@@ -1,0 +1,62 @@
+#!/usr/bin/env python
+
+from typing import Optional, Union, Sequence
+
+from anndata import AnnData
+from pandas import DataFrame
+
+import numpy as np
+from scipy.sparse import issparse
+
+from .. import _adata_arg_checking
+
+@_adata_arg_checking
+def anndata_to_dataframe(
+    adata: AnnData,
+    obs: Optional[Union[str, Sequence[str]]] = None,
+    layer: Optional[str] = None,
+    is_log: Optional[bool] = False
+) -> DataFrame:
+    """Convert Anndata instance into Dataframe instance.
+    
+    Parameters
+    ----------
+    adata
+        Annotated data matrix.
+    var
+        Any key or key set in anndata.obs corresponding to defined clusters or groups.
+        If specified, add adata.var.loc[var] to dataframe.
+    layer
+        Any key in adata.layers.
+        If provided, use adata.layers[layer] for expression values instead of adata.X.
+    is_log
+        Boolean value specifying if the counts are logarithmized.
+        If value parameter is `True`, perform an exponential transformation.
+        If counts are still logarithmized but user want to keep logarithmized counts,
+        please specify `False` to the value parameter.
+    
+    Returns
+    -------
+    Dataframe providing information about counts and optionnaly other additionnal chosen information.
+    """
+
+    if layer:
+        if issparse(adata.layers[layer]):
+            counts_df = DataFrame(adata.layers[layer].toarray(), index=adata.obs.index, columns = adata.var.index)
+        else:
+            counts_df = DataFrame(adata.layers[layer], index=adata.obs.index, columns = adata.var.index)
+    elif issparse(adata.X):
+        counts_df = DataFrame(adata.X.toarray(), index=adata.obs.index, columns = adata.var.index)
+    else:
+        counts_df = DataFrame(adata.X, index=adata.obs.index, columns = adata.var.index)
+    
+    if is_log:
+        if "log1p" in adata.uns_keys() and adata.uns["log1p"].get('base') is not None:
+            counts_df = np.expm1(counts_df * np.log(adata.uns['log1p']['base']))
+        else:
+            counts_df = np.expm1(counts_df)
+    
+    if obs is not None:
+        counts_df.loc[:,obs] = adata.obs.loc[:,[obs]] if isinstance (obs, str) else adata.obs.loc[:,obs]
+    
+    return counts_df
