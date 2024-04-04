@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 from typing import Union
+
 import math
 
 class PartialBoolean:
 
-    def __init__(self, value: Union[bool, 0, 1, float("nan")]):
+    def __init__(self, value: Union[bool, float, int]):
         if isinstance(value, bool):
             self.__value = 1 if value is True else 0
         elif value in [0, 1] or math.isnan(value):

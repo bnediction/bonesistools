@@ -9,7 +9,7 @@ import anndata as ad
 import pandas as pd
 from scipy.sparse import csr_matrix
 
-from utils.genesyn import GeneSynonyms
+from databases.genesyn import GeneSynonyms
 
 def set_ncbi_reference_name(
     adata: ad.AnnData,

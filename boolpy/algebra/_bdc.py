@@ -24,7 +24,7 @@ class BooleanDifferentialCalculus(object):
         else:
             raise TypeError(f"incorrect conversion for `value`: {value}")
 
-    def differential(self, v1, v2) -> Union[-1, 0, 1]:
+    def differential(self, v1, v2):
         _v1 = self.__conversion__(v1)
         _v2 = self.__conversion__(v2)
         if _v1 == _v2:
