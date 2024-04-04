@@ -1,1 +1,90 @@
+### Data ###
+data/
+results/
+*.png
+*.jpg
+*.txt
+*.csv
+*.tsv
+*.bin
+*.desc
+*.h5ad
+
+### Distributions/packaging ###
+build/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+
+### Duplicates ###
+*copy/
+*copy.*
+*[0-9]/
+*_[0-9]
+*_[0-9][0-9]
+*.[0-9]
+*.[0-9][0-9]
+
+### Python ###
 __pycache__
+__pycache__/
+*.py[cod]
+*$py.class
+ipython_config.py
+
+### R ###
+.Rhistory
+
+### C extensions ###
+*.so
+
+### Environments ###
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+### Vscode ###
+.vscode/
+launch.json
+settings.json
+jsconfig.json
+tsconfig.json
+
+### TeX ###
+q.log
+*.aux
+*.nav
+*.snm
+*.toc
+*.out
+
+### Others ###
+!.gitignore
+!.placeholder
+.*
+*.log
+logs/
+*test*/
+*debug*/
+*tmp*
+*tmp/
+todo.*
+
+### Related-repository ###
+!.pipeline.png
+supplemental/
