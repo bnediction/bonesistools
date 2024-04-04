@@ -5,7 +5,7 @@ import warnings
 import os, argparse
 from pathlib import Path
 
-from utils.genesyn import GeneSynonyms
+from databases.genesyn import GeneSynonyms
 
 import pandas as pd
 
