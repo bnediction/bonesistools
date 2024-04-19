@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
 import ctypes
+from collections import namedtuple
+try:
+    from sortedcontainers import SortedSet
+except:
+    pass
 
 import warnings
 
@@ -13,6 +18,8 @@ except:
 
 import os
 from pathlib import Path
+
+import re
 
 from pandas import DataFrame
 
@@ -28,15 +35,13 @@ class GeneSynonyms(object):
             self.ncbi_file = Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.mus_musculus_gene_info.tsv")
         else:
             raise TypeError(f"`ncbi_file` is not a Path")
-        self.gene_synonyms = self.__synonyms_from_NCBI(self.ncbi_file)
-        self.__upper_gene_synonyms = {gene.upper(): self.gene_synonyms[gene] for gene in self.gene_synonyms.keys()}
+        self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
+        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
         return None
     
-    def __get__(self, attribute: str = None) -> Any:
-        if attribute is None or attribute == "gene_synonyms":
-            return {gene: ncbi_reference_name.value.decode() for gene, ncbi_reference_name in self.gene_synonyms.items()}
-        elif attribute == "__upper_gene_synonyms":
-            raise AttributeError(f"`__upper_gene_synonyms` attribute is private")
+    def __get__(self, attribute: str = "gene_alias_mapping") -> Any:
+        if attribute == "__upper_gene_names_mapping":
+            raise AttributeError(f"private attribute")
         else:
             return getattr(self, attribute)
     
@@ -45,8 +50,8 @@ class GeneSynonyms(object):
             self.ncbi_file = ncbi_file
         else:
             raise TypeError(f"`ncbi_file` is not a Path")
-        self.gene_synonyms = self.__synonyms_from_NCBI(self.gi_file)
-        self.__upper_gene_synonyms = {gene.upper(): self.gene_synonyms[gene] for gene in self.gene_synonyms.keys()}
+        self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
+        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
         return None
     
     def __call__(self, data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph], *args, **kwargs):
@@ -58,8 +63,8 @@ class GeneSynonyms(object):
             return self.graph_standardization(data, *args, **kwargs)
         else:
             raise TypeError(f"fail to convert gene name: `data` has incorrect type")
-   
-    def __synonyms_from_NCBI(self, gi_file: Path) -> dict:
+
+    def __alias_from_NCBI(self, gi_file: Path) -> dict:
         """
         Create a dictionary matching each gene name to its NCBI reference gene name.
         For speeding up the task facing a large matrix from NCBI, the parsing of the NCBI gene data is run with awk.
@@ -75,70 +80,199 @@ class GeneSynonyms(object):
         """
 
         gi_file_cut = Path(f"{gi_file}_cut")
-        command_parsing = "awk -F'\t' '{print $3 \"\t\" $5 \"\t\" $11}' " + str(gi_file) + " | tr \| '\t' > " + str(gi_file_cut) + " ; sed -i 1d " + str(gi_file_cut)
+        command_parsing = "awk -F'\t' 'NR>1 {print $2 \"\t\" $3 \"\t\" $5 \"\t\" $11 \"\t\" $6}' " + str(gi_file) + " > " + str(gi_file_cut)
         os.system(command_parsing)
 
-        gene_synonyms_dict = dict()
-        reference_names = set()
+        gene_alias_mapping = {
+            "geneid": dict(),
+            "genename": dict(),
+            "ensemblid": dict(),
+            "mgi": dict()
+        }
 
-        with open (gi_file_cut, "r") as file_synonyms:
-            for gene in file_synonyms:
-                gene = gene.strip()
-                gene_synonyms_list = gene.split("\t")
-                ncbi_reference_name = gene_synonyms_list.pop(0)
-                res = [_synonym for _synonym in gene_synonyms_list if (_synonym != "-" and _synonym != ncbi_reference_name)]
+        try:
+            gene_names = SortedSet()
+        except:
+            gene_names = set()
 
-                gene_synonyms_dict[ncbi_reference_name] = ctypes.create_string_buffer(ncbi_reference_name.encode())
-                reference_names.add(ncbi_reference_name)
+        with open(gi_file_cut, "r") as file:
+            for line in file:
+                geneinfo = line.strip().split("\t")
+                _geneid = geneinfo.pop(0)
+                _reference_name = geneinfo.pop(0)
+                _synonyms = [_synonym for _synonym in geneinfo.pop(0).split("|") + geneinfo.pop(0).split("|") \
+                    if (_synonym != "-" and _synonym != _reference_name)]
+                geneinfo = geneinfo[0]
+                _mgi = re.findall("MGI:MGI:[0-9]*", geneinfo)
+                _mgi = re.sub("^MGI:MGI:", "", _mgi[0]) if _mgi else None
+                _ensemblid = re.findall("Ensembl:[A-Z]{7}[0-9]{11}", geneinfo)
+                _ensemblid = re.sub("^Ensembl:", "", _ensemblid[0]) if _ensemblid else None
 
-                for gene in res:
-                    if gene not in reference_names and gene not in gene_synonyms_dict:
-                        # warning with NCBI list of synonyms: a noun can be the synonym of several reference names. Arbitrary, the choosen one is the first.
-                        gene_synonyms_dict[gene] = ctypes.create_string_buffer(ncbi_reference_name.encode())
+                gene_names.add(_reference_name)
+                pointer_to_geneid = ctypes.create_string_buffer(_geneid.encode())
+                if _geneid:
+                    gene_alias_mapping["geneid"][_geneid] = namedtuple("GeneAlias", ["reference_genename", "ensemblid", "mgi"])(_reference_name, _ensemblid, _mgi)
+                gene_alias_mapping["genename"][_reference_name] = pointer_to_geneid
+                for _synonym in _synonyms:
+                    if _synonym not in gene_names:
+                        gene_names.add(_synonym)
+                        gene_alias_mapping["genename"][_synonym] = pointer_to_geneid
+                    else:
+                        print(f"synonym {_synonym} multiple times with ref name: {_reference_name}")
+                if _ensemblid:
+                    gene_alias_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
+                if _mgi:
+                    gene_alias_mapping["mgi"][_mgi] = pointer_to_geneid
 
         os.system(f"rm {str(gi_file_cut)}")
-        return gene_synonyms_dict
+        return gene_alias_mapping
     
-    def get_reference_gene_name(self, gene_name: str) -> str:
+    def get_geneid(self, alias: str, alias_type: str="genename") -> str:
         """
-        Provide the reference name with respect to a gene name.
+        Provide the geneid with respect to a gene alias.
 
         Parameters
         ----------
-        gene_name
-            name of a gene
-        gene_synonyms_dict
-            dictionary where keys correspond to gene name and values correspond to reference gene name
+        alias
+            gene alias
+        alias_type
+            genename|ensemblid|mgi
 
         Returns
         -------
-        Given a gene name, return its reference name.
+        Given an alias, return its geneid
         """
 
-        _gene_name = gene_name.upper()
-        if _gene_name in self.__upper_gene_synonyms:
-            return self.__upper_gene_synonyms[_gene_name].value.decode()
+        if alias_type == "genename":
+            gene_name = alias.upper()
+            if gene_name in self.__upper_gene_names_mapping:
+                return self.__upper_gene_names_mapping[gene_name].value.decode()
+            else:
+                warnings.warn(f"no correspondance for gene name '{alias}'", stacklevel=10)
+                return None
+        elif alias_type in ["ensemblid", "mgi"]:
+            if alias in self.gene_alias_mapping[alias_type]:
+                return self.gene_alias_mapping[alias_type][alias].value.decode()
+            else:
+                warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
+                return None
         else:
-            warnings.warn(f"NCBI does not find a correspondance for {gene_name}.", stacklevel=10)
-            return gene_name
+            raise ValueError("Invalid value for argument 'alias_type'")
     
-    def sequence_standardization(self, gene_sequence: Sequence[str]) -> Sequence[str]:
+    def get_reference_name(self, alias: str, alias_type: str="genename") -> str:
         """
-        Create a copy of the input Sequence, with each gene name replaced by its reference name.
+        Provide the reference name with respect to a gene alias.
 
         Parameters
         ----------
-        interaction_list
+        alias
+            gene alias
+        alias_type
+            genename|geneid|ensemblid|mgi
+
+        Returns
+        -------
+        Given an alias, return its reference name
+        """
+    
+        geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
+        if geneid in self.gene_alias_mapping["geneid"]:
+            return self.gene_alias_mapping["geneid"][geneid].reference_genename
+        else:
+            warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
+            return None
+    
+    def get_mgi(self, alias: str, alias_type: str="genename") -> str:
+        """
+        Provide the mgi with respect to a gene alias.
+
+        Parameters
+        ----------
+        alias
+            gene alias
+        alias_type
+            genename|geneid|ensemblid
+
+        Returns
+        -------
+        Given an alias, return its mgi
+        """
+    
+        geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
+        if geneid in self.gene_alias_mapping["geneid"]:
+            return self.gene_alias_mapping["geneid"][geneid].mgi
+        else:
+            warnings.warn(f"no mgi correspondance for {alias_type} '{alias}'", stacklevel=10)
+            return None
+
+    def get_ensemblid(self, alias: str, alias_type: str="genename") -> str:
+        """
+        Provide the ensemblid with respect to a gene alias.
+
+        Parameters
+        ----------
+        alias
+            gene alias
+        alias_type
+            genename|geneid|mgi
+
+        Returns
+        -------
+        Given an alias, return its ensemblid
+        """
+    
+        geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
+        if geneid in self.gene_alias_mapping["geneid"]:
+            return self.gene_alias_mapping["geneid"][geneid].ensemblid
+        else:
+            warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
+            return None
+
+    def __convert(out_alias_type: str="referencename") -> str:
+        """
+        Convert gene alias.
+
+        Parameters
+        ----------
+        out_alias_type
+            geneid|referencename|ensemblid|mgi
+
+        Returns
+        -------
+        Return a function converting gene labels.
+        """
+
+        if out_alias_type == "referencename":
+            out_alias_type = "reference_gene_name"
+        return eval(f"self.get_{out_alias_type}")
+
+    def sequence_standardization(
+            self,
+            gene_sequence: Sequence[str],
+            in_alias_type: str="genename",
+            out_alias_type: str="referencename"
+        ) -> Sequence[str]:
+        """
+        Create a copy of the input Sequence, with corresponding alias.
+
+        Parameters
+        ----------
+        gene_sequence
             list of tuples containing string (source) + string (target) + dict (sign = -1 or 1)
+        in_alias_type
+            genename|geneid|ensemblid|mgi
+        out_alias_type
+            referencename|geneid|ensemblid|mgi
         
         Returns
         -------
-        return an interaction list where each gene name is converted into its reference value.
+        return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
+        convert = self.__convert(out_alias_type)
         standardized_gene_sequence = list()
         for gene in gene_sequence:
-            standardized_gene_sequence.append(self.get_reference_gene_name(gene))
+            standardized_gene_sequence.append(convert(gene,in_alias_type))
         
         standardized_gene_sequence = type(gene_sequence)(standardized_gene_sequence)
         
