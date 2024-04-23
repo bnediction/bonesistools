@@ -58,12 +58,12 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
-        self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
-        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
-        self.databases = {_db for _db in self.gene_alias_mapping["databases"].keys()}
+        self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
+        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
+        self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
         return None
     
-    def __get__(self, attribute: str = "gene_alias_mapping") -> Any:
+    def __get__(self, attribute: str = "gene_aliases_mapping") -> Any:
         if attribute == "__upper_gene_names_mapping":
             raise AttributeError(f"private attribute")
         else:
@@ -85,9 +85,9 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
-        self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
-        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
-        self.databases = {_db for _db in self.gene_alias_mapping["databases"].keys()}
+        self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
+        self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
+        self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
         return None
     
     def __call__(self, data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph], *args, **kwargs):
@@ -100,7 +100,7 @@ class GeneSynonyms(object):
         else:
             raise TypeError(f"fail to convert gene name: 'data' has incorrect type")
 
-    def __alias_from_NCBI(self, gi_file: Path) -> dict:
+    def __aliases_from_NCBI(self, gi_file: Path) -> dict:
         """
         Create a dictionary matching each gene name to its NCBI reference gene name.
         For speeding up the task facing a large matrix from NCBI, the parsing of the NCBI gene data is run with awk.
@@ -119,7 +119,7 @@ class GeneSynonyms(object):
         command_parsing = "awk -F'\t' 'NR>1 {print $2 \"\t\" $3 \"\t\" $5 \"\t\" $11 \"\t\" $6}' " + str(gi_file) + " > " + str(gi_file_cut)
         os.system(command_parsing)
 
-        gene_alias_mapping = {
+        gene_aliases_mapping = {
             "geneid": dict(),
             "genename": dict(),
             "ensemblid": dict(),
@@ -154,24 +154,24 @@ class GeneSynonyms(object):
                 gene_names.add(_reference_name)
                 pointer_to_geneid = ctypes.create_string_buffer(_geneid.encode())
                 if _geneid:
-                    gene_alias_mapping["geneid"][_geneid] = namedtuple("GeneAlias", ["reference_genename", "ensemblid", "databases"])(_reference_name, _ensemblid, _db_name_dict)
-                gene_alias_mapping["genename"][_reference_name] = pointer_to_geneid
+                    gene_aliases_mapping["geneid"][_geneid] = namedtuple("GeneAlias", ["reference_genename", "ensemblid", "databases"])(_reference_name, _ensemblid, _db_name_dict)
+                gene_aliases_mapping["genename"][_reference_name] = pointer_to_geneid
                 for _synonym in _synonyms:
                     if _synonym not in gene_names:
                         gene_names.add(_synonym)
-                        gene_alias_mapping["genename"][_synonym] = pointer_to_geneid
+                        gene_aliases_mapping["genename"][_synonym] = pointer_to_geneid
                     else:
                         print(f"synonym {_synonym} multiple times with ref name: {_reference_name}")
                 if _ensemblid:
-                    gene_alias_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
+                    gene_aliases_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
                 if _db_name_dict:
                     for _db, _name in _db_name_dict.items():
-                        if _db not in gene_alias_mapping["databases"]:
-                            gene_alias_mapping["databases"][_db] = dict()
-                        gene_alias_mapping["databases"][_db][_name] = pointer_to_geneid
+                        if _db not in gene_aliases_mapping["databases"]:
+                            gene_aliases_mapping["databases"][_db] = dict()
+                        gene_aliases_mapping["databases"][_db][_name] = pointer_to_geneid
 
         os.system(f"rm {str(gi_file_cut)}")
-        return gene_alias_mapping
+        return gene_aliases_mapping
     
     def get_databases(self):
         """
@@ -204,14 +204,14 @@ class GeneSynonyms(object):
                 warnings.warn(f"no correspondance for gene name '{alias}'", stacklevel=10)
                 return None
         elif alias_type == "ensemblid":
-            if alias in self.gene_alias_mapping[alias_type]:
-                return self.gene_alias_mapping[alias_type][alias].value.decode()
+            if alias in self.gene_aliases_mapping[alias_type]:
+                return self.gene_aliases_mapping[alias_type][alias].value.decode()
             else:
                 warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
         elif alias_type in self.databases:
-            if alias in self.gene_alias_mapping["databases"][alias_type]:
-                return self.gene_alias_mapping["databases"][alias_type][alias].value.decode()
+            if alias in self.gene_aliases_mapping["databases"][alias_type]:
+                return self.gene_aliases_mapping["databases"][alias_type][alias].value.decode()
             else:
                 warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
@@ -236,8 +236,8 @@ class GeneSynonyms(object):
         """
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
-        if geneid in self.gene_alias_mapping["geneid"]:
-            return self.gene_alias_mapping["geneid"][geneid].reference_genename
+        if geneid in self.gene_aliases_mapping["geneid"]:
+            return self.gene_aliases_mapping["geneid"][geneid].reference_genename
         else:
             warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
@@ -260,8 +260,8 @@ class GeneSynonyms(object):
         """
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
-        if geneid in self.gene_alias_mapping["geneid"]:
-            return self.gene_alias_mapping["geneid"][geneid].ensemblid
+        if geneid in self.gene_aliases_mapping["geneid"]:
+            return self.gene_aliases_mapping["geneid"][geneid].ensemblid
         else:
             warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
@@ -288,9 +288,9 @@ class GeneSynonyms(object):
             raise ValueError(f"invalid value for argument 'database' (got {database}, expected a value in {self.get_databases})")
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
-        if geneid in self.gene_alias_mapping["geneid"]:
-            if database in self.gene_alias_mapping["geneid"][geneid].databases:
-                return self.gene_alias_mapping["geneid"][geneid].databases[database]
+        if geneid in self.gene_aliases_mapping["geneid"]:
+            if database in self.gene_aliases_mapping["geneid"][geneid].databases:
+                return self.gene_aliases_mapping["geneid"][geneid].databases[database]
             else:
                 warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
@@ -326,10 +326,11 @@ class GeneSynonyms(object):
         self,
         gene_sequence: Sequence[str],
         in_alias_type: str="genename",
-        out_alias_type: str="referencename"
+        out_alias_type: str="referencename",
+        keep_if_missing: bool=True
     ) -> Sequence[str]:
         """
-        Create a copy of the input Sequence, with corresponding alias.
+        Create a copy of the input Sequence, with corresponding aliases.
 
         Parameters
         ----------
@@ -341,16 +342,22 @@ class GeneSynonyms(object):
         out_alias_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
+        keep_if_missing
+            if conversion is performed from gene names towards theirs reference gene names,
+            keep gene name instead of 'None' value if gene name is missing from NCBI database.
         
         Returns
         -------
         return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
+        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         standardized_gene_sequence = list()
         alias_conversion = self.__convert(out_alias_type)
         for gene in gene_sequence:
-            standardized_gene_sequence.append(alias_conversion(alias=gene, alias_type=in_alias_type))
+            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = gene if (keep_if_missing and alias is None) else alias
+            standardized_gene_sequence.append(alias)
         
         standardized_gene_sequence = type(gene_sequence)(standardized_gene_sequence)
         
@@ -360,10 +367,11 @@ class GeneSynonyms(object):
         self,
         interactions_list: Sequence[Tuple[str, str, Dict[str, int]]],
         in_alias_type: str="genename",
-        out_alias_type: str="referencename"
+        out_alias_type: str="referencename",
+        keep_if_missing: bool=True
     ) -> List[Tuple[str, str, Dict[str, int]]]:
         """
-        Create a copy of the input list of pairwise interactions, with each gene name replaced by its reference name.
+        Create a copy of the input list of pairwise interactions, with corresponding aliases.
 
         Parameters
         ----------
@@ -375,17 +383,23 @@ class GeneSynonyms(object):
         out_alias_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
+        keep_if_missing
+            if conversion is performed from gene names towards theirs reference gene names,
+            keep gene name instead of 'None' value if gene name is missing from NCBI database.
 
         Returns
         -------
-        return an interaction list where each gene name is converted into its reference value.
+        return an interaction list where each gene name is converted into the user-defined alias type.
         """
 
+        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         standardized_interactions_list = list()
         alias_conversion = self.__convert(out_alias_type)
         for interaction in interactions_list:
             source = alias_conversion(alias=interaction[0], alias_type=in_alias_type)
-            target = alias_conversion(alias=interaction[1], alias_type=in_alias_type)
+            source = interaction[0] if (keep_if_missing and source is None) else source
+            target = alias_conversion(alias=interaction[0], alias_type=in_alias_type)
+            target = interaction[1] if (keep_if_missing and target is None) else target
             standardized_interactions_list.append((source, target, interaction[2]))
 
         return standardized_interactions_list
@@ -396,6 +410,7 @@ class GeneSynonyms(object):
         axis: Axis=0,
         in_alias_type: str="genename",
         out_alias_type: str="referencename",
+        keep_if_missing: bool=True,
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
@@ -404,7 +419,7 @@ class GeneSynonyms(object):
         Parameters
         ----------
         df
-            dataframe where names must be standardized
+            DataFrame object where names are expected being standardized
         axis
             whether to rename labels from the index (0 or 'index') or columns (1 or 'columns')
         in_alias_type
@@ -413,18 +428,22 @@ class GeneSynonyms(object):
         out_alias_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
+        keep_if_missing
+            if conversion is performed from gene names towards theirs reference gene names,
+            keep gene name instead of 'None' value if gene name is missing from NCBI database.
         copy
             return a copy instead of updating 'df'
         
         Returns
         -------
-        Depending on 'copy', update or return dataframe with standardized gene name.
+        Depending on 'copy', update or return DataFrame object with standardized gene name.
         """
 
+        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         df = df.copy() if copy is True else df
         alias_conversion = self.__convert(out_alias_type)
 
-        alias = list()
+        aliases = list()
 
         if axis == 0 or axis == "index":
             gene_iterator = iter(df.index)
@@ -432,13 +451,16 @@ class GeneSynonyms(object):
             gene_iterator = iter(df.columns)
         else:
             raise ValueError(f"No axis named {axis} for object type DataFrame")
+
         for gene in gene_iterator:
-            ncbi_reference_name = alias_conversion(alias=gene, alias_type=in_alias_type)
-            alias.append(ncbi_reference_name)
+            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = gene if (keep_if_missing and alias is None) else alias
+            aliases.append(alias)
+
         if axis == 0 or axis == "index":
-            df.index = alias
+            df.index = aliases
         elif axis == 1 or axis == "columns":
-            df.columns = alias
+            df.columns = aliases
 
         if copy is True:
             return df
@@ -448,6 +470,7 @@ class GeneSynonyms(object):
         graph: Graph,
         in_alias_type: str="genename",
         out_alias_type: str="referencename",
+        keep_if_missing: bool=True,
         copy: bool = True
     ) -> Union[Graph, None]:
         """
@@ -463,6 +486,9 @@ class GeneSynonyms(object):
         out_alias_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
+        keep_if_missing
+            if conversion is performed from gene names towards theirs reference gene names,
+            keep gene name instead of 'None' value if gene name is missing from NCBI database.
         copy
             return a copy instead of updating 'graph'
         
@@ -471,12 +497,15 @@ class GeneSynonyms(object):
         Depending on 'copy', update or return graph with standardized gene name.
         """
 
-        synonym_mapping = dict()
+        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        aliases_mapping = dict()
         alias_conversion = self.__convert(out_alias_type)
         for gene in graph.nodes:
-            synonym_mapping[gene] = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = gene if (keep_if_missing and alias is None) else alias
+            aliases_mapping[gene] = alias
         if copy is True:
-            return nx.relabel_nodes(graph, mapping=synonym_mapping, copy=True)
+            return nx.relabel_nodes(graph, mapping=aliases_mapping, copy=True)
         else:
-            nx.relabel_nodes(graph, mapping=synonym_mapping, copy=False)
+            nx.relabel_nodes(graph, mapping=aliases_mapping, copy=False)
             return None
