@@ -27,21 +27,24 @@ from pandas import DataFrame
 import networkx as nx
 from networkx import Graph
 
-ORGANISMS = {"mouse", "human"}
+ORGANISMS = {"mouse", "human", "escherichia coli"}
 
 FTP_GENE_INFO = {
     "mouse": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Mus_musculus.gene_info.gz",
-    "human": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz"
+    "human": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz",
+    "escherichia coli": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Archaea_Bacteria/Escherichia_coli_str._K-12_substr._MG1655.gene_info.gz"
 }
 
 NCBI_FILES = {
-    "mouse": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.mus_musculus_gene_info.tsv"),
-    "human": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.homo_sapiens_gene_info.tsv")
+    "mouse": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.mus_musculus_gene_info.tsv"),
+    "human": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.homo_sapiens_gene_info.tsv"),
+    "escherichia coli": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.escherichia_coli_gene_info.tsv")
 }
 
 class GeneSynonyms(object):
 
     def __init__(self, organism: str="mouse", force_download: bool=False) -> None:
+        organism = organism.lower().replace("-"," ")
         if organism in ORGANISMS:
             self.organism = organism
         else:
