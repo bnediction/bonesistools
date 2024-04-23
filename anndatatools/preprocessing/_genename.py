@@ -108,6 +108,22 @@ def var_names_merge_duplicates(
     adata: ad.AnnData,
     var_names_column: Optional[str]=None
 ) -> Union[ad.AnnData, None]:
+    """
+    Merge the duplicated index names in adata.var by summing the counts between each duplicated index elements.
+
+    Parameters
+    ----------
+    adata
+        AnnData object where names are expected being standardized
+    var_names_column
+        if specify, give a priority order for which row in adata.var is saved when rows are merged.
+        For instance, if multiple rows have same index but different cell values,
+        the row with cell value at 'var_names_column' column is considered as the main information over others.
+    
+    Returns
+    -------
+    return AnnData object with duplicated index names in adata.var merged together.
+    """
 
     if var_names_column is None:
         var_names = "copy_var_names"
@@ -135,12 +151,12 @@ def var_names_merge_duplicates(
     adatas.append(adata)
 
     adata = ad.concat(
-            adatas=adatas,
-            join="outer",
-            axis=1,
-            merge="same",
-            uns_merge="first",
-            label=None
+        adatas=adatas,
+        join="outer",
+        axis=1,
+        merge="same",
+        uns_merge="first",
+        label=None
     )
 
     if var_names_column is None:
