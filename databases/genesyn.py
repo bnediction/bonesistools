@@ -41,11 +41,11 @@ NCBI_FILES = {
 
 class GeneSynonyms(object):
 
-    def __init__(self, organism: str = "mouse", force_download: bool = False) -> None:
+    def __init__(self, organism: str="mouse", force_download: bool=False) -> None:
         if organism in ORGANISMS:
             self.organism = organism
         else:
-            raise ValueError("invalid value for argument `organism`")
+            raise ValueError("invalid value for argument 'organism'")
         self.ncbi_file = NCBI_FILES[organism]
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
@@ -53,7 +53,7 @@ class GeneSynonyms(object):
         elif force_download is False:
             pass
         else:
-            raise ValueError(f"invalid value for argument `force_download` (expected {type(bool)}, got {type(force_download)})")
+            raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
         self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
@@ -66,13 +66,13 @@ class GeneSynonyms(object):
         else:
             return getattr(self, attribute)
     
-    def __set__(self, organism: str = None, force_download: bool = False) -> None:
+    def __set__(self, organism: str=None, force_download: bool=False) -> None:
         if organism is None and self.organism in ORGANISMS:
             pass
         elif organism in ORGANISMS:
             self.organism = organism
         else:
-            raise ValueError("invalid value for argument `organism`")
+            raise ValueError("invalid value for argument 'organism'")
         self.ncbi_file = NCBI_FILES[self.organism]
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
@@ -80,7 +80,7 @@ class GeneSynonyms(object):
         elif force_download is False:
             pass
         else:
-            raise ValueError(f"invalid value for argument `force_download` (expected {type(bool)}, got {type(force_download)})")
+            raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
         self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
@@ -95,7 +95,7 @@ class GeneSynonyms(object):
         elif isinstance(data, Graph):
             return self.graph_standardization(data, *args, **kwargs)
         else:
-            raise TypeError(f"fail to convert gene name: `data` has incorrect type")
+            raise TypeError(f"fail to convert gene name: 'data' has incorrect type")
 
     def __alias_from_NCBI(self, gi_file: Path) -> dict:
         """
@@ -265,7 +265,7 @@ class GeneSynonyms(object):
     
     def get_alias_from_database(self, database: str, alias: str, alias_type: str="genename") -> str:
         """
-        Provide the alias with respect to a database.
+        Provide the database-defined gene name.
 
         Parameters
         ----------
@@ -282,7 +282,7 @@ class GeneSynonyms(object):
         """
 
         if database not in self.get_databases():
-            raise ValueError(f"invalid value for argument `database` (got {database}, expected a value in {self.get_databases})")
+            raise ValueError(f"invalid value for argument 'database' (got {database}, expected a value in {self.get_databases})")
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
         if geneid in self.gene_alias_mapping["geneid"]:
@@ -303,6 +303,7 @@ class GeneSynonyms(object):
         ----------
         out_alias_type
             geneid|referencename|ensemblid|<database>
+            see self.get_database() for enumerating database names
 
         Returns
         -------
@@ -319,38 +320,45 @@ class GeneSynonyms(object):
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{out_alias_type}'")
 
     def sequence_standardization(
-            self,
-            gene_sequence: Sequence[str],
-            in_alias_type: str="genename",
-            out_alias_type: str="referencename"
-        ) -> Sequence[str]:
+        self,
+        gene_sequence: Sequence[str],
+        in_alias_type: str="genename",
+        out_alias_type: str="referencename"
+    ) -> Sequence[str]:
         """
         Create a copy of the input Sequence, with corresponding alias.
 
         Parameters
         ----------
         gene_sequence
-            list of tuples containing string (source) + string (target) + dict (sign = -1 or 1)
+            list of genes
         in_alias_type
-            genename|geneid|ensemblid|mgi
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
         out_alias_type
-            referencename|geneid|ensemblid|mgi
+            referencename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
         
         Returns
         -------
         return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
-        convert = self.__convert(out_alias_type)
         standardized_gene_sequence = list()
+        alias_conversion = self.__convert(out_alias_type)
         for gene in gene_sequence:
-            standardized_gene_sequence.append(convert(gene,in_alias_type))
+            standardized_gene_sequence.append(alias_conversion(alias=gene, alias_type=in_alias_type))
         
         standardized_gene_sequence = type(gene_sequence)(standardized_gene_sequence)
         
         return standardized_gene_sequence
 
-    def interaction_list_standardization(self, interactions_list: Sequence[Tuple[str, str, Dict[str, int]]]) -> List[Tuple[str, str, Dict[str, int]]]:
+    def interaction_list_standardization(
+        self,
+        interactions_list: Sequence[Tuple[str, str, Dict[str, int]]],
+        in_alias_type: str="genename",
+        out_alias_type: str="referencename"
+    ) -> List[Tuple[str, str, Dict[str, int]]]:
         """
         Create a copy of the input list of pairwise interactions, with each gene name replaced by its reference name.
 
@@ -358,6 +366,12 @@ class GeneSynonyms(object):
         ----------
         interaction_list
             list of tuples containing string (source) + string (target) + dict (sign = -1 or 1)
+        in_alias_type
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
+        out_alias_type
+            referencename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
 
         Returns
         -------
@@ -365,9 +379,10 @@ class GeneSynonyms(object):
         """
 
         standardized_interactions_list = list()
+        alias_conversion = self.__convert(out_alias_type)
         for interaction in interactions_list:
-            source = self.get_reference_gene_name(interaction[0])
-            target = self.get_reference_gene_name(interaction[1])
+            source = alias_conversion(alias=interaction[0], alias_type=in_alias_type)
+            target = alias_conversion(alias=interaction[1], alias_type=in_alias_type)
             standardized_interactions_list.append((source, target, interaction[2]))
 
         return standardized_interactions_list
@@ -375,29 +390,38 @@ class GeneSynonyms(object):
     def df_standardization(
         self,
         df: DataFrame,
-        axis: Axis = 0,
+        axis: Axis=0,
+        in_alias_type: str="genename",
+        out_alias_type: str="referencename",
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene name with its reference gene name into `df`.
+        Replace gene name with its reference gene name into 'df'.
 
         Parameters
         ----------
         df
             dataframe where names must be standardized
         axis
-            whether to rename labels from the index (0 or `index`) or columns (1 or `columns`)
+            whether to rename labels from the index (0 or 'index') or columns (1 or 'columns')
+        in_alias_type
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
+        out_alias_type
+            referencename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
         copy
-            return a copy instead of updating `df`
+            return a copy instead of updating 'df'
         
         Returns
         -------
-        Depending on `inplace`, update or return dataframe with standardized gene name.
+        Depending on 'copy', update or return dataframe with standardized gene name.
         """
 
         df = df.copy() if copy is True else df
+        alias_conversion = self.__convert(out_alias_type)
 
-        synonyms = list()
+        alias = list()
 
         if axis == 0 or axis == "index":
             gene_iterator = iter(df.index)
@@ -406,12 +430,12 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"No axis named {axis} for object type DataFrame")
         for gene in gene_iterator:
-            ncbi_reference_name = self.get_reference_gene_name(gene)
-            synonyms.append(ncbi_reference_name)
+            ncbi_reference_name = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias.append(ncbi_reference_name)
         if axis == 0 or axis == "index":
-            df.index = synonyms
+            df.index = alias
         elif axis == 1 or axis == "columns":
-            df.columns = synonyms
+            df.columns = alias
 
         if copy is True:
             return df
@@ -419,26 +443,35 @@ class GeneSynonyms(object):
     def graph_standardization(
         self,
         graph: Graph,
+        in_alias_type: str="genename",
+        out_alias_type: str="referencename",
         copy: bool = True
     ) -> Union[Graph, None]:
         """
-        Replace gene name with its reference gene name into `graph`.
+        Replace gene name with its reference gene name into 'graph'.
 
         Parameters
         ----------
         graph
             graph where nodes must be standardized
+        in_alias_type
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
+        out_alias_type
+            referencename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
         copy
-            return a copy instead of updating `graph`
+            return a copy instead of updating 'graph'
         
         Returns
         -------
-        Depending on `inplace`, update or return graph with standardized gene name.
+        Depending on 'copy', update or return graph with standardized gene name.
         """
 
         synonym_mapping = dict()
+        alias_conversion = self.__convert(out_alias_type)
         for gene in graph.nodes:
-            synonym_mapping[gene] = self.get_reference_gene_name(gene)
+            synonym_mapping[gene] = alias_conversion(alias=gene, alias_type=in_alias_type)
         if copy is True:
             return nx.relabel_nodes(graph, mapping=synonym_mapping, copy=True)
         else:
