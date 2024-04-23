@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import ctypes
+from functools import partial
 from collections import namedtuple
 try:
     from sortedcontainers import SortedSet
@@ -26,17 +27,37 @@ from pandas import DataFrame
 import networkx as nx
 from networkx import Graph
 
+ORGANISMS = {"mouse", "human"}
+
+FTP_GENE_INFO = {
+    "mouse": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Mus_musculus.gene_info.gz",
+    "human": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz"
+}
+
+NCBI_FILES = {
+    "mouse": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.mus_musculus_gene_info.tsv"),
+    "human": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.homo_sapiens_gene_info.tsv")
+}
+
 class GeneSynonyms(object):
 
-    def __init__(self, ncbi_file: Path = None) -> None:
-        if isinstance(ncbi_file, Path):
-            self.ncbi_file = ncbi_file
-        elif ncbi_file is None:
-            self.ncbi_file = Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.mus_musculus_gene_info.tsv")
+    def __init__(self, organism: str = "mouse", force_download: bool = False) -> None:
+        if organism in ORGANISMS:
+            self.organism = organism
         else:
-            raise TypeError(f"`ncbi_file` is not a Path")
+            raise ValueError("invalid value for argument `organism`")
+        self.ncbi_file = NCBI_FILES[organism]
+        if force_download is True:
+            command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
+            os.system(command_parsing)
+        elif force_download is False:
+            pass
+        else:
+            raise ValueError(f"invalid value for argument `force_download` (expected {type(bool)}, got {type(force_download)})")
+        self.force_download = force_download
         self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
+        self.databases = {_db for _db in self.gene_alias_mapping["databases"].keys()}
         return None
     
     def __get__(self, attribute: str = "gene_alias_mapping") -> Any:
@@ -45,13 +66,25 @@ class GeneSynonyms(object):
         else:
             return getattr(self, attribute)
     
-    def __set__(self, ncbi_file: Path) -> None:
-        if isinstance(ncbi_file, Path):
-            self.ncbi_file = ncbi_file
+    def __set__(self, organism: str = None, force_download: bool = False) -> None:
+        if organism is None and self.organism in ORGANISMS:
+            pass
+        elif organism in ORGANISMS:
+            self.organism = organism
         else:
-            raise TypeError(f"`ncbi_file` is not a Path")
+            raise ValueError("invalid value for argument `organism`")
+        self.ncbi_file = NCBI_FILES[self.organism]
+        if force_download is True:
+            command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
+            os.system(command_parsing)
+        elif force_download is False:
+            pass
+        else:
+            raise ValueError(f"invalid value for argument `force_download` (expected {type(bool)}, got {type(force_download)})")
+        self.force_download = force_download
         self.gene_alias_mapping = self.__alias_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_alias_mapping["genename"].items()}
+        self.databases = {_db for _db in self.gene_alias_mapping["databases"].keys()}
         return None
     
     def __call__(self, data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph], *args, **kwargs):
@@ -87,7 +120,7 @@ class GeneSynonyms(object):
             "geneid": dict(),
             "genename": dict(),
             "ensemblid": dict(),
-            "mgi": dict()
+            "databases": dict()
         }
 
         try:
@@ -102,16 +135,23 @@ class GeneSynonyms(object):
                 _reference_name = geneinfo.pop(0)
                 _synonyms = [_synonym for _synonym in geneinfo.pop(0).split("|") + geneinfo.pop(0).split("|") \
                     if (_synonym != "-" and _synonym != _reference_name)]
-                geneinfo = geneinfo[0]
-                _mgi = re.findall("MGI:MGI:[0-9]*", geneinfo)
-                _mgi = re.sub("^MGI:MGI:", "", _mgi[0]) if _mgi else None
-                _ensemblid = re.findall("Ensembl:[A-Z]{7}[0-9]{11}", geneinfo)
-                _ensemblid = re.sub("^Ensembl:", "", _ensemblid[0]) if _ensemblid else None
-
+                _ensemblid = None
+                _db_name_list = geneinfo.pop(0).split("|")
+                _db_name_dict = dict()
+                for _db_name in _db_name_list:
+                    if _db_name == "-":
+                        continue
+                    _db, _name = _db_name.split(":", maxsplit=1)
+                    if _db == "Ensembl":
+                        _ensemblid = re.findall("[A-Z]{7}[0-9]{11}", _name)
+                        _ensemblid = _ensemblid[0] if _ensemblid else None
+                    else:
+                        _db_name_dict[_db] = _name
+                
                 gene_names.add(_reference_name)
                 pointer_to_geneid = ctypes.create_string_buffer(_geneid.encode())
                 if _geneid:
-                    gene_alias_mapping["geneid"][_geneid] = namedtuple("GeneAlias", ["reference_genename", "ensemblid", "mgi"])(_reference_name, _ensemblid, _mgi)
+                    gene_alias_mapping["geneid"][_geneid] = namedtuple("GeneAlias", ["reference_genename", "ensemblid", "databases"])(_reference_name, _ensemblid, _db_name_dict)
                 gene_alias_mapping["genename"][_reference_name] = pointer_to_geneid
                 for _synonym in _synonyms:
                     if _synonym not in gene_names:
@@ -121,12 +161,21 @@ class GeneSynonyms(object):
                         print(f"synonym {_synonym} multiple times with ref name: {_reference_name}")
                 if _ensemblid:
                     gene_alias_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
-                if _mgi:
-                    gene_alias_mapping["mgi"][_mgi] = pointer_to_geneid
+                if _db_name_dict:
+                    for _db, _name in _db_name_dict.items():
+                        if _db not in gene_alias_mapping["databases"]:
+                            gene_alias_mapping["databases"][_db] = dict()
+                        gene_alias_mapping["databases"][_db][_name] = pointer_to_geneid
 
         os.system(f"rm {str(gi_file_cut)}")
         return gene_alias_mapping
     
+    def get_databases(self):
+        """
+        Provide database names using specific nomenclature.
+        """
+        return self.databases
+
     def get_geneid(self, alias: str, alias_type: str="genename") -> str:
         """
         Provide the geneid with respect to a gene alias.
@@ -136,7 +185,8 @@ class GeneSynonyms(object):
         alias
             gene alias
         alias_type
-            genename|ensemblid|mgi
+            genename|ensemblid|<database>
+            see self.get_database() for enumerating database names
 
         Returns
         -------
@@ -150,14 +200,20 @@ class GeneSynonyms(object):
             else:
                 warnings.warn(f"no correspondance for gene name '{alias}'", stacklevel=10)
                 return None
-        elif alias_type in ["ensemblid", "mgi"]:
+        elif alias_type == "ensemblid":
             if alias in self.gene_alias_mapping[alias_type]:
                 return self.gene_alias_mapping[alias_type][alias].value.decode()
             else:
                 warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
+        elif alias_type in self.databases:
+            if alias in self.gene_alias_mapping["databases"][alias_type]:
+                return self.gene_alias_mapping["databases"][alias_type][alias].value.decode()
+            else:
+                warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
+                return None
         else:
-            raise ValueError("Invalid value for argument 'alias_type'")
+            raise ValueError("invalid value for argument 'alias_type'")
     
     def get_reference_name(self, alias: str, alias_type: str="genename") -> str:
         """
@@ -168,7 +224,8 @@ class GeneSynonyms(object):
         alias
             gene alias
         alias_type
-            genename|geneid|ensemblid|mgi
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
 
         Returns
         -------
@@ -181,29 +238,6 @@ class GeneSynonyms(object):
         else:
             warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
-    
-    def get_mgi(self, alias: str, alias_type: str="genename") -> str:
-        """
-        Provide the mgi with respect to a gene alias.
-
-        Parameters
-        ----------
-        alias
-            gene alias
-        alias_type
-            genename|geneid|ensemblid
-
-        Returns
-        -------
-        Given an alias, return its mgi
-        """
-    
-        geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
-        if geneid in self.gene_alias_mapping["geneid"]:
-            return self.gene_alias_mapping["geneid"][geneid].mgi
-        else:
-            warnings.warn(f"no mgi correspondance for {alias_type} '{alias}'", stacklevel=10)
-            return None
 
     def get_ensemblid(self, alias: str, alias_type: str="genename") -> str:
         """
@@ -214,7 +248,8 @@ class GeneSynonyms(object):
         alias
             gene alias
         alias_type
-            genename|geneid|mgi
+            genename|geneid|<database>
+            see self.get_database() for enumerating database names
 
         Returns
         -------
@@ -227,15 +262,47 @@ class GeneSynonyms(object):
         else:
             warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
+    
+    def get_alias_from_database(self, database: str, alias: str, alias_type: str="genename") -> str:
+        """
+        Provide the alias with respect to a database.
 
-    def __convert(out_alias_type: str="referencename") -> str:
+        Parameters
+        ----------
+        database
+            see self.get_database() for enumerating database names
+        alias
+            gene alias
+        alias_type
+            genename|geneid|ensemblid
+
+        Returns
+        -------
+        Given a gene identifier derived from a database, return its alias
+        """
+
+        if database not in self.get_databases():
+            raise ValueError(f"invalid value for argument `database` (got {database}, expected a value in {self.get_databases})")
+    
+        geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
+        if geneid in self.gene_alias_mapping["geneid"]:
+            if database in self.gene_alias_mapping["geneid"][geneid].databases:
+                return self.gene_alias_mapping["geneid"][geneid].databases[database]
+            else:
+                warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
+                return None
+        else:
+            warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
+            return None
+
+    def __convert(self, out_alias_type: str="referencename") -> str:
         """
         Convert gene alias.
 
         Parameters
         ----------
         out_alias_type
-            geneid|referencename|ensemblid|mgi
+            geneid|referencename|ensemblid|<database>
 
         Returns
         -------
@@ -243,8 +310,13 @@ class GeneSynonyms(object):
         """
 
         if out_alias_type == "referencename":
-            out_alias_type = "reference_gene_name"
-        return eval(f"self.get_{out_alias_type}")
+            out_alias_type = "reference_name"
+        if out_alias_type in ["geneid", "reference_name", "ensemblid"]:
+            return eval(f"self.get_{out_alias_type}")
+        elif out_alias_type in self.get_databases():
+            return partial(self.get_alias_from_database, database=out_alias_type)
+        else:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{out_alias_type}'")
 
     def sequence_standardization(
             self,
