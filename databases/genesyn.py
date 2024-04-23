@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 import ctypes
-from functools import partial
 from collections import namedtuple
 try:
     from sortedcontainers import SortedSet
 except:
     pass
+
+from functools import partial
 
 import warnings
 
@@ -18,6 +19,7 @@ except:
     from collections.abc import Sequence as SequenceInstance
 
 import os
+import sys
 from pathlib import Path
 
 import re
@@ -43,7 +45,7 @@ NCBI_FILES = {
 
 class GeneSynonyms(object):
 
-    def __init__(self, organism: str="mouse", force_download: bool=False) -> None:
+    def __init__(self, organism: str="mouse", force_download: bool=False, show_warnings: bool=False) -> None:
         organism = organism.lower().replace("-"," ")
         if organism in ORGANISMS:
             self.organism = organism
@@ -58,6 +60,7 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
+        self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
         self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
@@ -69,7 +72,7 @@ class GeneSynonyms(object):
         else:
             return getattr(self, attribute)
     
-    def __set__(self, organism: str=None, force_download: bool=False) -> None:
+    def __set__(self, organism: str=None, force_download: bool=False, show_warnings: bool=False) -> None:
         if organism is None and self.organism in ORGANISMS:
             pass
         elif organism in ORGANISMS:
@@ -85,6 +88,7 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
         self.force_download = force_download
+        self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
         self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
@@ -160,8 +164,8 @@ class GeneSynonyms(object):
                     if _synonym not in gene_names:
                         gene_names.add(_synonym)
                         gene_aliases_mapping["genename"][_synonym] = pointer_to_geneid
-                    else:
-                        print(f"synonym {_synonym} multiple times with ref name: {_reference_name}")
+                    elif self.show_warnings:
+                        warnings.warn(f"synonym {_synonym} multiple times with ref name: {_reference_name}", stacklevel=10)
                 if _ensemblid:
                     gene_aliases_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
                 if _db_name_dict:
@@ -201,19 +205,22 @@ class GeneSynonyms(object):
             if gene_name in self.__upper_gene_names_mapping:
                 return self.__upper_gene_names_mapping[gene_name].value.decode()
             else:
-                warnings.warn(f"no correspondance for gene name '{alias}'", stacklevel=10)
+                if self.show_warnings:
+                    warnings.warn(f"no correspondance for gene name '{alias}'", stacklevel=10)
                 return None
         elif alias_type == "ensemblid":
             if alias in self.gene_aliases_mapping[alias_type]:
                 return self.gene_aliases_mapping[alias_type][alias].value.decode()
             else:
-                warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
+                if self.show_warnings:
+                    warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
         elif alias_type in self.databases:
             if alias in self.gene_aliases_mapping["databases"][alias_type]:
                 return self.gene_aliases_mapping["databases"][alias_type][alias].value.decode()
             else:
-                warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
+                if self.show_warnings:
+                    warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
         else:
             raise ValueError("invalid value for argument 'alias_type'")
@@ -239,7 +246,8 @@ class GeneSynonyms(object):
         if geneid in self.gene_aliases_mapping["geneid"]:
             return self.gene_aliases_mapping["geneid"][geneid].reference_genename
         else:
-            warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
+            if self.show_warnings:
+                warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
     def get_ensemblid(self, alias: str, alias_type: str="genename") -> str:
@@ -263,7 +271,8 @@ class GeneSynonyms(object):
         if geneid in self.gene_aliases_mapping["geneid"]:
             return self.gene_aliases_mapping["geneid"][geneid].ensemblid
         else:
-            warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
+            if self.show_warnings:
+                warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
     
     def get_alias_from_database(self, database: str, alias: str, alias_type: str="genename") -> str:
@@ -292,10 +301,12 @@ class GeneSynonyms(object):
             if database in self.gene_aliases_mapping["geneid"][geneid].databases:
                 return self.gene_aliases_mapping["geneid"][geneid].databases[database]
             else:
-                warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
+                if self.show_warnings:
+                    warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
         else:
-            warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
+            if self.show_warnings:
+                warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
     def __convert(self, out_alias_type: str="referencename") -> str:
