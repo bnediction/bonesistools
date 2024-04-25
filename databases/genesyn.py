@@ -19,7 +19,6 @@ except:
     from collections.abc import Sequence as SequenceInstance
 
 import os
-import sys
 from pathlib import Path
 
 import re
@@ -275,7 +274,7 @@ class GeneSynonyms(object):
                 warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
     
-    def get_alias_from_database(self, database: str, alias: str, alias_type: str="genename") -> str:
+    def get_alias_from_database(self, alias: str, database: str, alias_type: str="genename") -> str:
         """
         Provide the database-defined gene name.
 
