@@ -11,7 +11,8 @@ import pandas as pd
 
 parser = argparse.ArgumentParser(
     prog="gene name standardization",
-    description="""Update gene names by their NCBI reference name.""",
+    description="""Convert gene aliases by another aliases.
+    By default, convert gene names by their NCBI reference names.""",
     usage="""python genename_standardization.py [-h] <path> <path> [<args>]"""
 )
 
