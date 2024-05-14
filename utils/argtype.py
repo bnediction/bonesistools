@@ -30,6 +30,34 @@ class Range(argparse.Action):
             raise argparse.ArgumentError(self, f"value {value} not in range [{self.min}-{self.max}].")
         setattr(namespace, self.dest, value)
 
+class Store_boolean(argparse.Action):
+
+    def __init__(
+        self,
+        *args,
+        **kwargs
+    ):
+        kwargs.update({
+            "type":str,
+            "metavar":"BOOL"
+        })
+        super(Store_boolean, self).__init__(*args, **kwargs)
+
+    def __call__(
+        self,
+        parser,
+        namespace,
+        value,
+        option_string=None
+    ):
+        if value.lower() in ("0", "n", "no", "false"):
+            value = False
+        elif value.lower() in ("1", "y", "yes", "true"):
+            value = True
+        else:
+            raise argparse.ArgumentTypeError("Boolean value expected.")
+        setattr(namespace, self.dest, value)
+
 class Store_prefix(argparse.Action):
 
     def __init__(
