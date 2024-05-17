@@ -16,20 +16,20 @@ parser = argparse.ArgumentParser(
     prog="anndata to csv conversion",
     description="""Convert anndata object to dataframe object by taking counts
     and optionaly supplemental observation and save it in the specified location in csv format.""",
-    usage="""python anndata2csv.py [-h] <path> <path> [<args>]"""
+    usage="""python anndata2csv.py [-h] <FILE> <FILE> [<args>]"""
 )
 
 parser.add_argument(
     "infile",
     type=lambda x: Path(x).resolve(),
-    metavar="PATH",
+    metavar="FILE",
     help="infile in h5ad format"
 )
 
 parser.add_argument(
     "outfile",
     type=lambda x: Path(x).resolve(),
-    metavar="PATH",
+    metavar="FILE",
     help="outfile in csv format"
 )
 
