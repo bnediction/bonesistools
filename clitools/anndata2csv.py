@@ -30,7 +30,17 @@ parser.add_argument(
     "outfile",
     type=lambda x: Path(x).resolve(),
     metavar="FILE",
-    help="outfile in csv format"
+    help="outfile name"
+)
+
+parser.add_argument(
+    "--extension",
+    dest="extension",
+    choices=["csv", "pkl"],
+    default="csv",
+    required=False,
+    metavar="[csv | pkl]",
+    help="outfile extension (default: csv)"
 )
 
 parser.add_argument(
@@ -40,7 +50,7 @@ parser.add_argument(
     required=False,
     default=",",
     metavar="CHAR",
-    help="field delimiter for the outfile (default: `,`)"
+    help="field delimiter for the outfile if in csv format (default: `,`)"
 )
 
 parser.add_argument(
@@ -103,4 +113,7 @@ if args.obs is not None:
 
 print("Saving data...")
 print(df)
-df.to_csv(args.outfile, sep=args.sep, index=True)
+if args.extension == "csv":
+    df.to_csv(args.outfile, sep=args.sep, index=True)
+else:
+    df.to_pickle(args.outfile)
