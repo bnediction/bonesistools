@@ -108,8 +108,10 @@ if args.exp:
     else:
         df = np.expm1(df)
 
+df.attrs["genes"] = list(df.columns)
 if args.obs is not None:
     df.loc[:,args.obs] = adata.obs.loc[:,args.obs]
+    df.attrs["metadata"] = args.obs
 
 print("Saving data...")
 print(df)
