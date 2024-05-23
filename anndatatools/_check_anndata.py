@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import types
+from functools import wraps
+
 from anndata import AnnData
 
 def _adata_arg_checking(
@@ -19,6 +21,7 @@ def _adata_arg_checking(
     Raise an error if the first argument is not an anndata instance.
     """
 
+    @wraps(function)
     def wrapper(adata, *args, **kwargs):
         if not isinstance(adata, AnnData):
             raise TypeError(f"Argument `adata` must be of type {type(AnnData)}, not {type(adata)}")
