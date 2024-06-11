@@ -13,6 +13,28 @@ def load_grn(
     remove_pmid: bool=False,
     **kwargs
 )-> nx.MultiDiGraph:
+    """
+    Provide a Graph Regulatory Network (GRN) derived from collectri database
+    (<Müller-Dott et al. (2023), Expanding the coverage of regulons from high-confidence
+    prior knowledge for accurate estimation of transcription factor activities>)
+
+    Parameters
+    ----------
+    organism
+        common name or identifier of the organism of interest (default: human).
+        Identifier can be NCBI ID, EnsemblID or latin name.
+    split_complexes
+        specify whether to split complexes into subunits
+    remove_pmid
+        specify whether to remove PMIDs in node labels
+    kwargs
+        keyword-arguments passed to`omnipath.interactions.CollecTRI.get    
+        
+    Returns
+    -------
+    Return graph from Collectri database.
+    """
+
     if not isinstance(organism, (str, int)):
         raise ValueError(f"parameter `organism` is not a string or integer instance")
     if not isinstance(split_complexes, bool):

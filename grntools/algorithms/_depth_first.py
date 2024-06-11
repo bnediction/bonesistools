@@ -19,7 +19,7 @@ def dfe(graph: nx.Graph, source: Any, limit_depth: int=3) -> list:
     source
         node
     limit_depth
-        specify the maximum search depth.
+        specify the maximum search depth
     
     Returns
     -------
