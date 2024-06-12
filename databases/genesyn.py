@@ -481,7 +481,7 @@ class GeneSynonyms(object):
         in_alias_type: str="genename",
         out_alias_type: str="referencename",
         keep_if_missing: bool=True,
-        copy: bool = True
+        copy: bool=True
     ) -> Union[Graph, None]:
         """
         Replace gene name with its reference gene name into 'graph'.

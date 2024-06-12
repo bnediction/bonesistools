@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Union
+
 import argparse
 
 class Range(argparse.Action):
@@ -66,8 +68,8 @@ class Store_prefix(argparse.Action):
         **kwargs
     ):
         kwargs.update({
-            "type":str,
-            "metavar":"LITERAL"
+            "type": str,
+            "metavar": "LITERAL"
         })
         super(Store_prefix, self).__init__(*args, **kwargs)
 
@@ -86,8 +88,8 @@ class Store_dict(argparse.Action):
 
     def __init__(
         self,
-        type_key: type = str,
-        type_value: type = str,
+        type_key: type=str,
+        type_value: type=str,
         *args,
         **kwargs
     ):
@@ -124,3 +126,32 @@ class Store_dict(argparse.Action):
             key = self.type_key(key)
             value = self.type_value(value)
             getattr(namespace, self.dest)[key] = value
+
+class Store_organism(argparse.Action):
+
+    def __init__(
+        self,
+        *args,
+        **kwargs
+    ):
+        default = kwargs["default"] if "default" in kwargs else "human"
+        kwargs.update({
+            "type": str,
+            "metavar": "ORGANISM",
+            "default": default,
+            "help": kwargs["help"] if "help" in kwargs else f"common name or identifier of the organism of interest (default: {default})"
+        })
+        super(Store_organism, self).__init__(*args, **kwargs)
+
+    def __call__(
+        self,
+        parser,
+        namespace,
+        value,
+        option_string=None
+    ):
+        if value.is_integer():
+            value = int(value)
+        else:
+            pass
+        setattr(namespace, self.dest, value)
