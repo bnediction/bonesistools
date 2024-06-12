@@ -150,7 +150,7 @@ class Store_organism(argparse.Action):
         value,
         option_string=None
     ):
-        if value.is_integer():
+        if value.isdigit():
             value = int(value)
         else:
             pass

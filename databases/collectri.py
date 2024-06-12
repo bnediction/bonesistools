@@ -12,7 +12,7 @@ def load_grn(
     organism: Union[str,int]="human",
     split_complexes=False,
     remove_pmid: bool=False,
-    gene_synonyms: Optional[GeneSynonyms] = None,
+    gene_synonyms: Optional[GeneSynonyms]=None,
     in_alias_type: str="genename",
     out_alias_type: str="referencename",
     **kwargs
