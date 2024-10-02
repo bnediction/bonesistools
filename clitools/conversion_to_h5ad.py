@@ -48,8 +48,13 @@ parser.add_argument(
     help="sample metadata"
 )
 
-s = """data/rna/ctrl/velocyto/ctrl.loom data/rna/ctrl/raw/ctrl.h5ad --sample-info age=adult date=29-09-2020 sample_name=ctrl condition=control"""
-args = parser.parse_args(s.split())
+parser.add_argument(
+    "--remove-positions",
+    dest="remove_positions",
+    required=False,
+    action="store_true",
+    help="remove chromosome, position on it and strand direction for each gene"
+)
 
 args = parser.parse_args()
 
@@ -66,6 +71,12 @@ else:
 adata.raw = adata
 adata.obs.index = pd.Index(map(lambda barcode: re.sub("[^ATCG]","",re.sub("^.*:","",barcode)), adata.obs.index))
 adata.var["symbol"] = list(adata.var.index)
+if "Accession" in adata.var.columns:
+    adata.var.rename(columns={"Accession":"ensemblid"}, inplace=True)
+if args.remove_positions:
+    for column in ["Chromosome", "Start", "End", "Strand"]:
+        if column in adata.var.columns:
+            del adata.var[column]
 
 for metadatum in args.sample_info:
     key, value = metadatum.split("=")
