@@ -353,15 +353,14 @@ class GeneSynonyms(object):
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
-            if conversion is performed from gene names towards theirs reference gene names,
-            keep gene name instead of 'None' value if gene name is missing from NCBI database.
+            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
         
         Returns
         -------
         return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
-        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         standardized_gene_sequence = list()
         alias_conversion = self.__convert(out_alias_type)
         for gene in gene_sequence:
@@ -394,15 +393,14 @@ class GeneSynonyms(object):
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
-            if conversion is performed from gene names towards theirs reference gene names,
-            keep gene name instead of 'None' value if gene name is missing from NCBI database.
+            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
 
         Returns
         -------
         return an interaction list where each gene name is converted into the user-defined alias type.
         """
 
-        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         standardized_interactions_list = list()
         alias_conversion = self.__convert(out_alias_type)
         for interaction in interactions_list:
@@ -439,8 +437,7 @@ class GeneSynonyms(object):
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
-            if conversion is performed from gene names towards theirs reference gene names,
-            keep gene name instead of 'None' value if gene name is missing from NCBI database.
+            if true, keep gene name instead of 'None' value if gene alias is missing from NCBI database.
         copy
             return a copy instead of updating 'df'
         
@@ -449,7 +446,7 @@ class GeneSynonyms(object):
         Depending on 'copy', update or return DataFrame object with standardized gene name.
         """
 
-        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         df = df.copy() if copy is True else df
         alias_conversion = self.__convert(out_alias_type)
 
@@ -497,8 +494,7 @@ class GeneSynonyms(object):
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
-            if conversion is performed from gene names towards theirs reference gene names,
-            keep gene name instead of 'None' value if gene name is missing from NCBI database.
+            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
         copy
             return a copy instead of updating 'graph'
         
@@ -507,7 +503,7 @@ class GeneSynonyms(object):
         Depending on 'copy', update or return graph with standardized gene name.
         """
 
-        keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
         aliases_mapping = dict()
         alias_conversion = self.__convert(out_alias_type)
         for gene in graph.nodes:
