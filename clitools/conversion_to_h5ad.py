@@ -71,8 +71,6 @@ else:
 adata.raw = adata
 adata.obs.index = pd.Index(map(lambda barcode: re.sub("[^ATCG]","",re.sub("^.*:","",barcode)), adata.obs.index))
 adata.var["symbol"] = list(adata.var.index)
-if "Accession" in adata.var.columns:
-    adata.var.rename(columns={"Accession":"ensemblid"}, inplace=True)
 if args.remove_positions:
     for column in ["Chromosome", "Start", "End", "Strand"]:
         if column in adata.var.columns:
