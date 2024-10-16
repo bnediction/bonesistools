@@ -170,9 +170,12 @@ def __scatterplot_continuous(
 ):
 
     if colors:
-        _cmap = colors.name
+        if hasattr(colors, "name"):
+            _cmap = colors.name
+        else:
+            _cmap = colors
     else:
-        _cmap="autumn"
+        _cmap = "autumn"
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
@@ -189,7 +192,8 @@ def __scatterplot_continuous(
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1
         )
-        fig.colorbar(sc)
+        cb = fig.colorbar(sc, shrink=kwargs["colorbar_scale"] if "colorbar_scale" in kwargs else 1)
+        cb.update_ticks()
     elif n_components==3:
         ax.scatter3D(
             adata.obsm[obsm][:,0],
