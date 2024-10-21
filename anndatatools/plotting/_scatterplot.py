@@ -339,7 +339,7 @@ def embedding_plot(
 
     Returns
     -------
-    Depending on `outfile`, save figure or create a current figure.
+    Depending on `outfile`, save figure or create figure and axe.
     """
 
     if n_components not in [2,3]:
