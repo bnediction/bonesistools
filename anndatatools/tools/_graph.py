@@ -19,7 +19,7 @@ def get_paga_graph(
     """
     Get the partition-based graph abstraction (PAGA) graph stored in `adata`
     with a graph-based data structure.
-    To compute the PAGA, please use `scanpy.tl.paga`.
+    To compute the PAGA matrix, please use `scanpy.tl.paga`.
     PAGA can also be computed using `scvelo`. In this case, please run previously
     adata.uns[`edges`] = adata.uns["paga"][`edges`]
 
@@ -32,9 +32,9 @@ def get_paga_graph(
     obsm
         The data points are retrieved by the first columns in .obsm[`obsm`]
     edges
-        The adjacency matrix-based data structure is retrieved by .uns[`edges`]
+        The adjacency matrix-based data structure is retrieved by .uns[`edges`] (default: transitions_confidence)
     threshold
-        confidence threshold
+        confidence threshold (default: 0.01)
 
     Returns
     -------

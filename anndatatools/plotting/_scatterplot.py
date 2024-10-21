@@ -300,7 +300,7 @@ def embedding_plot(
     **kwargs
 ):
     """
-    Compute a scatterplot between the two first columns of .obsm[`obsm`]
+    Draw a scatterplot between the `n_components` first columns of .obsm[`obsm`]
     by using a classification/clusterization with respect to .obs[`obs`].
 
     Parameters
@@ -318,11 +318,11 @@ def embedding_plot(
     outfile
         If specified, save the figure
     add_graph
-        plot elastic principal graph
+        Draw elastic principal graph
     add_text
-        add node labels of elastic principal graph
+        Add node labels of elastic principal graph
     default_parameters
-        function specifying default figure parameters
+        Function specifying default figure parameters
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
