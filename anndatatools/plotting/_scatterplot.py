@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from collections.abc import Mapping
 import types, typing
 
 from pathlib import Path
@@ -89,7 +90,7 @@ def __scatterplot_discrete(
     adata: ad.AnnData,
     obs: str,
     obsm: str,
-    colors: typing.Optional[typing.Union[typing.Sequence[typing.Sequence[str]], cycle]] = None,
+    colors: typing.Optional[typing.Union[typing.Sequence[typing.Sequence[str]], cycle, Mapping]] = None,
     n_components: typing.Optional[int] = 2,
     **kwargs
 ):
@@ -102,14 +103,16 @@ def __scatterplot_discrete(
         add_legend = False
     
     if not colors:
-        colors = _colors.COLORS
-    
+        colors = _colors.COLORS[0:len(adata.obs[obs].cat.categories)]
+    elif isinstance(colors, Mapping):
+        colors = [colors[cluster] for cluster in adata.obs[obs].cat.categories]
+
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
     fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
     fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5)
-        
-    for _cluster, _color in zip(sorted(adata.obs[obs].unique()), colors):
+    
+    for _cluster, _color in zip(adata.obs[obs].cat.categories, colors):
         idx = np.where(adata.obs[obs] == _cluster)[0]
         if n_components==2:
             ax.scatter(
