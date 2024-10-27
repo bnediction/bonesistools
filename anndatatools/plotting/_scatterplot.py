@@ -147,19 +147,26 @@ def __scatterplot_discrete(
                 if n_components == 3:
                     fig.tight_layout()
                     fig.subplots_adjust(right=0.8)
-                ax.legend(
-                    loc="center left",
-                    bbox_to_anchor=(1.04, 0.5) if n_components == 2 else (1.09, 0.5),
-                    **kwargs["lgd_params"]
-                )
+                kwargs["lgd_params"]["loc"] = "center left"
+                kwargs["lgd_params"]["bbox_to_anchor"] = (1.04, 0.5) if n_components == 2 else (1.09, 0.5)
             else:
-                ax.legend(**kwargs["lgd_params"])
+                pass
         else:
-            ax.legend(
-                loc="center left",
-                bbox_to_anchor=(1.04, 0.5),
-            )
+            kwargs["lgd_params"] = {
+                "loc":"center left",
+                "bbox_to_anchor":(1.04, 0.5)
+            }
     
+        handles, labels = ax.get_legend_handles_labels()
+        index = sorted(range(len(labels)), key=lambda idx: labels[idx])
+        handles = [handles[i] for i in index]
+        labels = [labels[i] for i in index]
+        ax.legend(
+            handles,
+            labels,
+            **kwargs["lgd_params"]
+        )
+
     return fig, ax
 
 @__default_plot
