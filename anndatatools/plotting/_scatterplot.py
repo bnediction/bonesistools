@@ -111,6 +111,30 @@ def __scatterplot_discrete(
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
     fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
     fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5)
+
+    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
+
+    if adata.obs[obs].isna().any():
+        idx = adata.obs[obs].isna()
+        if n_components==2:
+            ax.scatter(
+                adata.obsm[obsm][idx,0],
+                adata.obsm[obsm][idx,1],
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
+                facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
+                edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
+            )
+        elif n_components==3:
+            ax.scatter3D(
+                adata.obsm[obsm][idx,0],
+                adata.obsm[obsm][idx,1],
+                adata.obsm[obsm][idx,2],
+                s=kwargs["s"] if "s" in kwargs else 3,
+                facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
+                edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
+            )
     
     for _cluster, _color in zip(adata.obs[obs].cat.categories, colors):
         idx = np.where(adata.obs[obs] == _cluster)[0]
