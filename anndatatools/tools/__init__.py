@@ -11,3 +11,5 @@ from ._markers import (
 )
 from ._conversion import anndata_to_dataframe
 from ._graph import get_paga_graph
+from ._maths import barycenters
+from ._clusters import subclusters_at_extremity
