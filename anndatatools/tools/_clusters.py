@@ -20,6 +20,31 @@ def subclusters_at_extremity(
     n_neighbors: int=30,
     copy: bool=False
 ):
+    """
+    Compute subclusters with respect to an embedding projection in adata.obsm.
+
+    Parameters
+    ----------
+    adata
+        Annotated data matrix
+    obs
+        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+    obsm
+        The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
+    n_components
+        Dimension of the embedding projection (default: all components)
+    key
+        Name of the column created in adata.obs
+    n_neighbors
+        Size of local neighborhood (in terms of number of neighboring data
+        points) used for manifold approximation.
+    copy
+        return a copy instead of updating `adata` object
+
+    Returns
+    -------
+    Depending on `copy`, updates or returns `adata`.
+    """
     
     adata = adata.copy() if copy else adata
     
