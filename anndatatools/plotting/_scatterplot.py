@@ -103,9 +103,9 @@ def __scatterplot_discrete(
         add_legend = False
     
     if not colors:
-        colors = _colors.COLORS[0:len(adata.obs[obs].cat.categories)]
+        colors = _colors.COLORS[0:len(adata.obs[obs].astype("category").cat.categories)]
     elif isinstance(colors, Mapping):
-        colors = [colors[cluster] for cluster in adata.obs[obs].cat.categories]
+        colors = [colors[cluster] for cluster in adata.obs[obs].astype("category").cat.categories]
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
@@ -136,7 +136,7 @@ def __scatterplot_discrete(
                 alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
             )
     
-    for _cluster, _color in zip(adata.obs[obs].cat.categories, colors):
+    for _cluster, _color in zip(adata.obs[obs].astype("category").cat.categories, colors):
         idx = np.where(adata.obs[obs] == _cluster)[0]
         if n_components==2:
             ax.scatter(

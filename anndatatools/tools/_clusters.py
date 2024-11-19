@@ -94,6 +94,7 @@ def subclusters_at_extremity(
     key: str="subclusters",
     n_neighbors: int=30,
     include: Optional[Sequence[str]]=None,
+    exclude_for_computation: Optional[Sequence[str]]=None,
     copy: bool=False
 ):
     """
@@ -116,6 +117,8 @@ def subclusters_at_extremity(
         points) used for manifold approximation
     include
         Cluster for which subclusters are computed (default: all clusters)
+    exclude_for_computation
+        Clusters not taken into account for computing other subclusters (default: None)
     copy
         return a copy instead of updating `adata` object
 
@@ -141,6 +144,15 @@ def subclusters_at_extremity(
         obsm=obsm,
         n_components=n_components
     )
+
+    if exclude_for_computation is None:
+        pass
+    elif isinstance(exclude_for_computation, collections.abc.MutableSequence) or isinstance(exclude_for_computation, set):
+        exclude_for_computation = set(exclude_for_computation) if isinstance(exclude_for_computation, collections.abc.MutableSequence) else exclude_for_computation
+        for cluster in exclude_for_computation:
+            del _barycenters[cluster]
+    else:
+        raise TypeError(f"`exclude_for_computation` must be a sequence (value: {exclude_for_computation}).")
 
     for cluster in adata.obs[obs].cat.categories:
         if cluster not in include:
@@ -178,6 +190,7 @@ def subclusters(
     n_neighbors: int=30,
     include_center: Optional[Sequence[str]]=None,
     include_extremity: Optional[Sequence[str]]=None,
+    exclude_for_computation: Optional[Sequence[str]]=None,
     copy: bool=False
 ):
     """
@@ -202,6 +215,8 @@ def subclusters(
         Cluster for which subclusters are computed with subclusters_at_center() (default: no cluster)
     include_extremity
         Cluster for which subclusters are computed with subclusters_at_extremity() (default: no cluster)
+    exclude_for_computation
+        Clusters not taken into account for computing other subclusters (default: None)
     copy
         return a copy instead of updating `adata` object
 
@@ -240,6 +255,7 @@ def subclusters(
                 key=key_extremity,
                 n_neighbors=n_neighbors,
                 include=include_extremity,
+                exclude_for_computation=exclude_for_computation,
                 copy=False
             )
             subclusters_df = pd.concat([adata.obs[key_center].astype(str).replace("nan","",regex=True),adata.obs[key_extremity].astype(str).replace("nan","",regex=True)],axis=1)
