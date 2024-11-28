@@ -2,6 +2,8 @@
 
 from typing import Union
 
+import math
+
 import argparse
 
 class Range(argparse.Action):
@@ -119,7 +121,6 @@ class Store_dict(argparse.Action):
         values,
         option_string=None
     ):
-
         setattr(namespace, self.dest, dict())
         for element in values:
             key, value = element.split("=")
@@ -152,6 +153,29 @@ class Store_organism(argparse.Action):
     ):
         if value.isdigit():
             value = int(value)
-        else:
-            pass
         setattr(namespace, self.dest, value)
+
+class Required_length(argparse.Action):
+
+    def __init__(
+        self,
+        min: int=0,
+        max: int=math.inf,
+        *args,
+        **kwargs
+    ):
+        self.min = min
+        self.max = max
+        kwargs.update({"nargs":"*"})
+        super(Required_length, self).__init__(*args, **kwargs)
+
+    def __call__(
+        self,
+        parser,
+        namespace,
+        values,
+        option_string=None
+    ):
+        if not self.min <= len(values) <= self.max:
+            raise argparse.ArgumentTypeError(self, f"argument {self.dest} requires between {self.min} and {self.max} arguments")
+        setattr(namespace, self.dest, values)
