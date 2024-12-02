@@ -31,7 +31,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-f = minibn.BooleanNetwork.load(args.infile)
+f = minibn.BooleanNetwork.load(str(args.infile))
 nodes = list(f.keys())
 
 if args.outfile:
