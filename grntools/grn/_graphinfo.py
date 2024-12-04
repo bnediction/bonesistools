@@ -54,10 +54,9 @@ def get_path_sign(graph: nx.Graph, *nodes) -> int:
     """
 
     path_sign = 1
-    _predecessor = nodes[0]
-    for _node in nodes[1:]:
-        _successor = _node
-        _sign = get_edge_sign(graph, _predecessor, _successor)
+    u = nodes[0]
+    for v in nodes[1:]:
+        _sign = get_edge_sign(graph, u, v)
         if _sign == -1:
             path_sign = _sign * path_sign
         elif _sign == 0:
@@ -65,9 +64,38 @@ def get_path_sign(graph: nx.Graph, *nodes) -> int:
         elif _sign == 1:
             pass
         else:
-            raise ValueError("value of `sign` between {_predecessor} and {_successor} genes is not equal to -1, 0 or 1: `sign` = {_sign}")
-        _predecessor = _successor
+            raise ValueError("value of `sign` between {u} and {v} genes is not equal to -1, 0 or 1: `sign` = {_sign}")
+        u = v
     return path_sign
+
+def path_to_string(graph: nx.Graph, *nodes) -> str:
+    """
+    Get a human-readable string describing a path.
+
+    Parameters
+    ----------
+    graph
+        NetworkX graph
+    *nodes
+        nodes in a specific order depicting an existing path
+
+    Returns
+    -------
+    Return a string with nodes separated by an arrow depicting the positive, negative or bi-signed effect.
+    """
+
+    u = nodes[0]
+    string = str(u)
+    for v in nodes[1:]:
+        sign = get_edge_sign(graph, u, v)
+        if sign == -1:
+            string += f" -| {v}"
+        elif sign == 1:
+            string += f" -> {v}"
+        else:
+            string += f" -- {v}"
+        u = v
+    return string
 
 def scoring(
     graph: nx.Graph,
