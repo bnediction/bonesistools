@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 
 from collections.abc import Mapping
-import types, typing
+import types
+from typing import (
+    Optional,
+    Union,
+    Sequence,
+    Tuple
+)
 
 from pathlib import Path
 
@@ -10,12 +16,14 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.ticker import FormatStrFormatter
 from matplotlib.colors import Colormap
 from mpl_toolkits import mplot3d
 from mpl_toolkits.mplot3d import Axes3D
 from itertools import cycle
+Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
 
 from . import _figure
 from . import _colors
@@ -30,8 +38,8 @@ def __default_plot(
         adata: ad.AnnData,
         obs: str,
         obsm: str,
-        colors: typing.Union[typing.Sequence[typing.Sequence[str]], cycle, Colormap] = None,
-        n_components: typing.Optional[int] = 2,
+        colors: Optional[Colors] = None,
+        n_components: Optional[int] = 2,
         **kwargs
     ):
 
@@ -90,8 +98,8 @@ def __scatterplot_discrete(
     adata: ad.AnnData,
     obs: str,
     obsm: str,
-    colors: typing.Optional[typing.Union[typing.Sequence[typing.Sequence[str]], cycle, Mapping]] = None,
-    n_components: typing.Optional[int] = 2,
+    colors: Optional[Colors] = None,
+    n_components: Optional[int] = 2,
     **kwargs
 ):
 
@@ -198,8 +206,8 @@ def __scatterplot_continuous(
     adata: ad.AnnData,
     obs: str,
     obsm: str,
-    colors: typing.Optional[Colormap] = None,
-    n_components: typing.Optional[int] = 2,
+    colors: Optional[Colormap] = None,
+    n_components: Optional[int] = 2,
     **kwargs
 ):
 
@@ -245,8 +253,8 @@ def __scatterplot_continuous(
 @_adata_arg_checking
 def __graph_to_plot(
     adata: ad.AnnData,
-    ax: typing.Optional[Axes] = None,
-    dim: typing.Optional[int] = 2,
+    ax: Optional[Axes] = None,
+    dim: Optional[int] = 2,
     **kwargs
     ):
 
@@ -284,8 +292,8 @@ def __graph_to_plot(
 @_adata_arg_checking
 def __text_to_plot(
     adata: ad.AnnData,
-    ax: typing.Optional[Axes] = None,
-    dim: typing.Optional[int] = 2,
+    ax: Optional[Axes] = None,
+    dim: Optional[int] = 2,
     **kwargs
     ):
 
@@ -322,14 +330,14 @@ def embedding_plot(
     adata: ad.AnnData,
     obs: str,
     obsm: str,
-    colors: typing.Optional[Colormap] = None,
-    n_components: typing.Optional[int] = 2,
-    outfile: typing.Optional[Path] = None,
-    add_graph: typing.Optional[bool] = None,
-    add_text: typing.Optional[bool] = None,
-    default_parameters: typing.Optional[types.FunctionType] = None,
+    colors: Optional[Colormap] = None,
+    n_components: Optional[int] = 2,
+    outfile: Optional[Path] = None,
+    add_graph: Optional[bool] = None,
+    add_text: Optional[bool] = None,
+    default_parameters: Optional[types.FunctionType] = None,
     **kwargs
-):
+) -> Tuple[Figure, Axes]:
     """
     Draw a scatterplot between the `n_components` first columns of .obsm[`obsm`]
     by using a classification/clusterization with respect to .obs[`obs`].
