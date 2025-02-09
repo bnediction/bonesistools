@@ -10,6 +10,7 @@ from ._markers import (
     get_info
 )
 from ._conversion import anndata_to_dataframe
+from ._write import to_csv, to_mtx, to_npz, to_csv_or_mtx, to_csv_or_npz
 from ._graph import get_paga_graph
 from ._maths import barycenters
 from ._clusters import subclusters_at_center, subclusters_at_extremity, subclusters

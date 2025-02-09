@@ -47,7 +47,7 @@ parser.add_argument(
     default="index",
     required=False,
     metavar="[index | columns]",
-    help="axis to change in dataframe instance if extension infile is csv or tsv (default: index)"
+    help="axis to change in dataframe instance if infile format is csv or tsv (default: index)"
 )
 
 parser.add_argument(
@@ -116,4 +116,4 @@ elif file_extension == "csv" or file_extension == "tsv":
     )
     output.to_csv(args.outfile, sep=args.sep)
 else:
-    raise OSError(f"extension not supported for `{args.infile}`: available extension are txt, csv and tsv")
+    raise IOError(f"incorrect format (txt, csv or tsv format expected)")

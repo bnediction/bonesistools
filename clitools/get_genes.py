@@ -20,7 +20,7 @@ parser.add_argument(
     "infile",
     type=lambda x: Path(x).resolve(),
     metavar="FILE",
-    help="h5ad file"
+    help="h5ad or loom file"
 )
 
 parser.add_argument(
@@ -45,7 +45,7 @@ parser.add_argument(
     dest="standardization",
     required=False,
     action="store_true",
-    help="standardize gene name with their reference name"
+    help="standardize gene name with their NCBI reference name"
 )
 
 args = parser.parse_args()
@@ -53,7 +53,12 @@ args = parser.parse_args()
 if not Path(os.path.dirname(args.outfile)).exists():
     os.makedirs(os.path.dirname(args.outfile))
 
-adata = sc.read_h5ad(args.infile)
+if str(args.infile).endswith(".h5ad"):
+    adata = sc.read_h5ad(args.infile)
+elif str(args.infile).endswith(".loom"):
+    adata = sc.read_loom(args.infile)
+else:
+    raise IOError(f"incorrect format (h5ad or loom format expected)")
 
 if args.axis == "obs":
     gene_list = list(adata.obs.index)
