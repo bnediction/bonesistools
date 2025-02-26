@@ -23,9 +23,9 @@ def anndata_to_dataframe(
     ----------
     adata
         Annotated data matrix.
-    var
+    obs
         Any key or key set in anndata.obs corresponding to defined clusters or groups.
-        If specified, add adata.var.loc[var] to dataframe.
+        If specified, add adata.obs.loc[obs] to dataframe.
     layer
         Any key in adata.layers.
         If provided, use adata.layers[layer] for expression values instead of adata.X.

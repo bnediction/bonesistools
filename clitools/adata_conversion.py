@@ -57,10 +57,20 @@ parser.add_argument(
     "--to",
     dest="to",
     type=str,
-    choices=["h5ad", "loom", "csvs"],
-    metavar="[h5ad | loom | csvs]",
+    choices=["h5ad", "loom", "csv", "csvs"],
+    metavar="[h5ad | loom | csv | csvs]",
     required=True,
     help="matrix data input format"
+)
+
+parser.add_argument(
+    "--layer",
+    dest="layer",
+    type=str,
+    required=False,
+    default=None,
+    metavar="LITERAL",
+    help="layer saved if `--to=csv` (if not specified, save adata.X)"
 )
 
 parser.add_argument(
@@ -146,6 +156,15 @@ elif args.__getattribute__("to") == "loom":
     adata.write_loom(filename=args.output, write_obsm_varm=True)
 elif args.__getattribute__("to") == "zarr":
     adata.write_zarr(store=args.output)
+elif args.__getattribute__("to") == "csv":
+    adt.tl.anndata_to_dataframe(
+        adata=adata,
+        layer=args.layer
+    ).to_csv(
+        path_or_buf=args.output,
+        sep=",",
+        index=True
+    )
 elif args.__getattribute__("to") == "csvs":
     adata.write_csvs(dirname=args.output, sep=",")
     adt.tl.to_csv_or_mtx(
