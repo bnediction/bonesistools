@@ -105,19 +105,21 @@ elif str(args.infile).endswith("loom"):
 else:
     raise argparse.ArgumentError("unable to synchronously open infile (required format: h5ad or loom)")
 
-for column_name in obs_df.columns:
-    if column_name in adata.obs.columns:
-        del adata.obs[column_name]
-adata.obs = adata.obs.merge(how='left',right=obs_df, left_index=True, right_index=True)
+if isinstance(obs_df, pd.DataFrame):
+    for column_name in obs_df.columns:
+        if column_name in adata.obs.columns:
+            del adata.obs[column_name]
+    adata.obs = adata.obs.merge(how='left',right=obs_df, left_index=True, right_index=True)
 
-for column_name in var_df.columns:
-    if column_name in adata.var.columns:
-        del adata.var[column_name]
-adata.var = adata.var.merge(how='left',right=var_df, left_index=True, right_index=True)
+if isinstance(var_df, pd.DataFrame):
+    for column_name in var_df.columns:
+        if column_name in adata.var.columns:
+            del adata.var[column_name]
+    adata.var = adata.var.merge(how='left',right=var_df, left_index=True, right_index=True)
 
 if str(args.outfile).endswith("h5ad"):
-    adata.write_h5ad(filename=args.outpath, compression="gzip")
+    adata.write_h5ad(filename=args.outfile, compression="gzip")
 elif str(args.outfile).endswith("loom"):
-    adata.write_loom(filename=args.outpath, write_obsm_varm=True)
+    adata.write_loom(filename=args.outfile, write_obsm_varm=True)
 else:
     raise argparse.ArgumentError("unable to synchronously create outfile (required format: h5ad or loom)")

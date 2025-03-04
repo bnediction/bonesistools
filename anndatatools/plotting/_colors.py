@@ -1,8 +1,12 @@
 #!/usr/bin/env python
 
-from typing import Sequence
+from typing import Optional, Sequence
+
+import math
+import numpy as np
 
 from itertools import cycle
+from matplotlib.colors import Colormap, ListedColormap
 
 def rgb(color: list):
     return list(map(lambda x: x/255, color))
@@ -58,7 +62,6 @@ COLORS = [
     skyblue,
     teal,
     pink,
-    violet,
     darkblue,
     magenta,
     darkgreen,
@@ -71,7 +74,17 @@ COLORS = [
     indigo,
     gold,
     navy,
-    salmon
+    salmon,
+    black,
+    lightgreen,
+    coral,
+    yellow,
+    limegreen,
+    slateblue,
+    darkyellow,
+    darkorange,
+    lightyellow,
+    lightorange
 ]
 
 LIGHT_COLORS = [
@@ -92,4 +105,64 @@ LIGHT_COLORS = [
     salmon
 ]
 
+QUALITATIVE_COLORS = [
+    blue,
+    red,
+    green,
+    orange,
+    purple,
+    gray,
+    indigo,
+    pink,
+    darkgreen,
+    gold,
+    maroon
+]
+
 color_cycle = cycle(COLORS)
+
+bonesis_cm = ListedColormap(
+    colors=QUALITATIVE_COLORS,
+    name="bonesis"
+)
+
+def generate_colormap(
+    color_number: int = 80,
+    shade_number: Optional[int] = None,
+    cm: Colormap = bonesis_cm
+):
+
+    if color_number <= 0:
+        raise ValueError(f"invalid argument value for color_number (color_number is not positive, value: '{color_number}')")
+    
+    if not isinstance(cm, Colormap):
+        raise TypeError(f"unsupported argument type for cm: '{type(cm)}' instead of '{Colormap}'")
+
+    if shade_number is None:
+        shade_number = cm.N
+    elif shade_number <= 0:
+        raise ValueError(f"invalid argument value for shade_number (shade_number is not positive, value: '{shade_number}')")
+    
+    color_number_with_multiply_of_shades = int(math.ceil(color_number / shade_number) * shade_number)
+    linearly_uniform_floats = np.arange(color_number_with_multiply_of_shades) / color_number_with_multiply_of_shades
+    reorganised_array = linearly_uniform_floats.reshape(shade_number, color_number_with_multiply_of_shades // shade_number).transpose()
+    partition_number = reorganised_array.shape[0]
+
+    flatten_reorganised_array = reorganised_array.reshape(-1)
+
+    initial_cm = cm(flatten_reorganised_array)
+
+    lower_partitions_half = partition_number // 2
+    upper_partitions_half = partition_number - lower_partitions_half
+
+    lower_half = lower_partitions_half * shade_number
+    for i in range(3):
+        initial_cm[0:lower_half, i] *= np.arange(0.2, 1, 0.8/lower_half)
+
+    for i in range(3):
+        for j in range(upper_partitions_half):
+            modifier = np.ones(shade_number) - initial_cm[lower_half + j * shade_number: lower_half + (j + 1) * shade_number, i]
+            modifier = j * modifier / upper_partitions_half
+            initial_cm[lower_half + j * shade_number: lower_half + (j + 1) * shade_number, i] += modifier
+
+    return ListedColormap(initial_cm)

@@ -27,6 +27,7 @@ Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
 
 from . import _figure
 from . import _colors
+from .. import tl
 
 from .._check_anndata import _adata_arg_checking
 
@@ -111,9 +112,15 @@ def __scatterplot_discrete(
         add_legend = False
     
     if not colors:
-        colors = _colors.COLORS[0:len(adata.obs[obs].astype("category").cat.categories)]
+        cluster_number = len(adata.obs[obs].astype("category").cat.categories)
+        if len(_colors.QUALITATIVE_COLORS) >= cluster_number:
+            colors = _colors.QUALITATIVE_COLORS[0:cluster_number]
+        else:
+            colors = _colors.generate_colormap(color_number=cluster_number)
     elif isinstance(colors, Mapping):
         colors = [colors[cluster] for cluster in adata.obs[obs].astype("category").cat.categories]
+    if hasattr(colors, "colors"):
+        colors = colors.colors
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
@@ -145,6 +152,10 @@ def __scatterplot_discrete(
             )
     
     for _cluster, _color in zip(adata.obs[obs].astype("category").cat.categories, colors):
+        if len(_color) == 4:
+            if isinstance(_color, np.ndarray):
+                _color = _color.tolist()
+            del _color[-1]
         idx = np.where(adata.obs[obs] == _cluster)[0]
         if n_components==2:
             ax.scatter(
@@ -250,6 +261,47 @@ def __scatterplot_continuous(
 
     return fig, ax
 
+def __add_labels(
+    adata: ad.AnnData,
+    obs: str,
+    obsm: str,
+    ax: Optional[Axes] = None,
+    dim: Optional[int] = 2,
+    **kwargs
+):
+
+    barycenters = tl.barycenters(
+        adata=adata,
+        obs=obs,
+        obsm=obsm
+    )
+
+    if ax is None:
+        ax = plt.gca()
+    
+    if "verticalalignment" not in kwargs:
+        kwargs["verticalalignment"] = "center"
+    else:
+        pass
+
+    if dim == 2:
+        for label, value in barycenters.items():
+            plt.text(
+                x=value[0],
+                y=value[1],
+                s=label,
+                **kwargs
+            )
+    elif dim == 3:
+        for label, value in barycenters.items():
+            ax.text(
+                x=value[0],
+                y=value[1],
+                z=value[2],
+                s=label,
+                **kwargs
+            )
+
 @_adata_arg_checking
 def __graph_to_plot(
     adata: ad.AnnData,
@@ -290,7 +342,7 @@ def __graph_to_plot(
         ax.add_line(line)
 
 @_adata_arg_checking
-def __text_to_plot(
+def __add_labels_to_graph(
     adata: ad.AnnData,
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
@@ -302,7 +354,7 @@ def __text_to_plot(
 
     if ax is None:
         ax = plt.gca()
-
+    
     flat_tree = adata.uns["flat_tree"]
     flat_tree_node_label = nx.get_node_attributes(flat_tree, "label")
     flat_tree_node_pos = nx.get_node_attributes(flat_tree, "pos")
@@ -333,8 +385,9 @@ def embedding_plot(
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
     outfile: Optional[Path] = None,
-    add_graph: Optional[bool] = None,
-    add_text: Optional[bool] = None,
+    add_labels: bool = False,
+    add_graph: bool = False,
+    add_labels_to_graph: bool = False,
     default_parameters: Optional[types.FunctionType] = None,
     **kwargs
 ) -> Tuple[Figure, Axes]:
@@ -356,9 +409,11 @@ def embedding_plot(
         Number of plotted dimensions (default: 2)
     outfile
         If specified, save the figure
+    add_labels
+        Add labels retrieved by .obs[`obs`]
     add_graph
         Draw elastic principal graph
-    add_text
+    add_labels_to_graph
         Add node labels of elastic principal graph
     default_parameters
         Function specifying default figure parameters
@@ -411,26 +466,34 @@ def embedding_plot(
             **kwargs
         )
     
-    if add_graph:
+    if add_labels:
         ax = plt.gca()
-        __graph_to_plot(adata, ax=ax, dim=n_components)
-    
-    if add_text:
-        ax = plt.gca()
-        if "text" not in kwargs:
-            kwargs["text"] = dict()
-            kwargs["text"]["verticalalignment"] = "bottom" if add_graph else "center"
-        elif "verticalalignment" not in kwargs["text"]:
-            kwargs["text"]["verticalalignment"] = "bottom" if add_graph else "center"
-        else:
-            pass
-        __text_to_plot(
+        _kwargs = {} if "text" not in kwargs else kwargs["text"]
+        __add_labels(
             adata,
-            ax,
+            obs=obs,
+            obsm=obsm,
+            ax=plt.gca(),
             dim=n_components,
-            **kwargs["text"]
+            **_kwargs
+        )
+
+    if add_graph:
+        __graph_to_plot(
+            adata,
+            ax=plt.gca(),
+            dim=n_components
         )
     
+    if add_labels_to_graph:
+        _kwargs = {"verticalalignment": "bottom" if add_graph else "center"} if "text" not in kwargs else kwargs["text"]
+        __add_labels_to_graph(
+            adata,
+            ax=plt.gca(),
+            dim=n_components,
+            **_kwargs
+        )
+        
     if default_parameters:
         default_parameters()
     
