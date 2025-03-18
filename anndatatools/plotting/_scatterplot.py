@@ -15,6 +15,7 @@ import anndata as ad
 import pandas as pd
 import numpy as np
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
@@ -228,7 +229,7 @@ def __scatterplot_continuous(
         else:
             _cmap = colors
     else:
-        _cmap = "autumn"
+        _cmap = "autumn_r"
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")

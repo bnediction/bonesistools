@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 
-import os
+import os, io
 import contextlib
 
+import datetime
+
 @contextlib.contextmanager
-def disable_print():
-    with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
-        yield
+def disable_print(disable: bool=True):
+    if disable is True:
+        with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
+            yield
+    else:
+        with io.StringIO() as f:
+            yield
 
 class Section(object):
 
@@ -39,3 +45,12 @@ class Section(object):
     
     def verbose(self):
         self._verbose = True
+
+def print_task(task=None):
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - TASK - {task}")
+
+def print_info(info=None):
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - INFO - {info}")
+
+def print_warning(warning=None):
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - WARNING - {warning}")
