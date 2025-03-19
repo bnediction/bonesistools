@@ -22,7 +22,7 @@ def __generate_unique_index_name(
         _i += 1
     return index_name
 
-def transfer_obs_ato(
+def transfer_obs_sti(
     adata: ad.AnnData,
     adatas: List[ad.AnnData],
     obs: List[str],
@@ -31,21 +31,21 @@ def transfer_obs_ato(
     copy: bool = False
 ) -> Union[ad.AnnData, None]:
     """
-    Transfer observations all-to-one, i.e. transfer columns from multiple AnnData `adatas` towards a unique AnnData `adata`.
+    Transfer observations from specific to integrated dataset, i.e. transfer columns from multiple AnnData `adatas` towards a unique AnnData `adata`.
     This function handles issues whenever there are identical indices in `adatas.obs`.
 
     Parameters
     ----------
     adata
-        AnnData object receiving information
+        AnnData object receiving information (specific datasets)
     adatas
-        AnnData objects sending information
+        AnnData objects sending information (integrated dataset)
     obs
-        column names in `adatas.obs` to transfer
+        column names in specific `adata.obs` to transfer
     conditions
         conditions related to AnnData objects (ordered w.r.t `adatas`)
     condition_colname
-        column name in `adata.obs` related to conditions
+        column name in integrated `adata.obs` related to conditions
     copy
         return a copy instead of updating 'adata' object
         
@@ -89,3 +89,53 @@ def transfer_obs_ato(
     adata.obs = merge_df
 
     return adata if copy else None
+
+def transfer_obs_its(
+    adata: ad.AnnData,
+    adatas: List[ad.AnnData],
+    obs: List[str],
+    conditions: List[str],
+    condition_colname: str = "condition",
+    copy: bool = False
+) -> Union[ad.AnnData, None]:
+    """
+    Transfer observations from integrated to specific datasets, i.e. transfer columns from a unique AnnData `adata` towards multiple AnnData `adatas`.
+
+    Parameters
+    ----------
+    adata
+        AnnData object receiving information (specific datasets)
+    adatas
+        AnnData objects sending information (integrated dataset)
+    obs
+        column names in integrated `adata.obs` to transfer
+    conditions
+        conditions related to AnnData objects (ordered w.r.t `adatas`)
+    condition_colname
+        column name in integrated `adata.obs` related to conditions
+    copy
+        return a copy instead of updating 'adata' object
+        
+    Returns
+    -------
+    Depending on `copy`, update AnnData objects or return a list of AnnData objects with new observations.
+    """
+
+    if copy:
+        for _adata in adatas:
+            _adata = _adata.copy()
+        adatas_cp = []
+
+    for _condition, _adata in zip(conditions, adatas):
+        _cond = adata.obs[condition_colname] == _condition
+        df = adata.obs.loc[_cond][obs]
+        _adata.obs = _adata.obs.merge(
+            right=df,
+            how="left",
+            left_index=True,
+            right_index=True
+        )
+        if copy:
+            adatas_cp.append(_adata)
+    
+    return adatas_cp if copy else None
