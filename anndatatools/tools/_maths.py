@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
 from typing import Optional
-
 from anndata import AnnData
+from .._typing import adata_checker
 
 import numpy as np
 
-from .._check_anndata import _adata_arg_checking
-
-@_adata_arg_checking
+@adata_checker
 def barycenters(
     adata: AnnData,
     obs: str,

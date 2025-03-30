@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union
+from .._typing import adata_checker
 
 import numpy as np
 import math
@@ -9,9 +10,7 @@ from sklearn.metrics import pairwise_distances
 
 import anndata as ad
 
-from .._check_anndata import _adata_arg_checking
-
-@_adata_arg_checking
+@adata_checker
 def _shared_nearest_neighbors_graph(
     adata: ad.AnnData,
     cluster_key: str,
@@ -46,7 +45,7 @@ def _shared_nearest_neighbors_graph(
 
     return neighborhood_graph
 
-@_adata_arg_checking
+@adata_checker
 def shared_neighbors(
     adata: ad.AnnData,
     knn_key: str = "neighbors",

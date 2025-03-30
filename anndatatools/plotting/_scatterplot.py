@@ -8,6 +8,7 @@ from typing import (
     Sequence,
     Tuple
 )
+from .._typing import adata_checker
 
 from pathlib import Path
 
@@ -30,7 +31,6 @@ from . import _figure
 from . import _colors
 from .. import tl
 
-from .._check_anndata import _adata_arg_checking
 
 def __default_plot(
     plot: types.FunctionType
@@ -303,7 +303,7 @@ def __add_labels(
                 **kwargs
             )
 
-@_adata_arg_checking
+@adata_checker
 def __graph_to_plot(
     adata: ad.AnnData,
     ax: Optional[Axes] = None,
@@ -342,7 +342,7 @@ def __graph_to_plot(
             line = mplot3d.art3d.Line3D(xs=x, ys=y, zs=z, color=_colors.black, **kwargs)
         ax.add_line(line)
 
-@_adata_arg_checking
+@adata_checker
 def __add_labels_to_graph(
     adata: ad.AnnData,
     ax: Optional[Axes] = None,
@@ -378,7 +378,7 @@ def __add_labels_to_graph(
                 **kwargs
             )
 
-@_adata_arg_checking
+@adata_checker
 def embedding_plot(
     adata: ad.AnnData,
     obs: str,

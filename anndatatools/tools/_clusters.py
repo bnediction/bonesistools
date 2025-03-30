@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Optional, Sequence
 import collections.abc
+from typing import Optional, Sequence
+from .._typing import adata_checker
 
 from anndata import AnnData
 
@@ -9,9 +10,8 @@ import pandas as pd
 import numpy as np
 
 from . import barycenters
-from .._check_anndata import _adata_arg_checking
 
-@_adata_arg_checking
+@adata_checker
 def subclusters_at_center(
     adata: AnnData,
     obs: str,
@@ -85,7 +85,7 @@ def subclusters_at_center(
 
     return adata if copy else None
 
-@_adata_arg_checking
+@adata_checker
 def subclusters_at_extremity(
     adata: AnnData,
     obs: str,
@@ -180,7 +180,7 @@ def subclusters_at_extremity(
 
     return adata if copy else None
 
-@_adata_arg_checking
+@adata_checker
 def subclusters(
     adata: AnnData,
     obs: str,

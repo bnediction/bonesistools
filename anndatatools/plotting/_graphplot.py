@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-from collections.abc import Mapping
 import typing
-
+from collections.abc import Mapping
 from pathlib import Path
+from .._typing import adata_checker
 
 import matplotlib.pyplot as plt
 from matplotlib.axes._axes import Axes
@@ -14,9 +14,8 @@ from . import _colors
 import networkx as nx
 
 from ..tools import get_paga_graph
-from .._check_anndata import _adata_arg_checking
 
-@_adata_arg_checking
+@adata_checker
 def draw_paga(
     adata,
     obs,

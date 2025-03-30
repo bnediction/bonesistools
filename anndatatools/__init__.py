@@ -11,7 +11,17 @@ credits: "BNeDiction; PEPR Santé Numérique 2030"
 __version__ = "1.0.0"
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 
-from ._check_anndata import _adata_arg_checking
+from ._typing import (
+    UnionType,
+    type_checker,
+    adata_checker,
+    AnnDataList,
+    DataFrameList,
+    AxisInt,
+    Axis,
+    Keys,
+    Suffixes
+)
 
 from . import tools as tl
 from . import preprocessing as pp

@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
 from anndata import AnnData
+from .._typing import adata_checker
 
 import numpy as np
 
 import networkx as nx
 
-from .. import _adata_arg_checking
-
-@_adata_arg_checking
+@adata_checker
 def get_paga_graph(
     adata: AnnData,
     obs: str,

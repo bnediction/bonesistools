@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union, Sequence
+from .._typing import adata_checker
 
 from anndata import AnnData
 from pandas import DataFrame
@@ -8,9 +9,7 @@ from pandas import DataFrame
 import numpy as np
 from scipy.sparse import issparse
 
-from .. import _adata_arg_checking
-
-@_adata_arg_checking
+@adata_checker
 def anndata_to_dataframe(
     adata: AnnData,
     obs: Optional[Union[str, Sequence[str]]] = None,
@@ -24,7 +23,7 @@ def anndata_to_dataframe(
     adata
         Annotated data matrix.
     obs
-        Any key or key set in anndata.obs corresponding to defined clusters or groups.
+        Any key or key set in anndata.obs.
         If specified, add adata.obs.loc[obs] to dataframe.
     layer
         Any key in adata.layers.

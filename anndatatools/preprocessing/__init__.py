@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 from ._simple import (
+    set_index,
+    merge,
+    transfer_layer,
     transfer_obs_sti,
     transfer_obs_its
 )
