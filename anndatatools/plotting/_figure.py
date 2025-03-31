@@ -9,41 +9,45 @@ from matplotlib.ticker import FormatStrFormatter
 from matplotlib.colors import ListedColormap
 from . import _colors
 
-mpl.rcParams.update(mpl.rcParamsDefault)
+def set_default_params():
 
-font = {"family" : "normal",
-        "weight" : "normal",
-        "size"   : 12}
-mpl.rc("font", **font)
+    mpl.rcParams.update(mpl.rcParamsDefault)
 
-mpl.rcParams["text.usetex"] = True
-mpl.rcParams["lines.linewidth"] = 1.5
+    font = {"family" : "normal",
+            "weight" : "normal",
+            "size"   : 12}
+    mpl.rc("font", **font)
 
-mpl.rcParams.update({
-    "axes.spines.top"    : False,
-    "axes.spines.bottom" : True,
-    "axes.spines.left"   : True,
-    "axes.spines.right"  : False
-})
+    mpl.rcParams["text.usetex"] = True
+    mpl.rcParams["lines.linewidth"] = 1.5
 
-__margin = 0
-mpl.rcParams["axes.xmargin"] = __margin
-mpl.rcParams["axes.ymargin"] = __margin
-mpl.rcParams["axes.zmargin"] = __margin
-mpl.rcParams["axes.labelsize"] = 14
+    mpl.rcParams.update({
+        "axes.spines.top"    : False,
+        "axes.spines.bottom" : True,
+        "axes.spines.left"   : True,
+        "axes.spines.right"  : False
+    })
 
-mpl.rcParams["axes.prop_cycle"] = cycler.cycler(color=[
-    _colors.blue,
-    _colors.red,
-    _colors.green,
-    _colors.orange,
-    _colors.purple,
-    _colors.skyblue,
-    _colors.teal,
-    _colors.pink,
-    _colors.violet,
-    _colors.darkblue
-])
+    __margin = 0
+    mpl.rcParams["axes.xmargin"] = __margin
+    mpl.rcParams["axes.ymargin"] = __margin
+    mpl.rcParams["axes.zmargin"] = __margin
+    mpl.rcParams["axes.labelsize"] = 14
+
+    mpl.rcParams["axes.prop_cycle"] = cycler.cycler(color=[
+        _colors.blue,
+        _colors.red,
+        _colors.green,
+        _colors.orange,
+        _colors.purple,
+        _colors.skyblue,
+        _colors.teal,
+        _colors.pink,
+        _colors.violet,
+        _colors.darkblue
+    ])
+
+    return None
 
 cmap = ListedColormap(
     colors  = _colors.COLORS,
@@ -53,7 +57,7 @@ cmap = ListedColormap(
 
 mpl.colormaps.register(cmap)
 
-def set_default(
+def set_default_axis(
     ax: Optional[Axes] = None
 ):
     if ax is None:

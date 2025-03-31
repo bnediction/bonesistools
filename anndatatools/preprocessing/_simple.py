@@ -192,8 +192,7 @@ def transfer_layer(
         idx_to_add = list(left_idx.difference(right_idx))
         if cols_to_add:
             df.loc[:,cols_to_add] = nan
-        for idx in idx_to_add:
-            df.loc[idx,:] = pd.Series(dtype="float64")
+        df = pd.concat([df, pd.DataFrame(data=nan, columns=df.columns, index=idx_to_add)])
 
         cols_to_remove = list(right_cols.difference(left_cols))
         index_to_remove = list(right_idx.difference(left_idx))

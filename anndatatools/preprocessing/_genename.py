@@ -10,7 +10,7 @@ import anndata as ad
 import pandas as pd
 from scipy.sparse import csr_matrix
 
-from databases.genesyn import GeneSynonyms
+from ...databases.genesyn import GeneSynonyms
 
 @adata_checker
 def gene_synonyms_conversion(

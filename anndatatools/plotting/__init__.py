@@ -11,7 +11,10 @@ from ._colors import (
     color_cycle,
     bonesis_cm,
     rgb2hex,
-    generate_colormap
+    generate_colormap,
 )
-from ._figure import set_default
+from ._figure import (
+    set_default_params,
+    set_default_axis
+)
 from ._kde import kde_plot
