@@ -378,7 +378,6 @@ def __add_labels_to_graph(
                 **kwargs
             )
 
-@adata_checker
 def embedding_plot(
     adata: ad.AnnData,
     obs: str,

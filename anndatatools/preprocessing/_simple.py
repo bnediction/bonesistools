@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 
 from typing import (
-    Optional,
     Union,
     List,
-    Tuple,
-    Literal
 )
 from anndata import AnnData
 from pandas import DataFrame

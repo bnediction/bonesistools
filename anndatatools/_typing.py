@@ -109,11 +109,11 @@ def adata_checker(
 
         @wraps(function)
         def wrapper(*args, **kwargs):
-            iterator = iter(kwargs.items())
-            for _ in range(n):
-                key, value = next(iterator)
+            iterator = iter(list(args) + list(kwargs.values()))
+            for i in range(n):
+                value = next(iterator)
                 if not isinstance(value, AnnData):
-                    raise TypeError(f"unsupported argument type for '{key}': expected '{AnnData}' but received '{type(value)}'")
+                    raise TypeError(f"unsupported argument type for '{i}'-th argument: expected '{AnnData}' but received '{type(value)}'")
             return function(*args, **kwargs)
         return wrapper
 

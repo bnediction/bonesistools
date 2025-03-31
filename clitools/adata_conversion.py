@@ -3,7 +3,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
-from typing import Optional, Union
+from typing import Union
 
 from pathlib import Path
 
@@ -19,7 +19,7 @@ import anndatatools as adt
 PathLike = Union[str,Path]
 
 parser = argparse.ArgumentParser(
-    prog="Convert single-omics counting file into h5ad format",
+    prog="Convert single-omics counting file format",
     description="""Convert single-omics counting data into the desired format.
     In case of 10x sparse matrix format, it is a directory containing three files:
     - matrix.mtx.gz (sparse matrix in the Market Exchange MEX format) -- also named coordinate list format, which corresponds to compressed reordered sparse counting data)
