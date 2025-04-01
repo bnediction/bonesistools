@@ -5,7 +5,7 @@ from collections import deque
 
 import networkx as nx
 
-def dfe(graph: nx.Graph, source: Any, limit_depth: int=3) -> list:
+def depth_first_extraction(graph: nx.Graph, source: Any, limit_depth: int=3) -> list:
     """
     Extract all existing paths from a node within a distance
     by a recursive implementation of depth-first extraction (DFE) algorithm.

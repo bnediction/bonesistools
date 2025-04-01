@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-from . import _colors as color
-from . import _figure as fig
 from ._scatterplot import embedding_plot
 from ._graphplot import draw_paga
+from ._kde import kde_plot
+
 from ._colors import (
     COLORS,
     LIGHT_COLORS,
@@ -13,8 +13,8 @@ from ._colors import (
     rgb2hex,
     generate_colormap,
 )
+
 from ._figure import (
     set_default_params,
     set_default_axis
 )
-from ._kde import kde_plot

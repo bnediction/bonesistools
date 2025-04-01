@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 
-from typing import Union
-
-import math
-
 import argparse
 
 class Range(argparse.Action):
@@ -156,6 +152,8 @@ class Store_organism(argparse.Action):
         setattr(namespace, self.dest, value)
 
 class Required_length(argparse.Action):
+
+    import math
 
     def __init__(
         self,

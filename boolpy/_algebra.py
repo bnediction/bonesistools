@@ -2,7 +2,7 @@
 
 from typing import Union
 from numbers import Number
-from .._boolean import PartialBoolean
+from ._boolean import PartialBoolean
 
 import math
 

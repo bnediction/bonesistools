@@ -46,11 +46,14 @@ class Section(object):
     def verbose(self):
         self._verbose = True
 
-def print_task(task=None):
-    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - TASK - {task}")
+def print_task(message:str=None) -> None:
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - TASK - {message}")
+    return None
 
-def print_info(info=None):
-    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - INFO - {info}")
+def print_info(message:str=None) -> None:
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - INFO - {message}")
+    return None
 
-def print_warning(warning=None):
-    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - WARNING - {warning}")
+def print_warning(message:str=None) -> None:
+    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - WARNING - {message}")
+    return None

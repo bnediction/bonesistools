@@ -4,10 +4,8 @@ from typing import Any, Sequence, Optional
 from numbers import Number
 from collections import namedtuple
 
-import numpy as np
-
 import networkx as nx
-from .. import algorithms
+from ._algorithms import depth_first_extraction
 
 def get_edge_sign(graph: nx.Graph, source: Any, target: Any):
     """
@@ -130,7 +128,7 @@ def scoring(
     gene_set = gene_set if gene_set is not None else set(graph.nodes)
     for source in gene_set:
         targets = gene_set.difference([source])
-        paths_from_source = algorithms.dfe(graph=graph, source=source, limit_depth=radius)
+        paths_from_source = depth_first_extraction(graph=graph, source=source, limit_depth=radius)
         _interactions_from_source = {target: [0, 0, 0] for target in targets}
         for _path in paths_from_source:
             _target = _path[-1]
