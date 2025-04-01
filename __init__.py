@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-from . import anndatatools as at
-from . import boolpy as bp
-from . import databases as db
-from . import grntools as gt
+from . import anndatatools as adt
+from . import boolpy as bpy
+from . import databases as dbs
+from . import grntools as grn
 from . import utils
 
 import sys as _sys
 
-_sys.modules.update({f"{__name__}.{alias}": globals()[alias] for alias in ["at", "bp", "db", "gt"]})
+_sys.modules.update({f"{__name__}.{alias}": globals()[alias] for alias in ["adt", "bpy", "dbs", "grn"]})

@@ -6,7 +6,7 @@ import decoupler as dc
 
 import networkx as nx
 
-from .genesyn import GeneSynonyms
+from ..ncbi import GeneSynonyms
 
 def load_grn(
     organism: Union[str,int]="human",

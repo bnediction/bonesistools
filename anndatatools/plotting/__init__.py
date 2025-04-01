@@ -5,13 +5,15 @@ from ._graphplot import draw_paga
 from ._kde import kde_plot
 
 from ._colors import (
+    rgb,
+    rgb2hex,
+    get_color,
+    generate_colormap,
     COLORS,
     LIGHT_COLORS,
     QUALITATIVE_COLORS,
     color_cycle,
-    bonesis_cm,
-    rgb2hex,
-    generate_colormap,
+    bonesis_cm
 )
 
 from ._figure import (

@@ -126,6 +126,21 @@ bonesis_cm = ListedColormap(
     name="bonesis"
 )
 
+def get_color(color:str):
+
+    if color in [
+        "black", "white", "blue", "red", "green",
+        "violet", "lightgreen", "coral", "yellow", "darkyellow",
+        "lightyellow", "darkorange", "lightorange", "limegreen", "pink",
+        "orchid", "magenta", "purple", "indigo", "slateblue",
+        "lightgray", "gray", "darkgreen", "gold", "orange",
+        "salmon", "maroon", "beet", "teal", "olive",
+        "navy", "darkblue", "skyblue"
+    ]:
+        return eval(color)
+    else:
+        raise ValueError("color {color} not found")
+
 def generate_colormap(
     color_number: int = 80,
     shade_number: Optional[int] = None,
