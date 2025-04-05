@@ -4,7 +4,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from typing import Union, Optional
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 import anndata as ad
 import pandas as pd
@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 
 from ...databases.ncbi import GeneSynonyms
 
-@adata_checker
+@anndata_checker
 def gene_synonyms_conversion(
     adata: ad.AnnData,
     annotations: str="var",
@@ -67,7 +67,7 @@ def gene_synonyms_conversion(
     
     return adata if copy else None
 
-@adata_checker
+@anndata_checker
 def set_ncbi_reference_name(
     adata: ad.AnnData,
     annotations: str="var",
@@ -107,7 +107,7 @@ def set_ncbi_reference_name(
 
     return adata if copy else None
 
-@adata_checker
+@anndata_checker
 def var_names_merge_duplicates(
     adata: ad.AnnData,
     var_names_column: Optional[str]=None

@@ -4,23 +4,22 @@
 anndatatools is a python package for handling and performing operations on annotated data (anndata).
 It offers a range of efficient features not available in Scanpy package, proposes some corrections
 on Scanpy-based functions when inconsistencies have been highlighted, and matplotlib-based visualizations.
-
-credits: "BNeDiction; PEPR Santé Numérique 2030"
 """
-
-__version__ = "1.0.0"
-__credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 
 from ._typing import (
     UnionType,
     type_checker,
-    adata_checker,
+    anndata_checker,
+    mudata_checker,
+    anndata_or_mudata_checker,
     AnnDataList,
+    MuDataList,
     DataFrameList,
     AxisInt,
     Axis,
     Keys,
-    Suffixes
+    Suffixes,
+    ScData
 )
 
 from . import tools as tl

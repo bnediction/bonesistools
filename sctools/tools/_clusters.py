@@ -2,7 +2,7 @@
 
 import collections.abc
 from typing import Optional, Sequence
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 from anndata import AnnData
 
@@ -11,7 +11,7 @@ import numpy as np
 
 from . import barycenters
 
-@adata_checker
+@anndata_checker
 def subclusters_at_center(
     adata: AnnData,
     obs: str,
@@ -85,7 +85,7 @@ def subclusters_at_center(
 
     return adata if copy else None
 
-@adata_checker
+@anndata_checker
 def subclusters_at_extremity(
     adata: AnnData,
     obs: str,
@@ -180,7 +180,7 @@ def subclusters_at_extremity(
 
     return adata if copy else None
 
-@adata_checker
+@anndata_checker
 def subclusters(
     adata: AnnData,
     obs: str,

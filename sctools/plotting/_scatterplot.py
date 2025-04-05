@@ -8,7 +8,7 @@ from typing import (
     Sequence,
     Tuple
 )
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 from pathlib import Path
 
@@ -303,7 +303,7 @@ def __add_labels(
                 **kwargs
             )
 
-@adata_checker
+@anndata_checker
 def __graph_to_plot(
     adata: ad.AnnData,
     ax: Optional[Axes] = None,
@@ -342,7 +342,7 @@ def __graph_to_plot(
             line = mplot3d.art3d.Line3D(xs=x, ys=y, zs=z, color=_colors.black, **kwargs)
         ax.add_line(line)
 
-@adata_checker
+@anndata_checker
 def __add_labels_to_graph(
     adata: ad.AnnData,
     ax: Optional[Axes] = None,

@@ -8,7 +8,7 @@ from anndata import AnnData
 from pandas import DataFrame
 from numpy import nan
 from .._typing import (
-    adata_checker,
+    anndata_checker,
     type_checker,
     UnionType,
     DataFrameList,
@@ -36,7 +36,7 @@ def __generate_unique_index_name(
         _i += 1
     return index_name
 
-@adata_checker
+@anndata_checker
 def set_index(
     adata: AnnData,
     keys: Keys,
@@ -87,7 +87,7 @@ def set_index(
     
     return adata if copy else None
 
-@adata_checker(n=2)
+@anndata_checker(n=2)
 def merge(
     left_ad: AnnData,
     right_ad: AnnData,
@@ -143,7 +143,7 @@ def merge(
 
     return left_ad if copy else None
 
-@adata_checker(n=2)
+@anndata_checker(n=2)
 def transfer_layer(
     left_ad: AnnData,
     right_ad: AnnData,
@@ -206,7 +206,7 @@ def transfer_layer(
 
     return left_ad if copy else None
 
-@adata_checker
+@anndata_checker
 def transfer_obs_sti(
     adata: AnnData,
     adatas: List[AnnData],
@@ -275,7 +275,7 @@ def transfer_obs_sti(
 
     return adata if copy else None
 
-@adata_checker
+@anndata_checker
 def transfer_obs_its(
     adata: AnnData,
     adatas: List[AnnData],

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union
-from .._typing import adata_checker
+from .._typing import anndata_or_mudata_checker, ScData
 
 import numpy as np
 import math
@@ -10,14 +10,14 @@ from sklearn.metrics import pairwise_distances
 
 import anndata as ad
 
-@adata_checker
+@anndata_or_mudata_checker
 def _shared_nearest_neighbors_graph(
-    adata: ad.AnnData,
+    scdata: ScData, # type: ignore
     cluster_key: str,
     prune_snn: float
 ) -> csr_matrix:
 
-    k_neighbors = adata.uns[cluster_key]["params"]["n_neighbors"] - 1
+    k_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
     if prune_snn < 0:
         raise ValueError("`prune_snn` parameter must be positive, aborting")
     elif prune_snn < 1:
@@ -25,10 +25,10 @@ def _shared_nearest_neighbors_graph(
     elif prune_snn >= k_neighbors:
         raise ValueError("`prune_snn` parameter must be smaller than `n_neighbors` used for KNN computation, aborting")
 
-    n_cells = adata.n_obs
-    distances_key = adata.uns[cluster_key]["distances_key"]
+    n_cells = scdata.n_obs
+    distances_key = scdata.uns[cluster_key]["distances_key"]
 
-    neighborhood_graph = adata.obsp[distances_key].copy()
+    neighborhood_graph = scdata.obsp[distances_key].copy()
     if not issparse(neighborhood_graph):
         neighborhood_graph = csr_matrix(neighborhood_graph)
     neighborhood_graph.data[neighborhood_graph.data > 0] = 1
@@ -45,16 +45,16 @@ def _shared_nearest_neighbors_graph(
 
     return neighborhood_graph
 
-@adata_checker
+@anndata_or_mudata_checker
 def shared_neighbors(
-    adata: ad.AnnData,
+    scdata: ScData, # type: ignore
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
     prune_snn: Optional[float] = 1/15,
     metric: Optional[str] = "euclidean",
-    normalize_similarities: bool = True,
+    normalize_connectivities: bool = True,
     distances_key: Optional[str] = None,
-    similarities_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
     copy: bool = False
 ) -> Union[ad.AnnData, None]:
     """Compute a shared neighborhood (SNN) graph of observations.
@@ -64,40 +64,40 @@ def shared_neighbors(
 
     Parameters
     ----------
-    adata
-        Annotated data matrix.
+    scdata
+        Annotated data matrix
     knn_key
-        If not specified, the used neighbors data are retrieved from .uns['neighbors'].
-        If specified, the used neighbors data are retrieved from .uns[key_added].
+        If not specified, the used neighbors data are retrieved from .uns['neighbors'],
+        otherwise the used neighbors data are retrieved from .uns[key_added]
     snn_key
-        If not specified, the shared neighbors data are stored in .uns['shared_neighbors'].
-        If specified, the shared neighbors data are added to .uns[key_added].
+        If not specified, the shared neighbors data are stored in .uns['shared_neighbors']
+        If specified, the shared neighbors data are added to .uns[key_added]
     prune_snn
         If zero value, no prunning is performed. If strictly positive, removes edge between two neighbors
-        in the shared neighborhood graph who have a number of neighbors less than the specified value.
-        Value can be relative (float between 0 and 1) or absolute (integer between 1 and k).
+        in the shared neighborhood graph who have a number of neighbors less than the specified value
+        Value can be relative (float between 0 and 1) or absolute (integer between 1 and k)
     metric
-        Metric used for computing distances between two neighbors by using .obsm['X_pca'].
-    normalize_similarities
-        If false, similarities provide the absolute number of shared neighbors (integer between 0 and k),
-        otherwise provide the relative number of shared neighbors (float between 0 and k).
+        Metric used for computing distances between two neighbors by using scdata.obsm
+    normalize_connectivities
+        If false, connectivities provide the absolute number of shared neighbors (integer between 0 and k),
+        otherwise provide the relative number of shared neighbors (float between 0 and k)
     distances_key
         If specified, distances are stored in .obsp[distances_key],
-        otherwise in .obsp[snn_key+'_distances'].
-    similarities_key
-        If specified, distances are stored in .obsp[similarities_key],
-        otherwise in .obsp[snn_key+'_similarities'].
+        otherwise in .obsp[snn_key+'_distances']
+    connectivities_key
+        If specified, distances are stored in .obsp[connectivities_key],
+        otherwise in .obsp[snn_key+'_connectivities']
     copy
-        Return a copy instead of writing to adata.
+        Return a copy instead of writing to scdata.
 
     Returns
     -------
-    Depending on `copy`, updates or returns `adata` with the following:
+    Depending on `copy`, updates or returns `scdata` with the following:
 
     See `snn_key` parameter description for the storage path of
-    similarities and distances.
+    connectivities and distances.
 
-    **similarities** : sparse matrix.
+    **connectivities** : sparse matrix.
         Weighted adjacency matrix of the shared neighborhood graph.
         Weights should be interpreted as number of shared neighbors.
     **distances** : sparse matrix of dtype `float64`.
@@ -105,7 +105,7 @@ def shared_neighbors(
         neighbors.
     """
 
-    if knn_key not in adata.uns:
+    if knn_key not in scdata.uns:
         raise KeyError((
             "Neighborhood graph not already computed or not finding. "
             "Please use `scanpy.pp.neighbors` function before or "
@@ -117,38 +117,39 @@ def shared_neighbors(
         metric = "euclidean"
     if distances_key is None:
         distances_key = f"{snn_key}_distances"
-    if similarities_key is None:
-        similarities_key = f"{snn_key}_similarities"
-    n_neighbors = adata.uns[knn_key]["params"]["n_neighbors"]
+    if connectivities_key is None:
+        connectivities_key = f"{snn_key}_connectivities"
+    n_neighbors = scdata.uns[knn_key]["params"]["n_neighbors"]
 
-    adata = adata.copy() if copy else adata
+    scdata = scdata.copy() if copy else scdata
     
-    snn_graph = _shared_nearest_neighbors_graph(adata, cluster_key=knn_key, prune_snn = prune_snn)
+    snn_graph = _shared_nearest_neighbors_graph(scdata, cluster_key=knn_key, prune_snn = prune_snn)
 
-    n_pcs = adata.uns[knn_key]["params"]["n_pcs"]
+    n_pcs = scdata.uns[knn_key]["params"]["n_pcs"]
+    obsm = scdata.uns[knn_key]["params"]["use_rep"]
 
-    X = adata.obsm["X_pca"][:,0:n_pcs]
+    X = scdata.obsm[obsm][:,0:n_pcs]
     zeros_ones = snn_graph.toarray()
     zeros_ones[zeros_ones > 0] = 1
     
     distances_matrix = pairwise_distances(X, metric=metric)
     distances_matrix = np.multiply(zeros_ones, distances_matrix)
     distances_matrix = csr_matrix(distances_matrix)
-    similarities_matrix = snn_graph.copy()
-    if normalize_similarities:
-        similarities_matrix = similarities_matrix.astype(float)
-        similarities_matrix.data /= n_neighbors
+    connectivities_matrix = snn_graph.copy()
+    if normalize_connectivities:
+        connectivities_matrix = connectivities_matrix.astype(float)
+        connectivities_matrix.data /= n_neighbors
 
-    adata.obsp[distances_key] = distances_matrix
-    adata.obsp[similarities_key] = similarities_matrix
+    scdata.obsp[distances_key] = distances_matrix
+    scdata.obsp[connectivities_key] = connectivities_matrix
 
-    adata.uns[snn_key] = dict()
-    adata.uns[snn_key]["distances_key"] = distances_key
-    adata.uns[snn_key]["similarities_key"] = similarities_key
-    adata.uns[snn_key]["params"] = {
-        "knn_base": f"adata.uns['{knn_key}']",
+    scdata.uns[snn_key] = dict()
+    scdata.uns[snn_key]["distances_key"] = distances_key
+    scdata.uns[snn_key]["connectivities_key"] = connectivities_key
+    scdata.uns[snn_key]["params"] = {
+        "knn_base": f"scdata.uns['{knn_key}']",
         "prune_snn": prune_snn if prune_snn >= 1 else math.ceil(n_neighbors*prune_snn),
         "metric": metric
     }
 
-    return adata if copy else None
+    return scdata if copy else None

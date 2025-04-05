@@ -2,11 +2,11 @@
 
 from typing import Optional
 from anndata import AnnData
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 import numpy as np
 
-@adata_checker
+@anndata_checker
 def barycenters(
     adata: AnnData,
     obs: str,

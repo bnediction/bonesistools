@@ -7,7 +7,7 @@ from typing import (
     Sequence,
     Tuple
 )
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 import pandas as pd
 import anndata as ad
@@ -25,7 +25,7 @@ Colors = Union[Sequence[Tuple[str, str, str]], cycle]
 from . import _figure
 from . import _colors
 
-@adata_checker
+@anndata_checker
 def kde_plot(
     adata: ad.AnnData,
     gene: str,

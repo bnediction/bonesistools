@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Sequence, Any
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 import pandas as pd
 from anndata import AnnData
@@ -11,7 +11,7 @@ import scipy
 
 from ._conversion import anndata_to_dataframe
 
-@adata_checker
+@anndata_checker
 def extract_rank_genes_groups(
     adata: AnnData,
     logfc_keeping: Optional[bool] = None
@@ -56,7 +56,7 @@ def extract_rank_genes_groups(
 
     return pd.DataFrame.from_dict(markers_d, orient="columns")
 
-@adata_checker
+@anndata_checker
 def log_fold_changes(
     adata: AnnData,
     groupby: str,
@@ -194,7 +194,7 @@ def hypergeometric_test(
     
     return scipy.stats.hypergeom.sf(k = k, M = N, n = K, N = n, loc = 1)
 
-@adata_checker
+@anndata_checker
 def multiple_hypergeometric_test(
     adata: AnnData,
     signatures: dict,
@@ -205,7 +205,7 @@ def multiple_hypergeometric_test(
     _markers = markers[markers["clusters"] == cluster]["genes"]
     return {cell_type: hypergeometric_test(adata, signature, _markers) for cell_type, signature in signatures.items()}
 
-@adata_checker
+@anndata_checker
 def get_info(
     adata: AnnData,
     signatures: dict,

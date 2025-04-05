@@ -4,18 +4,15 @@ from typing import Optional, Union
 
 from pathlib import Path
 
-import anndata as ad
 import pandas as pd
+from anndata import AnnData
 
-from scipy import (
-    io,
-    sparse
-)
+from scipy import io, sparse
 
 PathLike = Union[str,Path]
 
 def to_csv(
-    adata: ad.AnnData,
+    adata: AnnData,
     filename: PathLike,
     layer: Optional[str]=None
 ) -> None:
@@ -35,7 +32,7 @@ def to_csv(
     )
 
 def to_mtx(
-    adata: ad.AnnData,
+    adata: AnnData,
     filename: PathLike,
     layer: Optional[str]=None
 ) -> None:
@@ -52,7 +49,7 @@ def to_mtx(
     io.mmwrite(filename, x)
 
 def to_npz(
-    adata: ad.AnnData,
+    adata: AnnData,
     filename: PathLike,
     layer: Optional[str]=None
 ) -> None:
@@ -69,7 +66,7 @@ def to_npz(
     sparse.save_npz(filename, x)
 
 def to_csv_or_mtx(
-    adata: ad.AnnData,
+    adata: AnnData,
     filename: PathLike,
     layer: Optional[str]=None,
 ) -> None:
@@ -86,7 +83,7 @@ def to_csv_or_mtx(
             to_mtx(adata, filename, layer)
 
 def to_csv_or_npz(
-    adata: ad.AnnData,
+    adata: AnnData,
     filename: PathLike,
     layer: Optional[str]=None,
 ) -> None:

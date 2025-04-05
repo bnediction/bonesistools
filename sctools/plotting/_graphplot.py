@@ -3,7 +3,7 @@
 import typing
 from collections.abc import Mapping
 from pathlib import Path
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 import matplotlib.pyplot as plt
 from matplotlib.axes._axes import Axes
@@ -15,7 +15,7 @@ import networkx as nx
 
 from ..tools import get_paga_graph
 
-@adata_checker
+@anndata_checker
 def draw_paga(
     adata,
     obs,

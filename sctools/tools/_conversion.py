@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union, Sequence
-from .._typing import adata_checker
+from .._typing import anndata_checker
 
 from anndata import AnnData
 from pandas import DataFrame
@@ -9,7 +9,7 @@ from pandas import DataFrame
 import numpy as np
 from scipy.sparse import issparse
 
-@adata_checker
+@anndata_checker
 def anndata_to_dataframe(
     adata: AnnData,
     obs: Optional[Union[str, Sequence[str]]] = None,
