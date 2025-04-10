@@ -4,3 +4,5 @@ from . import (
     collectri,
     ncbi
 )
+
+from ._typing import MPBooleanNetwork

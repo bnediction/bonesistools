@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.ticker import FormatStrFormatter
-import seaborn as sns
 from itertools import cycle
 Colors = Union[Sequence[Tuple[str, str, str]], cycle]
 
@@ -64,6 +63,8 @@ def kde_plot(
     -------
     Create figure and axe.
     """
+
+    import seaborn as sns
 
     counts = adata[:,gene].layers[layer] if layer else adata[:,gene].X
     if scipy.sparse.issparse(counts):

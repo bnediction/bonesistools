@@ -15,9 +15,9 @@ from pandas import DataFrame
 from functools import wraps
 
 try:
-    _enable_mudata = importlib.util.find_spec("mudata") is not None
+    _mudata_is_available = importlib.util.find_spec("mudata") is not None
 except:
-    _enable_mudata = importlib.find_loader("mudata") is not None
+    _mudata_is_available = importlib.find_loader("mudata") is not None
 
 class UnionType(object):
     
@@ -38,7 +38,7 @@ Keys = Union[List[str],str]
 
 AnnDataList = List[AnnData]
 
-if _enable_mudata:
+if _mudata_is_available:
     from mudata import MuData
     MuDataList = List[MuData]
     ScData = Union[AnnData,MuData]
@@ -108,7 +108,7 @@ def anndata_checker(
     n: int=1
 ):
     """
-    Check if the first 'n' arguments are an AnnData instance.
+    Check if the first 'n' arguments are AnnData instances.
     
     Parameters
     ----------
@@ -141,14 +141,14 @@ def anndata_checker(
             return anndata_checker(function, n)
         return partial_wrapper
 
-if _enable_mudata:
+if _mudata_is_available:
 
     def mudata_checker(
         function: types.FunctionType=None,
         n: int=1
     ):
         """
-        Check if the first 'n' arguments are a MuData instance.
+        Check if the first 'n' arguments are MuData instances.
 
         Parameters
         ----------
@@ -161,8 +161,6 @@ if _enable_mudata:
         -------
         Raise an error if at least one of the first 'n' arguments is not a MuData instance.
         """
-
-        from mudata import MuData
 
         if function is not None:
 
@@ -188,7 +186,7 @@ if _enable_mudata:
         n: int=1
     ):
         """
-        Check if the first 'n' arguments are an AnnData or MuData instance.
+        Check if the first 'n' arguments are AnnData or MuData instances.
 
         Parameters
         ----------
@@ -199,7 +197,7 @@ if _enable_mudata:
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not an AnnData or MuData instance.
+        Raise an error if at least one of the first 'n' arguments is not an AnnData or a MuData instance.
         """
 
         if function is not None:
@@ -228,7 +226,7 @@ else:
         n: int=1
     ):
         """
-        Check if the first 'n' arguments are an AnnData instance.
+        Check if the first 'n' arguments are MuData instances.
         
         Parameters
         ----------
@@ -261,7 +259,7 @@ else:
         n: int=1
     ):
         """
-        Check if the first 'n' arguments are an AnnData or MuData instance.
+        Check if the first 'n' arguments are AnnData or MuData instances.
 
         Parameters
         ----------
@@ -272,14 +270,19 @@ else:
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not an AnnData or MuData instance.
+        Raise an error if at least one of the first 'n' arguments is not an AnnData or a MuData instance.
         """
 
         if function is not None:
 
             @wraps(function)
             def wrapper(*args, **kwargs):
-                return anndata_checker(*args, **kwargs)
+                iterator = iter(list(args) + list(kwargs.values()))
+                for i in range(n):
+                    value = next(iterator)
+                    if not isinstance(value, AnnData):
+                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected '{AnnData}' but received '{type(value)}'")
+                return function(*args, **kwargs)
             return wrapper
 
         else:

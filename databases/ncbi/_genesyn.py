@@ -2,6 +2,7 @@
 
 import ctypes
 from collections import namedtuple
+from .._typing import MPBooleanNetwork
 try:
     from sortedcontainers import SortedSet
 except:
@@ -93,7 +94,12 @@ class GeneSynonyms(object):
         self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
         return None
     
-    def __call__(self, data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph], *args, **kwargs):
+    def __call__(
+        self,
+        data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph],
+        *args,
+        **kwargs
+    ):
         if (isinstance(data, SequenceInstance) and not isinstance(data, str)) or isinstance(data, set):
             return self.sequence_standardization(data, *args, **kwargs)
         elif isinstance(data, DataFrame):
@@ -308,13 +314,13 @@ class GeneSynonyms(object):
                 warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
-    def __convert(self, out_alias_type: str="referencename") -> str:
+    def __convert(self, output_type: str="referencename", *args, **kwargs) -> str:
         """
         Convert gene alias.
 
         Parameters
         ----------
-        out_alias_type
+        output_type
             geneid|referencename|ensemblid|<database>
             see self.get_database() for enumerating database names
 
@@ -323,20 +329,20 @@ class GeneSynonyms(object):
         Return a function converting gene labels.
         """
 
-        if out_alias_type == "referencename":
-            out_alias_type = "reference_name"
-        if out_alias_type in ["geneid", "reference_name", "ensemblid"]:
-            return eval(f"self.get_{out_alias_type}")
-        elif out_alias_type in self.get_databases():
-            return partial(self.get_alias_from_database, database=out_alias_type)
+        if output_type == "referencename":
+            output_type = "reference_name"
+        if output_type in ["geneid", "reference_name", "ensemblid"]:
+            return eval(f"self.get_{output_type}")
+        elif output_type in self.get_databases():
+            return partial(self.get_alias_from_database, database=output_type)
         else:
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{out_alias_type}'")
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{output_type}'")
 
     def sequence_standardization(
         self,
         gene_sequence: Sequence[str],
-        in_alias_type: str="genename",
-        out_alias_type: str="referencename",
+        input_type: str="genename",
+        output_type: str="referencename",
         keep_if_missing: bool=True
     ) -> Sequence[str]:
         """
@@ -346,10 +352,10 @@ class GeneSynonyms(object):
         ----------
         gene_sequence
             list of genes
-        in_alias_type
+        input_type
             genename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
-        out_alias_type
+        output_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
@@ -360,11 +366,11 @@ class GeneSynonyms(object):
         return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
-        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         standardized_gene_sequence = list()
-        alias_conversion = self.__convert(out_alias_type)
+        alias_conversion = self.__convert(output_type)
         for gene in gene_sequence:
-            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = alias_conversion(alias=gene, alias_type=input_type)
             alias = gene if (keep_if_missing and alias is None) else alias
             standardized_gene_sequence.append(alias)
         
@@ -375,8 +381,8 @@ class GeneSynonyms(object):
     def interaction_list_standardization(
         self,
         interactions_list: Sequence[Tuple[str, str, Dict[str, int]]],
-        in_alias_type: str="genename",
-        out_alias_type: str="referencename",
+        input_type: str="genename",
+        output_type: str="referencename",
         keep_if_missing: bool=True
     ) -> List[Tuple[str, str, Dict[str, int]]]:
         """
@@ -386,10 +392,10 @@ class GeneSynonyms(object):
         ----------
         interaction_list
             list of tuples containing string (source) + string (target) + dict (sign = -1 or 1)
-        in_alias_type
+        input_type
             genename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
-        out_alias_type
+        output_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
@@ -400,13 +406,13 @@ class GeneSynonyms(object):
         return an interaction list where each gene name is converted into the user-defined alias type.
         """
 
-        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         standardized_interactions_list = list()
-        alias_conversion = self.__convert(out_alias_type)
+        alias_conversion = self.__convert(output_type)
         for interaction in interactions_list:
-            source = alias_conversion(alias=interaction[0], alias_type=in_alias_type)
+            source = alias_conversion(alias=interaction[0], alias_type=input_type)
             source = interaction[0] if (keep_if_missing and source is None) else source
-            target = alias_conversion(alias=interaction[0], alias_type=in_alias_type)
+            target = alias_conversion(alias=interaction[0], alias_type=input_type)
             target = interaction[1] if (keep_if_missing and target is None) else target
             standardized_interactions_list.append((source, target, interaction[2]))
 
@@ -416,8 +422,8 @@ class GeneSynonyms(object):
         self,
         df: DataFrame,
         axis: Axis=0,
-        in_alias_type: str="genename",
-        out_alias_type: str="referencename",
+        input_type: str="genename",
+        output_type: str="referencename",
         keep_if_missing: bool=True,
         copy: bool = True,
     ) -> Union[DataFrame, None]:
@@ -430,10 +436,10 @@ class GeneSynonyms(object):
             DataFrame object where names are expected being standardized
         axis
             whether to rename labels from the index (0 or 'index') or columns (1 or 'columns')
-        in_alias_type
+        input_type
             genename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
-        out_alias_type
+        output_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
@@ -446,9 +452,9 @@ class GeneSynonyms(object):
         Depending on 'copy', update or return DataFrame object with standardized gene name.
         """
 
-        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         df = df.copy() if copy is True else df
-        alias_conversion = self.__convert(out_alias_type)
+        alias_conversion = self.__convert(output_type)
 
         aliases = list()
 
@@ -460,7 +466,7 @@ class GeneSynonyms(object):
             raise ValueError(f"No axis named {axis} for object type DataFrame")
 
         for gene in gene_iterator:
-            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = alias_conversion(alias=gene, alias_type=input_type)
             alias = gene if (keep_if_missing and alias is None) else alias
             aliases.append(alias)
 
@@ -475,8 +481,8 @@ class GeneSynonyms(object):
     def graph_standardization(
         self,
         graph: Graph,
-        in_alias_type: str="genename",
-        out_alias_type: str="referencename",
+        input_type: str="genename",
+        output_type: str="referencename",
         keep_if_missing: bool=True,
         copy: bool=True
     ) -> Union[Graph, None]:
@@ -487,10 +493,10 @@ class GeneSynonyms(object):
         ----------
         graph
             graph where nodes must be standardized
-        in_alias_type
+        input_type
             genename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
-        out_alias_type
+        output_type
             referencename|geneid|ensemblid|<database>
             see self.get_database() for enumerating database names
         keep_if_missing
@@ -500,14 +506,14 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Depending on 'copy', update or return graph with standardized gene name.
+        Depending on 'copy', update or return Graph object with standardized gene name.
         """
 
-        # keep_if_missing = keep_if_missing if (in_alias_type=="genename" and out_alias_type=="referencename") else False
+        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         aliases_mapping = dict()
-        alias_conversion = self.__convert(out_alias_type)
+        alias_conversion = self.__convert(output_type)
         for gene in graph.nodes:
-            alias = alias_conversion(alias=gene, alias_type=in_alias_type)
+            alias = alias_conversion(alias=gene, alias_type=input_type)
             alias = gene if (keep_if_missing and alias is None) else alias
             aliases_mapping[gene] = alias
         if copy is True:
@@ -515,3 +521,42 @@ class GeneSynonyms(object):
         else:
             nx.relabel_nodes(graph, mapping=aliases_mapping, copy=False)
             return None
+
+    def bn_standardization(
+        self,
+        bn: MPBooleanNetwork, # type: ignore
+        input_type: str="genename",
+        output_type: str="referencename",
+        copy: bool=False
+    ) -> MPBooleanNetwork: # type: ignore
+        """
+        Replace gene name with its reference gene name into 'bn'.
+
+        Parameters
+        ----------
+        bn
+            Boolean Network
+        input_type
+            genename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
+        output_type
+            referencename|geneid|ensemblid|<database>
+            see self.get_database() for enumerating database names
+        copy
+            return a copy instead of updating 'bn' object
+        
+        Returns
+        -------
+        Depending on 'copy', update or return MPBooleanNetwork object with standardized gene name.
+        """
+
+        bn = bn.copy() if copy else bn
+
+        alias_conversion = self.__convert(output_type)
+        genes = tuple(bn.keys())
+        for gene in genes:
+            alias = alias_conversion(alias=gene, alias_type=input_type)
+            alias = gene if alias is None else alias
+            bn.rename(gene, alias)
+                
+        return bn if copy else None

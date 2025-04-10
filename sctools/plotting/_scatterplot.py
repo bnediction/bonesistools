@@ -8,11 +8,13 @@ from typing import (
     Sequence,
     Tuple
 )
-from .._typing import anndata_checker
+from .._typing import (
+    ScData,
+    anndata_or_mudata_checker
+)
 
 from pathlib import Path
 
-import anndata as ad
 import pandas as pd
 import numpy as np
 
@@ -37,7 +39,7 @@ def __default_plot(
 ):
 
     def wrapper(
-        adata: ad.AnnData,
+        adata: ScData, # type: ignore
         obs: str,
         obsm: str,
         colors: Optional[Colors] = None,
@@ -97,7 +99,7 @@ def __default_plot(
 
 @__default_plot
 def __scatterplot_discrete(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     obs: str,
     obsm: str,
     colors: Optional[Colors] = None,
@@ -215,7 +217,7 @@ def __scatterplot_discrete(
 
 @__default_plot
 def __scatterplot_continuous(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     obs: str,
     obsm: str,
     colors: Optional[Colormap] = None,
@@ -263,7 +265,7 @@ def __scatterplot_continuous(
     return fig, ax
 
 def __add_labels(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     obs: str,
     obsm: str,
     ax: Optional[Axes] = None,
@@ -303,9 +305,8 @@ def __add_labels(
                 **kwargs
             )
 
-@anndata_checker
 def __graph_to_plot(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
     **kwargs
@@ -342,9 +343,8 @@ def __graph_to_plot(
             line = mplot3d.art3d.Line3D(xs=x, ys=y, zs=z, color=_colors.black, **kwargs)
         ax.add_line(line)
 
-@anndata_checker
 def __add_labels_to_graph(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
     **kwargs
@@ -378,8 +378,9 @@ def __add_labels_to_graph(
                 **kwargs
             )
 
+@anndata_or_mudata_checker
 def embedding_plot(
-    adata: ad.AnnData,
+    adata: ScData, # type: ignore
     obs: str,
     obsm: str,
     colors: Optional[Colormap] = None,
@@ -388,6 +389,7 @@ def embedding_plot(
     add_labels: bool = False,
     add_graph: bool = False,
     add_labels_to_graph: bool = False,
+    automatic_resize: bool = False,
     default_parameters: Optional[types.FunctionType] = None,
     **kwargs
 ) -> Tuple[Figure, Axes]:
@@ -415,6 +417,8 @@ def embedding_plot(
         Draw elastic principal graph
     add_labels_to_graph
         Add node labels of elastic principal graph
+    automatic_resize
+        Resize figure
     default_parameters
         Function specifying default figure parameters
     **kwargs
@@ -493,6 +497,9 @@ def embedding_plot(
             dim=n_components,
             **_kwargs
         )
+    
+    if automatic_resize:
+        fig.tight_layout(pad = 1.2, rect=[0, 0, 0.84, 1])
         
     if default_parameters:
         default_parameters()

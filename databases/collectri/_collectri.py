@@ -2,8 +2,6 @@
 
 from typing import Optional, Union
 
-import decoupler as dc
-
 import networkx as nx
 
 from ..ncbi import GeneSynonyms
@@ -43,6 +41,9 @@ def load_grn(
         raise TypeError(f"parameter `organism` is not a string or integer instance")
     if not isinstance(split_complexes, bool):
         raise TypeError(f"parameter `split_complexes` is not a boolean instance")
+    
+    import decoupler as dc
+    
     collectri_db = dc.get_collectri(organism=organism, split_complexes=split_complexes, **kwargs)
     collectri_db = collectri_db.rename(columns = {"weight":"sign"})
     if isinstance(remove_pmid, bool):

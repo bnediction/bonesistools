@@ -19,7 +19,7 @@ def gene_synonyms_conversion(
     in_alias_type: str="genename",
     out_alias_type: str="referencename",
     keep_if_missing: bool=True,
-    copy: bool = False
+    copy: bool=False
 ) -> Union[ad.AnnData, None]:
     """
     Replace gene names with theirs gene aliases into 'adata' object.
