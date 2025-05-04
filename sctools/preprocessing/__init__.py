@@ -2,6 +2,8 @@
 
 from ._simple import (
     set_index,
+    filter_obs,
+    filter_var,
     merge,
     transfer_layer,
     transfer_obs_sti,

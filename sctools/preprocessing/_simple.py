@@ -3,7 +3,10 @@
 from typing import (
     Union,
     List,
+    Optional,
+    Callable
 )
+from types import FunctionType
 from anndata import AnnData
 from pandas import DataFrame
 from numpy import nan
@@ -44,7 +47,7 @@ def set_index(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Create a MultiIndex for `adata.obs` or `adata.var` using current index and existing columns.
+    Create a MultiIndex for 'adata.obs' or 'adata.var' using current index and existing columns.
 
     Parameters
     ----------
@@ -53,13 +56,13 @@ def set_index(
     keys
         either a single column key or a list containing an arbitrary combination of column keys
     axis
-        whether to update index from adata.var (0 or `var`) or adata.obs (1 or `obs`)
+        whether to update index from adata.var (0 or 'var') or adata.obs (1 or 'obs')
     copy
-        return a copy instead of updating `adata` object
-        
+        return a copy instead of updating 'adata' object
+    
     Returns
     -------
-    Depending on `copy`, update or return AnnData object.
+    Depending on 'copy', update or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -74,7 +77,7 @@ def set_index(
     elif axis in [1, "var"]:
         df = adata.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for axis: `{axis}`")
+        raise TypeError(f"unsupported argument type for axis: '{axis}'")
     
     index_name = __generate_unique_index_name(df)
     df[index_name] = df.index
@@ -87,6 +90,91 @@ def set_index(
     
     return adata if copy else None
 
+@anndata_checker
+def filter_obs(
+    adata: AnnData,
+    obs: str,
+    function: Optional[Callable],
+    copy: bool = False
+) -> Union[AnnData, None]:
+    """
+    Filter observations based on a column in 'adata.obs'
+
+    Parameters
+    ----------
+    adata
+        AnnData object
+    obs
+        column name in 'adata.obs' used for filtering
+    function
+        function to apply to the observation used for filtering
+    copy
+        return a copy instead of updating 'adata' object
+
+    Returns
+    -------
+    Depending on 'copy', update or return AnnData object.
+    """
+
+    adata = adata.copy() if copy else adata
+
+    if isinstance(obs, str):
+        if obs not in adata.obs:
+            raise KeyError(f"obs '{obs}' not found in adata.obs")
+    else:
+        raise TypeError(f"unsupported argument type for 'obs': expected '{str}' but received '{type(obs)}'")
+
+    if not callable(function):
+        raise TypeError(f"unsupported argument type for 'function': expected '{FunctionType}' but received '{type(function)}'")
+    
+    obs_subset = function(adata.obs[obs].values)
+    adata._inplace_subset_obs(obs_subset)
+
+    return adata if copy else None
+
+@anndata_checker
+def filter_var(
+    adata: AnnData,
+    var: str,
+    function: Optional[Callable],
+    copy: bool = False
+) -> Union[AnnData, None]:
+    """
+    Filter variables based on a column in 'adata.var'
+
+    Parameters
+    ----------
+    adata
+        AnnData object
+    var
+        column name in 'adata.var' used for filtering
+    function
+        function to apply to the variable used for filtering
+    copy
+        return a copy instead of updating 'adata' object
+
+    Returns
+    -------
+    Depending on 'copy', update or return AnnData object.
+    """
+
+    adata = adata.copy() if copy else adata
+
+    if isinstance(var, str):
+        if var not in adata.var:
+            raise KeyError(f"var '{var}' not found in adata.var")
+    else:
+        raise TypeError(f"unsupported argument type for 'var': expected '{str}' but received '{type(var)}'")
+
+    if not callable(function):
+        raise TypeError(f"unsupported argument type for 'function': expected '{FunctionType}' but received '{type(function)}'")
+    
+    var_subset = function(adata.var[var].values)
+    adata._inplace_subset_var(var_subset)
+
+    return adata if copy else None
+
+
 @anndata_checker(n=2)
 def merge(
     left_ad: AnnData,
@@ -96,7 +184,7 @@ def merge(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Merge DataFrame from `adata.obs` or `adata.var` with an index-based join.
+    Merge DataFrame from 'adata.obs' or 'adata.var' with an index-based join.
 
     Parameters
     ----------
@@ -105,16 +193,16 @@ def merge(
     right_ad
         AnnData object sending information
     axis
-        whether to merge adata.var (0 or `var`) or adata.obs (1 or `obs`)
+        whether to merge adata.var (0 or 'var') or adata.obs (1 or 'obs')
     suffixes
         length-2 sequence where each element is a string indicating the suffix
-        to add to overlapping column names in `left_ad` and `right_ad` respectively
+        to add to overlapping column names in 'left_ad' and 'right_ad' respectively
     copy
-        return a copy instead of updating `left_ad` object
+        return a copy instead of updating 'left_ad' object
     
     Returns
     -------
-    Depending on `copy`, update or return `left_ad` AnnData object.
+    Depending on 'copy', update or return 'left_ad' AnnData object.
     """
     
     left_ad = left_ad.copy() if copy else left_ad
@@ -126,7 +214,7 @@ def merge(
         left_df = left_ad.var.copy()
         right_df = right_ad.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for axis: `{axis}`")
+        raise TypeError(f"unsupported argument type for axis: '{axis}'")
 
     df = left_df.merge(
         right=right_df,
@@ -151,7 +239,7 @@ def transfer_layer(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Transfer layers from `right_ad.layers` to `left_ad.layers` by preserving
+    Transfer layers from 'right_ad.layers' to 'left_ad.layers' by preserving
     the order of observations and variables.
 
     Parameters
@@ -161,13 +249,13 @@ def transfer_layer(
     right_ad
         AnnData object sending layer-based information
     layers
-        sequence where each element is a string indicating the layer to add in `left_ad`
+        sequence where each element is a string indicating the layer to add in 'left_ad'
     copy
-        return a copy instead of updating `left_ad` object
+        return a copy instead of updating 'left_ad' object
     
     Returns
     -------
-    Depending on `copy`, update or return `left_ad` AnnData object.
+    Depending on 'copy', update or return 'left_ad' AnnData object.
     """
     
     left_ad = left_ad.copy() if copy else left_ad
@@ -216,8 +304,8 @@ def transfer_obs_sti(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Transfer observations from specific to integrated dataset, i.e. transfer columns from multiple AnnData `adatas` towards a unique AnnData `adata`.
-    This function handles issues whenever there are identical indices in `adatas.obs`.
+    Transfer observations from specific to integrated dataset, i.e. transfer columns from multiple AnnData 'adatas' towards a unique AnnData 'adata'.
+    This function handles issues whenever there are identical indices in 'adatas.obs'.
 
     Parameters
     ----------
@@ -226,17 +314,17 @@ def transfer_obs_sti(
     adatas
         AnnData objects sending information (integrated dataset)
     obs
-        column names in specific `adata.obs` to transfer
+        column names in specific 'adata.obs' to transfer
     conditions
-        conditions related to AnnData objects (ordered w.r.t `adatas`)
+        conditions related to AnnData objects (ordered w.r.t 'adatas')
     condition_colname
-        column name in integrated `adata.obs` related to conditions
+        column name in integrated 'adata.obs' related to conditions
     copy
         return a copy instead of updating 'adata' object
         
     Returns
     -------
-    Depending on `copy`, update or return AnnData object with new observations.
+    Depending on 'copy', update or return AnnData object with new observations.
     """
     
     adata = adata.copy() if copy else adata
@@ -285,7 +373,7 @@ def transfer_obs_its(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Transfer observations from integrated to specific datasets, i.e. transfer columns from a unique AnnData `adata` towards multiple AnnData `adatas`.
+    Transfer observations from integrated to specific datasets, i.e. transfer columns from a unique AnnData 'adata' towards multiple AnnData 'adatas'.
 
     Parameters
     ----------
@@ -294,17 +382,17 @@ def transfer_obs_its(
     adatas
         AnnData objects sending information (integrated dataset)
     obs
-        column names in integrated `adata.obs` to transfer
+        column names in integrated 'adata.obs' to transfer
     conditions
-        conditions related to AnnData objects (ordered w.r.t `adatas`)
+        conditions related to AnnData objects (ordered w.r.t 'adatas')
     condition_colname
-        column name in integrated `adata.obs` related to conditions
+        column name in integrated 'adata.obs' related to conditions
     copy
         return a copy instead of updating 'adata' object
         
     Returns
     -------
-    Depending on `copy`, update AnnData objects or return a list of AnnData objects with new observations.
+    Depending on 'copy', update AnnData objects or return a list of AnnData objects with new observations.
     """
 
     if copy:

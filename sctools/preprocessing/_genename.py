@@ -4,7 +4,11 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from typing import Union, Optional
-from .._typing import anndata_checker
+from .._typing import (
+    ScData,
+    anndata_checker,
+    anndata_or_mudata_checker
+)
 
 import anndata as ad
 import pandas as pd
@@ -12,100 +16,100 @@ from scipy.sparse import csr_matrix
 
 from ...databases.ncbi import GeneSynonyms
 
-@anndata_checker
+@anndata_or_mudata_checker
 def gene_synonyms_conversion(
-    adata: ad.AnnData,
+    scdata: ScData, # type: ignore
     annotations: str="var",
-    in_alias_type: str="genename",
-    out_alias_type: str="referencename",
+    input_type: str="genename",
+    output_type: str="referencename",
     keep_if_missing: bool=True,
     copy: bool=False
-) -> Union[ad.AnnData, None]:
+) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene names with theirs gene aliases into 'adata' object.
+    Replace gene names with theirs gene aliases into 'scdata' object.
 
     Parameters
     ----------
-    adata
-        AnnData object where names are expected being standardized
+    scdata
+        AnnData or MuData object where names are expected being standardized
     annotations
-        whether to rename labels from adata.var (0 or 'var') or adata.obs (1 or 'obs')
-    in_alias_type
+        whether to rename labels from scdata.var (0 or 'var') or scdata.obs (1 or 'obs')
+    input_type
         genename|geneid|ensemblid|<database>
-    out_alias_type
+    output_type
         referencename|geneid|ensemblid|<database>
     copy
-        return a copy instead of updating 'adata' object
+        return a copy instead of updating 'scdata' object
         
     Returns
     -------
-    Depending on 'copy', update or return AnnData object with gene aliases.
+    Depending on 'copy', update or return AnnData or MuData object with gene aliases.
     """
 
-    adata = adata.copy() if copy else adata
+    scdata = scdata.copy() if copy else scdata
 
     if annotations in [0, "var"]:
         GeneSynonyms()(
-            adata.var,
+            scdata.var,
             axis="index",
-            in_alias_type=in_alias_type,
-            out_alias_type=out_alias_type,
+            input_type=input_type,
+            output_type=output_type,
             keep_if_missing=keep_if_missing,
             copy=False
         )
     elif annotations in [1, "obs"]:
         GeneSynonyms()(
-            adata.obs,
+            scdata.obs,
             axis="index",
-            in_alias_type=in_alias_type,
-            out_alias_type=out_alias_type,
+            input_type=input_type,
+            output_type=output_type,
             keep_if_missing=keep_if_missing,
             copy=False
         )
     else:
-        raise ValueError("invalid value for 'annotations' (got {annotations}, expected 'obs' or 'var')")
+        raise ValueError(f"invalid value for 'annotations' (got {annotations}, expected 'obs' or 'var')")
     
-    return adata if copy else None
+    return scdata if copy else None
 
 @anndata_checker
 def set_ncbi_reference_name(
-    adata: ad.AnnData,
+    scdata: ScData, # type: ignore
     annotations: str="var",
-    in_alias_type: str="genename",
+    input_type: str="genename",
     keep_if_missing: bool=True,
     copy: bool = False
-) -> Union[ad.AnnData, None]:
+) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene names with theirs reference gene names into 'adata' object.
+    Replace gene names with theirs reference gene names into 'scdata' object.
 
     Parameters
     ----------
-    adata
-        AnnData object where names are expected being standardized
+    scdata
+        AnnData or MuData object where names are expected being standardized
     annotations
-        whether to rename labels from adata.var (0 or 'var') or adata.obs (1 or 'obs')
-    in_alias_type
+        whether to rename labels from scdata.var (0 or 'var') or scdata.obs (1 or 'obs')
+    input_type
         genename|geneid|ensemblid|<database>
     copy
-        return a copy instead of updating 'adata' object
+        return a copy instead of updating 'scdata' object
         
     Returns
     -------
-    Depending on 'copy', update or return AnnData object with reference gene names.
+    Depending on 'copy', update or return AnnData or MuData object with reference gene names.
     """
 
-    adata = adata.copy() if copy else adata
+    scdata = scdata.copy() if copy else scdata
 
     gene_synonyms_conversion(
-        adata=adata,
+        scdata=scdata,
         annotations=annotations,
-        in_alias_type=in_alias_type,
-        out_alias_type="referencename",
+        input_type=input_type,
+        output_type="referencename",
         keep_if_missing=keep_if_missing,
         copy=False
     )
 
-    return adata if copy else None
+    return scdata if copy else None
 
 @anndata_checker
 def var_names_merge_duplicates(
