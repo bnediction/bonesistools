@@ -45,29 +45,27 @@ def mitochondrial_genes(
     scdata = scdata.copy() if copy else scdata
 
     genesyn = GeneSynonyms()
-    mt = pd.Series(
-        data=None,
-        index=scdata.obs.index if axis in [0, "obs"] else scdata.var.index,
-        name=key)
-
+    if axis in [0, "obs"]:
+        axis = "obs"
+        scdata.obs[key] = False
+    elif axis in [1, "var"]:
+        axis = "var"
+        scdata.var[key] = False
+    else:
+        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+    
     mt_id = set()
     for k,v in genesyn.gene_aliases_mapping["genename"].items():
         if k.startswith("mt-"):
             mt_id.add(v.value.decode())
 
-    for gene in mt.index:
+    for index in eval(f"scdata.{axis}.index"):
         geneid = genesyn.get_geneid(
-            alias=gene,
+            alias=index,
             alias_type=index_type
         )
-        mt[gene] = (geneid in mt_id)
-    
-    if axis in [0, "obs"]:
-        scdata.obs = pd.concat([scdata.obs, mt], axis=1)
-    elif axis in [1, "var"]:
-        scdata.var = pd.concat([scdata.var, mt], axis=1)
-    else:
-        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+        if geneid in mt_id:
+            exec(f"scdata.{axis}.at['{index}','{key}'] = True")
 
     return scdata if copy else None
 
@@ -105,28 +103,26 @@ def ribosomal_genes(
     scdata = scdata.copy() if copy else scdata
 
     genesyn = GeneSynonyms()
-    mt = pd.Series(
-        data=None,
-        index=scdata.obs.index if axis in [0, "obs"] else scdata.var.index,
-        name=key)
-
-    mt_id = set()
-    for k,v in genesyn.gene_aliases_mapping["genename"].items():
-        if k.startswith(("Rps","Rpl","Mrp")):
-            mt_id.add(v.value.decode())
-
-    for gene in mt.index:
-        geneid = genesyn.get_geneid(
-            alias=gene,
-            alias_type=index_type
-        )
-        mt[gene] = (geneid in mt_id)
-    
     if axis in [0, "obs"]:
-        scdata.obs = pd.concat([scdata.obs, mt], axis=1)
+        axis = "obs"
+        scdata.obs[key] = False
     elif axis in [1, "var"]:
-        scdata.var = pd.concat([scdata.var, mt], axis=1)
+        axis = "var"
+        scdata.var[key] = False
     else:
         raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+    
+    rps_id = set()
+    for k,v in genesyn.gene_aliases_mapping["genename"].items():
+        if k.startswith(("Rps","Rpl","Mrp")):
+            rps_id.add(v.value.decode())
+
+    for index in eval(f"scdata.{axis}.index"):
+        geneid = genesyn.get_geneid(
+            alias=index,
+            alias_type=index_type
+        )
+        if geneid in rps_id:
+            exec(f"scdata.{axis}.at['{index}','{key}'] = True")
 
     return scdata if copy else None
