@@ -56,7 +56,7 @@ def set_index(
     keys
         either a single column key or a list containing an arbitrary combination of column keys
     axis
-        whether to update index from adata.var (0 or 'var') or adata.obs (1 or 'obs')
+        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var')
     copy
         return a copy instead of updating 'adata' object
     
@@ -193,7 +193,7 @@ def merge(
     right_ad
         AnnData object sending information
     axis
-        whether to merge adata.var (0 or 'var') or adata.obs (1 or 'obs')
+        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var')
     suffixes
         length-2 sequence where each element is a string indicating the suffix
         to add to overlapping column names in 'left_ad' and 'right_ad' respectively

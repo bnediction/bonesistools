@@ -86,7 +86,7 @@ class GeneSynonyms(object):
         elif force_download is False:
             pass
         else:
-            raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
+            raise ValueError(f"invalid value for argument 'force_download' (expected {bool}, got {type(force_download)})")
         self.force_download = force_download
         self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
@@ -314,6 +314,32 @@ class GeneSynonyms(object):
                 warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
+    def conversion(self, alias: str, input_type: str="genename", output_type: str="referencename") -> str:
+        """
+        Convert gene alias.
+
+        Parameters
+        ----------
+        output_type
+            geneid|referencename|ensemblid|<database>
+            see self.get_database() for enumerating database names
+
+        Returns
+        -------
+        Return a function converting gene labels.
+        """
+
+        if output_type == "referencename":
+            output_type = "reference_name"
+        if output_type in ["geneid", "reference_name", "ensemblid"]:
+            convert = eval(f"self.get_{output_type}")
+        elif output_type in self.get_databases():
+            convert = partial(self.get_alias_from_database, database=output_type)
+        else:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{output_type}'")
+        
+        return convert(alias=alias, alias_type=input_type)
+    
     def __convert(self, output_type: str="referencename", *args, **kwargs) -> str:
         """
         Convert gene alias.

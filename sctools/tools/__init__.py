@@ -27,3 +27,8 @@ from ._markers import (
     multiple_hypergeometric_test,
     get_info
 )
+
+from ._classification import (
+    mitochondrial_genes,
+    ribosomal_genes
+)

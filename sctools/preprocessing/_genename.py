@@ -7,7 +7,8 @@ from typing import Union, Optional
 from .._typing import (
     ScData,
     anndata_checker,
-    anndata_or_mudata_checker
+    anndata_or_mudata_checker,
+    Axis
 )
 
 import anndata as ad
@@ -19,7 +20,7 @@ from ...databases.ncbi import GeneSynonyms
 @anndata_or_mudata_checker
 def gene_synonyms_conversion(
     scdata: ScData, # type: ignore
-    annotations: str="var",
+    axis: Axis="var",
     input_type: str="genename",
     output_type: str="referencename",
     keep_if_missing: bool=True,
@@ -32,8 +33,8 @@ def gene_synonyms_conversion(
     ----------
     scdata
         AnnData or MuData object where names are expected being standardized
-    annotations
-        whether to rename labels from scdata.var (0 or 'var') or scdata.obs (1 or 'obs')
+    axis
+        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
     input_type
         genename|geneid|ensemblid|<database>
     output_type
@@ -48,16 +49,7 @@ def gene_synonyms_conversion(
 
     scdata = scdata.copy() if copy else scdata
 
-    if annotations in [0, "var"]:
-        GeneSynonyms()(
-            scdata.var,
-            axis="index",
-            input_type=input_type,
-            output_type=output_type,
-            keep_if_missing=keep_if_missing,
-            copy=False
-        )
-    elif annotations in [1, "obs"]:
+    if axis in [0, "obs"]:
         GeneSynonyms()(
             scdata.obs,
             axis="index",
@@ -66,15 +58,24 @@ def gene_synonyms_conversion(
             keep_if_missing=keep_if_missing,
             copy=False
         )
+    elif axis in [1, "var"]:
+        GeneSynonyms()(
+            scdata.var,
+            axis="index",
+            input_type=input_type,
+            output_type=output_type,
+            keep_if_missing=keep_if_missing,
+            copy=False
+        )
     else:
-        raise ValueError(f"invalid value for 'annotations' (got {annotations}, expected 'obs' or 'var')")
+        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
     
     return scdata if copy else None
 
 @anndata_checker
 def set_ncbi_reference_name(
     scdata: ScData, # type: ignore
-    annotations: str="var",
+    axis: Axis="var",
     input_type: str="genename",
     keep_if_missing: bool=True,
     copy: bool = False
@@ -87,7 +88,7 @@ def set_ncbi_reference_name(
     scdata
         AnnData or MuData object where names are expected being standardized
     annotations
-        whether to rename labels from scdata.var (0 or 'var') or scdata.obs (1 or 'obs')
+        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
     input_type
         genename|geneid|ensemblid|<database>
     copy
@@ -102,7 +103,7 @@ def set_ncbi_reference_name(
 
     gene_synonyms_conversion(
         scdata=scdata,
-        annotations=annotations,
+        annotations=axis,
         input_type=input_type,
         output_type="referencename",
         keep_if_missing=keep_if_missing,
