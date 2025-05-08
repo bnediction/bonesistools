@@ -12,9 +12,9 @@ def barycenters(
     obs: str,
     obsm: str="X_umap",
     n_components: Optional[int]=None
-):
+) -> dict:
     """
-    Compute the barycenter with respect to an embedding projection in adata.obsm.
+    Calculate the barycenter with respect to an embedding projection.
 
     Parameters
     ----------

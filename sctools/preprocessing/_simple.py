@@ -21,6 +21,10 @@ from .._typing import (
 )
 
 import pandas as pd
+import numpy as np
+
+from scipy.sparse import issparse
+from sklearn.linear_model import LinearRegression
 
 from ..tools import anndata_to_dataframe
 
@@ -98,7 +102,7 @@ def filter_obs(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Filter observations based on a column in 'adata.obs'
+    Filter observations based on a column in 'adata.obs'.
 
     Parameters
     ----------
@@ -140,7 +144,7 @@ def filter_var(
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Filter variables based on a column in 'adata.var'
+    Filter variables based on a column in 'adata.var'.
 
     Parameters
     ----------
@@ -174,6 +178,84 @@ def filter_var(
 
     return adata if copy else None
 
+def __linear_regress_out_feature(
+    interest: np.ndarray,
+    regressors: np.ndarray,
+    intercept: bool=False,
+    n_jobs: int=1
+):
+
+    regression_model = LinearRegression(fit_intercept=False, n_jobs=n_jobs)
+    regression_model.fit(regressors, interest)
+    prediction = regression_model.predict(regressors)
+
+    if intercept:
+        intercept = regression_model.coef_[0][0]
+        predicted = interest - prediction + intercept
+    else:
+        predicted = interest - prediction
+    
+    return predicted[:,0]
+
+def regress_out(
+    adata,
+    keys,
+    layer=None,
+    intercept=False,
+    copy=False,
+    n_jobs=1
+):
+    """
+    Regress out unwanted sources of variation.
+
+    Parameters
+    ----------
+    adata
+        AnnData object
+    keys
+        keys in 'adata.obs' on which to regress on
+    layer
+        if specify, regress out on adata.layer['layers'] instead of adata.X
+    intercept
+        if true, add intercept as regressor on which to regress on
+    copy
+        return a copy instead of updating 'adata' object
+    n_jobs
+        number of jobs for parallel computation
+
+    Returns
+    -------
+    Depending on 'copy', update or return AnnData object.
+    """
+
+    adata = adata.copy() if copy else adata
+
+    if layer is None:
+        counts = adata.X.copy()
+    else:
+        counts = adata.layers[layer].copy()
+
+    if issparse(counts):
+        counts = counts.toarray()
+    regressors = adata.obs[keys]
+    regressors.insert(0, 'ones', 1.0)
+    regressors = regressors.to_numpy()
+
+    for i in range(adata.n_vars):
+        interest = counts[:,i].reshape(-1, 1)
+        counts[:,i] = __linear_regress_out_feature(
+            interest,
+            regressors,
+            intercept=intercept,
+            n_jobs=n_jobs
+        )
+    
+    if layer is None:
+        adata.X = counts
+    else:
+        adata.layers[layer] = counts
+    
+    return adata if copy else None
 
 @anndata_checker(n=2)
 def merge(

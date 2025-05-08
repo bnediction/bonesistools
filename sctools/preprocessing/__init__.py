@@ -4,6 +4,7 @@ from ._simple import (
     set_index,
     filter_obs,
     filter_var,
+    regress_out,
     merge,
     transfer_layer,
     transfer_obs_sti,

@@ -386,6 +386,7 @@ def embedding_plot(
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
     outfile: Optional[Path] = None,
+    title: Optional[Union[str, dict]] = None,
     add_labels: bool = False,
     add_graph: bool = False,
     add_labels_to_graph: bool = False,
@@ -411,6 +412,8 @@ def embedding_plot(
         Number of plotted dimensions (default: 2)
     outfile
         If specified, save the figure
+    title
+        Add title to current axe
     add_labels
         Add labels retrieved by .obs[`obs`]
     add_graph
@@ -503,6 +506,14 @@ def embedding_plot(
         
     if default_parameters:
         default_parameters()
+    
+    if title:
+        if isinstance(title, str):
+            ax.set_title(title)
+        elif isinstance(title, dict):
+            ax.set_title(**title)
+        else:
+            raise TypeError(f"unsupported argument type for 'title': expected '{str}' or '{dict}', but received '{type(title)}'")
     
     if outfile:
         plt.savefig(outfile, bbox_inches="tight")
