@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence
+from typing import Union
 from .._typing import (
     anndata_or_mudata_checker,
     ScData,
@@ -8,8 +8,6 @@ from .._typing import (
 )
 
 from ...databases.ncbi import GeneSynonyms
-
-import pandas as pd
 
 @anndata_or_mudata_checker
 def mitochondrial_genes(

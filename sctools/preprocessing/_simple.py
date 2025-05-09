@@ -197,6 +197,7 @@ def __linear_regress_out_feature(
     
     return predicted[:,0]
 
+@anndata_checker
 def regress_out(
     adata,
     keys,
@@ -261,9 +262,9 @@ def regress_out(
 def merge(
     left_ad: AnnData,
     right_ad: AnnData,
-    axis: Axis = 0,
-    suffixes: Suffixes = ("_x", "_y"),
-    copy: bool = False
+    axis: Axis=0,
+    suffixes: Suffixes=("_x", "_y"),
+    copy: bool=False
 ) -> Union[AnnData, None]:
     """
     Merge DataFrame from 'adata.obs' or 'adata.var' with an index-based join.

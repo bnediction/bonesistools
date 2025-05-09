@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-bonesistools is a python package enabling to use a lot of functionnalities and analysis upstream and downstream of BoNesis framework.
+Bonesistools is a python package proposing functionnalities and analysis upstream and downstream of BoNesis framework.
 
 credits: "BNeDiction; PEPR Santé Numérique 2030"
 """

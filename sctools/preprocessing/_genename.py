@@ -103,7 +103,7 @@ def set_ncbi_reference_name(
 
     gene_synonyms_conversion(
         scdata=scdata,
-        annotations=axis,
+        axis=axis,
         input_type=input_type,
         output_type="referencename",
         keep_if_missing=keep_if_missing,
