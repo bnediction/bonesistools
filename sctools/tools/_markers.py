@@ -29,7 +29,7 @@ def extract_rank_genes_groups(
     
     Returns
     -------
-    Dataframe with information related to gene rankings. Need to use `scanpy.tl.rank_genes_groups` function
+    Dataframe with information related to gene rankings. Need to use 'scanpy.tl.rank_genes_groups' function
     on anndata object before.
     """
 
@@ -37,7 +37,7 @@ def extract_rank_genes_groups(
         markers_uns = adata.uns["rank_genes_groups"]
     else:
         raise ValueError("adata.uns does not contain key 'rank_genes_groups'.\
-            Please use `scanpy.tl.rank_genes_groups` function before, aborting")
+            Please use 'scanpy.tl.rank_genes_groups' function before, aborting")
     
     groupby = markers_uns["params"]["groupby"]
 
@@ -64,13 +64,13 @@ def log_fold_changes(
     is_log: Optional[bool] =False,
     cluster_rebalancing: Optional[bool] = False
 ) -> pd.DataFrame:
-    """Log2 fold change is a metric translating how much the transcript's expression
+    """Log2 fold-change is a metric translating how much the transcript's expression
     has changed between cells in and out of a cluster. The reported values are based
     on a logarithmic scale to base 2 with respect to the fold change ratios.
     According to <https://www.biostars.org/p/453129/>, computed log2 fold changes
     are different between FindAllMarkers (package Seurat) and rank_gene_groups
     (module Scanpy) functions. As mentionned, results derived from Scanpy are inconsistent.
-    This current function `log_fold_changes` computes it in the right way, with identical
+    This current function 'log_fold_changes' computes it in the right way, with identical
     results to Seurat by keeping default options.
 
     Parameters
@@ -152,9 +152,9 @@ def hypergeometric_test(
     signature: Sequence[str],
     markers: Sequence[str],
 ) -> float:
-    """Computes the p-value (or survival function) of an hypergeometric
-    distribution using scRNA-seq data in order to test whether marker genes
-    significantly match signature genes.
+    """Estimates the p-value (or survival function) of an hypergeometric
+    distribution in order to test whether marker genes significantly
+    match signature genes.
     Given a population size N and a number of success states K,
     it describes the probability of having at least k successes
     in n draws, without replacement, where:
@@ -171,14 +171,14 @@ def hypergeometric_test(
         Annotated data matrix.
     signature
         Set of signature genes in a given cell-type.
-        A signature is a set of overexpressed genes in a cell-type.
+        A signature is a set of over-expressed genes in a cell-type.
     markers
         Set of markers (genes) in a given cluster.
-        A marker set is a set of overexpressed genes in a cluster.
+        A marker set is a set of over-expressed genes in a cluster.
     """
 
     if not isinstance(adata, AnnData):
-        raise TypeError(f"Argument `adata` must be of type {type(AnnData)}, not {type(adata)}")
+        raise TypeError(f"Argument 'adata' must be of type {type(AnnData)}, not {type(adata)}")
     
     background = set(adata.var.index)
     if not isinstance(signature, set):
@@ -192,46 +192,10 @@ def hypergeometric_test(
     n = len(markers)            # number of draws
     k = len(marked_genes)       # number of observed successes (matching genes)
     
-    return scipy.stats.hypergeom.sf(k = k, M = N, n = K, N = n, loc = 1)
-
-@anndata_checker
-def multiple_hypergeometric_test(
-    adata: AnnData,
-    signatures: dict,
-    markers: pd.DataFrame,
-    cluster: str,
-) -> dict:
-
-    _markers = markers[markers["clusters"] == cluster]["genes"]
-    return {cell_type: hypergeometric_test(adata, signature, _markers) for cell_type, signature in signatures.items()}
-
-@anndata_checker
-def get_info(
-    adata: AnnData,
-    signatures: dict,
-    markers: pd.DataFrame,
-    groupby: str = "cluster",
-    by: Optional[Any] = None,
-) -> dict:
-
-    columns = ["genes", "clusters", "pvals", "adj_pvals", "scores", "log_fc"]
-    for idx, column in enumerate(columns):
-        if not column == markers.columns[idx]:
-            raise ValueError("`markers` dataframe must contain specific rows with the specific order\
-                `genes`, `clusters`, `pvals`, `adj_pvals`, `scores`, `log_fc`")
-
-    if by:
-        group_ad = adata[adata.obs[groupby] == by]
-        group_info_d = dict()
-        group_info_d["n_cells"] = group_ad.n_obs
-        group_info_d["proportion_cells"] = round(group_ad.n_obs / adata.n_obs, ndigits=6)
-        proportion_phases = group_ad.obs["pypairs_max_class"].value_counts() / group_ad.n_obs
-        group_info_d.update({phase: round(proportion_phases[phase], ndigits=6) for phase in sorted(proportion_phases.index)})
-        group_info_d["median_expressed_genes"] = group_ad.obs["n_genes_by_counts"].median()
-        group_info_d["median_total_counts"] = group_ad.obs["total_counts"].median()
-        group_info_d["median_proportion_mito"] = f"{group_ad.obs['pct_counts_mitochondrion'].median():.4f}%"
-        pvalues_d = multiple_hypergeometric_test(group_ad, signatures, markers, cluster=by)
-        group_info_d.update({cell_type: round(pvalue, ndigits=6) for cell_type, pvalue in pvalues_d.items()})
-        return group_info_d
-    else:
-        return {group: get_info(adata, signatures, markers, groupby=groupby, by=group) for group in sorted(adata.obs[groupby].unique())}
+    return scipy.stats.hypergeom.sf(
+        k=k,
+        M=N,
+        n=K,
+        N=n,
+        loc=1
+    )
