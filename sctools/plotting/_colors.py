@@ -149,6 +149,8 @@ def generate_colormap(
 
     if color_number <= 0:
         raise ValueError(f"invalid argument value for color_number (color_number is not positive, value: '{color_number}')")
+    elif color_number <= cm.N:
+        return ListedColormap(cm.colors[0:color_number])
     
     if not isinstance(cm, Colormap):
         raise TypeError(f"unsupported argument type for cm: '{type(cm)}' instead of '{Colormap}'")

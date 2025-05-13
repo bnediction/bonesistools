@@ -6,9 +6,13 @@ from typing import (
     Optional,
     Union,
     List,
-    Tuple,
-    Literal
+    Tuple
 )
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
+
 from anndata import AnnData
 from pandas import DataFrame
 
