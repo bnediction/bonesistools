@@ -11,8 +11,8 @@ def load_grn(
     split_complexes=False,
     remove_pmid: bool=False,
     gene_synonyms: Optional[GeneSynonyms]=None,
-    in_alias_type: str="genename",
-    out_alias_type: str="referencename",
+    input_type: str="genename",
+    output_type: str="referencename",
     **kwargs
 )-> nx.MultiDiGraph:
     """
@@ -65,8 +65,8 @@ def load_grn(
     elif isinstance(gene_synonyms, GeneSynonyms):
         gene_synonyms.graph_standardization(
             graph=grn,
-            in_alias_type=in_alias_type,
-            out_alias_type=out_alias_type,
+            input_type=input_type,
+            output_type=output_type,
             copy=False
         )
         return grn

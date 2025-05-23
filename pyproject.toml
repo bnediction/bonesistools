@@ -26,6 +26,7 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -37,7 +38,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
     "Topic :: Scientific/Engineering :: Boolean Networks",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.6"
 dependencies = [
     "anndata>=0.8",
     "ctypes>=1.1.0",

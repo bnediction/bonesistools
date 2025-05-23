@@ -267,7 +267,7 @@ def merge(
     copy: bool=False
 ) -> Union[AnnData, None]:
     """
-    Merge DataFrame from 'adata.obs' or 'adata.var' with an index-based join.
+    Merge dataframes from 'adata.obs' or 'adata.var' with an index-based join.
 
     Parameters
     ----------

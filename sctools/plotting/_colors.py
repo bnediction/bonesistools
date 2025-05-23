@@ -122,7 +122,7 @@ QUALITATIVE_COLORS = [
 color_cycle = cycle(COLORS)
 
 bonesis_cm = ListedColormap(
-    colors=QUALITATIVE_COLORS,
+    colors=COLORS,
     name="bonesis"
 )
 
@@ -153,7 +153,7 @@ def generate_colormap(
         return ListedColormap(cm.colors[0:color_number])
     
     if not isinstance(cm, Colormap):
-        raise TypeError(f"unsupported argument type for cm: '{type(cm)}' instead of '{Colormap}'")
+        raise TypeError(f"unsupported argument type for cm: expected '{Colormap}' but received '{type(cm)}'")
 
     if shade_number is None:
         shade_number = cm.N

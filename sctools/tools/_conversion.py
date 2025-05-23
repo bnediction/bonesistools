@@ -16,7 +16,8 @@ def anndata_to_dataframe(
     layer: Optional[str] = None,
     is_log: Optional[bool] = False
 ) -> DataFrame:
-    """Convert Anndata instance into Dataframe instance.
+    """
+    Convert Anndata instance into Dataframe instance.
     
     Parameters
     ----------
@@ -30,9 +31,9 @@ def anndata_to_dataframe(
         If provided, use adata.layers[layer] for expression values instead of adata.X.
     is_log
         Boolean value specifying if the counts are logarithmized.
-        If value parameter is `True`, perform an exponential transformation.
+        If value parameter is 'True', perform an exponential transformation.
         If counts are still logarithmized but user want to keep logarithmized counts,
-        please specify `False` to the value parameter.
+        please specify 'False' to the value parameter.
     
     Returns
     -------
