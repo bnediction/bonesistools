@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import collections.abc
-from typing import Optional, Sequence
+from typing import Optional, Union, Sequence
 from .._typing import anndata_checker
 
 from anndata import AnnData
@@ -21,7 +21,7 @@ def subclusters_at_center(
     n_neighbors: int=30,
     include: Optional[Sequence[str]]=None,
     copy: bool=False
-):
+) -> Union[AnnData, None]:
     """
     Compute subclusters at center with respect to an embedding projection in adata.obsm.
 
@@ -34,7 +34,8 @@ def subclusters_at_center(
     obsm
         The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
     n_components
-        Dimension of the embedding projection (default: all components)
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
     key
         Name of the column created in adata.obs
     n_neighbors
@@ -96,7 +97,7 @@ def subclusters_at_extremity(
     include: Optional[Sequence[str]]=None,
     exclude_for_computation: Optional[Sequence[str]]=None,
     copy: bool=False
-):
+) -> Union[AnnData, None]:
     """
     Compute subclusters at end with respect to an embedding projection in adata.obsm.
 
@@ -192,7 +193,7 @@ def subclusters(
     include_extremity: Optional[Sequence[str]]=None,
     exclude_for_computation: Optional[Sequence[str]]=None,
     copy: bool=False
-):
+) -> Union[AnnData, None]:
     """
     Compute subclusters at center with respect to an embedding projection in adata.obsm.
 

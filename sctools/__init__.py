@@ -19,7 +19,8 @@ from ._typing import (
     Axis,
     Keys,
     Suffixes,
-    ScData
+    ScData,
+    Metric
 )
 
 from . import tools as tl

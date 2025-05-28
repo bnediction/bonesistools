@@ -5,6 +5,7 @@ import types
 from typing import (
     Optional,
     Union,
+    Callable,
     List,
     Tuple
 )
@@ -15,6 +16,7 @@ except ImportError:
 
 from anndata import AnnData
 from pandas import DataFrame
+import numpy as np
 
 from functools import wraps
 
@@ -50,6 +52,33 @@ else:
     MuData = type(NotImplemented)
     MuDataList = List[type(NotImplemented)]
     ScData = AnnData
+
+Metric = Literal[
+    "cityblock",
+    "cosine",
+    "euclidean",
+    "l1",
+    "l2",
+    "manhattan",
+    "braycurtis",
+    "canberra",
+    "chebyshev",
+    "correlation",
+    "dice",
+    "hamming",
+    "jaccard",
+    "kulsinski",
+    "mahalanobis",
+    "minkowski",
+    "rogerstanimoto",
+    "russellrao",
+    "seuclidean",
+    "sokalmichener",
+    "sokalsneath",
+    "sqeuclidean",
+    "yule"
+]
+Metric_Function = Callable[[np.ndarray, np.ndarray], float]
 
 def type_checker(
     function: types.FunctionType=None,

@@ -19,11 +19,11 @@ def _shared_nearest_neighbors_graph(
 
     k_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
     if prune_snn < 0:
-        raise ValueError("`prune_snn` parameter must be positive, aborting")
+        raise ValueError("'prune_snn' parameter must be positive, aborting")
     elif prune_snn < 1:
         prune_snn = math.ceil(k_neighbors*prune_snn)
     elif prune_snn >= k_neighbors:
-        raise ValueError("`prune_snn` parameter must be smaller than `n_neighbors` used for KNN computation, aborting")
+        raise ValueError("'prune_snn' parameter must be smaller than 'n_neighbors' used for KNN computation, aborting")
 
     n_cells = scdata.n_obs
     distances_key = scdata.uns[cluster_key]["distances_key"]
@@ -68,10 +68,10 @@ def shared_neighbors(
         Annotated data matrix
     knn_key
         If not specified, the used neighbors data are retrieved from .uns['neighbors'],
-        otherwise the used neighbors data are retrieved from .uns[key_added]
+        otherwise the used neighbors data are retrieved from .uns['key_added']
     snn_key
         If not specified, the shared neighbors data are stored in .uns['shared_neighbors']
-        If specified, the shared neighbors data are added to .uns[key_added]
+        If specified, the shared neighbors data are added to .uns['key_added']
     prune_snn
         If zero value, no prunning is performed. If strictly positive, removes edge between two neighbors
         in the shared neighborhood graph who have a number of neighbors less than the specified value
@@ -92,15 +92,15 @@ def shared_neighbors(
 
     Returns
     -------
-    Depending on `copy`, updates or returns `scdata` with the following:
+    Depending on 'copy', updates or returns 'scdata' with the following:
 
-    See `snn_key` parameter description for the storage path of
+    See 'snn_key' parameter description for the storage path of
     connectivities and distances.
 
     **connectivities** : sparse matrix.
         Weighted adjacency matrix of the shared neighborhood graph.
         Weights should be interpreted as number of shared neighbors.
-    **distances** : sparse matrix of dtype `float64`.
+    **distances** : sparse matrix of dtype 'float64'.
         Instead of decaying weights, this stores distances for each pair of
         neighbors.
     """
@@ -108,8 +108,8 @@ def shared_neighbors(
     if knn_key not in scdata.uns:
         raise KeyError((
             "Neighborhood graph not already computed or not finding. "
-            "Please use `scanpy.pp.neighbors` function before or "
-            "specify `key_added` parameter when scanpy.pp.neighbors has been called, aborting"
+            "Please use 'scanpy.pp.neighbors' function before or "
+            "specify 'key_added' parameter when scanpy.pp.neighbors has been called, aborting"
     ))
     if prune_snn is None:
         prune_snn = 0

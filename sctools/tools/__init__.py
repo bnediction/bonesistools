@@ -1,9 +1,14 @@
 #!/usr/bin/env python
 
+from ._utils import choose_representation
+
 from ._neighbors import shared_neighbors
 from ._conversion import anndata_to_dataframe
 from ._graph import get_paga_graph
-from ._maths import barycenters
+from ._maths import (
+    compute_distances,
+    barycenters
+)
 
 from ._write import (
     to_csv,
