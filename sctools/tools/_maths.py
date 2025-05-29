@@ -42,7 +42,7 @@ def compute_distances(
     use_rep
         Use the indicated representation in adata.obsm
     metric
-        Metric used when calculating distance between observations
+        Metric used when calculating pairwise distances between observations
     key_added
         If not specified, return distance matrix
         If specified, distance matrix is added to .obsp['key_added']

@@ -7,7 +7,8 @@ from typing import (
     Union,
     Callable,
     List,
-    Tuple
+    Tuple,
+    Any
 )
 try:
     from typing import Literal

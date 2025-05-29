@@ -1,14 +1,105 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union
-from .._typing import anndata_or_mudata_checker, ScData
+from typing import (
+    Optional,
+    Union,
+    Mapping,
+    Literal,
+    Any
+)
+from .._typing import (
+    ScData,
+    Metric,
+    anndata_or_mudata_checker
+)
 
-import numpy as np
 import math
+import numpy as np
+import anndata as ad
+
+import networkx as nx
+from networkx import Graph
+
 from scipy.sparse import csr_matrix, issparse, diags
 from sklearn.metrics import pairwise_distances
 
-import anndata as ad
+from ._utils import choose_representation
+
+@anndata_or_mudata_checker
+def kneighbors_graph(
+    scdata: ScData, # type: ignore
+    n_neighbors: int,
+    n_components: Optional[int] = None,
+    use_rep: Optional[str] = None,
+    metric: Metric = "euclidean",
+    create_using: Optional[Graph] = nx.DiGraph,
+    edge_attr: Optional[str] = "distance",
+    index_or_name: Literal["index","name"] = "index",
+    n_jobs: int = 1,
+    **metric_kwds: Mapping[str, Any]
+) -> Graph:
+    """
+    Compute the k-nearest neighbors-based graph using an embedding space.
+
+    Parameters
+    ----------
+    scdata
+        AnnData or MuData object
+    n_neighbors
+        number of closest neighbors
+    n_components
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
+    use_rep
+        Use the indicated representation in adata.obsm
+    metric
+        Metric used when calculating pairwise distances between observations
+    create_using
+        Graph type to return
+        If graph instance, then cleared it before computing k-nearest neighbors
+    edge_attr
+        Attribute to which the distance values are assigned on each edge
+    index_or_name
+        node names are referring either to index number ('index') or index name ('name')
+    n_jobs
+        Number of allocated processors
+    **metric_kwds
+        Any further parameters passed to the distance function
+
+    Returns
+    -------
+    return Graph object.
+    """
+
+    from sklearn import neighbors
+    
+    X = choose_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components
+    )
+    weighted_adjacency_matrix = neighbors.kneighbors_graph(
+        X=X,
+        n_neighbors=n_neighbors,
+        mode="distance",
+        metric=metric,
+        n_jobs=n_jobs,
+        **metric_kwds
+    )
+    kneighbors_graph = nx.from_numpy_array(
+        weighted_adjacency_matrix,
+        create_using=create_using,
+        edge_attr=edge_attr
+    )
+
+    if index_or_name == "index":
+        pass
+    elif index_or_name == "name":
+        nx.relabel_nodes(kneighbors_graph,dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)))
+    else:
+        raise ValueError(f"invalid parameter value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
+
+    return kneighbors_graph
 
 @anndata_or_mudata_checker
 def _shared_nearest_neighbors_graph(

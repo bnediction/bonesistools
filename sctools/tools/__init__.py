@@ -2,7 +2,10 @@
 
 from ._utils import choose_representation
 
-from ._neighbors import shared_neighbors
+from ._neighbors import (
+    kneighbors_graph,
+    shared_neighbors
+)
 from ._conversion import anndata_to_dataframe
 from ._graph import get_paga_graph
 from ._maths import (
