@@ -22,16 +22,19 @@ def choose_representation(
     ----------
     scdata
         AnnData or MuData object
+    use_rep
+        Use the indicated representation in scdata.obsm
     n_components
         Number of principal components or dimensions in the embedding space
         taken into account for each observation
-    use_rep
-        Use the indicated representation in scdata.obsm
 
     Returns
     -------
     Return Array object.
     """
+
+    if use_rep is None:
+        use_rep = "X_pca"
 
     if use_rep not in scdata.obsm_keys():
         if use_rep == "X_pca":

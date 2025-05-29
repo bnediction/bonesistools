@@ -5,7 +5,8 @@ from typing import (
     Union,
     Mapping,
     Literal,
-    Any
+    Any,
+    get_args
 )
 from .._typing import (
     ScData,
@@ -13,8 +14,12 @@ from .._typing import (
     anndata_or_mudata_checker
 )
 
+import warnings
+import importlib
+
 import math
 import numpy as np
+import pandas as pd
 import anndata as ad
 
 import networkx as nx
@@ -23,6 +28,7 @@ from networkx import Graph
 from scipy.sparse import csr_matrix, issparse, diags
 from sklearn.metrics import pairwise_distances
 
+from ._maths import barycenters
 from ._utils import choose_representation
 
 @anndata_or_mudata_checker
@@ -93,13 +99,171 @@ def kneighbors_graph(
     )
 
     if index_or_name == "index":
-        pass
+        return kneighbors_graph
     elif index_or_name == "name":
-        nx.relabel_nodes(kneighbors_graph,dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)))
+        return nx.relabel_nodes(kneighbors_graph,dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)))
     else:
         raise ValueError(f"invalid parameter value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
 
-    return kneighbors_graph
+class Knnbs(object):
+
+    def __init__(
+        self,
+        n_neighbors: int,
+        use_rep: Optional[str]="X_pca",
+        n_components: Optional[str]=None,
+        metric: Metric="euclidean",
+        **metric_kwds: Mapping[str, Any]
+    ):
+    
+        if isinstance(n_neighbors, int):
+            if n_neighbors > 0:
+                self.n_neighbors = n_neighbors
+            else:
+                raise ValueError(f"invalid argument value for 'n_neighbors': expected non-null positive but received '{n_neighbors}'")
+        elif isinstance(n_neighbors, float):
+            if n_neighbors.is_integer():
+                self.n_neighbors = n_neighbors
+            else:
+                raise ValueError(f"invalid parameter value for 'n_neighbors': expected integer but received '{n_neighbors}'")
+        else:
+            raise TypeError(f"unsupported parameter type for 'n_neighbors': expected '{int}' but received '{type(n_neighbors)}'")
+
+        if n_components is None:
+            self.n_components = None
+        elif isinstance(n_components, int):
+            if n_components > 0:
+                self.n_components = n_components
+            else:
+                raise ValueError(f"invalid argument value for 'n_components': expected non-null positive but received '{n_components}'")
+        elif isinstance(n_components, float):
+            if n_components.is_integer():
+                self.n_components = n_components
+            else:
+                raise ValueError(f"invalid parameter value for 'n_components': expected integer but received '{n_components}'")
+        else:
+            raise TypeError(f"unsupported parameter type for 'n_components': expected '{int}' but received '{type(n_components)}'")
+        
+        if isinstance(use_rep, str):
+            self.use_rep = use_rep
+        else:
+            raise TypeError(f"unsupported parameter type for 'use_rep': expected '{str}' but received '{type(use_rep)}'")
+        
+        if metric in get_args(Metric):
+            self.metric = metric
+        else:
+            raise ValueError(f"unsupported parameter value for 'metric': '{metric}'")
+        
+        self.metric_kwds = metric_kwds
+    
+    def __repr__(self) -> str:
+    
+        return f"{self.__class__.__name__}(n_neighbors={self.n_neighbors},use_rep={self.use_rep},n_components={self.n_components},metric={self.metric},metric_kwds={self.metric_kwds})"
+
+    def get(self, attribute: str) -> Any:
+    
+        if hasattr(self, attribute):
+            return getattr(self, attribute)
+        else:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attribute}'")
+
+    def fit(
+        self,
+        adata: ad.AnnData,
+        obs: str,
+        n_jobs: int=1
+    ) -> None:
+        
+        from sklearn.metrics import pairwise_distances
+
+        X = choose_representation(adata, use_rep=self.use_rep, n_components=self.n_components)
+
+        _kneighbors_graph = kneighbors_graph(
+            adata,
+            n_neighbors=self.n_neighbors,
+            n_components=self.n_components,
+            use_rep=self.use_rep,
+            metric=self.metric,
+            create_using=nx.Graph,
+            index_or_name="name",
+            n_jobs=n_jobs
+        )
+
+        _barycenters = barycenters(
+            adata,
+            obs=obs,
+            use_rep=self.use_rep,
+            n_components=self.n_components
+        )
+        for key, value in _barycenters.items():
+            barycenter_coordinate = value.reshape(1,-1)
+            distances = pairwise_distances(
+                X,
+                barycenter_coordinate,
+                metric=self.metric,
+                n_jobs=n_jobs
+            ).reshape(1,-1)
+            _kneighbors_graph.add_node(key)
+            knn_indices = list(np.argpartition(distances, kth=self.n_neighbors, axis=1)[:, :self.n_neighbors].reshape(-1))
+            distances = list(distances[0,knn_indices].reshape(-1))
+            for obs_name, distance in zip(adata.obs.index[knn_indices], distances):
+                _kneighbors_graph.add_edge(key, obs_name, distance=distance)
+        
+        if nx.number_connected_components(_kneighbors_graph) > 1:
+            raise nx.NetworkXAlgorithmError(f"'kneighbors_graph' not weakly connected")
+        else:
+            self.kneighbors_graph = _kneighbors_graph
+            self.obs = adata.obs[obs]
+            return None
+
+    def shortest_path_lengths(
+        self,
+        method: str="dijkstra",
+        n_jobs: int=1
+    ) -> None:
+            
+        def shortest_path_lengths_from(
+            source: str,
+        ):
+            distances = pd.Series(data=self.obs.index,index=self.obs.index)
+            distances = distances.apply(
+                lambda x: nx.shortest_path_lengths(
+                    self.kneighbors_graph,
+                    source=source,
+                    target=x,
+                    weight="distance",
+                    method=method
+                )
+            )
+            return (source, distances)
+
+        try:
+            _multiprocess_is_available = importlib.util.find_spec("multiprocess") is not None
+        except:
+            _multiprocess_is_available = importlib.find_loader("multiprocess") is not None
+
+        if _multiprocess_is_available:
+            from multiprocess import Pool
+            with Pool(processes=n_jobs) as pool:
+                shortest_path_lengths_ls = pool.map(shortest_path_lengths_from, self.obs.cat.categories)
+        else:
+            warnings.warn("module multiprocess not available: not using CPU parallelization")
+            shortest_path_lengths_ls = []
+            for obs in self.obs.cat.categories:
+                shortest_path_lengths_ls.append((obs,shortest_path_lengths_from(obs)))
+        
+        shortest_path_lengths_dict = {}
+        for k, v in shortest_path_lengths_ls:
+            shortest_path_lengths_dict[k] = v
+        self.shortest_path_lengths_df = pd.DataFrame.from_dict(data=shortest_path_lengths_dict, orient="columns")
+    
+    def subclusters(
+            self,
+            key: str="knnbs",
+            size: int=30
+    ) -> pd.Series:
+        # TODO
+        return
 
 @anndata_or_mudata_checker
 def _shared_nearest_neighbors_graph(

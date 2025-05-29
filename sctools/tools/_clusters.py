@@ -10,13 +10,14 @@ import pandas as pd
 import numpy as np
 
 from . import barycenters
+from ._utils import choose_representation
 
 @anndata_checker
 def subclusters_at_center(
     adata: AnnData,
     obs: str,
-    obsm: str="X_umap",
-    n_components: Optional[int]=None,
+    use_rep: Optional[str] = None,
+    n_components: Optional[int] = None,
     key: str="subclusters",
     n_neighbors: int=30,
     include: Optional[Sequence[str]]=None,
@@ -31,8 +32,8 @@ def subclusters_at_center(
         Annotated data matrix
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
+    use_rep
+        Use the indicated representation in adata.obsm
     n_components
         Number of principal components or dimensions in the embedding space
         taken into account for each observation
@@ -65,14 +66,18 @@ def subclusters_at_center(
     _barycenters = barycenters(
         adata,
         obs=obs,
-        obsm=obsm,
-        n_components=n_components
+        n_components=n_components,
+        use_rep=use_rep
     )
 
     for cluster in adata.obs[obs].cat.categories:
         if cluster not in include:
             continue
-        cluster_data_points = adata.obsm[obsm][:,:n_components][adata.obs[obs] == cluster]
+        cluster_data_points = choose_representation(
+            adata,
+            use_rep=use_rep,
+            n_components=n_components
+        )[adata.obs[obs] == cluster]
         if n_neighbors > cluster_data_points.shape[0]:
             barcodes = adata.obs[obs][adata.obs[obs] == cluster].index
         else:
@@ -90,8 +95,8 @@ def subclusters_at_center(
 def subclusters_at_extremity(
     adata: AnnData,
     obs: str,
-    obsm: str="X_umap",
-    n_components: Optional[int]=None,
+    use_rep: Optional[str] = None,
+    n_components: Optional[int] = None,
     key: str="subclusters",
     n_neighbors: int=30,
     include: Optional[Sequence[str]]=None,
@@ -107,10 +112,11 @@ def subclusters_at_extremity(
         Annotated data matrix
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
+    use_rep
+        Use the indicated representation in adata.obsm
     n_components
-        Dimension of the embedding projection (default: all components)
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
     key
         Name of the column created in adata.obs
     n_neighbors
@@ -142,7 +148,7 @@ def subclusters_at_extremity(
     _barycenters = barycenters(
         adata,
         obs=obs,
-        obsm=obsm,
+        use_rep=use_rep,
         n_components=n_components
     )
 
@@ -160,7 +166,11 @@ def subclusters_at_extremity(
             continue
         barycenters_wo_cluster = _barycenters.copy(); del barycenters_wo_cluster[cluster]
         distances = []
-        cluster_data_points = adata.obsm[obsm][:,:n_components][adata.obs[obs] == cluster]
+        cluster_data_points = choose_representation(
+            adata,
+            use_rep=use_rep,
+            n_components=n_components
+        )[adata.obs[obs] == cluster]
         if n_neighbors > cluster_data_points.shape[0]:
             barcodes = adata.obs[obs][adata.obs[obs] == cluster].index
         else:
@@ -185,8 +195,8 @@ def subclusters_at_extremity(
 def subclusters(
     adata: AnnData,
     obs: str,
-    obsm: str="X_umap",
-    n_components: Optional[int]=None,
+    use_rep: Optional[str] = None,
+    n_components: Optional[int] = None,
     key: str="subclusters",
     n_neighbors: int=30,
     include_center: Optional[Sequence[str]]=None,
@@ -203,10 +213,11 @@ def subclusters(
         Annotated data matrix
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
+    use_rep
+        Use the indicated representation in adata.obsm
     n_components
-        Dimension of the embedding projection (default: all components)
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
     key
         Name of the column created in adata.obs
     n_neighbors
@@ -241,7 +252,7 @@ def subclusters(
             subclusters_at_center(
                 adata=adata,
                 obs=obs,
-                obsm=obsm,
+                use_rep=use_rep,
                 n_components=n_components,
                 key=key_center,
                 n_neighbors=n_neighbors,
@@ -251,7 +262,7 @@ def subclusters(
             subclusters_at_extremity(
                 adata=adata,
                 obs=obs,
-                obsm=obsm,
+                use_rep=use_rep,
                 n_components=n_components,
                 key=key_extremity,
                 n_neighbors=n_neighbors,
@@ -270,7 +281,7 @@ def subclusters(
         subclusters_at_center(
             adata=adata,
             obs=obs,
-            obsm=obsm,
+            use_rep=use_rep,
             n_components=n_components,
             key=key,
             n_neighbors=n_neighbors,
@@ -282,7 +293,7 @@ def subclusters(
         subclusters_at_extremity(
             adata=adata,
             obs=obs,
-            obsm=obsm,
+            use_rep=use_rep,
             n_components=n_components,
             key=key,
             n_neighbors=n_neighbors,

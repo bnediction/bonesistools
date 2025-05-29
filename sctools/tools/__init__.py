@@ -9,7 +9,7 @@ from ._neighbors import (
 from ._conversion import anndata_to_dataframe
 from ._graph import get_paga_graph
 from ._maths import (
-    compute_distances,
+    pairwise_distances,
     barycenters
 )
 

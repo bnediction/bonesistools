@@ -20,7 +20,7 @@ from ._utils import (
 import numpy as np
 
 @anndata_checker
-def compute_distances(
+def pairwise_distances(
     adata,
     n_components: Optional[int]=None,
     use_rep: Optional[str]=None,
@@ -30,7 +30,7 @@ def compute_distances(
     **metric_kwds: Mapping[str, Any]
 ) -> Union[AnnData, None]:
     """
-    Compute the distance matrix between observations.
+    Calculate the distance matrix between observations with respect to an embedding projection.
 
     Parameters
     ----------
@@ -56,11 +56,11 @@ def compute_distances(
     Depending on 'key_added', update AnnData or return Array object.
     """
     
-    from sklearn.metrics import pairwise_distances
+    from sklearn import metrics
 
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
 
-    distances = pairwise_distances(
+    distances = metrics.pairwise_distances(
         X,
         metric=metric,
         n_jobs=n_jobs,
@@ -83,8 +83,8 @@ def compute_distances(
 def barycenters(
     adata: AnnData,
     obs: str,
-    obsm: str="X_umap",
-    n_components: Optional[int]=None
+    use_rep: Optional[str]=None,
+    n_components: Optional[int]=None,
 ) -> Mapping:
     """
     Calculate the barycenter with respect to an embedding projection.
@@ -95,22 +95,22 @@ def barycenters(
         Annotated data matrix
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first `n_components` rows in .obsm[`obsm`]
+    use_rep
+        Use the indicated representation in adata.obsm
     n_components
-        Dimension of the embedding projection (default: all components)
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
 
     Returns
     -------
     dict[cluster] = barycenter
     """
 
-    if n_components is None:
-        n_components = adata.obsm[obsm].shape[1]
+    X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
     
     if not hasattr(adata.obs[obs], "cat"):
         raise TypeError("adata.obs[`obs`] has not attribute `.cat`")
     else:
         clusters = adata.obs[obs].cat.categories
 
-    return {cluster: np.nanmean(adata.obsm[obsm][:,:n_components][adata.obs[obs] == cluster], axis=0) for cluster in clusters}
+    return {cluster: np.nanmean(X[adata.obs[obs] == cluster], axis=0) for cluster in clusters}
