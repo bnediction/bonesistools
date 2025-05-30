@@ -267,7 +267,7 @@ class Knnbs(object):
         n_jobs: int = 1
     ) -> None:
         """
-        Compute shortest path lengths in the graph.
+        Compute pairwise shortest path lengths between cells and barycenters.
 
         Parameters
         ----------
@@ -279,7 +279,7 @@ class Knnbs(object):
     
         Returns
         -------
-        Update knnbs object by adding as attribute pairwise shortest path lengths between cells and barycenters.
+        Update knnbs object by adding as attribute pairwise shortest path lengths derived from the graph.
         """
         
         def shortest_path_lengths_from(

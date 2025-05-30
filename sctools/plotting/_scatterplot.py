@@ -276,7 +276,7 @@ def __add_labels(
     barycenters = tl.barycenters(
         adata=adata,
         obs=obs,
-        obsm=obsm
+        use_rep=obsm
     )
 
     if ax is None:
