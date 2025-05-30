@@ -22,12 +22,6 @@ from ._write import (
     to_csv_or_npz
 )
 
-from ._clusters import (
-    subclusters_at_center,
-    subclusters_at_extremity,
-    subclusters
-)
-
 from ._markers import (
     extract_rank_genes_groups,
     log_fold_changes,
