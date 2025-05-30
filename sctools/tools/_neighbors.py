@@ -40,8 +40,8 @@ from ._utils import choose_representation
 def kneighbors_graph(
     scdata: ScData, # type: ignore
     n_neighbors: int,
-    n_components: Optional[int] = None,
     use_rep: Optional[str] = None,
+    n_components: Optional[int] = None,
     metric: Metric = "euclidean",
     create_using: Optional[Graph] = nx.DiGraph,
     edge_attr: Optional[str] = "distance",
@@ -58,11 +58,11 @@ def kneighbors_graph(
         AnnData or MuData object
     n_neighbors
         number of closest neighbors
+    use_rep
+        Use the indicated representation in adata.obsm
     n_components
         Number of principal components or dimensions in the embedding space
         taken into account for each observation
-    use_rep
-        Use the indicated representation in adata.obsm
     metric
         Metric used when calculating pairwise distances between observations
     create_using
@@ -79,7 +79,7 @@ def kneighbors_graph(
 
     Returns
     -------
-    return Graph object.
+    Return Graph object.
     """
 
     from sklearn import neighbors
@@ -112,13 +112,34 @@ def kneighbors_graph(
 
 
 class Knnbs(object):
+    """
+    Class for using k-nearest neighbors-based subclusters (knnbs) algorithm.
+    A k-nearest neighbors graph is constructed in order to compute distance
+    between cells and clusters' barycenters. Two methods are used for finding subclusters:
+    (1) searching for cell manifolds maximizing distances to other clusters' barycenters
+    (2) searching for cell manifolds minimizing distances to self barycenter
+
+    Parameters
+    ----------
+    n_neighbors
+        number of closest neighbors
+    use_rep
+        Use the indicated representation in adata.obsm
+    n_components
+        Number of principal components or dimensions in the embedding space
+        taken into account for each observation
+    metric
+        Metric used when calculating pairwise distances between observations
+    **metric_kwds
+        Any further parameters passed to the distance function
+    """
 
     def __init__(
         self,
         n_neighbors: int,
-        use_rep: Optional[str]="X_pca",
-        n_components: Optional[str]=None,
-        metric: Metric="euclidean",
+        use_rep: Optional[str] = "X_pca",
+        n_components: Optional[str] = None,
+        metric: Metric = "euclidean",
         **metric_kwds: Mapping[str, Any]
     ):
     
@@ -177,9 +198,27 @@ class Knnbs(object):
         self,
         adata: AnnData,
         obs: str,
-        n_jobs: int=1
+        n_jobs: int = 1
     ) -> None:
-        
+        """
+        Compute the k-nearest neighbors-based graph using an embedding space.
+        If parameters set at the knnbs instanciation are not desired,
+        first update knnbs object-related attributes with desired options.
+
+        Parameters
+        ----------
+        adata
+            AnnData object
+        obs
+            Column name in 'adata.obs' used as reference for clusters
+        n_jobs
+            Number of allocated processors
+
+        Returns
+        -------
+        Update knnbs object by adding as attribute computed kneighbors_graph.
+        """
+
         from sklearn.metrics import pairwise_distances
 
         X = choose_representation(adata, use_rep=self.use_rep, n_components=self.n_components)
@@ -224,10 +263,25 @@ class Knnbs(object):
 
     def shortest_path_lengths(
         self,
-        method: str="dijkstra",
-        n_jobs: int=1
+        method: Shortest_Path_Method = "dijkstra",
+        n_jobs: int = 1
     ) -> None:
-            
+        """
+        Compute shortest path lengths in the graph.
+
+        Parameters
+        ----------
+        method
+            Algorithm used to compute the shortest path lengths
+            (supported values: 'dijkstra', 'bellman-ford')
+        n_jobs
+            Number of allocated processors
+    
+        Returns
+        -------
+        Update knnbs object by adding as attribute pairwise shortest path lengths between cells and barycenters.
+        """
+        
         def shortest_path_lengths_from(
             source: str,
         ):
@@ -265,12 +319,29 @@ class Knnbs(object):
         self.shortest_path_lengths_df = pd.DataFrame.from_dict(data=shortest_path_lengths_dict, orient="columns")
         return None
     
-    def maximize_distances(
+    def find_furthest_cells_to_other_barycenters(
             self,
-            size: int=30,
-            key: str="knnbs",
-            clusters: Optional[Sequence[str]]=None,
+            size: int = 30,
+            key: str = "knnbs",
+            clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
+        """
+        Find cluster related-cell manifolds maximizing distances to other clusters' barycenters.
+
+        Parameters
+        ----------
+        size
+            Number of cells in each macrostate
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
+        key
+            Pandas serie name
+        clusters
+            List of clusters for which cell subpopulations are computed
+    
+        Returns
+        -------
+        Return a pandas serie storing furthest cells to other barycenters.
+        """
         
         if clusters is None:
             clusters = self.obs.cat.categories
@@ -284,7 +355,7 @@ class Knnbs(object):
         if key is not None:
             subclusters_series.name = key
         
-        shortest_path_length_free_from_self_cluster_df = self.shortest_path_lengths_df
+        shortest_path_length_free_from_self_cluster_df = self.shortest_path_lengths_df.copy(deep=True)
         for idx, obs in self.obs.items():
             shortest_path_length_free_from_self_cluster_df.at[idx,obs] = np.nan
 
@@ -306,12 +377,29 @@ class Knnbs(object):
         
         return subclusters_series
     
-    def minimize_distances(
+    def find_closest_cells_to_self_barycenter(
         self,
-        size: int=30,
-        key: str="knnbs",
-        clusters: Optional[Sequence[str]]=None,
+        size: int = 30,
+        key: str = "knnbs",
+        clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
+        """
+        Find cluster related-cell manifolds minimizing distances to self barycenter.
+
+        Parameters
+        ----------
+        size
+            Number of cells in each macrostate
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
+        key
+            Pandas serie name
+        clusters
+            List of clusters for which cell subpopulations are computed
+    
+        Returns
+        -------
+        Return a pandas serie storing closest cells to self barycenter.
+        """
         
         if clusters is None:
             clusters = self.obs.cat.categories
@@ -325,37 +413,58 @@ class Knnbs(object):
         if key is not None:
             subclusters_series.name = key
 
-            _min_dists = pd.Series(
+            _dists = pd.Series(
                 data=np.nan,
                 index=self.obs.index
             )
-            _min_dists.name = "min_dist"
+            _dists.name = "dist"
             for idx, obs in self.obs.items():
-                _min_dists.at[idx] = self.shortest_path_lengths_df.loc[idx,obs]
+                _dists.at[idx] = self.shortest_path_lengths_df.loc[idx,obs]
 
-        _min_dists = _min_dists.to_frame().merge(
+        _dists = _dists.to_frame().merge(
             right=self.obs.to_frame(),
             left_index=True,
             right_index=True
         )
         for cluster in clusters:
-            _min_dists_cluster = _min_dists[_min_dists[self.obs.name] == cluster]["min_dist"]
-            if len(_min_dists_cluster) < size:
-                _obs = _min_dists_cluster.index
+            _dists_cluster = _dists[_dists[self.obs.name] == cluster]["dist"]
+            if len(_dists_cluster) < size:
+                _obs = _dists_cluster.index
             else:
-                _idx = np.argpartition(_min_dists_cluster, kth=size)[:size]
-                _obs = _min_dists_cluster.iloc[_idx].index
+                _idx = np.argpartition(_dists_cluster, kth=size)[:size]
+                _obs = _dists_cluster.iloc[_idx].index
             subclusters_series.loc[_obs] = cluster
         
         return subclusters_series
     
-    def subclusters(
+    def knnbs(
         self,
-        size: int=30,
-        key: str="knnbs",
-        subclusters_maximizing_distances: Optional[Sequence[str]]=None,
-        subclusters_minimizing_distances: Optional[Sequence[str]]=None,
+        size: int = 30,
+        key: str = "knnbs",
+        subclusters_maximizing_distances: Optional[Sequence[str]] = None,
+        subclusters_minimizing_distances: Optional[Sequence[str]] = None,
     ) -> pd.Series:
+        """
+        Find cluster related-cell manifolds using k-nearest neighbors-based subclusters algorithm.
+
+        Parameters
+        ----------
+        size
+            Number of cells in each macrostate
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
+        key
+            Pandas serie name
+        subclusters_maximizing_distances
+            List of clusters for which cell subpopulations are computed
+            by maximizing distances to other clusters' barycenters
+        subclusters_minimizing_distances
+            List of clusters for which cell subpopulations are computed
+            by minimizing distances to self barycenter 
+    
+        Returns
+        -------
+        Return a pandas serie storing subclusters derived from k-nearest neighbors-based subclusters algorithm.
+        """
         
         if subclusters_maximizing_distances is None and subclusters_minimizing_distances is None:
             subclusters_maximizing_distances = set(self.obs.cat.categories)
@@ -368,7 +477,7 @@ class Knnbs(object):
             raise ValueError("'subclusters_maximizing_distances' and 'subclusters_minimizing_distances' are not disjoint")
 
         if subclusters_maximizing_distances:
-            max_dists = self.maximize_distances(
+            max_dists = self.find_furthest_cells_to_other_barycenters(
                 size=size,
                 key="max_dists",
                 clusters=subclusters_maximizing_distances
@@ -383,7 +492,7 @@ class Knnbs(object):
             max_dists.name="max_dists"
 
         if subclusters_minimizing_distances:
-            min_dists = self.minimize_distances(
+            min_dists = self.find_closest_cells_to_self_barycenter(
                 size=size,
                 key="min_dists",
                 clusters=subclusters_minimizing_distances
