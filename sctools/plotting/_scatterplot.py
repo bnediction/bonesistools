@@ -29,6 +29,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from itertools import cycle
 Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
 
+from ..tools._utils import choose_representation
+
 from . import _figure
 from . import _colors
 from .. import tl
@@ -39,23 +41,23 @@ def __default_plot(
 ):
 
     def wrapper(
-        adata: ScData, # type: ignore
+        scdata: ScData, # type: ignore
         obs: str,
-        obsm: str,
+        use_rep: str,
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
         **kwargs
     ):
 
-        if obs not in adata.obs:
-            raise KeyError(f"adata.obs[`{obs}`] does not exist.")
-        if obsm not in adata.obsm:
-            raise KeyError(f"adata.obsm[`{obsm}`] does not exist.")
+        if obs not in scdata.obs:
+            raise KeyError(f"scdata.obs[`{obs}`] does not exist.")
+        if use_rep not in scdata.obsm:
+            raise KeyError(f"scdata.obsm[`{use_rep}`] does not exist.")
 
         fig, ax = plot(
-            adata,
+            scdata,
             obs,
-            obsm,
+            use_rep,
             colors,
             n_components,
             **kwargs
@@ -99,31 +101,39 @@ def __default_plot(
 
 @__default_plot
 def __scatterplot_discrete(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     obs: str,
-    obsm: str,
+    use_rep: str,
     colors: Optional[Colors] = None,
     n_components: Optional[int] = 2,
     **kwargs
 ):
 
-    if len(adata.obs[obs].unique()) < 2:
-        raise ValueError(f"adata.obs[{obs}] specifies only one category, aborting")
+    if len(scdata.obs[obs].unique()) < 2:
+        raise ValueError(f"only one category for '{obs}' in scdata.obs")
     elif "add_legend" in kwargs:
         add_legend = kwargs["add_legend"]
     else:
         add_legend = False
     
+    categories = set(scdata.obs[obs].unique()) & set(scdata.obs[obs].astype("category").cat.categories)
+
     if not colors:
-        cluster_number = len(adata.obs[obs].astype("category").cat.categories)
+        cluster_number = len(scdata.obs[obs].astype("category").cat.categories)
         if len(_colors.QUALITATIVE_COLORS) >= cluster_number:
             colors = _colors.QUALITATIVE_COLORS[0:cluster_number]
         else:
             colors = _colors.generate_colormap(color_number=cluster_number)
     elif isinstance(colors, Mapping):
-        colors = [colors[cluster] for cluster in adata.obs[obs].astype("category").cat.categories]
+        colors = [colors[cluster] for cluster in scdata.obs[obs].astype("category").cat.categories]
     if hasattr(colors, "colors"):
         colors = colors.colors
+    
+    X = choose_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components
+    )
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
@@ -132,12 +142,12 @@ def __scatterplot_discrete(
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
 
-    if adata.obs[obs].isna().any():
-        idx = adata.obs[obs].isna()
+    if scdata.obs[obs].isna().any():
+        idx = scdata.obs[obs].isna()
         if n_components==2:
             ax.scatter(
-                adata.obsm[obsm][idx,0],
-                adata.obsm[obsm][idx,1],
+                X[idx,0],
+                X[idx,1],
                 s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
                 facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
                 edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
@@ -145,25 +155,27 @@ def __scatterplot_discrete(
             )
         elif n_components==3:
             ax.scatter3D(
-                adata.obsm[obsm][idx,0],
-                adata.obsm[obsm][idx,1],
-                adata.obsm[obsm][idx,2],
+                X[idx,0],
+                X[idx,1],
+                X[idx,2],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
                 edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
                 alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
             )
     
-    for _cluster, _color in zip(adata.obs[obs].astype("category").cat.categories, colors):
+    for _cluster, _color in zip(scdata.obs[obs].astype("category").cat.categories, colors):
+        if _cluster not in categories:
+            continue
         if len(_color) == 4:
             if isinstance(_color, np.ndarray):
                 _color = _color.tolist()
             del _color[-1]
-        idx = np.where(adata.obs[obs] == _cluster)[0]
+        idx = np.where(scdata.obs[obs] == _cluster)[0]
         if n_components==2:
             ax.scatter(
-                adata.obsm[obsm][idx,0],
-                adata.obsm[obsm][idx,1],
+                X[idx,0],
+                X[idx,1],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=_color,
                 edgecolors="none",
@@ -172,9 +184,9 @@ def __scatterplot_discrete(
             )
         elif n_components==3:
             ax.scatter3D(
-                adata.obsm[obsm][idx,0],
-                adata.obsm[obsm][idx,1],
-                adata.obsm[obsm][idx,2],
+                X[idx,0],
+                X[idx,1],
+                X[idx,2],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=_color,
                 edgecolors="none",
@@ -217,9 +229,9 @@ def __scatterplot_discrete(
 
 @__default_plot
 def __scatterplot_continuous(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     obs: str,
-    obsm: str,
+    use_rep: str,
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
     **kwargs
@@ -232,6 +244,12 @@ def __scatterplot_continuous(
             _cmap = colors
     else:
         _cmap = "autumn_r"
+    
+    X = choose_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components
+    )
 
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
@@ -240,10 +258,10 @@ def __scatterplot_continuous(
     
     if n_components == 2:
         sc = ax.scatter(
-            adata.obsm[obsm][:,0],
-            adata.obsm[obsm][:,1],
+            X[:,0],
+            X[:,1],
             s=kwargs["s"] if "s" in kwargs else 3,
-            c=adata.obs[obs],
+            c=scdata.obs[obs],
             cmap=_cmap,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1
@@ -252,11 +270,11 @@ def __scatterplot_continuous(
         cb.update_ticks()
     elif n_components==3:
         ax.scatter3D(
-            adata.obsm[obsm][:,0],
-            adata.obsm[obsm][:,1],
-            adata.obsm[obsm][:,2],
+            X[:,0],
+            X[:,1],
+            X[:,2],
             s=kwargs["s"] if "s" in kwargs else 3,
-            c=adata.obs[obs],
+            c=scdata.obs[obs],
             cmap=_cmap,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1
@@ -265,19 +283,25 @@ def __scatterplot_continuous(
     return fig, ax
 
 def __add_labels(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     obs: str,
-    obsm: str,
+    use_rep: str,
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
     **kwargs
 ):
 
     barycenters = tl.barycenters(
-        adata=adata,
+        scdata=scdata,
         obs=obs,
-        use_rep=obsm
+        use_rep=use_rep
     )
+    keys_to_remove = []
+    for k, v in barycenters.items():
+        if np.isnan(v).any():
+            keys_to_remove.append(k)
+    for k in keys_to_remove:
+        barycenters.pop(k, None)
 
     if ax is None:
         ax = plt.gca()
@@ -286,7 +310,7 @@ def __add_labels(
         kwargs["verticalalignment"] = "center"
     else:
         pass
-
+    
     if dim == 2:
         for label, value in barycenters.items():
             plt.text(
@@ -306,7 +330,7 @@ def __add_labels(
             )
 
 def __graph_to_plot(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
     **kwargs
@@ -318,8 +342,8 @@ def __graph_to_plot(
     if ax is None:
         ax = plt.gca()
 
-    epg = adata.uns["epg"]
-    flat_tree = adata.uns["flat_tree"]
+    epg = scdata.uns["epg"]
+    flat_tree = scdata.uns["flat_tree"]
     epg_node_pos = nx.get_node_attributes(epg,"pos")
 
     traces = set()
@@ -344,7 +368,7 @@ def __graph_to_plot(
         ax.add_line(line)
 
 def __add_labels_to_graph(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
     **kwargs
@@ -356,7 +380,7 @@ def __add_labels_to_graph(
     if ax is None:
         ax = plt.gca()
     
-    flat_tree = adata.uns["flat_tree"]
+    flat_tree = scdata.uns["flat_tree"]
     flat_tree_node_label = nx.get_node_attributes(flat_tree, "label")
     flat_tree_node_pos = nx.get_node_attributes(flat_tree, "pos")
 
@@ -380,9 +404,9 @@ def __add_labels_to_graph(
 
 @anndata_or_mudata_checker
 def embedding_plot(
-    adata: ScData, # type: ignore
+    scdata: ScData, # type: ignore
     obs: str,
-    obsm: str,
+    use_rep: str,
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
     outfile: Optional[Path] = None,
@@ -395,17 +419,17 @@ def embedding_plot(
     **kwargs
 ) -> Tuple[Figure, Axes]:
     """
-    Draw a scatterplot between the `n_components` first columns of .obsm[`obsm`]
+    Draw a scatterplot between the `n_components` first columns of .obsm[`use_rep`]
     by using a classification/clusterization with respect to .obs[`obs`].
 
     Parameters
     ----------
-    adata
-        Annotated data matrix
+    scdata
+        AnnData or MuData object
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first columns in .obsm[`obsm`]
+    use_rep
+        Use the indicated representation in scdata.obsm
     colors
         Visualization of the mapping from a list of color values
     n_components
@@ -447,27 +471,25 @@ def embedding_plot(
     """
 
     if n_components not in [2,3]:
-        raise ValueError(f"`n_components` parameter value is {n_components}, please set it to 2 or 3.")
-    elif n_components == 3 and adata.obsm[obsm].shape[1] < 3:
-        raise ValueError(f"incoherent value: `n_components` parameter value is {n_components} while number of dimension in .obsm[{obsm}] is {adata.obsm[obsm].shape[1]}.")
+        raise ValueError(f"invalid parameter value for 'n_components': expected 2 or 3 but received '{n_components}'")
 
-    if pd.api.types.is_float_dtype(adata.obs[obs]):
+    if pd.api.types.is_float_dtype(scdata.obs[obs]):
         fig, ax = __scatterplot_continuous(
-            adata,
+            scdata,
             obs,
-            obsm,
+            use_rep,
             colors,
             n_components,
             **kwargs
         )
-    elif pd.api.types.is_integer_dtype(adata.obs[obs]) or \
-         pd.api.types.is_bool_dtype(adata.obs[obs]) or \
-         pd.api.types.is_string_dtype(adata.obs[obs]) or \
-         pd.api.types.is_categorical_dtype(adata.obs[obs]):
+    elif pd.api.types.is_integer_dtype(scdata.obs[obs]) or \
+         pd.api.types.is_bool_dtype(scdata.obs[obs]) or \
+         pd.api.types.is_string_dtype(scdata.obs[obs]) or \
+         pd.api.types.is_categorical_dtype(scdata.obs[obs]):
         fig, ax = __scatterplot_discrete(
-            adata,
+            scdata,
             obs,
-            obsm,
+            use_rep,
             colors,
             n_components,
             **kwargs
@@ -477,17 +499,17 @@ def embedding_plot(
         ax = plt.gca()
         _kwargs = {} if "text" not in kwargs else kwargs["text"]
         __add_labels(
-            adata,
+            scdata,
             obs=obs,
-            obsm=obsm,
+            use_rep=use_rep,
             ax=plt.gca(),
             dim=n_components,
             **_kwargs
         )
-
+    
     if add_graph:
         __graph_to_plot(
-            adata,
+            scdata,
             ax=plt.gca(),
             dim=n_components
         )
@@ -495,7 +517,7 @@ def embedding_plot(
     if add_labels_to_graph:
         _kwargs = {"verticalalignment": "bottom" if add_graph else "center"} if "text" not in kwargs else kwargs["text"]
         __add_labels_to_graph(
-            adata,
+            scdata,
             ax=plt.gca(),
             dim=n_components,
             **_kwargs

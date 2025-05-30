@@ -59,7 +59,7 @@ def kneighbors_graph(
     n_neighbors
         number of closest neighbors
     use_rep
-        Use the indicated representation in adata.obsm
+        Use the indicated representation in scdata.obsm
     n_components
         Number of principal components or dimensions in the embedding space
         taken into account for each observation

@@ -8,9 +8,11 @@ from typing import (
 )
 from anndata import AnnData
 from .._typing import (
+    ScData,
     Metric,
     Metric_Function,
-    anndata_checker
+    anndata_checker,
+    anndata_or_mudata_checker
 )
 
 from ._utils import (
@@ -79,9 +81,9 @@ def pairwise_distances(
     else:
         return distances
 
-@anndata_checker
+@anndata_or_mudata_checker
 def barycenters(
-    adata: AnnData,
+    scdata: ScData, # type: ignore
     obs: str,
     use_rep: Optional[str]=None,
     n_components: Optional[int]=None,
@@ -91,26 +93,26 @@ def barycenters(
 
     Parameters
     ----------
-    adata
-        Annotated data matrix
+    scdata
+        AnnData or MuData object
     obs
         The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
     use_rep
-        Use the indicated representation in adata.obsm
+        Use the indicated representation in scdata.obsm
     n_components
         Number of principal components or dimensions in the embedding space
         taken into account for each observation
 
     Returns
     -------
-    dict[cluster] = barycenter
+    Return dict-like mapping where keys are clusters and values are barycenter values
     """
 
-    X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
+    X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
     
-    if not hasattr(adata.obs[obs], "cat"):
-        raise TypeError("adata.obs[`obs`] has not attribute `.cat`")
+    if not hasattr(scdata.obs[obs], "cat"):
+        raise TypeError("scdata.obs[`obs`] has not attribute `.cat`")
     else:
-        clusters = adata.obs[obs].cat.categories
+        clusters = scdata.obs[obs].cat.categories
 
-    return {cluster: np.nanmean(X[adata.obs[obs] == cluster], axis=0) for cluster in clusters}
+    return {cluster: np.nanmean(X[scdata.obs[obs] == cluster], axis=0) for cluster in clusters}
