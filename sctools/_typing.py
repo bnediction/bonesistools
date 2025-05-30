@@ -7,8 +7,7 @@ from typing import (
     Union,
     Callable,
     List,
-    Tuple,
-    Any
+    Tuple
 )
 try:
     from typing import Literal
@@ -80,6 +79,8 @@ Metric = Literal[
     "yule"
 ]
 Metric_Function = Callable[[np.ndarray, np.ndarray], float]
+
+Shortest_Path_Method = Literal["dijkstra", "bellman-ford"]
 
 def type_checker(
     function: types.FunctionType=None,

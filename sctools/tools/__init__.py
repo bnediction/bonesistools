@@ -3,6 +3,7 @@
 from ._utils import choose_representation
 
 from ._neighbors import (
+    Knnbs,
     kneighbors_graph,
     shared_neighbors
 )

@@ -4,13 +4,18 @@ from typing import (
     Optional,
     Union,
     Mapping,
-    Literal,
-    Any,
-    get_args
+    Sequence,
+    Any
 )
+try:
+    from typing import Literal, get_args
+except ImportError:
+    from typing_extensions import Literal, get_args
 from .._typing import (
+    AnnData,
     ScData,
     Metric,
+    Shortest_Path_Method,
     anndata_or_mudata_checker
 )
 
@@ -105,6 +110,7 @@ def kneighbors_graph(
     else:
         raise ValueError(f"invalid parameter value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
 
+
 class Knnbs(object):
 
     def __init__(
@@ -169,7 +175,7 @@ class Knnbs(object):
 
     def fit(
         self,
-        adata: ad.AnnData,
+        adata: AnnData,
         obs: str,
         n_jobs: int=1
     ) -> None:
@@ -227,7 +233,7 @@ class Knnbs(object):
         ):
             distances = pd.Series(data=self.obs.index,index=self.obs.index)
             distances = distances.apply(
-                lambda x: nx.shortest_path_lengths(
+                lambda x: nx.shortest_path_length(
                     self.kneighbors_graph,
                     source=source,
                     target=x,
@@ -249,21 +255,157 @@ class Knnbs(object):
         else:
             warnings.warn("module multiprocess not available: not using CPU parallelization")
             shortest_path_lengths_ls = []
-            for obs in self.obs.cat.categories:
-                shortest_path_lengths_ls.append((obs,shortest_path_lengths_from(obs)))
+            for category in self.obs.cat.categories:
+                shortest_path_lengths_ls.append((category,shortest_path_lengths_from(category)))
         
         shortest_path_lengths_dict = {}
         for k, v in shortest_path_lengths_ls:
             shortest_path_lengths_dict[k] = v
+
         self.shortest_path_lengths_df = pd.DataFrame.from_dict(data=shortest_path_lengths_dict, orient="columns")
+        return None
+    
+    def maximize_distances(
+            self,
+            size: int=30,
+            key: str="knnbs",
+            clusters: Optional[Sequence[str]]=None,
+    ) -> pd.Series:
+        
+        if clusters is None:
+            clusters = self.obs.cat.categories
+
+        subclusters_series = pd.Series(
+            data=np.nan,
+            index=self.obs.index,
+            dtype="category",
+            copy=True
+        ).cat.add_categories(self.obs.cat.categories)
+        if key is not None:
+            subclusters_series.name = key
+        
+        shortest_path_length_free_from_self_cluster_df = self.shortest_path_lengths_df
+        for idx, obs in self.obs.items():
+            shortest_path_length_free_from_self_cluster_df.at[idx,obs] = np.nan
+
+        _min_dists = shortest_path_length_free_from_self_cluster_df.min(axis=1, skipna=True)
+        _min_dists.name = "min_dist"
+        max_dists = _min_dists.to_frame().merge(
+            right=self.obs.to_frame(),
+            left_index=True,
+            right_index=True
+        )
+        for cluster in clusters:
+            _max_dists_cluster = max_dists[max_dists[self.obs.name] == cluster]["min_dist"]
+            if len(_max_dists_cluster) < size:
+                _obs = _max_dists_cluster.index
+            else:
+                _idx = np.argpartition(_max_dists_cluster, kth=len(_max_dists_cluster) - size)[-size:]
+                _obs = _max_dists_cluster.iloc[_idx].index
+            subclusters_series.loc[_obs] = cluster
+        
+        return subclusters_series
+    
+    def minimize_distances(
+        self,
+        size: int=30,
+        key: str="knnbs",
+        clusters: Optional[Sequence[str]]=None,
+    ) -> pd.Series:
+        
+        if clusters is None:
+            clusters = self.obs.cat.categories
+
+        subclusters_series = pd.Series(
+            data=np.nan,
+            index=self.obs.index,
+            dtype="category",
+            copy=True
+        ).cat.add_categories(self.obs.cat.categories)
+        if key is not None:
+            subclusters_series.name = key
+
+            _min_dists = pd.Series(
+                data=np.nan,
+                index=self.obs.index
+            )
+            _min_dists.name = "min_dist"
+            for idx, obs in self.obs.items():
+                _min_dists.at[idx] = self.shortest_path_lengths_df.loc[idx,obs]
+
+        _min_dists = _min_dists.to_frame().merge(
+            right=self.obs.to_frame(),
+            left_index=True,
+            right_index=True
+        )
+        for cluster in clusters:
+            _min_dists_cluster = _min_dists[_min_dists[self.obs.name] == cluster]["min_dist"]
+            if len(_min_dists_cluster) < size:
+                _obs = _min_dists_cluster.index
+            else:
+                _idx = np.argpartition(_min_dists_cluster, kth=size)[:size]
+                _obs = _min_dists_cluster.iloc[_idx].index
+            subclusters_series.loc[_obs] = cluster
+        
+        return subclusters_series
     
     def subclusters(
-            self,
-            key: str="knnbs",
-            size: int=30
+        self,
+        size: int=30,
+        key: str="knnbs",
+        subclusters_maximizing_distances: Optional[Sequence[str]]=None,
+        subclusters_minimizing_distances: Optional[Sequence[str]]=None,
     ) -> pd.Series:
-        # TODO
-        return
+        
+        if subclusters_maximizing_distances is None and subclusters_minimizing_distances is None:
+            subclusters_maximizing_distances = set(self.obs.cat.categories)
+            subclusters_minimizing_distances = set()
+        else:
+            subclusters_maximizing_distances = set(subclusters_maximizing_distances)
+            subclusters_minimizing_distances = set(subclusters_minimizing_distances)
+        
+        if subclusters_maximizing_distances & subclusters_minimizing_distances:
+            raise ValueError("'subclusters_maximizing_distances' and 'subclusters_minimizing_distances' are not disjoint")
+
+        if subclusters_maximizing_distances:
+            max_dists = self.maximize_distances(
+                size=size,
+                key="max_dists",
+                clusters=subclusters_maximizing_distances
+            )
+        else:
+            max_dists = pd.Series(
+                data=np.nan,
+                index=self.obs.index,
+                dtype="category",
+                copy=True
+            ).cat.add_categories(self.obs.cat.categories)
+            max_dists.name="max_dists"
+
+        if subclusters_minimizing_distances:
+            min_dists = self.minimize_distances(
+                size=size,
+                key="min_dists",
+                clusters=subclusters_minimizing_distances
+            )
+        else:
+            min_dists = pd.Series(
+                data=np.nan,
+                index=self.obs.index,
+                dtype="category",
+                copy=True
+            ).cat.add_categories(self.obs.cat.categories)
+            min_dists.name="min_dists"
+        
+        dists = max_dists.to_frame().merge(
+            right=min_dists.to_frame(),
+            left_index=True,
+            right_index=True
+        )
+        subclusters = dists.bfill(axis=1).iloc[:, 0]
+        subclusters.name = key
+
+        return subclusters
 
 @anndata_or_mudata_checker
 def _shared_nearest_neighbors_graph(
