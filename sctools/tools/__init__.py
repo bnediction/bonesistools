@@ -23,8 +23,7 @@ from ._write import (
 )
 
 from ._markers import (
-    extract_rank_genes_groups,
-    log_fold_changes,
+    calculate_logfoldchanges,
     update_logfoldchanges,
     hypergeometric_test
 )
