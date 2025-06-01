@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
-from typing import Optional, Sequence
+from typing import (
+    Optional,
+    Sequence,
+    Callable
+)
+from types import FunctionType
 from .._typing import anndata_checker
 
 import pandas as pd
@@ -53,7 +58,7 @@ def calculate_logfoldchanges(
         __df.insert(0, "group", cluster)
         return __df
     
-    logfc_df = pd.DataFrame(columns=["group","names","logfoldchanges"])
+    logfoldchanges_df = pd.DataFrame(columns=["group","names","logfoldchanges"])
     counts_df = anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log)
 
     if cluster_rebalancing:
@@ -61,17 +66,17 @@ def calculate_logfoldchanges(
         for cluster in sorted(adata.obs[groupby].unique().dropna()):
             _mean_in = mean_counts_df.loc[cluster]
             _mean_out = mean_counts_df.drop(index=cluster, inplace=False).mean()
-            _logfc_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfc_df = pd.concat([logfc_df, _logfc_df.copy()])
+            _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
+            logfoldchanges_df = pd.concat([logfoldchanges_df, _logfoldchanges_df.copy()])
     else:
         for cluster in sorted(adata.obs[groupby].unique().dropna()):
             _mean_in = counts_df.loc[counts_df[groupby] == cluster, counts_df.columns != groupby].mean()
             _mean_out = counts_df.loc[counts_df[groupby] != cluster, counts_df.columns != groupby].mean()
-            _logfc_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfc_df = pd.concat([logfc_df, _logfc_df.copy()])
-            del _logfc_df
+            _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
+            logfoldchanges_df = pd.concat([logfoldchanges_df, _logfoldchanges_df.copy()])
+            del _logfoldchanges_df
 
-    return logfc_df.reset_index(drop=True)
+    return logfoldchanges_df.reset_index(drop=True)
 
 def update_logfoldchanges(
     df: pd.DataFrame,
@@ -80,10 +85,10 @@ def update_logfoldchanges(
     layer: str,
     is_log: Optional[bool] = True,
     cluster_rebalancing: Optional[bool] = False,
-    threshold: Optional[float] = None
+    filter_logfoldchanges: Optional[Callable]=None,
 ) -> pd.DataFrame:
 
-    logfc_df = calculate_logfoldchanges(
+    logfoldchanges_df = calculate_logfoldchanges(
         adata,
         groupby=groupby,
         layer=layer,
@@ -91,11 +96,16 @@ def update_logfoldchanges(
         cluster_rebalancing=cluster_rebalancing
     )
     df = df.loc[:, df.columns != "logfoldchanges"]
-    if threshold:
-        logfc_df = logfc_df.loc[logfc_df["logfoldchanges"] > threshold]
+
+    if filter_logfoldchanges is not None:
+        if not callable(filter_logfoldchanges):
+            raise TypeError(f"unsupported argument type for 'filter_logfoldchanges': expected '{FunctionType}' but received '{type(function)}'")
+        else:
+            logfoldchanges_df = logfoldchanges_df.loc[filter_logfoldchanges(logfoldchanges_df["logfoldchanges"].values)]
+
     df = pd.merge(
         df,
-        logfc_df,
+        logfoldchanges_df,
         left_on=["names", "group"],
         right_on=["names", "group"],
         how="inner"

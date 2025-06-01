@@ -109,8 +109,8 @@ def __scatterplot_discrete(
     **kwargs
 ):
 
-    if len(scdata.obs[obs].unique()) < 2:
-        raise ValueError(f"only one category for '{obs}' in scdata.obs")
+    if len(scdata.obs[obs].cat.categories) == 0:
+        raise ValueError(f"no category found for '{obs}' in scdata.obs")
     elif "add_legend" in kwargs:
         add_legend = kwargs["add_legend"]
     else:
