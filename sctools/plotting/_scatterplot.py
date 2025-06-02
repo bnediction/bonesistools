@@ -30,6 +30,7 @@ from itertools import cycle
 Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
 
 from ..tools._utils import choose_representation
+from ._colors import get_color
 
 from . import _figure
 from . import _colors
@@ -149,8 +150,8 @@ def __scatterplot_discrete(
                 X[idx,0],
                 X[idx,1],
                 s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
-                facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
-                edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
+                facecolors=kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else _colors.gray,
+                edgecolors=kwargs["nan"]["edgecolor"] if "edgecolor" in kwargs["nan"] else "none",
                 alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
             )
         elif n_components==3:
@@ -236,14 +237,23 @@ def __scatterplot_continuous(
     n_components: Optional[int] = 2,
     **kwargs
 ):
-
+    
     if colors:
         if hasattr(colors, "name"):
-            _cmap = colors.name
+            cmap = colors.name
         else:
-            _cmap = colors
+            cmap = colors
     else:
-        _cmap = "autumn_r"
+        cmap = plt.get_cmap("autumn_r")
+    
+    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
+    if "facecolor" in kwargs["nan"] and not "color" in kwargs["nan"]:
+        kwargs["nan"]["color"] = kwargs["nan"]["facecolor"]
+    try:
+        if not np.all(cmap.get_bad() != 0) and not "facecolor" in kwargs["nan"]:
+            kwargs["nan"]["color"] = cmap.get_bad()
+    except:
+        pass
     
     X = choose_representation(
         scdata,
@@ -255,14 +265,36 @@ def __scatterplot_continuous(
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
     fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
     fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5 if n_components == 2 else 6)
-    
+
+    if scdata.obs[obs].isna().any():
+        idx = scdata.obs[obs].isna()
+        if n_components==2:
+            ax.scatter(
+                X[idx,0],
+                X[idx,1],
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
+                facecolors=kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else _colors.lightgray,
+                edgecolors=kwargs["nan"]["edgecolor"] if "edgecolor" in kwargs["nan"] else "none",
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
+            )
+        elif n_components==3:
+            ax.scatter3D(
+                X[idx,0],
+                X[idx,1],
+                X[idx,2],
+                s=kwargs["s"] if "s" in kwargs else 3,
+                facecolors=kwargs["nan"]["facecolors"] if "facecolors" in kwargs["nan"] else _colors.gray,
+                edgecolors=kwargs["nan"]["facecolors"] if "edgecolors" in kwargs["nan"] else "none",
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3
+            )
+
     if n_components == 2:
         sc = ax.scatter(
             X[:,0],
             X[:,1],
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
-            cmap=_cmap,
+            cmap=cmap,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1
         )
@@ -275,7 +307,7 @@ def __scatterplot_continuous(
             X[:,2],
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
-            cmap=_cmap,
+            cmap=cmap,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1
         )
