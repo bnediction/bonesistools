@@ -20,6 +20,7 @@ from ._utils import (
 )
 
 import numpy as np
+from sklearn import metrics
 
 @anndata_checker
 def pairwise_distances(
@@ -58,8 +59,6 @@ def pairwise_distances(
     Depending on 'key_added', update AnnData or return Array object.
     """
     
-    from sklearn import metrics
-
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
 
     distances = metrics.pairwise_distances(

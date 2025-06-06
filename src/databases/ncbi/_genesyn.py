@@ -389,7 +389,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        return a gene sequence where each gene alias is converted into the user-defined alias type.
+        Return a gene sequence where each gene alias is converted into the user-defined alias type.
         """
         
         # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
@@ -429,7 +429,7 @@ class GeneSynonyms(object):
 
         Returns
         -------
-        return an interaction list where each gene name is converted into the user-defined alias type.
+        Return an interaction list where each gene name is converted into the user-defined alias type.
         """
 
         # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False

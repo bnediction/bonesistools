@@ -30,12 +30,12 @@ from itertools import cycle
 Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
 
 from ..tools._utils import choose_representation
-from ._colors import get_color
 
 from . import _figure
 from . import _colors
 from .. import tl
 
+import networkx as nx
 
 def __default_plot(
     plot: types.FunctionType
@@ -368,9 +368,6 @@ def __graph_to_plot(
     **kwargs
     ):
 
-    if "nx" not in locals():
-        import networkx as nx
-
     if ax is None:
         ax = plt.gca()
 
@@ -405,9 +402,6 @@ def __add_labels_to_graph(
     dim: Optional[int] = 2,
     **kwargs
     ):
-
-    if "nx" not in locals():
-        import networkx as nx
 
     if ax is None:
         ax = plt.gca()

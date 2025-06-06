@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "bonesistools"
 description = "python package proposing functionnalities and analysis upstream and downstream of BoNesis framework"
 version = "1.0.0"
-dynamic = [ "version" ]
+license = {file = "LICENSE.txt"}
 authors = [
     { name = "Théo Roncalli" },
     { name = "Loïc Paulevé" },
@@ -18,14 +18,14 @@ readme = "README.md"
 classifiers = [
     "Environment :: Console",
     "Framework :: IPython",
+    "Framework :: Matplotlib",
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "Topic :: Software Development :: Build Tools",
     "Natural Language :: English",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: Unix",
+    "License :: OSI Approved :: CEA CNRS Inria Logiciel Libre License, version 2.1 (CeCILL-2.1)",
     "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
@@ -34,35 +34,43 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "Topic :: Scientific/Engineering :: Visualization",
-    "Topic :: Scientific/Engineering :: Boolean Networks",
+    "Topic :: Scientific/Engineering :: Visualization"
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research"
 ]
 requires-python = ">=3.7"
 dependencies = [
     "anndata>=0.8",
-    "ctypes>=1.1.0",
     "h5py>=3.7",
     "matplotlib>=3.5",
     "networkx>=2.1",
     "numpy>=1.21",
     "pandas >=1.3.5",
     "scikit-learn>=1.0",
-    "scipy>=1.7",
-    "networkx"
+    "scipy>=1.7"
 ]
 keywords = [
+    "gene",
+    "transcriptome",
+    "boolean networks",
+    "grn",
     "bonesis",
-    "rnaseq",
+    "scrnaseq",
     "h5py",
     "anndata",
     "scanpy",
-    "sctools",
+    "sctools"
 ]
 
 [project.optional-dependencies]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata" ]
+mpbn = [ "mpbn" ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/"]
 
 [project.urls]
 Repository = "https://github.com/bnediction/bonesistools"

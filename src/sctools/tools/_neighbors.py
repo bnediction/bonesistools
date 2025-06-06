@@ -219,8 +219,6 @@ class Knnbs(object):
         Update knnbs object by adding as attribute computed kneighbors_graph.
         """
 
-        from sklearn.metrics import pairwise_distances
-
         X = choose_representation(adata, use_rep=self.use_rep, n_components=self.n_components)
 
         _kneighbors_graph = kneighbors_graph(
