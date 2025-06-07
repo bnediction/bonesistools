@@ -1,6 +1,10 @@
+[![PyPI](https://img.shields.io/pypi/v/bonesistools.svg)](https://pypi.org/project/bonesistools)
+[![python](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbnediction%2Fbonesistools%2Frefs%2Fheads%2Fmain%2Fpyproject.toml&query=%24.project.requires-python&style=flat&label=python)](https://www.python.org/)
+[![license](https://img.shields.io/pypi/l/bonesistools.svg)](https://github.com/bnediction/bonesistools/blob/main/LICENSE)
+
 # BoNesisTools
 
-BoNesisTools is a python package proposing bio-informatics tools for upstream and downstream analysis of [BoNesis](https://github.com/bnediction/bonesis) framework.
+BoNesisTools is a python package proposing bioinformatics tools for upstream and downstream analysis of [BoNesis](https://github.com/bnediction/bonesis) framework.
 
 ## Functionalities
 

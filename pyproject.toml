@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonesistools"
-description = "BoNesisTools is a python package proposing bio-informatics tools for upstream and downstream analysis of BoNesis framework"
+description = "BoNesisTools is a python package proposing bioinformatics tools for upstream and downstream analysis of BoNesis framework"
 version = "1.0.0"
 license = {file = "LICENSE"}
 authors = [
@@ -25,7 +25,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: Unix",
     "License :: OSI Approved :: CEA CNRS Inria Logiciel Libre License, version 2.1 (CeCILL-2.1)",
-    "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
