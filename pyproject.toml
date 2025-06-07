@@ -4,12 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonesistools"
-description = "python package proposing functionnalities and analysis upstream and downstream of BoNesis framework"
+description = "BoNesisTools is a python package proposing bio-informatics tools for upstream and downstream analysis of BoNesis framework"
 version = "1.0.0"
 license = {file = "LICENSE.txt"}
 authors = [
     { name = "Théo Roncalli" },
-    { name = "Loïc Paulevé" },
 ]
 maintainers = [
     { name = "Théo Roncalli", email = "theo.roncalli@labri.fr" },
@@ -65,9 +64,14 @@ keywords = [
 ]
 
 [project.optional-dependencies]
+default = [
+    "decoupler>=1.8",
+    "mudata>=0.3.1",
+    "mpbn>=4.1"
+]
 collectri = [ "decoupler>=1.8" ]
-mudata = [ "mudata" ]
-mpbn = [ "mpbn" ]
+mudata = [ "mudata>=0.3.1" ]
+mpbn = [ "mpbn>=4.1" ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/"]
