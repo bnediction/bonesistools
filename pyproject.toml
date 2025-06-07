@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "bonesistools"
 description = "BoNesisTools is a python package proposing bio-informatics tools for upstream and downstream analysis of BoNesis framework"
 version = "1.0.0"
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE"}
 authors = [
     { name = "Théo Roncalli" },
 ]
@@ -35,7 +35,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "Topic :: Scientific/Engineering :: Visualization"
+    "Topic :: Scientific/Engineering :: Visualization",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research"
 ]
@@ -74,7 +74,7 @@ mudata = [ "mudata>=0.3.1" ]
 mpbn = [ "mpbn>=4.1" ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/"]
+packages = ["bonesistools/"]
 
 [project.urls]
 Repository = "https://github.com/bnediction/bonesistools"

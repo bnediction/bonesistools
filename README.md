@@ -42,7 +42,7 @@ Each sub-package has a corresponding alias:
 * sctools can be accessed with `bt.sct`, which is decomposed into three Scanpy-like parts: preprocessing (`bt.sct.pp`), tools (`bt.sct.tl`) and plotting (`bt.sct.pl`)
 * boolpy can be accessed with `bt.bpy`
 * grntools can be accessed with `bt.grn`
-* databases can be accessed with `bt.dbs`, which is decomposed into two parts for the moment: ncbi (`bt.dbs.ncbi`) for handling gene alias-related issues and [CollecTRI](https://github.com/saezlab/CollecTRI) (`bt.sct.pl`) for getting a gene regulatory networks
+* databases can be accessed with `bt.dbs`, which is decomposed into two parts for the moment: ncbi (`bt.dbs.ncbi`) for handling gene alias-related issues and [CollecTRI](https://github.com/saezlab/CollecTRI) (`bt.dbs.collectri`) for getting a gene regulatory networks
 
 ## Bugs
 
