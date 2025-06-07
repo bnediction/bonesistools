@@ -95,7 +95,7 @@ def barycenters(
     scdata
         AnnData or MuData object
     obs
-        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
     use_rep
         Use the indicated representation in scdata.obsm
     n_components
@@ -110,7 +110,7 @@ def barycenters(
     X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
     
     if not hasattr(scdata.obs[obs], "cat"):
-        raise TypeError("scdata.obs[`obs`] has not attribute `.cat`")
+        raise AttributeError(f"scdata.obs[{obs}] object has not attribute '.cat'")
     else:
         clusters = scdata.obs[obs].cat.categories
 

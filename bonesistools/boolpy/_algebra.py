@@ -18,11 +18,11 @@ class BooleanDifferentialCalculus(object):
             if value in [0, 1] or math.isnan(value):
                 return PartialBoolean(value)
             else:
-                raise TypeError(f"incorrect conversion for `value`: {value}")
+                raise TypeError(f"unsupported type conversion for '{value}'")
         elif isinstance(value, PartialBoolean):
             return value
         else:
-            raise TypeError(f"incorrect conversion for `value`: {value}")
+            raise TypeError(f"unsupported type conversion for '{value}'")
 
     def differential(self, v1, v2):
         _v1 = self.__conversion__(v1)
@@ -57,7 +57,7 @@ class BooleanDifferentialCalculus(object):
         source_differential = self.differential(source_v1, source_v2)
         target_differential = self.differential(target_v1, target_v2)
         if sign not in [-1, 1]:
-            raise ValueError(f"incorrect value for `sign`: {sign}")
+            raise ValueError(f"invalid argument value for 'sign': {sign}")
         if source_differential != 0 or target_differential == 0:
             return None
         elif source_differential == 0:
@@ -68,4 +68,4 @@ class BooleanDifferentialCalculus(object):
             if source_v1 == source_v2 == PartialBoolean(float("nan")):
                 return None
         else:
-            raise AssertionError("incoherence")
+            raise AssertionError("found incoherence")

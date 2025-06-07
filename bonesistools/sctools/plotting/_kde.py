@@ -44,9 +44,9 @@ def kde_plot(
     gene
         Gene of interest for which display the density
     layer
-        The counting are retrieved from .layers[`layer`] if specified, otherwise .X
+        The counting are retrieved from .layers['layer'] if specified, otherwise .X
     obs
-        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
     colors
         Density function are colored with respect to a list of color values
     default_parameters

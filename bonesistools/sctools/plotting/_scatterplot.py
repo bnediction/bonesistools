@@ -51,9 +51,9 @@ def __default_plot(
     ):
 
         if obs not in scdata.obs:
-            raise KeyError(f"scdata.obs[`{obs}`] does not exist.")
+            raise KeyError(f"key '{obs}' not found in scdata.obs")
         if use_rep not in scdata.obsm:
-            raise KeyError(f"scdata.obsm[`{use_rep}`] does not exist.")
+            raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
         fig, ax = plot(
             scdata,
@@ -110,8 +110,8 @@ def __scatterplot_discrete(
     **kwargs
 ):
 
-    if len(scdata.obs[obs].cat.categories) == 0:
-        raise ValueError(f"no category found for '{obs}' in scdata.obs")
+    if not hasattr(scdata.obs[obs], "cat"):
+        raise AttributeError(f"scdata.obs[{obs}] object has not attribute '.cat'")
     elif "add_legend" in kwargs:
         add_legend = kwargs["add_legend"]
     else:
@@ -445,15 +445,15 @@ def embedding_plot(
     **kwargs
 ) -> Tuple[Figure, Axes]:
     """
-    Draw a scatterplot between the `n_components` first columns of .obsm[`use_rep`]
-    by using a classification/clusterization with respect to .obs[`obs`].
+    Draw a scatterplot between the 'n_components' first columns of .obsm['use_rep']
+    by using a classification/clusterization with respect to .obs['obs'].
 
     Parameters
     ----------
     scdata
         AnnData or MuData object
     obs
-        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
     use_rep
         Use the indicated representation in scdata.obsm
     colors
@@ -465,7 +465,7 @@ def embedding_plot(
     title
         Add title to current axe
     add_labels
-        Add labels retrieved by .obs[`obs`]
+        Add labels retrieved by .obs['obs']
     add_graph
         Draw elastic principal graph
     add_labels_to_graph
@@ -482,7 +482,7 @@ def embedding_plot(
         - ylabel[str]: set the label for the y-axis
         - zlabel[str]: set the label for the z-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major formatter on x-, y- and z-axis
-        - add_legend[bool]: when .obs[`obs`] are discrete values, specify whether to draw legend
+        - add_legend[bool]: when .obs['obs'] are discrete values, specify whether to draw legend
         - lgd_params[dict]: when add_legend is True, modify legend following the syntax of matplotlib.pyplot.legend
         - tick_params[dict]: change the appearance of ticks, tick labels, and gridlines following the syntax of matplotlib.axes.Axes.tick_params
         - xtick_params[dict]: change the appearance of ticks, tick labels, and gridlines on x-axis following the syntax of matplotlib.axes.Axes.tick_params
@@ -493,11 +493,11 @@ def embedding_plot(
 
     Returns
     -------
-    Depending on `outfile`, save figure or create figure and axe.
+    Depending on 'outfile', save figure or create figure and axe.
     """
 
     if n_components not in [2,3]:
-        raise ValueError(f"invalid parameter value for 'n_components': expected 2 or 3 but received '{n_components}'")
+        raise ValueError(f"invalid argument value for 'n_components': expected 2 or 3 but received '{n_components}'")
 
     if pd.api.types.is_float_dtype(scdata.obs[obs]):
         fig, ax = __scatterplot_continuous(
@@ -561,7 +561,7 @@ def embedding_plot(
         elif isinstance(title, dict):
             ax.set_title(**title)
         else:
-            raise TypeError(f"unsupported argument type for 'title': expected '{str}' or '{dict}', but received '{type(title)}'")
+            raise TypeError(f"unsupported argument type for 'title': expected {str} or {dict}, but received {type(title)}")
     
     if outfile:
         plt.savefig(outfile, bbox_inches="tight")

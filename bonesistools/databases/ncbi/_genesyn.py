@@ -50,7 +50,7 @@ class GeneSynonyms(object):
         if organism in ORGANISMS:
             self.organism = organism
         else:
-            raise ValueError("invalid value for argument 'organism'")
+            raise ValueError(f"invalid argument value for 'organism': {organism}")
         self.ncbi_file = NCBI_FILES[organism]
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
@@ -58,7 +58,7 @@ class GeneSynonyms(object):
         elif force_download is False:
             pass
         else:
-            raise ValueError(f"invalid value for argument 'force_download' (expected {type(bool)}, got {type(force_download)})")
+            raise TypeError(f"unsupported argument type for '{force_download}': expected {bool} but received {type(force_download)}")
         self.force_download = force_download
         self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
@@ -68,7 +68,7 @@ class GeneSynonyms(object):
     
     def __get__(self, attribute: str = "gene_aliases_mapping") -> Any:
         if attribute == "__upper_gene_names_mapping":
-            raise AttributeError(f"private attribute")
+            raise AttributeError(f"attribute '{attribute}' not accessed: private")
         else:
             return getattr(self, attribute)
     
@@ -78,7 +78,7 @@ class GeneSynonyms(object):
         elif organism in ORGANISMS:
             self.organism = organism
         else:
-            raise ValueError("invalid value for argument 'organism'")
+            raise ValueError(f"invalid argument value for 'organism': {organism}")
         self.ncbi_file = NCBI_FILES[self.organism]
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
@@ -86,7 +86,7 @@ class GeneSynonyms(object):
         elif force_download is False:
             pass
         else:
-            raise ValueError(f"invalid value for argument 'force_download' (expected {bool}, got {type(force_download)})")
+            raise TypeError(f"unsupported argument type for '{force_download}': expected {bool} but received {type(force_download)}")
         self.force_download = force_download
         self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
@@ -107,7 +107,7 @@ class GeneSynonyms(object):
         elif isinstance(data, Graph):
             return self.graph_standardization(data, *args, **kwargs)
         else:
-            raise TypeError(f"fail to convert gene name: 'data' has incorrect type")
+            raise TypeError(f"unsupported argument type for 'data': {data}")
 
     def __aliases_from_NCBI(self, gi_file: Path) -> dict:
         """
@@ -228,7 +228,7 @@ class GeneSynonyms(object):
                     warnings.warn(f"no geneid correspondance for {alias_type} '{alias}'", stacklevel=10)
                 return None
         else:
-            raise ValueError("invalid value for argument 'alias_type'")
+            raise ValueError(f"invalid argument value for 'alias_type': {alias_type}")
     
     def get_reference_name(self, alias: str, alias_type: str="genename") -> str:
         """
@@ -299,7 +299,7 @@ class GeneSynonyms(object):
         """
 
         if database not in self.get_databases():
-            raise ValueError(f"invalid value for argument 'database' (got {database}, expected a value in {self.get_databases})")
+            raise ValueError(f"invalid argument value for 'database': got '{database}' but expected a value in {self.get_databases})")
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
         if geneid in self.gene_aliases_mapping["geneid"]:
@@ -489,7 +489,7 @@ class GeneSynonyms(object):
         elif axis == 1 or axis == "columns":
             gene_iterator = iter(df.columns)
         else:
-            raise ValueError(f"No axis named {axis} for object type DataFrame")
+            raise TypeError(f"unsupported argument type for 'axis': {axis}")
 
         for gene in gene_iterator:
             alias = alias_conversion(alias=gene, alias_type=input_type)

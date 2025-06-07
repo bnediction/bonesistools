@@ -16,22 +16,22 @@ def get_paga_graph(
     threshold: float = 0.01,
 ):
     """
-    Get the partition-based graph abstraction (PAGA) graph stored in `adata`
+    Get the partition-based graph abstraction (PAGA) graph stored in 'adata'
     with a graph-based data structure.
-    To compute the PAGA matrix, please use `scanpy.tl.paga`.
-    PAGA can also be computed using `scvelo`. In this case, please run previously
-    adata.uns[`edges`] = adata.uns["paga"][`edges`]
+    To compute the PAGA matrix, please use 'scanpy.tl.paga'.
+    PAGA can also be computed using 'scvelo'. In this case, please run previously
+    adata.uns['edges'] = adata.uns["paga"]['edges']
 
     Parameters
     ----------
     adata
         Annotated data matrix
     obs
-        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
     obsm
-        The data points are retrieved by the first columns in .obsm[`obsm`]
+        The data points are retrieved by the first columns in .obsm['obsm']
     edges
-        The adjacency matrix-based data structure is retrieved by .uns[`edges`] (default: transitions_confidence)
+        The adjacency matrix-based data structure is retrieved by .uns['edges'] (default: transitions_confidence)
     threshold
         confidence threshold (default: 0.01)
 
@@ -47,13 +47,13 @@ def get_paga_graph(
         if "connectivities" in adata.uns:
             edges = "connectivities"
         else:
-            raise ValueError(f"edges `{edges}` not in adata.uns.")
+            raise KeyError(f"key '{edges}' not found in adata.uns")
     adjacency = adata.uns[edges].copy()
 
     if not isinstance(threshold, float):
-        raise TypeError(f"`threshold` is not a float.")
+        raise TypeError(f"unsupported argument type for 'threshold': expected {float} but received {type(threshold)}")
     elif threshold < 0:
-        raise ValueError(f"`threshold` is not positive.")
+        raise ValueError(f"invalid argument value for 'threshold': expected positive value but received '{threshold}'")
     elif threshold > 0:
         adjacency.data[adjacency.data < threshold] = 0
         adjacency.eliminate_zeros()

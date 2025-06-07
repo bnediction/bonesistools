@@ -147,14 +147,14 @@ class Knnbs(object):
             if n_neighbors > 0:
                 self.n_neighbors = n_neighbors
             else:
-                raise ValueError(f"invalid argument value for 'n_neighbors': expected non-null positive but received '{n_neighbors}'")
+                raise ValueError(f"invalid argument value for 'n_neighbors': expected non-null positive value but received '{n_neighbors}'")
         elif isinstance(n_neighbors, float):
             if n_neighbors.is_integer():
                 self.n_neighbors = n_neighbors
             else:
                 raise ValueError(f"invalid parameter value for 'n_neighbors': expected integer but received '{n_neighbors}'")
         else:
-            raise TypeError(f"unsupported parameter type for 'n_neighbors': expected '{int}' but received '{type(n_neighbors)}'")
+            raise TypeError(f"unsupported argument type for 'n_neighbors': expected {int} but received {type(n_neighbors)}")
 
         if n_components is None:
             self.n_components = None
@@ -162,24 +162,24 @@ class Knnbs(object):
             if n_components > 0:
                 self.n_components = n_components
             else:
-                raise ValueError(f"invalid argument value for 'n_components': expected non-null positive but received '{n_components}'")
+                raise ValueError(f"invalid argument value for 'n_components': expected non-null positive value but received '{n_components}'")
         elif isinstance(n_components, float):
             if n_components.is_integer():
                 self.n_components = n_components
             else:
                 raise ValueError(f"invalid parameter value for 'n_components': expected integer but received '{n_components}'")
         else:
-            raise TypeError(f"unsupported parameter type for 'n_components': expected '{int}' but received '{type(n_components)}'")
+            raise TypeError(f"unsupported argument type for 'n_components': expected {int} but received {type(n_components)}")
         
         if isinstance(use_rep, str):
             self.use_rep = use_rep
         else:
-            raise TypeError(f"unsupported parameter type for 'use_rep': expected '{str}' but received '{type(use_rep)}'")
+            raise TypeError(f"unsupported argument type for 'use_rep': expected {str} but received {type(use_rep)}")
         
         if metric in get_args(Metric):
             self.metric = metric
         else:
-            raise ValueError(f"unsupported parameter value for 'metric': '{metric}'")
+            raise ValueError(f"invalid argument value for 'metric': {metric}")
         
         self.metric_kwds = metric_kwds
     
@@ -472,7 +472,7 @@ class Knnbs(object):
             subclusters_minimizing_distances = set(subclusters_minimizing_distances)
         
         if subclusters_maximizing_distances & subclusters_minimizing_distances:
-            raise ValueError("'subclusters_maximizing_distances' and 'subclusters_minimizing_distances' are not disjoint")
+            raise RuntimeError("'subclusters_maximizing_distances' and 'subclusters_minimizing_distances' are not disjoint")
 
         if subclusters_maximizing_distances:
             max_dists = self.find_furthest_cells_to_other_barycenters(
@@ -521,13 +521,13 @@ def _shared_nearest_neighbors_graph(
     prune_snn: float
 ) -> csr_matrix:
 
-    k_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
+    n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
     if prune_snn < 0:
-        raise ValueError("'prune_snn' parameter must be positive, aborting")
+        raise ValueError(f"invalid argument value for 'prune_snn': expected positive value but received '{prune_snn}'")
     elif prune_snn < 1:
-        prune_snn = math.ceil(k_neighbors*prune_snn)
-    elif prune_snn >= k_neighbors:
-        raise ValueError("'prune_snn' parameter must be smaller than 'n_neighbors' used for KNN computation, aborting")
+        prune_snn = math.ceil(n_neighbors*prune_snn)
+    elif prune_snn >= n_neighbors:
+        raise ValueError(f"invalid argument values for 'prune_snn' and 'n_neighbors: 'prune_snn' is higher than 'n_neighbors'")
 
     n_cells = scdata.n_obs
     distances_key = scdata.uns[cluster_key]["distances_key"]
@@ -538,7 +538,7 @@ def _shared_nearest_neighbors_graph(
     neighborhood_graph.data[neighborhood_graph.data > 0] = 1
 
     neighborhood_graph = neighborhood_graph * neighborhood_graph.transpose()
-    neighborhood_graph -= (k_neighbors * diags(np.ones(n_cells), offsets=0, shape=(n_cells, n_cells)))
+    neighborhood_graph -= (n_neighbors * diags(np.ones(n_cells), offsets=0, shape=(n_cells, n_cells)))
     neighborhood_graph.sort_indices()
     neighborhood_graph = neighborhood_graph.astype(dtype=np.int8)
 
@@ -610,11 +610,7 @@ def shared_neighbors(
     """
 
     if knn_key not in scdata.uns:
-        raise KeyError((
-            "Neighborhood graph not already computed or not finding. "
-            "Please use 'scanpy.pp.neighbors' function before or "
-            "specify 'key_added' parameter when scanpy.pp.neighbors has been called, aborting"
-    ))
+        raise KeyError("neighborhood graph not found in 'scdata': please run 'scanpy.pp.neighbors' or specify 'knn_key")
     if prune_snn is None:
         prune_snn = 0
     if metric is None:

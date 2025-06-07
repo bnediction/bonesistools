@@ -123,9 +123,9 @@ def type_checker(
                         if isinstance(arg, dtype):
                             types_match = True
                     if types_match == False:
-                        raise TypeError(f"unsupported argument type for '{key}': expected '{value}' but received '{type(key)}'")
+                        raise TypeError(f"unsupported argument type for key '{key}': expected '{value}' but received {type(key)}")
                 elif not isinstance(arg, value):
-                    raise TypeError(f"unsupported argument type for '{key}': expected '{value.__name__}' but received '{type(key)}'")
+                    raise TypeError(f"unsupported argument type for key '{key}': expected {value.__name__} but received {type(key)}")
             output = function(*args, **kwargs)
             return output
         return wrapper
@@ -165,7 +165,7 @@ def anndata_checker(
             for i in range(n):
                 value = next(iterator)
                 if not isinstance(value, AnnData):
-                    raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected '{AnnData}' but received '{type(value)}'")
+                    raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}")
             return function(*args, **kwargs)
         return wrapper
 
@@ -205,7 +205,7 @@ if _mudata_is_available:
                 for i in range(n):
                     value = next(iterator)
                     if not isinstance(value, MuData):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected '{MuData}' but received '{type(value)}'")
+                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {MuData} but received {type(value)}")
                 return function(*args, **kwargs)
             return wrapper
 
@@ -243,7 +243,7 @@ if _mudata_is_available:
                 for i in range(n):
                     value = next(iterator)
                     if not (isinstance(value, AnnData) or isinstance(value, MuData)):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected '{AnnData}' or '{MuData}' but received '{type(value)}'")
+                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} or {MuData} but received {type(value)}")
                 return function(*args, **kwargs)
             return wrapper
 
@@ -316,7 +316,7 @@ else:
                 for i in range(n):
                     value = next(iterator)
                     if not isinstance(value, AnnData):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected '{AnnData}' but received '{type(value)}'")
+                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}")
                 return function(*args, **kwargs)
             return wrapper
 

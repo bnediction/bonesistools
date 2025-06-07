@@ -139,7 +139,7 @@ def get_color(color:str):
     ]:
         return eval(color)
     else:
-        raise ValueError("color {color} not found")
+        raise ValueError(f"color not found: {color}")
 
 def generate_colormap(
     color_number: int = 80,
@@ -148,17 +148,17 @@ def generate_colormap(
 ):
 
     if color_number <= 0:
-        raise ValueError(f"invalid argument value for color_number (color_number is not positive, value: '{color_number}')")
+        raise ValueError(f"invalid argument value for 'color_number': expected non-null positive value but received '{color_number}'")
     elif color_number <= cm.N:
         return ListedColormap(cm.colors[0:color_number])
     
     if not isinstance(cm, Colormap):
-        raise TypeError(f"unsupported argument type for cm: expected '{Colormap}' but received '{type(cm)}'")
+        raise TypeError(f"unsupported argument type for 'cm': expected {Colormap} but received {type(cm)}")
 
     if shade_number is None:
         shade_number = cm.N
     elif shade_number <= 0:
-        raise ValueError(f"invalid argument value for shade_number (shade_number is not positive, value: '{shade_number}')")
+        raise ValueError(f"invalid argument value for 'shade_number': expected non-null positive value but received '{shade_number}'")
     
     color_number_with_multiply_of_shades = int(math.ceil(color_number / shade_number) * shade_number)
     linearly_uniform_floats = np.arange(color_number_with_multiply_of_shades) / color_number_with_multiply_of_shades

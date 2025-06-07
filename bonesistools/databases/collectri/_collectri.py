@@ -30,7 +30,7 @@ def load_grn(
     remove_pmid
         specify whether to remove PMIDs in node labels
     kwargs
-        keyword-arguments passed to`omnipath.interactions.CollecTRI.get    
+        keyword-arguments passed to 'omnipath.interactions.CollecTRI.get'
         
     Returns
     -------
@@ -38,9 +38,9 @@ def load_grn(
     """
 
     if not isinstance(organism, (str, int)):
-        raise TypeError(f"parameter `organism` is not a string or integer instance")
+        raise TypeError(f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}")
     if not isinstance(split_complexes, bool):
-        raise TypeError(f"parameter `split_complexes` is not a boolean instance")
+        raise TypeError(f"unsupported argument type for 'split_complexes': expected {bool} but received {type(split_complexes)}")
     
     import decoupler as dc
     
@@ -52,7 +52,7 @@ def load_grn(
         else:
             pass
     else:
-        raise ValueError(f"parameter `remove_pmid` is not a boolean instance")
+        raise TypeError(f"unsupported argument type for 'remove_pmid': expected {bool} but received {type(remove_pmid)}")
     grn = nx.from_pandas_edgelist(
         df = collectri_db,
         source="source",
@@ -71,5 +71,5 @@ def load_grn(
         )
         return grn
     else:
-        raise TypeError(f"parameter `gene_synonyms` is not a {GeneSynonyms} instance")
+        raise TypeError(f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(gene_synonyms)}")
 

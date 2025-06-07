@@ -51,16 +51,16 @@ dependencies = [
     "scipy>=1.7"
 ]
 keywords = [
-    "gene",
-    "transcriptome",
-    "boolean networks",
-    "grn",
-    "bonesis",
-    "scrnaseq",
-    "h5py",
+    "bioinformatics",
+    "systems-biology",
+    "single-cell",
+    "rnaseq",
+    "atacseq",
+    "boolean-networks",
     "anndata",
-    "scanpy",
-    "sctools"
+    "mudata",
+    "gene-regulatory-networks",
+    "bonesis",
 ]
 
 [project.optional-dependencies]

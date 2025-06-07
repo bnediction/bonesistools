@@ -74,14 +74,14 @@ def set_index(
     if isinstance(keys, str):
         keys = [keys]
     elif not isinstance(keys, List):
-        raise TypeError(f"unsupported argument type for keys: '{type(keys)}' instead of '{str}' or '{List}'")
+        raise TypeError(f"unsupported argument type for 'keys': expected {str} or {List} but received {type(keys)}")
     
     if axis in [0, "obs"]:
         df = adata.obs.copy()
     elif axis in [1, "var"]:
         df = adata.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for axis: '{axis}'")
+        raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     index_name = __generate_unique_index_name(df)
     df[index_name] = df.index
@@ -124,12 +124,12 @@ def filter_obs(
 
     if isinstance(obs, str):
         if obs not in adata.obs:
-            raise KeyError(f"obs '{obs}' not found in adata.obs")
+            raise KeyError(f"key '{obs}' not found in adata.obs")
     else:
-        raise TypeError(f"unsupported argument type for 'obs': expected '{str}' but received '{type(obs)}'")
+        raise TypeError(f"unsupported argument type for 'obs': expected {str} but received {type(obs)}")
 
     if not callable(function):
-        raise TypeError(f"unsupported argument type for 'function': expected '{FunctionType}' but received '{type(function)}'")
+        raise TypeError(f"unsupported argument type for 'function': expected callable object")
     
     obs_subset = function(adata.obs[obs].values)
     adata._inplace_subset_obs(obs_subset)
@@ -166,12 +166,12 @@ def filter_var(
 
     if isinstance(var, str):
         if var not in adata.var:
-            raise KeyError(f"var '{var}' not found in adata.var")
+            raise KeyError(f"key '{var}' not found in adata.var")
     else:
-        raise TypeError(f"unsupported argument type for 'var': expected '{str}' but received '{type(var)}'")
+        raise TypeError(f"unsupported argument type for 'var': expected {str} but received {type(var)}")
 
     if not callable(function):
-        raise TypeError(f"unsupported argument type for 'function': expected '{FunctionType}' but received '{type(function)}'")
+        raise TypeError(f"unsupported argument type for 'function': expected callable object")
     
     var_subset = function(adata.var[var].values)
     adata._inplace_subset_var(var_subset)
@@ -297,7 +297,7 @@ def merge(
         left_df = left_ad.var.copy()
         right_df = right_ad.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for axis: '{axis}'")
+        raise TypeError(f"unsupported argument type for 'axis': {axis}")
 
     df = left_df.merge(
         right=right_df,
@@ -346,7 +346,7 @@ def transfer_layer(
     if isinstance(layers, str):
         layers = [layers]
     elif not isinstance(layers, List):
-        raise TypeError(f"unsupported argument type for layers: '{type(layers)}' instead of '{str}' or '{List}'")
+        raise TypeError(f"unsupported argument type for 'layers': expected {str} or {List} but received {type(layers)}")
 
     for layer in layers:
         df = anndata_to_dataframe(

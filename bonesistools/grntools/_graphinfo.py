@@ -29,7 +29,7 @@ def get_edge_sign(graph: nx.Graph, source: Any, target: Any):
     signs = {value["sign"] for value in edge_data.values()}
     for sign in signs:
         if sign not in [-1, 1]:
-            raise ValueError("edge attribute `sign` is not equal to -1 or 1")
+            raise ValueError(f"invalid value for edge attribute 'sign': expected 0 or 1 but received {sign}")
     if len(signs) == 1:
         return list(signs)[0]
     else:
@@ -62,7 +62,7 @@ def get_path_sign(graph: nx.Graph, *nodes) -> int:
         elif _sign == 1:
             pass
         else:
-            raise ValueError("value of `sign` between {u} and {v} genes is not equal to -1, 0 or 1: `sign` = {_sign}")
+            raise ValueError(f"invalid value for edge sign between nodes {u} and {v}: expected -1, 0 or 1 but got {_sign}")
         u = v
     return path_sign
 

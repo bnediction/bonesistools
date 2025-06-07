@@ -30,20 +30,20 @@ def draw_paga(
 ):
     """
     Draw the paga graph with Matplotlib.
-    To compute the PAGA matrix, please use `scanpy.tl.paga`.
-    PAGA can also be computed using `scvelo`. In this case, please run previously
-    adata.uns[`edges`] = adata.uns["paga"][`edges`]
+    To compute the PAGA matrix, please use 'scanpy.tl.paga'.
+    PAGA can also be computed using 'scvelo'. In this case, please run previously
+    adata.uns['edges'] = adata.uns["paga"]['edges']
 
     Parameters
     ----------
     adata
         Annotated data matrix
     obs
-        The classification is retrieved by .obs[`obs`], which must be categorical/qualitative values
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
     obsm
-        The data points are retrieved by the first columns in .obsm[`obsm`]
+        The data points are retrieved by the first columns in .obsm['obsm']
     edges
-        The adjacency matrix-based data structure is retrieved by .uns[`edges`] (default: transitions_confidence)
+        The adjacency matrix-based data structure is retrieved by .uns['edges'] (default: transitions_confidence)
         Please refer to 
     threshold
         Confidence threshold (default: 0.01)
@@ -60,7 +60,7 @@ def draw_paga(
 
     Returns
     -------
-    Depending on `outfile`, save figure or return axe.
+    Depending on 'outfile', save figure or return axe.
     """
     
     if ax is None:

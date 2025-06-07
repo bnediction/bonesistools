@@ -68,7 +68,7 @@ def gene_synonyms_conversion(
             copy=False
         )
     else:
-        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+        raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     return scdata if copy else None
 

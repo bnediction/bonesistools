@@ -50,7 +50,7 @@ def mitochondrial_genes(
         axis = "var"
         scdata.var[key] = False
     else:
-        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+        raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     mt_id = set()
     for k,v in genesyn.gene_aliases_mapping["genename"].items():
@@ -108,7 +108,7 @@ def ribosomal_genes(
         axis = "var"
         scdata.var[key] = False
     else:
-        raise ValueError(f"invalid value for 'annotations' (got {axis}, expected 'obs' or 'var')")
+        raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     rps_id = set()
     for k,v in genesyn.gene_aliases_mapping["genename"].items():

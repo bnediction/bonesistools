@@ -99,7 +99,7 @@ def update_logfoldchanges(
 
     if filter_logfoldchanges is not None:
         if not callable(filter_logfoldchanges):
-            raise TypeError(f"unsupported argument type for 'filter_logfoldchanges': expected '{FunctionType}' but received '{type(function)}'")
+            raise TypeError(f"unsupported argument type for 'filter_logfoldchanges': expected callable object")
         else:
             logfoldchanges_df = logfoldchanges_df.loc[filter_logfoldchanges(logfoldchanges_df["logfoldchanges"].values)]
 
@@ -143,7 +143,7 @@ def hypergeometric_test(
     """
 
     if not isinstance(adata, AnnData):
-        raise TypeError(f"Argument 'adata' must be of type {type(AnnData)}, not {type(adata)}")
+        raise TypeError(f"unsupported argument type for 'adata': expected {AnnData} but received {type(adata)}")
     
     background = set(adata.var.index)
     if not isinstance(signature, set):

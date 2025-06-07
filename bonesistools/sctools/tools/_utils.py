@@ -38,9 +38,9 @@ def choose_representation(
 
     if use_rep not in scdata.obsm_keys():
         if use_rep == "X_pca":
-            raise KeyError("'X_pca' not found in scdata.obsm: please run scanpy.tl.pca() before")
+            raise KeyError("key 'X_pca' not found in scdata.obsm: please run scanpy.tl.pca")
         else:
-            raise KeyError(f"'{use_rep}' not found in scdata.obsm")
+            raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
     if n_components is None:
         return scdata.obsm[use_rep]
@@ -82,7 +82,7 @@ def _get_distances(
             distances_key = scdata.uns["neighbors"]["distances_key"]
             return scdata.obsp[distances_key]
         else:
-            raise ValueError("distances not found in 'scdata': please run scanpy.pp.neighbors first or specify 'obsp' or 'neighbors_key'")
+            raise KeyError("distances not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'")
 
 @anndata_or_mudata_checker
 def _get_connectivities(
@@ -119,4 +119,4 @@ def _get_connectivities(
             connectivities_key = scdata.uns["neighbors"]["connectivities_key"]
             return scdata.obsp[connectivities_key]
         else:
-            raise ValueError("connectivities not found in 'scdata': please run scanpy.pp.neighbors first or specify 'obsp' or 'neighbors_key'")
+            raise KeyError("connectivities not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'")
