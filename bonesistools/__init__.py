@@ -6,7 +6,6 @@ Bonesistools is a python package proposing functionnalities and analysis upstrea
 credits: "BNeDiction; PEPR Santé Numérique 2030"
 """
 
-__version__ = "1.0.0"
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 
 from . import sctools as sct

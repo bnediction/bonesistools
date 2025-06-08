@@ -438,7 +438,7 @@ class GeneSynonyms(object):
 
         Returns
         -------
-        Return a function converting gene identifiers.
+        Return Function object converting gene identifiers.
 
         See Also
         --------
@@ -462,7 +462,8 @@ class GeneSynonyms(object):
         keep_if_missing: bool = True
     ) -> Sequence[str]:
         """
-        Create a copy of the input Sequence, with corresponding aliases.
+        Create a copy of the Sequence object, with corresponding aliases.
+        Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
@@ -477,7 +478,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Return a gene sequence where each gene identifier is converted into the user-defined alias type.
+        Return Sequence object.
 
         See Also
         --------
@@ -504,7 +505,8 @@ class GeneSynonyms(object):
         keep_if_missing: bool = True
     ) -> InteractionList:
         """
-        Create a copy of the input list of pairwise interactions, with corresponding aliases.
+        Create a copy of the pairwise InteractionList object, with corresponding aliases.
+        Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
@@ -519,7 +521,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Return an interaction list where each gene identifier is converted into the user-defined alias type.
+        Return InteractionList object.
 
         See Also
         --------
@@ -547,7 +549,8 @@ class GeneSynonyms(object):
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene identifiers into 'df'.
+        Replace gene identifiers in DataFrame object with corresponding aliases.
+        Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
@@ -564,7 +567,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Depending on 'copy', update or return DataFrame object with corresponding aliases.
+        Depending on 'copy', update 'df' or return DataFrame object.
 
         See Also
         --------
@@ -604,7 +607,8 @@ class GeneSynonyms(object):
         copy: bool = True
     ) -> Union[Graph, None]:
         """
-        Replace gene identifiers into 'graph'.
+        Replace gene identifiers in Graph object with corresponding aliases.
+        Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
@@ -619,7 +623,7 @@ class GeneSynonyms(object):
 
         Returns
         -------
-        Depending on 'copy', update or return Graph object with corresponding aliases.
+        Depending on 'copy', update 'df' or return Graph object.
 
         See Also
         --------
@@ -646,7 +650,8 @@ class GeneSynonyms(object):
         copy: bool = False
     ) -> MPBooleanNetwork: # type: ignore
         """
-        Replace gene identifiers into 'bn'.
+        Replace gene identifiers in MPBooleanNetwork object with corresponding aliases.
+        Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
@@ -661,7 +666,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Depending on 'copy', update or return MPBooleanNetwork object with corresponding aliases.
+        Depending on 'copy', update 'bn' or return MPBooleanNetwork object.
 
         See Also
         --------
@@ -685,7 +690,8 @@ class GeneSynonyms(object):
         keep_if_missing: bool = True
     ) -> Sequence[str]:
         """
-        Create a copy of the input Sequence, with corresponding NCBI reference names.
+        Create a copy of the Sequence object, with corresponding NCBI reference names.
+        Each gene name is converted into its NCBI reference name.
 
         Parameters
         ----------
@@ -696,7 +702,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Return a gene sequence where each gene name is converted into its NCBI reference name.
+        Return Sequence object.
         """
 
         return self.convert_sequence(
@@ -712,7 +718,8 @@ class GeneSynonyms(object):
         keep_if_missing: bool = True
     ) -> InteractionList:
         """
-        Create a copy of the input list of pairwise interactions, with corresponding NCBI reference names.
+        Create a copy of the pairwise InteractionList object, with corresponding NCBI reference names.
+        Each gene name is converted into its NCBI reference name.
 
         Parameters
         ----------
@@ -723,7 +730,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Return an interaction list where each gene identifier is converted into its NCBI reference name.
+        Return InteractionList object.
         """
 
         return self.convert_interaction_list(
@@ -740,7 +747,7 @@ class GeneSynonyms(object):
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene names with their corresponding NCBI reference names into 'df'.
+        Replace gene names in DataFrame object with corresponding NCBI reference names.
 
         Parameters
         ----------
@@ -753,7 +760,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Depending on 'copy', update or return DataFrame object with corresponding NCBI reference names.
+        Depending on 'copy', update 'df' or return DataFrame object.
         """
 
         return self.convert_df(
@@ -770,7 +777,7 @@ class GeneSynonyms(object):
         copy: bool = True
     ) -> Union[Graph, None]:
         """
-        Replace gene names with their corresponding NCBI reference names into 'graph'.
+        Replace gene names in Graph object with corresponding NCBI reference names.
 
         Parameters
         ----------
@@ -781,7 +788,7 @@ class GeneSynonyms(object):
 
         Returns
         -------
-        Depending on 'copy', update or return Graph object with corresponding NCBI reference names.
+        Depending on 'copy', update 'graph' or return Graph object.
         """
 
         return self.convert_graph(
@@ -797,7 +804,7 @@ class GeneSynonyms(object):
         copy: bool = False
     ) -> MPBooleanNetwork: # type: ignore
         """
-        Replace gene names with their corresponding NCBI reference names into 'bn'.
+        Replace gene names in MPBooleanNetwork object with corresponding NCBI reference names.
 
         Parameters
         ----------
@@ -808,7 +815,7 @@ class GeneSynonyms(object):
         
         Returns
         -------
-        Depending on 'copy', update or return MPBooleanNetwork object with corresponding NCBI reference names.
+        Depending on 'copy', update 'bn' or return MPBooleanNetwork object.
         """
 
         return self.convert_bn(

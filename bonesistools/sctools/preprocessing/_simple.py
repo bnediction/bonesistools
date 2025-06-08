@@ -61,13 +61,13 @@ def set_index(
     keys: List[str]
         Either a single column key or a list containing an arbitrary combination of column keys.
     axis: Axis (default: 0)
-        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+        Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
     copy: bool (default: False)
-        return a copy instead of updating 'adata' object.
+        Return a copy instead of updating 'adata' object.
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -110,15 +110,15 @@ def filter_obs(
     adata: ad.AnnData
         Unimodal annotated data matrix.
     obs: str
-        column name in 'adata.obs' used for filtering.
+        Column name in 'adata.obs' used for filtering.
     function: Callable
-        function to apply to the observation used for filtering.
+        Function to apply to the observation used for filtering.
     copy: bool (default: False)
-        return a copy instead of updating 'adata' object.
+        Return a copy instead of updating 'adata' object.
 
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -160,7 +160,7 @@ def filter_var(
 
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -206,7 +206,7 @@ def regress_out(
     intercept: bool = False,
     copy: bool = False,
     n_jobs: int = 1
-):
+) -> Union[AnnData, None]:
     """
     Regress out unwanted sources of variation.
 
@@ -227,7 +227,7 @@ def regress_out(
 
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -288,7 +288,7 @@ def merge(
     
     Returns
     -------
-    Depending on 'copy', update or return 'left_ad' AnnData object.
+    Depending on 'copy', update 'left_ad' or return AnnData object.
     """
     
     left_ad = left_ad.copy() if copy else left_ad
@@ -343,7 +343,7 @@ def transfer_layer(
     
     Returns
     -------
-    Depending on 'copy', update or return 'left_ad' AnnData object.
+    Depending on 'copy', update 'left_ad' or return AnnData object.
     """
     
     left_ad = left_ad.copy() if copy else left_ad
@@ -415,7 +415,7 @@ def transfer_obs_sti(
         
     Returns
     -------
-    Depending on 'copy', update or return AnnData object with new observations.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
     
     adata = adata.copy() if copy else adata
@@ -486,7 +486,7 @@ def transfer_obs_its(
         
     Returns
     -------
-    Depending on 'copy', update AnnData objects or return a list of AnnData objects with new observations.
+    Depending on 'copy', update 'adatas' object or return a list of AnnData objects.
     """
 
     if copy:

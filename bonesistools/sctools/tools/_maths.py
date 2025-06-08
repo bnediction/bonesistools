@@ -56,7 +56,7 @@ def pairwise_distances(
 
     Returns
     -------
-    Depending on 'key_added', update AnnData or return ndarray object.
+    Depending on 'key_added', update 'adata' or return ndarray object.
     """
     
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)

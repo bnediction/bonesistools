@@ -30,7 +30,7 @@ def choose_representation(
 
     Returns
     -------
-    Return Array object.
+    Return ndarray object.
     """
 
     if use_rep is None:
@@ -67,7 +67,7 @@ def _get_distances(
 
     Returns
     -------
-    Return Array object.
+    Return ndarray object.
     """
 
     if obsp is not None and neighbors_key is not None:
@@ -104,7 +104,7 @@ def _get_connectivities(
 
     Returns
     -------
-    Return Array object.
+    Return ndarray object.
     """
 
     if obsp is not None and neighbors_key is not None:

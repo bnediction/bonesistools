@@ -38,7 +38,7 @@ def mitochondrial_genes(
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
@@ -94,7 +94,7 @@ def ribosomal_genes(
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData object.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata

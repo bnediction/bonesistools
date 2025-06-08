@@ -495,7 +495,7 @@ def embedding_plot(
 
     Returns
     -------
-    Depending on 'outfile', save figure or create matplotlib figure and axe.
+    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
 
     References
     ----------

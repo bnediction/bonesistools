@@ -46,7 +46,7 @@ def convert_gene_identifiers(
     
     Returns
     -------
-    Depending on 'copy', update or return ScData object with corresponding aliases.
+    Depending on 'copy', update 'scdata' or return ScData object.
     """
 
     scdata = scdata.copy() if copy else scdata
@@ -93,7 +93,7 @@ def standardize_genenames(
         
     Returns
     -------
-    Depending on 'copy', update or return ScData object with corresponding NCBI reference names.
+    Depending on 'copy', update 'scdata' or return ScData object.
     """
 
     return convert_gene_identifiers(
@@ -123,7 +123,7 @@ def var_names_merge_duplicates(
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData object with duplicated index names in adata.var merged together.
+    Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     if var_names_column is None:

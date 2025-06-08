@@ -79,7 +79,8 @@ def kneighbors_graph(
 
     Returns
     -------
-    Return nx.Graph object storing weighted edges that connects two nodes.
+    Return Graph object.
+    The graph stores weighted edges that connects two nodes.
     """
 
     from sklearn import neighbors
@@ -216,7 +217,8 @@ class Knnbs(object):
 
         Returns
         -------
-        Update knnbs object by adding as attribute computed kneighbors_graph.
+        Update Knnbs object.
+        Add attribute 'shortest_path_lengths_df' to Knnbs instance.
         """
 
         X = choose_representation(adata, use_rep=self.use_rep, n_components=self.n_components)
@@ -276,7 +278,8 @@ class Knnbs(object):
     
         Returns
         -------
-        Update knnbs object by adding as attribute pairwise shortest path lengths derived from the graph.
+        Update Knnbs object.
+        Add attribute 'shortest_path_lengths_df' to Knnbs instance.
         """
         
         def shortest_path_lengths_from(
@@ -337,7 +340,8 @@ class Knnbs(object):
     
         Returns
         -------
-        Return a pandas serie storing furthest cells to other barycenters.
+        Return Series object.
+        Series stores furthest cells to other barycenters.
         """
         
         if clusters is None:
@@ -395,7 +399,8 @@ class Knnbs(object):
     
         Returns
         -------
-        Return a pandas serie storing closest cells to self barycenter.
+        Return Series object.
+        Series stores closest cells to self barycenter.
         """
         
         if clusters is None:
@@ -460,7 +465,8 @@ class Knnbs(object):
     
         Returns
         -------
-        Return a pandas serie storing subclusters derived from k-nearest neighbors-based subclusters algorithm.
+        Return Series object.
+        Series stores subclusters derived from k-nearest neighbors-based subclusters algorithm.
         """
         
         if subclusters_maximizing_distances is None and subclusters_minimizing_distances is None:
@@ -595,17 +601,17 @@ def shared_neighbors(
 
     Returns
     -------
-    Depending on 'copy', updates or returns 'scdata' with the following:
+    Depending on 'copy', update 'scdata' or return ScData object.
 
     See 'snn_key' parameter description for the storage path of
     connectivities and distances.
 
-    **connectivities** : sparse matrix.
-        Weighted adjacency matrix of the shared neighborhood graph.
-        Weights should be interpreted as number of shared neighbors.
-    **distances** : sparse matrix of dtype 'float64'.
-        Instead of decaying weights, this stores distances for each pair of
-        neighbors.
+    ScData contains two keys in scdata.uns['snn_key']:
+        - connectivities: sparse matrix.
+            Weighted adjacency matrix of the shared neighborhood graph.
+            Weights should be interpreted as number of shared neighbors.
+        - distances: sparse matrix of dtype 'float64'.
+            Instead of decaying weights, this stores distances for each pair of neighbors.
     """
 
     if knn_key not in scdata.uns:

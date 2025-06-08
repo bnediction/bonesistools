@@ -51,7 +51,8 @@ def calculate_logfoldchanges(
     
     Returns
     -------
-    Return DataFrame storing log2 fold-changes.
+    Return DataFrame.
+    DataFrame stores computed log2 fold-changes.
     
     See also
     --------
