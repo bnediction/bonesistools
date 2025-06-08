@@ -12,7 +12,7 @@ from ._simple import (
 )
 
 from ._genename import (
-    gene_synonyms_conversion,
-    set_ncbi_reference_name,
+    convert_gene_identifiers,
+    standardize_genenames,
     var_names_merge_duplicates
 )

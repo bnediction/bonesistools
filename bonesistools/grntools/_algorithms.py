@@ -1,29 +1,33 @@
 #!/usr/bin/env python
 
 from typing import Any
+from ._typing import Graph
+
 from collections import deque
 
-import networkx as nx
-
-def depth_first_extraction(graph: nx.Graph, source: Any, limit_depth: int=3) -> list:
+def depth_first_extraction(
+    graph: Graph,
+    source: Any,
+    limit_depth: int = 3
+    ) -> list:
     """
-    Extract all existing paths from a node within a distance
+    Extract all existing paths from a node within a given distance
     by a recursive implementation of depth-first extraction (DFE) algorithm.
     Contrary to NetworkX python module, do not consider only simple paths and
     avoid duplicate paths when edge sign take multiple values.
 
     Parameters
     ----------
-    graph
-        NetworkX graph
-    source
-        node
-    limit_depth
-        specify the maximum search depth
+    graph: nx.Graph
+        NetworkX Graph object used for extracting paths.
+    source: Any
+        Starting node for paths.
+    limit_depth: int (default: 3)
+        Maximum length required for a path to pass filtering.
     
     Returns
     -------
-    Return a list of paths from source within a distance.
+    Return a list of paths from 'source' within a distance.
     """
 
     def dfe_exploration(graph, source, stack, depth):

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import importlib
-import types
 from typing import (
     Optional,
     Union,
     Callable,
+    Sequence,
     List,
     Tuple
 )
@@ -40,7 +40,7 @@ Suffixes = Tuple[Optional[str], Optional[str]]
 
 AxisInt = int
 Axis = Union[AxisInt, Literal["obs", "var"]]
-Keys = Union[List[str],str]
+Keys = Union[Sequence[str],str]
 
 AnnDataList = List[AnnData]
 
@@ -83,19 +83,19 @@ Metric_Function = Callable[[np.ndarray, np.ndarray], float]
 Shortest_Path_Method = Literal["dijkstra", "bellman-ford"]
 
 def type_checker(
-    function: types.FunctionType=None,
+    function: Optional[Callable] = None,
     **options
 ):
     """
-    Check if the argument types passed to function are correct.
+    Check if the argument types passed to 'function' are correct.
     
     Parameters
     ----------
-    function
-        called function
+    function: Callable
+        function for which argument types are checked.
     **options
         key-value data-structure where 'key' is the argument name
-        and 'value' is the expected argument type
+        and 'value' is the expected argument type.
     
     Returns
     -------
@@ -139,22 +139,22 @@ def type_checker(
         return partial_wrapper
 
 def anndata_checker(
-    function: types.FunctionType=None,
-    n: int=1
+    function: Optional[Callable] = None,
+    n: int = 1
 ):
     """
-    Check if the first 'n' arguments are AnnData instances.
+    Check if the first arguments are AnnData instances.
     
     Parameters
     ----------
-    function
-        called function
-    n
-        number of arguments to test
+    function: Callable
+        Function for which the first argument types are expected being AnnData instances.
+    n: int (default: 1)
+        Number of arguments to test.
     
     Returns
     -------
-    Raise an error if at least one of the first 'n' arguments is not an AnnData instance.
+    Raise an error if at least one of the first 'n' arguments is not a AnnData instance.
     """
     
     if function is not None:
@@ -179,19 +179,19 @@ def anndata_checker(
 if _mudata_is_available:
 
     def mudata_checker(
-        function: types.FunctionType=None,
-        n: int=1
+        function: Optional[Callable] = None,
+        n: int = 1
     ):
         """
-        Check if the first 'n' arguments are MuData instances.
-
+        Check if the first arguments are MuData instances.
+    
         Parameters
         ----------
-        function
-            called function
-        n
-            number of arguments to test
-
+        function: Callable
+            Function for which the first argument types are expected being MuData instances.
+        n: int (default: 1)
+            Number of arguments to test.
+    
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a MuData instance.
@@ -217,22 +217,22 @@ if _mudata_is_available:
             return partial_wrapper
     
     def anndata_or_mudata_checker(
-        function: types.FunctionType=None,
-        n: int=1
+        function: Optional[Callable] = None,
+        n: int = 1
     ):
         """
-        Check if the first 'n' arguments are AnnData or MuData instances.
-
+        Check if the first arguments are AnnData or MuData instances.
+    
         Parameters
         ----------
-        function
-            called function
-        n
-            number of arguments to test
-
+        function: Callable
+            Function for which the first argument types are expected being AnnData or MuData instances.
+        n: int (default: 1)
+            Number of arguments to test.
+    
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not an AnnData or a MuData instance.
+        Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
         """
 
         if function is not None:
@@ -257,19 +257,19 @@ if _mudata_is_available:
 else:
 
     def mudata_checker(
-        function: types.FunctionType=None,
-        n: int=1
+        function: Optional[Callable] = None,
+        n: int = 1
     ):
         """
-        Check if the first 'n' arguments are MuData instances.
-        
+        Check if the first arguments are MuData instances.
+    
         Parameters
         ----------
-        function
-            called function
-        n
-            number of arguments to test
-        
+        function: Callable
+            Function for which the first argument types are expected being MuData instances.
+        n: int (default: 1)
+            Number of arguments to test.
+    
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a MuData instance.
@@ -290,22 +290,22 @@ else:
             return partial_wrapper
 
     def anndata_or_mudata_checker(
-        function: types.FunctionType=None,
-        n: int=1
+        function: Optional[Callable] = None,
+        n: int = 1
     ):
         """
-        Check if the first 'n' arguments are AnnData or MuData instances.
-
+        Check if the first arguments are AnnData or MuData instances.
+    
         Parameters
         ----------
-        function
-            called function
-        n
-            number of arguments to test
-
+        function: Callable
+            Function for which the first argument types are expected being AnnData or MuData instances.
+        n: int (default: 1)
+            Number of arguments to test.
+    
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not an AnnData or a MuData instance.
+        Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
         """
 
         if function is not None:

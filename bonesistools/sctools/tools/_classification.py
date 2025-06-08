@@ -1,54 +1,55 @@
 #!/usr/bin/env python
 
 from typing import Union
+from anndata import AnnData
 from .._typing import (
-    anndata_or_mudata_checker,
-    ScData,
+    anndata_checker,
     Axis,
 )
 
-from ...databases.ncbi import GeneSynonyms
+from ...databases.ncbi import (
+    GeneType,
+    GeneSynonyms
+)    
 
-@anndata_or_mudata_checker
+@anndata_checker
 def mitochondrial_genes(
-    scdata: ScData,  # type: ignore
-    index_type: str = "genename",
+    adata: AnnData,  # type: ignore
+    index_type: GeneType = "genename",
     key: str = "mt",
     axis: Axis = 1,
     copy: bool = False,
-) -> Union[ScData, None]: # type: ignore
+) -> Union[AnnData, None]: # type: ignore
     """
     Create a column storing whether gene encodes a mitochondrial protein using current index.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    genesyn
-        GeneSynonyms object
-    index_type
-        genename|geneid|ensemblid|<database>
-    key
-        column name storing whether gene encodes a mitochondrial protein
-    axis
-        whether to classify from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
-    copy
-        return a copy instead of updating 'scdata' object
+    adata: ad.AnnData
+        Annotated data matrix.
+    index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+        Input identifier type of indices.
+    key: str (default: 'mt')
+        Column name storing whether gene encodes a mitochondrial protein.
+    axis: Axis (default: 1)
+        Whether to classify from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    copy: bool (default: False)
+        Return a copy instead of updating 'adata' object.
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData or MuData object.
+    Depending on 'copy', update or return AnnData object.
     """
 
-    scdata = scdata.copy() if copy else scdata
+    adata = adata.copy() if copy else adata
 
     genesyn = GeneSynonyms()
     if axis in [0, "obs"]:
         axis = "obs"
-        scdata.obs[key] = False
+        adata.obs[key] = False
     elif axis in [1, "var"]:
         axis = "var"
-        scdata.var[key] = False
+        adata.var[key] = False
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
@@ -57,56 +58,54 @@ def mitochondrial_genes(
         if k.startswith("mt-"):
             mt_id.add(v.value.decode())
 
-    for index in eval(f"scdata.{axis}.index"):
+    for index in eval(f"adata.{axis}.index"):
         geneid = genesyn.get_geneid(
             alias=index,
             alias_type=index_type
         )
         if geneid in mt_id:
-            exec(f"scdata.{axis}.at['{index}','{key}'] = True")
+            exec(f"adata.{axis}.at['{index}','{key}'] = True")
 
-    return scdata if copy else None
+    return adata if copy else None
 
-@anndata_or_mudata_checker
+@anndata_checker
 def ribosomal_genes(
-    scdata: ScData,  # type: ignore
-    index_type: str = "genename",
+    adata: AnnData,  # type: ignore
+    index_type: GeneType = "genename",
     key: str = "rps",
     axis: Axis = 1,
     copy: bool = False,
-) -> Union[ScData, None]: # type: ignore
+) -> Union[AnnData, None]: # type: ignore
     """
     Create a column storing whether gene encodes a ribosomal protein using current index.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    genesyn
-        GeneSynonyms object
-    index_type
-        genename|geneid|ensemblid|<database>
-    key
-        column name storing whether gene encodes a ribosomal protein
-    axis
-        whether to classify from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
-    copy
-        return a copy instead of updating 'scdata' object
+    adata: ad.AnnData
+        Annotated data matrix.
+    index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+        Input identifier type of indices.
+    key: str (default: 'rps')
+        Column name storing whether gene encodes a ribosomal protein.
+    axis: Axis (default: 1)
+        Whether to classify from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    copy: bool (default: False)
+        Return a copy instead of updating 'adata' object.
     
     Returns
     -------
-    Depending on 'copy', update or return AnnData or MuData object.
+    Depending on 'copy', update or return AnnData object.
     """
 
-    scdata = scdata.copy() if copy else scdata
+    adata = adata.copy() if copy else adata
 
     genesyn = GeneSynonyms()
     if axis in [0, "obs"]:
         axis = "obs"
-        scdata.obs[key] = False
+        adata.obs[key] = False
     elif axis in [1, "var"]:
         axis = "var"
-        scdata.var[key] = False
+        adata.var[key] = False
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
@@ -115,12 +114,12 @@ def ribosomal_genes(
         if k.startswith(("Rps","Rpl","Mrp")):
             rps_id.add(v.value.decode())
 
-    for index in eval(f"scdata.{axis}.index"):
+    for index in eval(f"adata.{axis}.index"):
         geneid = genesyn.get_geneid(
             alias=index,
             alias_type=index_type
         )
         if geneid in rps_id:
-            exec(f"scdata.{axis}.at['{index}','{key}'] = True")
+            exec(f"adata.{axis}.at['{index}','{key}'] = True")
 
-    return scdata if copy else None
+    return adata if copy else None

@@ -3,10 +3,10 @@
 from typing import (
     Optional,
     Union,
-    Mapping,
     Sequence,
     Any
 )
+from collections.abc import Mapping
 try:
     from typing import Literal, get_args
 except ImportError:

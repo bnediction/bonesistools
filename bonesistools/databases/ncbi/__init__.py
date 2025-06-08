@@ -1,3 +1,7 @@
 #!/usr/bin/env python
 
-from ._genesyn import GeneSynonyms
+from ._genesyn import (
+    GeneType,
+    AliasType,
+    GeneSynonyms
+)

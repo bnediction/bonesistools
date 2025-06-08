@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 
-import types
 from typing import (
     Optional,
     Union,
     Sequence,
-    Tuple
+    Tuple,
+    Callable
 )
+from anndata import AnnData
+from ._typing import RGB
 from .._typing import anndata_checker
 
 import pandas as pd
-import anndata as ad
 
 import scipy
 
@@ -19,19 +20,18 @@ from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.ticker import FormatStrFormatter
 from itertools import cycle
-Colors = Union[Sequence[Tuple[str, str, str]], cycle]
-
-from . import _figure
 from . import _colors
+
+Colors = Union[Sequence[RGB], cycle]
 
 @anndata_checker
 def kde_plot(
-    adata: ad.AnnData,
+    adata: AnnData,
     gene: str,
     layer: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
-    default_parameters: Optional[types.FunctionType] = None,
+    default_parameters: Optional[Callable] = None,
     **kwargs
 ) -> Tuple[Figure, Axes]:
     """
@@ -39,18 +39,19 @@ def kde_plot(
 
     Parameters
     ----------
-    adata
-        Annotated data matrix
-    gene
-        Gene of interest for which display the density
-    layer
-        The counting are retrieved from .layers['layer'] if specified, otherwise .X
-    obs
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
-    colors
-        Density function are colored with respect to a list of color values
-    default_parameters
-        Function specifying default figure parameters
+    adata: ad.AnnData
+        Annotated data matrix.
+    gene: str
+        Gene of interest for which display the density.
+    layer: str (optional, default: None)
+        If specified, the counting are retrieved from adata.layers['layer'], otherwise from adata.X.
+    obs: str (optional, default: None)
+        If specified, draw gene-related density w.r.t. categories.
+        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+    colors: Colors (optional, default: None)
+        Density function are colored with respect to a list of color values.
+    default_parameters: Callable (optional, default: None)
+        Function specifying default figure parameters.
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -61,7 +62,7 @@ def kde_plot(
 
     Returns
     -------
-    Create figure and axe.
+    Create matplotlib figure and axe.
     """
 
     import seaborn as sns

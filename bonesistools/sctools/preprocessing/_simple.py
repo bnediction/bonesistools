@@ -2,11 +2,11 @@
 
 from typing import (
     Union,
+    Sequence,
     List,
     Optional,
     Callable
 )
-from types import FunctionType
 from anndata import AnnData
 from pandas import DataFrame
 from numpy import nan
@@ -14,6 +14,7 @@ from .._typing import (
     anndata_checker,
     type_checker,
     UnionType,
+    AnnDataList,
     DataFrameList,
     Axis,
     Keys,
@@ -55,14 +56,14 @@ def set_index(
 
     Parameters
     ----------
-    adata
-        AnnData object
-    keys
-        either a single column key or a list containing an arbitrary combination of column keys
-    axis
-        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var')
-    copy
-        return a copy instead of updating 'adata' object
+    adata: ad.AnnData
+        Annotated data matrix.
+    keys: List[str]
+        Either a single column key or a list containing an arbitrary combination of column keys.
+    axis: Axis (default: 0)
+        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    copy: bool (default: False)
+        return a copy instead of updating 'adata' object.
     
     Returns
     -------
@@ -98,7 +99,7 @@ def set_index(
 def filter_obs(
     adata: AnnData,
     obs: str,
-    function: Optional[Callable],
+    function: Callable,
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
@@ -106,14 +107,14 @@ def filter_obs(
 
     Parameters
     ----------
-    adata
-        AnnData object
-    obs
-        column name in 'adata.obs' used for filtering
-    function
-        function to apply to the observation used for filtering
-    copy
-        return a copy instead of updating 'adata' object
+    adata: ad.AnnData
+        Annotated data matrix.
+    obs: str
+        column name in 'adata.obs' used for filtering.
+    function: Callable
+        function to apply to the observation used for filtering.
+    copy: bool (default: False)
+        return a copy instead of updating 'adata' object.
 
     Returns
     -------
@@ -140,7 +141,7 @@ def filter_obs(
 def filter_var(
     adata: AnnData,
     var: str,
-    function: Optional[Callable],
+    function: Callable,
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
@@ -148,14 +149,14 @@ def filter_var(
 
     Parameters
     ----------
-    adata
-        AnnData object
-    var
-        column name in 'adata.var' used for filtering
-    function
-        function to apply to the variable used for filtering
+    adata: ad.AnnData
+        Annotated data matrix.
+    var: str
+        Column name in 'adata.var' used for filtering.
+    function: Callable
+        Function to apply to the variable used for filtering.
     copy
-        return a copy instead of updating 'adata' object
+        Return a copy instead of updating 'adata' object.
 
     Returns
     -------
@@ -181,8 +182,8 @@ def filter_var(
 def __linear_regress_out_feature(
     interest: np.ndarray,
     regressors: np.ndarray,
-    intercept: bool=False,
-    n_jobs: int=1
+    intercept: bool = False,
+    n_jobs: int = 1
 ):
 
     regression_model = LinearRegression(fit_intercept=False, n_jobs=n_jobs)
@@ -199,30 +200,30 @@ def __linear_regress_out_feature(
 
 @anndata_checker
 def regress_out(
-    adata,
-    keys,
-    layer=None,
-    intercept=False,
-    copy=False,
-    n_jobs=1
+    adata: AnnData,
+    keys: Keys,
+    layer: Optional[str] = None,
+    intercept: bool = False,
+    copy: bool = False,
+    n_jobs: int = 1
 ):
     """
     Regress out unwanted sources of variation.
 
     Parameters
     ----------
-    adata
-        AnnData object
-    keys
-        keys in 'adata.obs' on which to regress on
-    layer
-        if specify, regress out on adata.layer['layers'] instead of adata.X
-    intercept
-        if true, add intercept as regressor on which to regress on
-    copy
-        return a copy instead of updating 'adata' object
-    n_jobs
-        number of jobs for parallel computation
+    adata: ad.AnnData
+        Annotated data matrix.
+    keys: Keys
+        Keys in 'adata.obs' on which to regress on.
+    layer: str (optional, default: None)
+        If specify, regress out on adata.layer['layers'] instead of adata.X.
+    intercept: bool (default: False)
+        If true, add intercept as regressor on which to regress on.
+    copy: bool (default: False)
+        Return a copy instead of updating 'adata' object.
+    n_jobs: int (default: 1)
+        Number of jobs for parallel computation.
 
     Returns
     -------
@@ -262,26 +263,26 @@ def regress_out(
 def merge(
     left_ad: AnnData,
     right_ad: AnnData,
-    axis: Axis=0,
-    suffixes: Suffixes=("_x", "_y"),
-    copy: bool=False
+    axis: Axis = 0,
+    suffixes: Suffixes = ("_x", "_y"),
+    copy: bool = False
 ) -> Union[AnnData, None]:
     """
     Merge dataframes from 'adata.obs' or 'adata.var' with an index-based join.
 
     Parameters
     ----------
-    left_ad
-        AnnData object receiving information
-    right_ad
-        AnnData object sending information
-    axis
-        whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var')
-    suffixes
-        length-2 sequence where each element is a string indicating the suffix
-        to add to overlapping column names in 'left_ad' and 'right_ad' respectively
-    copy
-        return a copy instead of updating 'left_ad' object
+    left_ad: ad.AnnData
+        Annotated data matrix receiving information.
+    right_ad: ad.AnnData
+        Annotated data matrix sending information.
+    axis: Axis (default: 0)
+        Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    suffixes: Tuple[str, str] (default: ('_x','_y'))
+        Length-2 sequence where each element is a string indicating the suffix
+        to add to overlapping column names in 'left_ad' and 'right_ad' respectively.
+    copy: bool (default: False)
+        Return a copy instead of updating 'left_ad' object.
     
     Returns
     -------
@@ -327,14 +328,14 @@ def transfer_layer(
 
     Parameters
     ----------
-    left_ad
-        AnnData object receiving layer-based information
-    right_ad
-        AnnData object sending layer-based information
-    layers
-        sequence where each element is a string indicating the layer to add in 'left_ad'
-    copy
-        return a copy instead of updating 'left_ad' object
+    left_ad: ad.AnnData
+        Annotated data matrix receiving layer-based information.
+    right_ad: ad.AnnData
+        Annotated data matrix sending layer-based information.
+    layers: Keys
+        Sequence where each element is a string indicating the layer to add in 'left_ad'.
+    copy: bool (default: False)
+        Return a copy instead of updating 'left_ad' object.
     
     Returns
     -------
@@ -380,30 +381,31 @@ def transfer_layer(
 @anndata_checker
 def transfer_obs_sti(
     adata: AnnData,
-    adatas: List[AnnData],
-    obs: List[str],
-    conditions: List[str],
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
     condition_colname: str = "condition",
     copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Transfer observations from specific to integrated dataset, i.e. transfer columns from multiple AnnData 'adatas' towards a unique AnnData 'adata'.
-    This function handles issues whenever there are identical indices in 'adatas.obs'.
+    Transfer observations from specific to integrated dataset, i.e. transfer columns
+    from multiple AnnData 'adatas' towards a unique AnnData 'adata'.
+    This function handles issues whenever there are identical indices between AnnData objects.
 
     Parameters
     ----------
-    adata
-        AnnData object receiving information (specific datasets)
-    adatas
-        AnnData objects sending information (integrated dataset)
-    obs
-        column names in specific 'adata.obs' to transfer
-    conditions
-        conditions related to AnnData objects (ordered w.r.t 'adatas')
-    condition_colname
-        column name in integrated 'adata.obs' related to conditions
-    copy
-        return a copy instead of updating 'adata' object
+    adata: ad.AnnData
+        Annotated data matrix receiving information (integrated dataset).
+    adatas: AnnDataList
+        Annotated data matrix sending information (specific datasets).
+    obs: Keys
+        Column names in specific 'adata.obs' to transfer.
+    conditions: Keys
+        Conditions related to AnnData objects (ordered w.r.t 'adatas').
+    condition_colname: str (default: 'condition')
+        Column name in integrated 'adata.obs' related to conditions.
+    copy: bool (default: False)
+        Return a copy instead of updating 'adata' object.
         
     Returns
     -------
@@ -449,29 +451,30 @@ def transfer_obs_sti(
 @anndata_checker
 def transfer_obs_its(
     adata: AnnData,
-    adatas: List[AnnData],
-    obs: List[str],
-    conditions: List[str],
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
     condition_colname: str = "condition",
     copy: bool = False
-) -> Union[AnnData, None]:
+) -> Union[AnnDataList, None]:
     """
-    Transfer observations from integrated to specific datasets, i.e. transfer columns from a unique AnnData 'adata' towards multiple AnnData 'adatas'.
+    Transfer observations from integrated to specific datasets,
+    i.e. transfer columns from a unique AnnData 'adata' towards multiple AnnData 'adatas'.
 
     Parameters
     ----------
-    adata
-        AnnData object receiving information (specific datasets)
-    adatas
-        AnnData objects sending information (integrated dataset)
-    obs
-        column names in integrated 'adata.obs' to transfer
-    conditions
-        conditions related to AnnData objects (ordered w.r.t 'adatas')
-    condition_colname
-        column name in integrated 'adata.obs' related to conditions
-    copy
-        return a copy instead of updating 'adata' object
+    adata: ad.AnnData
+        Annotated data matrix sending information (integrated dataset).
+    adatas: AnnDataList
+        Annotated data matrix receiving information (specific datasets).
+    obs: Keys
+        Column names in integrated 'adata.obs' to transfer.
+    conditions: Keys
+        Conditions related to AnnData objects (ordered w.r.t 'adatas').
+    condition_colname: str (default: 'condition')
+        Column name in integrated 'adata.obs' related to conditions.
+    copy: bool (default: False)
+        Return a copy instead of updating 'adata' object.
         
     Returns
     -------

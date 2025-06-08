@@ -1,8 +1,14 @@
 #!/usr/bin/env python
 
-import typing
+from typing import (
+    Optional,
+    Union,
+    Sequence,
+)
 from collections.abc import Mapping
 from pathlib import Path
+from anndata import AnnData
+from ._typing import RGB
 from .._typing import anndata_checker
 
 import matplotlib.pyplot as plt
@@ -17,46 +23,45 @@ from ..tools import get_paga_graph
 
 @anndata_checker
 def draw_paga(
-    adata,
-    obs,
-    obsm,
+    adata: AnnData,
+    obs: str,
+    obsm: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
-    ax: Axes = None,
+    ax: Optional[Axes] = None,
     with_labels: bool = False,
-    node_color: typing.Optional[typing.Union[typing.Sequence[typing.Sequence[str]], cycle, Mapping]] = _colors.black,
-    outfile: typing.Optional[Path] = None,
+    node_color: Optional[Union[Sequence[RGB], cycle, Mapping]] = _colors.black,
+    outfile: Optional[Path] = None,
     **kwargs
 ):
     """
     Draw the paga graph with Matplotlib.
-    To compute the PAGA matrix, please use 'scanpy.tl.paga'.
-    PAGA can also be computed using 'scvelo'. In this case, please run previously
-    adata.uns['edges'] = adata.uns["paga"]['edges']
+    To compute the PAGA matrix, please run 'scanpy.tl.paga'.
+    PAGA can also be computed using 'scvelo'. In this case, please use
+    adata.uns['edges'] = adata.uns["paga"]['edges'] before.
 
     Parameters
     ----------
-    adata
-        Annotated data matrix
-    obs
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first columns in .obsm['obsm']
-    edges
-        The adjacency matrix-based data structure is retrieved by .uns['edges'] (default: transitions_confidence)
-        Please refer to 
-    threshold
-        Confidence threshold (default: 0.01)
-    ax
-        Draw the paga graph in the specified Matplotlib axes
-    with_labels
-        Set to True to draw labels on the nodes
-    node_color
-        Node color, array of node colors or mapping of node colors
-    outfile
-        If specified, save the figure
+    adata: ad.AnnData
+        Annotated data matrix.
+    obs: str
+        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+    obsm: str
+        The data points are retrieved by the first columns in adata.obsm['obsm'].
+    edges: str (default: 'transitions_confidence')
+        The adjacency matrix-based data structure is retrieved by adata.uns['edges'].
+    threshold: float (default: 0.01)
+        Confidence threshold used.
+    ax: Axes (optional, default: None)
+        Draw the paga graph in the specified Matplotlib axes.
+    with_labels: bool (default: False)
+        Add labels on the nodes.
+    node_color: Union[Sequence[RGB], cycle, Mapping] (optional, default: None)
+        Specify color for each nodes.
+    outfile: Path (optional, default: None)
+        If specified, save the figure.
     **kwargs
-        keyword arguments passed to networkx.draw_networkx() function
+        keyword arguments passed to function networkx.draw_networkx.
 
     Returns
     -------

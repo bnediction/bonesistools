@@ -5,7 +5,6 @@ from typing import (
     Sequence,
     Callable
 )
-from types import FunctionType
 from .._typing import anndata_checker
 
 import pandas as pd

@@ -66,7 +66,8 @@ keywords = [
 default = [
     "decoupler>=1.8",
     "mudata>=0.3.1",
-    "mpbn>=4.1"
+    "mpbn>=4.1",
+    "seaborn"
 ]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]

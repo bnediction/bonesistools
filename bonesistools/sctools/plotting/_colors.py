@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from typing import Optional, Sequence
+from typing import Optional
+from ._typing import RGB
 
 import math
 import numpy as np
@@ -8,10 +9,23 @@ import numpy as np
 from itertools import cycle
 from matplotlib.colors import Colormap, ListedColormap
 
-def rgb(color: list):
+def rgb(color):
     return list(map(lambda x: x/255, color))
 
-def rgb2hex(rgb: Sequence):
+def rgb2hex(rgb: RGB):
+    """
+    Convert color from rgb format to hexadecimal format.
+
+    Parameters
+    ----------
+    color: RGB
+        Color in RGB format.
+    
+    Returns
+    -------
+    Return the color in hexadecimal format.
+    """
+
     r, g, b = rgb
     if isinstance(r, float) and isinstance(g, float) and isinstance(b, float):
         r = round(r*255) if 0<r<1 else int(r)
@@ -145,7 +159,23 @@ def generate_colormap(
     color_number: int = 80,
     shade_number: Optional[int] = None,
     cm: Colormap = bonesis_cm
-):
+) -> ListedColormap:
+    """
+    Create a colormap from another colormap by adding some new colors.
+
+    Parameters
+    ----------
+    color_number: int (default: 80)
+        Number of colors in the returned colormap.
+    shade_number: int (optional, default: None)
+        Number of shades in the returned colormap.
+    cm: matplotlib.colors.Colormap (default: bonesis_cm)
+        Initial colormap to use for creating new colormap.
+
+    Returns
+    -------
+    Return a ListedColormap.
+    """
 
     if color_number <= 0:
         raise ValueError(f"invalid argument value for 'color_number': expected non-null positive value but received '{color_number}'")

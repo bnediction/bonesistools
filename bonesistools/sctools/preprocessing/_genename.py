@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-import warnings
-warnings.filterwarnings("ignore")
-
 from typing import Union, Optional
 from .._typing import (
     ScData,
@@ -10,41 +7,45 @@ from .._typing import (
     anndata_or_mudata_checker,
     Axis
 )
-
-import anndata as ad
-import pandas as pd
+from pandas import DataFrame
+from anndata import AnnData
 from scipy.sparse import csr_matrix
 
-from ...databases.ncbi import GeneSynonyms
+import anndata as ad
+
+from ...databases.ncbi import (
+    GeneType,
+    AliasType,
+    GeneSynonyms
+)
 
 @anndata_or_mudata_checker
-def gene_synonyms_conversion(
+def convert_gene_identifiers(
     scdata: ScData, # type: ignore
-    axis: Axis="var",
-    input_type: str="genename",
-    output_type: str="referencename",
-    keep_if_missing: bool=True,
-    copy: bool=False
+    axis: Axis = "var",
+    gene_type: GeneType = "genename",
+    alias_type: AliasType = "referencename",
+    copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene names with theirs gene aliases into 'scdata' object.
+    Replace gene identifiers into 'scdata'.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object where names are expected being standardized
-    axis
-        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
-    input_type
-        genename|geneid|ensemblid|<database>
-    output_type
-        referencename|geneid|ensemblid|<database>
-    copy
-        return a copy instead of updating 'scdata' object
-        
+    scdata: ScData
+        ScData object where gene aliases are converted into the desired identifiers.
+    axis: Axis (default: 'var')
+        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
+    gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+        Input identifier type of genes.
+    alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+        Output identifier type of genes.
+    copy: bool (default: False)
+        Return a copy instead of updating ScData object.
+    
     Returns
     -------
-    Depending on 'copy', update or return AnnData or MuData object with gene aliases.
+    Depending on 'copy', update or return ScData object with corresponding aliases.
     """
 
     scdata = scdata.copy() if copy else scdata
@@ -53,18 +54,16 @@ def gene_synonyms_conversion(
         GeneSynonyms()(
             scdata.obs,
             axis="index",
-            input_type=input_type,
-            output_type=output_type,
-            keep_if_missing=keep_if_missing,
+            gene_type=gene_type,
+            alias_type=alias_type,
             copy=False
         )
     elif axis in [1, "var"]:
         GeneSynonyms()(
             scdata.var,
             axis="index",
-            input_type=input_type,
-            output_type=output_type,
-            keep_if_missing=keep_if_missing,
+            gene_type=gene_type,
+            alias_type=alias_type,
             copy=False
         )
     else:
@@ -73,65 +72,56 @@ def gene_synonyms_conversion(
     return scdata if copy else None
 
 @anndata_checker
-def set_ncbi_reference_name(
+def standardize_genenames(
     scdata: ScData, # type: ignore
-    axis: Axis="var",
-    input_type: str="genename",
-    keep_if_missing: bool=True,
+    axis: Axis = "var",
     copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene names with theirs reference gene names into 'scdata' object.
+    Replace gene names with their corresponding NCBI reference names into 'scdata'.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object where names are expected being standardized
-    annotations
-        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var')
-    input_type
-        genename|geneid|ensemblid|<database>
-    copy
-        return a copy instead of updating 'scdata' object
+    scdata: ScData
+        ScData object where names are expected being standardized.
+    axis: Axis (default: 'var')
+        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
+    copy: bool (default: False)
+        Return a copy instead of updating ScData object.
         
     Returns
     -------
-    Depending on 'copy', update or return AnnData or MuData object with reference gene names.
+    Depending on 'copy', update or return ScData object with corresponding NCBI reference names.
     """
 
-    scdata = scdata.copy() if copy else scdata
-
-    gene_synonyms_conversion(
+    return convert_gene_identifiers(
         scdata=scdata,
         axis=axis,
-        input_type=input_type,
-        output_type="referencename",
-        keep_if_missing=keep_if_missing,
-        copy=False
+        gene_type="genename",
+        alias_type="referencename",
+        copy=copy
     )
-
-    return scdata if copy else None
 
 @anndata_checker
 def var_names_merge_duplicates(
-    adata: ad.AnnData,
-    var_names_column: Optional[str]=None
-) -> Union[ad.AnnData, None]:
+    adata: AnnData,
+    var_names_column: Optional[str] = None
+) -> Union[AnnData, None]:
     """
     Merge the duplicated index names in adata.var by summing the counts between each duplicated index elements.
 
     Parameters
     ----------
-    adata
-        AnnData object where names are expected being standardized
-    var_names_column
-        if specify, give a priority order for which row in adata.var is saved when rows are merged.
+    adata: ad.AnnData
+        Annotated data matrix where duplicated variable names are merged.
+    var_names_column: str (optional, default: None)
+        If specify, give a priority order for which row in adata.var is saved when rows are merged.
         For instance, if multiple rows have same index but different cell values,
         the row with cell value at 'var_names_column' column is considered as the main information over others.
     
     Returns
     -------
-    return AnnData object with duplicated index names in adata.var merged together.
+    Depending on 'copy', update or return AnnData object with duplicated index names in adata.var merged together.
     """
 
     if var_names_column is None:
@@ -140,7 +130,7 @@ def var_names_merge_duplicates(
     else:
         var_names = var_names_column
 
-    obs = pd.DataFrame(adata.obs.index).set_index(0)
+    obs = DataFrame(adata.obs.index).set_index(0)
     adatas = list()
     duplicated_var_names = {adata.var_names[idx] for idx, value in enumerate(adata.var_names.duplicated()) if value}
 
@@ -154,7 +144,7 @@ def var_names_merge_duplicates(
             var = adata_spec.var[filter].iloc[:1]
         else:
             var = adata_spec.var.iloc[:1]
-        adata_spec = ad.AnnData(X=X, var=var, obs=obs)
+        adata_spec = AnnData(X=X, var=var, obs=obs)
         adatas.append(adata_spec)
 
     adatas.append(adata)

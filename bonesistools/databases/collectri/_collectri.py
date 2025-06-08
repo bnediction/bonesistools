@@ -16,7 +16,7 @@ def load_grn(
     **kwargs
 )-> nx.MultiDiGraph:
     """
-    Provide a Graph Regulatory Network (GRN) derived from Collectri database.
+    Provide a Graph Regulatory Network (GRN) derived from Collectri database [1].
 
     Parameters
     ----------

@@ -10,6 +10,9 @@ from matplotlib.colors import ListedColormap
 from . import _colors
 
 def set_default_params():
+    """
+    Set default parameters for matplotlib.
+    """
 
     mpl.rcParams.update(mpl.rcParamsDefault)
 
@@ -60,6 +63,10 @@ mpl.colormaps.register(cmap)
 def set_default_axis(
     ax: Optional[Axes] = None
 ):
+    """
+    Set default parameters for matplotlib axes.
+    """
+    
     if ax is None:
         ax = plt.gca()
     ax.set_title("")

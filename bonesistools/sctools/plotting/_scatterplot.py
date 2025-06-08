@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 from collections.abc import Mapping
-import types
 from typing import (
     Optional,
     Union,
     Sequence,
-    Tuple
+    Tuple,
+    Callable
 )
+from ._typing import RGB
 from .._typing import (
     ScData,
     anndata_or_mudata_checker
@@ -27,18 +28,17 @@ from matplotlib.colors import Colormap
 from mpl_toolkits import mplot3d
 from mpl_toolkits.mplot3d import Axes3D
 from itertools import cycle
-Colors = Union[Sequence[Tuple[str, str, str]], cycle, Colormap]
+Colors = Union[Sequence[RGB], cycle, Colormap]
 
 from ..tools._utils import choose_representation
 
-from . import _figure
 from . import _colors
 from .. import tl
 
 import networkx as nx
 
 def __default_plot(
-    plot: types.FunctionType
+    plot: Callable
 ):
 
     def wrapper(
@@ -441,7 +441,7 @@ def embedding_plot(
     add_graph: bool = False,
     add_labels_to_graph: bool = False,
     automatic_resize: bool = False,
-    default_parameters: Optional[types.FunctionType] = None,
+    default_parameters: Optional[Callable] = None,
     **kwargs
 ) -> Tuple[Figure, Axes]:
     """
@@ -450,30 +450,31 @@ def embedding_plot(
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    obs
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
-    use_rep
-        Use the indicated representation in scdata.obsm
-    colors
-        Visualization of the mapping from a list of color values
-    n_components
-        Number of plotted dimensions (default: 2)
-    outfile
-        If specified, save the figure
-    title
-        Add title to current axe
-    add_labels
-        Add labels retrieved by .obs['obs']
-    add_graph
-        Draw elastic principal graph
-    add_labels_to_graph
-        Add node labels of elastic principal graph
-    automatic_resize
-        Resize figure
-    default_parameters
-        Function specifying default figure parameters
+    scdata: ScData
+        Unimodal or multimodal annotated data matrix.
+    obs: str
+        The classification is retrieved by scdata.obs['obs'], which must be categorical/qualitative values.
+    use_rep: str
+        Use the indicated representation in scdata.obsm.
+    colors: matplotlib.colors.Colormap (optional, default: None)
+        Visualization of the mapping from a list of color values.
+    n_components: 2 or 3 (default: 2)
+        Number of plotted dimensions.
+    outfile: Path (optional, default: None)
+        If specified, save the figure.
+    title: Union[str, dict] (optional, default: None)
+        Add title to current axe.
+    add_labels: bool (default: False)
+        Add labels retrieved by adata.obs['obs'] to the embedding space.
+    add_graph: bool (default: False)
+        Draw elastic principal graph retrieved from scdata.uns['epg'].
+        This parameter is helpful when user has use STREAM framework [1].
+    add_labels_to_graph: bool (default: False)
+        Add node labels of elastic principal graph retrieved from scdata.uns['epg'].
+    automatic_resize: bool (default: False)
+        Resize figure. Helpful when the legend is large and comes out of the framework.
+    default_parameters: Function (optional, default: None)
+        Function specifying default figure parameters.
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -493,7 +494,12 @@ def embedding_plot(
 
     Returns
     -------
-    Depending on 'outfile', save figure or create figure and axe.
+    Depending on 'outfile', save figure or create matplotlib figure and axe.
+
+    References
+    ----------
+    [1] Chen et al. (2019). Single-cell trajectories reconstruction, exploration and mapping of omics data
+    with STREAM. Nature communications, 10(1), 1903 (https://www.nature.com/articles/s41467-019-09670-4)
     """
 
     if n_components not in [2,3]:
