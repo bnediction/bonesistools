@@ -52,9 +52,9 @@ FTP_GENE_INFO = {
 }
 
 NCBI_FILES = {
-    "mouse": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.mus_musculus_gene_info.tsv"),
-    "human": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.homo_sapiens_gene_info.tsv"),
-    "escherichia coli": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/.ncbi_gi/.escherichia_coli_gene_info.tsv")
+    "mouse": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/data/gi/mus_musculus_gene_info.tsv"),
+    "human": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/data/gi/homo_sapiens_gene_info.tsv"),
+    "escherichia coli": Path(f"{str(os.path.abspath(os.path.dirname(__file__)))}/data/gi/escherichia_coli_gene_info.tsv")
 }
 
 class GeneSynonyms(object):

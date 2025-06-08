@@ -74,8 +74,15 @@ collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]
 mpbn = [ "mpbn>=4.1" ]
 
+[tool.hatch.build.targets.sdist]
+ignore-vcs = true
+include = [
+    "*.py",
+    "src/bonesistools/databases/ncbi/data/gi/*.tsv",
+]
+
 [tool.hatch.build.targets.wheel]
-packages = ["bonesistools/"]
+packages = [ "src/bonesistools" ]
 
 [project.urls]
 Repository = "https://github.com/bnediction/bonesistools"

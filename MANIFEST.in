@@ -1,1 +1,1 @@
-include src/databases/ncbi/.ncbi_gi/*_gene_info.tsv
+include src/bonesistools/databases/ncbi/data/gi/*.tsv
