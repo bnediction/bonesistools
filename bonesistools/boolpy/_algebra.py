@@ -34,16 +34,23 @@ class BooleanDifferentialCalculus(object):
         elif _v1 > _v2:
             return -1
         
-    def pairwise_predecessor_test(self, source_v1, source_v2, target_v1, target_v2, sign) -> Union[None, bool]:
+    def pairwise_predecessor_test(
+        self,
+        source_v1: Union[bool, PartialBoolean],
+        source_v2: Union[bool, PartialBoolean],
+        target_v1: Union[bool, PartialBoolean],
+        target_v2: Union[bool, PartialBoolean],
+        sign: int
+    ) -> Union[bool, None]:
         """
         By assuming there is two conditions 1 and 2, estimate which one preceeds the other one with respect to two nodes.
 
         Parameters
         ----------
-        source_v1, source_v2, target_v1, target_v2
-            bool or PartialBoolean
-        sign
-            specify the sign effect of source upon target
+        source_v1, source_v2, target_v1, target_v2: bool | PartialBoolean
+            Partial Boolean values.
+        sign: -1 | 1
+            Specify the sign effect of source upon target.
 
         Returns
         -------

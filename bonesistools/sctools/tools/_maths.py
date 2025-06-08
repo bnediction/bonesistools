@@ -25,38 +25,38 @@ from sklearn import metrics
 @anndata_checker
 def pairwise_distances(
     adata,
-    n_components: Optional[int]=None,
-    use_rep: Optional[str]=None,
-    metric: Union[Metric, Metric_Function]="euclidean",
-    key_added: Optional[str]=None,
-    n_jobs: int=1,
+    n_components: Optional[int] = None,
+    use_rep: Optional[str] = None,
+    metric: Union[Metric, Metric_Function] = "euclidean",
+    key_added: Optional[str] = None,
+    n_jobs: int = 1,
     **metric_kwds: Mapping[str, Any]
-) -> Union[AnnData, None]:
+) -> Union[np.ndarray, None]:
     """
-    Calculate the distance matrix between observations with respect to an embedding projection.
+    Calculate the distance matrix between observations with respect to a choosen representation.
 
     Parameters
     ----------
-    adata
-        AnnData object
-    n_components
-        Number of principal components or dimensions in the embedding space
-        taken into account for each observation
-    use_rep
-        Use the indicated representation in adata.obsm
-    metric
-        Metric used when calculating pairwise distances between observations
-    key_added
-        If not specified, return distance matrix
-        If specified, distance matrix is added to .obsp['key_added']
-    n_jobs
-        Number of allocated processors
+    adata: ad.AnnData
+        Unimodal annotated data matrix.
+    n_components: int (optional, default: None)
+        Number of principal components or dimensions in the embedding space taken into account for each observation.
+        If not specified, consider all principal components.
+    use_rep: str (optional, default: None)
+        Use the indicated representation in adata.obsm.
+    metric: Metric | Metric_Function (default: 'euclidean')
+        Metric used when calculating pairwise distances between observations.
+    key_added: str (optional, default: None)
+        If not specified, return distance matrix.
+        If specified, distance matrix is added to .obsp['key_added'].
+    n_jobs: int (default: 1)
+        Number of allocated processors.
     **metric_kwds
-        Any further parameters passed to the distance function
+        Any further parameters passed to the distance function.
 
     Returns
     -------
-    Depending on 'key_added', update AnnData or return Array object.
+    Depending on 'key_added', update AnnData or return ndarray object.
     """
     
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
@@ -84,27 +84,27 @@ def pairwise_distances(
 def barycenters(
     scdata: ScData, # type: ignore
     obs: str,
-    use_rep: Optional[str]=None,
-    n_components: Optional[int]=None,
-) -> Mapping:
+    use_rep: Optional[str] = None,
+    n_components: Optional[int] = None,
+) -> Mapping[str, np.ndarray]:
     """
-    Calculate the barycenter with respect to an embedding projection.
+    Calculate the barycenter with respect to an embedding space.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    obs
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
-    use_rep
-        Use the indicated representation in scdata.obsm
-    n_components
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    obs: str
+        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values.
+    use_rep: str (optional, default: None)
+        Use the indicated representation in scdata.obsm.
+    n_components: int (optional, default: None)
         Number of principal components or dimensions in the embedding space
-        taken into account for each observation
+        taken into account for each observation.
 
     Returns
     -------
-    Return dict-like mapping where keys are clusters and values are barycenter values
+    Return dict-like mapping where keys are clusters and values are barycenter values.
     """
 
     X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)

@@ -32,8 +32,9 @@ def convert_gene_identifiers(
 
     Parameters
     ----------
-    scdata: ScData
-        ScData object where gene aliases are converted into the desired identifiers.
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+        The stored gene identifiers are converted into the desired identifier format.
     axis: Axis (default: 'var')
         whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
     gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
@@ -82,8 +83,9 @@ def standardize_genenames(
 
     Parameters
     ----------
-    scdata: ScData
-        ScData object where names are expected being standardized.
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+        The stored gene names are standardized.
     axis: Axis (default: 'var')
         whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
     copy: bool (default: False)
@@ -113,7 +115,7 @@ def var_names_merge_duplicates(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix where duplicated variable names are merged.
+        Unimodal annotated data matrix where duplicated variable names are merged.
     var_names_column: str (optional, default: None)
         If specify, give a priority order for which row in adata.var is saved when rows are merged.
         For instance, if multiple rows have same index but different cell values,

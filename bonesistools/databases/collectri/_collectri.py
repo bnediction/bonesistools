@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union
+from typing import (
+    Optional,
+    Union,
+    Mapping,
+    Any
+)
 
 import networkx as nx
 
@@ -13,7 +18,7 @@ def load_grn(
     gene_synonyms: Optional[GeneSynonyms] = None,
     input_type: str = "genename",
     output_type: str = "referencename",
-    **kwargs
+    **kwargs: Mapping[str, Any]
 )-> nx.MultiDiGraph:
     """
     Provide a Graph Regulatory Network (GRN) derived from Collectri database [1].
@@ -28,7 +33,7 @@ def load_grn(
     remove_pmid
         Specify whether to remove PMIDs in node labels.
     kwargs
-        Keyword-arguments passed to omnipath.interactions.CollecTRI.get().
+        Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
     
     Returns
     -------

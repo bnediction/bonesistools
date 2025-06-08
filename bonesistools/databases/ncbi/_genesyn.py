@@ -2,12 +2,13 @@
 
 from typing import (
     Union,
-    Any,
+    Mapping,
     Sequence,
     Dict,
     Tuple,
     Literal,
     Callable,
+    Any,
     get_args
 )
 from pandas import DataFrame
@@ -153,8 +154,8 @@ class GeneSynonyms(object):
     def __call__(
         self,
         data: Union[InteractionList, DataFrame, Graph],
-        *args,
-        **kwargs
+        *args: Sequence[Any],
+        **kwargs: Mapping[str, Any]
     ):
         if (isinstance(data, SequenceInstance) and not isinstance(data, str)) or isinstance(data, set):
             return self.sequence_standardization(data, *args, **kwargs)
@@ -424,8 +425,8 @@ class GeneSynonyms(object):
     def __conversion_function(
         self,
         alias_type: Union[AliasType, str] = "referencename",
-        *args,
-        **kwargs
+        *args: Sequence[Any],
+        **kwargs: Mapping[str, Any]
     ) -> Callable:
         """
         Function converting gene identifiers.

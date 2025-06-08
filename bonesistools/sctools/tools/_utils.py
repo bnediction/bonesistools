@@ -12,21 +12,21 @@ from .._typing import (
 @anndata_or_mudata_checker
 def choose_representation(
     scdata: ScData, # type: ignore
-    use_rep: Optional[str]="X_pca",
-    n_components: Optional[str]=None
+    use_rep: str = "X_pca",
+    n_components: Optional[int] = None
 ) -> ndarray:
     """
     Get a matrix representation of data.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    use_rep
-        Use the indicated representation in scdata.obsm
-    n_components
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    use_rep: str (default: 'X_pca')
+        Use the indicated representation in scdata.obsm.
+    n_components: int (optional, default: None)
         Number of principal components or dimensions in the embedding space
-        taken into account for each observation
+        taken into account for each observation.
 
     Returns
     -------
@@ -50,20 +50,20 @@ def choose_representation(
 @anndata_or_mudata_checker
 def _get_distances(
     scdata: ScData, # type: ignore
-    obsp: Optional[str]=None,
-    neighbors_key: Optional[str]=None
+    obsp: Optional[str] = None,
+    neighbors_key: Optional[str] = None
 ) -> ndarray:
     """
     Get distance matrix already computed.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    obsp
-        If specified, return scdata.obsp['obsp']
-    neighbors_key
-        If specified, retrieve distance matrix using information in scdata.uns['neighbors_key']
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    obsp: str (optional, default: None)
+        If specified, return scdata.obsp['obsp'].
+    neighbors_key: str (optional, default: None)
+        If specified, retrieve distance matrix using information in scdata.uns['neighbors_key'].
 
     Returns
     -------
@@ -87,20 +87,20 @@ def _get_distances(
 @anndata_or_mudata_checker
 def _get_connectivities(
     scdata: ScData, # type: ignore
-    obsp: Optional[str]=None,
-    neighbors_key: Optional[str]=None
+    obsp: Optional[str] = None,
+    neighbors_key: Optional[str] = None
 ) -> ndarray:
     """
     Get connectivity matrix already computed.
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    obsp
-        If specified, return scdata.obsp['obsp']
-    neighbors_key
-        If specified, retrieve connectivity matrix using information in scdata.uns['neighbors_key']
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    obsp: str (optional, default: None)
+        If specified, return scdata.obsp['obsp'].
+    neighbors_key: str (optional, default: None)
+        If specified, retrieve distance matrix using information in scdata.uns['neighbors_key'].
 
     Returns
     -------

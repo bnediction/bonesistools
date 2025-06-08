@@ -57,7 +57,7 @@ def set_index(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     keys: List[str]
         Either a single column key or a list containing an arbitrary combination of column keys.
     axis: Axis (default: 0)
@@ -108,7 +108,7 @@ def filter_obs(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     obs: str
         column name in 'adata.obs' used for filtering.
     function: Callable
@@ -150,7 +150,7 @@ def filter_var(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     var: str
         Column name in 'adata.var' used for filtering.
     function: Callable
@@ -213,7 +213,7 @@ def regress_out(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     keys: Keys
         Keys in 'adata.obs' on which to regress on.
     layer: str (optional, default: None)
@@ -273,9 +273,11 @@ def merge(
     Parameters
     ----------
     left_ad: ad.AnnData
-        Annotated data matrix receiving information.
+        Unimodal annotated data matrix.
+        It corresponds to the object receiving new information.
     right_ad: ad.AnnData
-        Annotated data matrix sending information.
+        Unimodal annotated data matrix.
+        It corresponds to the object sending information.
     axis: Axis (default: 0)
         Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
     suffixes: Tuple[str, str] (default: ('_x','_y'))
@@ -329,9 +331,11 @@ def transfer_layer(
     Parameters
     ----------
     left_ad: ad.AnnData
-        Annotated data matrix receiving layer-based information.
+        Unimodal annotated data matrix.
+        It corresponds to the object receiving layer-based information.
     right_ad: ad.AnnData
-        Annotated data matrix sending layer-based information.
+        Unimodal annotated data matrix.
+        It corresponds to the object sending layer-based information.
     layers: Keys
         Sequence where each element is a string indicating the layer to add in 'left_ad'.
     copy: bool (default: False)
@@ -395,9 +399,11 @@ def transfer_obs_sti(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix receiving information (integrated dataset).
+        Unimodal annotated data matrix.
+        It corresponds to the integrated dataset receiving information.
     adatas: AnnDataList
-        Annotated data matrix sending information (specific datasets).
+        List of unimodal annotated data matrix.
+        It corresponds to the specific datasets sending information.
     obs: Keys
         Column names in specific 'adata.obs' to transfer.
     conditions: Keys
@@ -464,9 +470,11 @@ def transfer_obs_its(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix sending information (integrated dataset).
+        Unimodal annotated data matrix.
+        It corresponds to the integrated dataset sending information.
     adatas: AnnDataList
-        Annotated data matrix receiving information (specific datasets).
+        List of unimodal annotated data matrix.
+        It corresponds to the specific datasets receiving information.
     obs: Keys
         Column names in integrated 'adata.obs' to transfer.
     conditions: Keys

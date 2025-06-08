@@ -3,9 +3,11 @@
 from typing import (
     Optional,
     Union,
+    Mapping,
     Sequence,
     Tuple,
-    Callable
+    Callable,
+    Any
 )
 from anndata import AnnData
 from ._typing import RGB
@@ -32,7 +34,7 @@ def kde_plot(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     default_parameters: Optional[Callable] = None,
-    **kwargs
+    **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
     Draw gene-related density function using kernel density estimation.
@@ -40,7 +42,7 @@ def kde_plot(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     gene: str
         Gene of interest for which display the density.
     layer: str (optional, default: None)

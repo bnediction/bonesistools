@@ -40,14 +40,14 @@ Suffixes = Tuple[Optional[str], Optional[str]]
 
 AxisInt = int
 Axis = Union[AxisInt, Literal["obs", "var"]]
-Keys = Union[Sequence[str],str]
+Keys = Union[str, Sequence[str]]
 
 AnnDataList = List[AnnData]
 
 if _mudata_is_available:
     from mudata import MuData
     MuDataList = List[MuData]
-    ScData = Union[AnnData,MuData]
+    ScData = Union[AnnData, MuData]
 else:
     MuData = type(NotImplemented)
     MuDataList = List[type(NotImplemented)]

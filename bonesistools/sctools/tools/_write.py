@@ -14,7 +14,7 @@ PathLike = Union[str,Path]
 def to_csv(
     adata: AnnData,
     filename: PathLike,
-    layer: Optional[str]=None
+    layer: Optional[str] = None
 ) -> None:
 
     filename = str(filename)
@@ -34,7 +34,7 @@ def to_csv(
 def to_mtx(
     adata: AnnData,
     filename: PathLike,
-    layer: Optional[str]=None
+    layer: Optional[str] = None
 ) -> None:
     
     filename = str(filename)
@@ -51,7 +51,7 @@ def to_mtx(
 def to_npz(
     adata: AnnData,
     filename: PathLike,
-    layer: Optional[str]=None
+    layer: Optional[str] = None
 ) -> None:
     
     filename = str(filename)
@@ -68,7 +68,7 @@ def to_npz(
 def to_csv_or_mtx(
     adata: AnnData,
     filename: PathLike,
-    layer: Optional[str]=None,
+    layer: Optional[str] = None,
 ) -> None:
     
     if layer is None:
@@ -85,7 +85,7 @@ def to_csv_or_mtx(
 def to_csv_or_npz(
     adata: AnnData,
     filename: PathLike,
-    layer: Optional[str]=None,
+    layer: Optional[str] = None,
 ) -> None:
     
     if layer is None:

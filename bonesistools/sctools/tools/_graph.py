@@ -14,30 +14,33 @@ def get_paga_graph(
     obsm: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
-):
+) -> nx.DiGraph:
     """
-    Get the partition-based graph abstraction (PAGA) graph stored in 'adata'
-    with a graph-based data structure.
-    To compute the PAGA matrix, please use 'scanpy.tl.paga'.
-    PAGA can also be computed using 'scvelo'. In this case, please run previously
-    adata.uns['edges'] = adata.uns["paga"]['edges']
-
+    Get the partition-based graph abstraction (paga) graph stored in 'adata' with a graph-based data structure.
+    To compute the paga matrix, please run 'scanpy.tl.paga'. Paga can also be computed using scvelo [1].
+    In this case, please use adata.uns['edges'] = adata.uns["paga"]['edges'] before.
+    
     Parameters
     ----------
-    adata
-        Annotated data matrix
-    obs
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values
-    obsm
-        The data points are retrieved by the first columns in .obsm['obsm']
-    edges
-        The adjacency matrix-based data structure is retrieved by .uns['edges'] (default: transitions_confidence)
-    threshold
-        confidence threshold (default: 0.01)
+    adata: ad.AnnData
+        Unimodal annotated data matrix.
+    obs: str
+        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+    obsm: str
+        The data points are retrieved by the first columns in .obsm['obsm'].
+    edges: str (default: transitions_confidence)
+        The adjacency matrix-based data structure is retrieved by adata.uns['edges'].
+    threshold: float (default: 0.01)
+        Confidence threshold.
 
     Returns
     -------
-    nx.DiGraph (directed graph-based data structure)
+    Return DiGraph corresponding to the paga.
+
+    References
+    ----------
+    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell states through dynamical modeling.
+    Nature biotechnology, 38(12), 1408-1414 (https://doi.org/10.1038/s41587-020-0591-3)
     """
 
     clusters = adata.obs[obs].cat.categories

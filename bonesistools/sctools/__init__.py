@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-sctools handles and performs operations on unimodal and multimodal annotated data (anndata/mudata). \
+sctools handles and performs operations on unimodal and multimodal annotated data matrix (anndata/mudata). \
 It offers a range of efficient features not available in Scanpy package, proposes some corrections \
 on Scanpy-based functions when inconsistencies have been highlighted, and matplotlib-based visualizations.
 """

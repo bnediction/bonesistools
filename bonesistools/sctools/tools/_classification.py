@@ -26,7 +26,7 @@ def mitochondrial_genes(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
         Input identifier type of indices.
     key: str (default: 'mt')
@@ -82,7 +82,7 @@ def ribosomal_genes(
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
         Input identifier type of indices.
     key: str (default: 'rps')

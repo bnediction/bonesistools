@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union, Sequence
-from .._typing import anndata_checker
+from .._typing import (
+    anndata_checker,
+    Keys
+)
 
 from anndata import AnnData
 from pandas import DataFrame
@@ -12,24 +15,24 @@ from scipy.sparse import issparse
 @anndata_checker
 def anndata_to_dataframe(
     adata: AnnData,
-    obs: Optional[Union[str, Sequence[str]]] = None,
+    obs: Optional[Keys] = None,
     layer: Optional[str] = None,
-    is_log: Optional[bool] = False
+    is_log: bool = False
 ) -> DataFrame:
     """
     Convert Anndata instance into Dataframe instance.
     
     Parameters
     ----------
-    adata
-        Annotated data matrix.
-    obs
+    adata: ad.AnnData
+        Unimodal annotated data matrix.
+    obs: Keys (optional, default: None)
         Any key or key set in anndata.obs.
         If specified, add adata.obs.loc[obs] to dataframe.
-    layer
+    layer: str (optional, default: None)
         Any key in adata.layers.
         If provided, use adata.layers[layer] for expression values instead of adata.X.
-    is_log
+    is_log: bool (default: False)
         Boolean value specifying if the counts are logarithmized.
         If value parameter is 'True', perform an exponential transformation.
         If counts are still logarithmized but user want to keep logarithmized counts,
@@ -37,7 +40,7 @@ def anndata_to_dataframe(
     
     Returns
     -------
-    Dataframe providing information about counts and optionnaly other additionnal chosen information.
+    Return DataFrame providing information about counts and optionnaly other additionnal chosen information.
     """
 
     if layer:

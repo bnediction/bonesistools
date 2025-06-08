@@ -20,34 +20,43 @@ def calculate_logfoldchanges(
     adata: AnnData,
     groupby: str,
     layer: Optional[str] = None,
-    is_log: Optional[bool] =False,
-    cluster_rebalancing: Optional[bool] = False
+    is_log: bool =False,
+    cluster_rebalancing: bool = False
 ) -> pd.DataFrame:
-    """Log2 fold-change is a metric translating how much the transcript's expression
+    """
+    Log2 fold-change is a metric translating how much the transcript's expression
     has changed between cells in and out of a cluster. The reported values are based
     on a logarithmic scale to base 2 with respect to the fold change ratios.
     According to <https://www.biostars.org/p/453129/>, computed log2 fold changes
     are different between FindAllMarkers (package Seurat) and rank_gene_groups
     (module Scanpy) functions. As mentionned, results derived from Scanpy are inconsistent.
-    This current function 'calculate_logfoldchanges' computes it in the right way, with identical
-    results to Seurat by keeping default options.
+    This function computes it in the right way, with identical results to Seurat by keeping default options.
 
     Parameters
     ----------
-    adata
-        Annotated data matrix.
-    groupby
+    adata: ad.AnnData
+        Unimodal annotated data matrix.
+    groupby: str
         Any key in anndata.obs corresponding to defined clusters or groups.
-    layer
+    layer: str (optional, default: None)
         Any key in anndata.layer.
         If not specify, log2 fold changes are derived from anndata.X.
-    is_log
-        Boolean value specifying if the counts is logarithmized.
-    cluster_rebalancing
+    is_log: bool (default: False)
+        Specify whether counts are logarithmized or not.
+    cluster_rebalancing: bool (default: False)
         If no cluster rebalancing, cells are equally-weighted.
         Otherwise, cells are weighted with cluster size such as clusters are equally-weighted.
         It means that cells in small cluster have a greater weight than other cells in order
-        to correct cluster size effects.    
+        to correct cluster size effects.
+    
+    Returns
+    -------
+    Return DataFrame storing log2 fold-changes.
+    
+    See also
+    --------
+    Get more information about the difference between log2 fold-changes derived with Seurat and Scanpy here:
+    <https://www.biostars.org/p/453129/>
     """
 
     def compute_logfc(mean_in, mean_out, cluster):
@@ -116,12 +125,11 @@ def hypergeometric_test(
     signature: Sequence[str],
     markers: Sequence[str],
 ) -> float:
-    """Estimates the p-value (or survival function) of an hypergeometric
-    distribution in order to test whether marker genes significantly
-    match signature genes.
-    Given a population size N and a number of success states K,
-    it describes the probability of having at least k successes
-    in n draws, without replacement, where:
+    """
+    Estimates the p-value (or survival function) of an hypergeometric distribution in order
+    to test whether marker genes significantly match signature genes.
+    Given a population size N and a number of sccess states K, it describes the probability
+    of having at least k successes in n draws, without replacement, where:
     - N is the number of genes in anndata,
     - K is the number of signature genes,
     - n is the number of markers,
@@ -131,14 +139,18 @@ def hypergeometric_test(
 
     Parameters
     ----------
-    adata
-        Annotated data matrix.
-    signature
+    adata: ad.AnnData
+        Unimodal annotated data matrix.
+    signature: Sequence[str]
         Set of signature genes in a given cell-type.
         A signature is a set of over-expressed genes in a cell-type.
-    markers
+    markers: Sequence[str]
         Set of markers (genes) in a given cluster.
         A marker set is a set of over-expressed genes in a cluster.
+    
+    Returns
+    -------
+    Return the p-value.
     """
 
     if not isinstance(adata, AnnData):

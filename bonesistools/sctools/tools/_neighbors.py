@@ -4,7 +4,8 @@ from typing import (
     Optional,
     Union,
     Sequence,
-    Any
+    Any,
+    Type
 )
 from collections.abc import Mapping
 try:
@@ -28,7 +29,7 @@ import pandas as pd
 import anndata as ad
 
 import networkx as nx
-from networkx import Graph
+from networkx import Graph, DiGraph
 
 from scipy.sparse import csr_matrix, issparse, diags
 from sklearn.metrics import pairwise_distances
@@ -43,8 +44,8 @@ def kneighbors_graph(
     use_rep: Optional[str] = None,
     n_components: Optional[int] = None,
     metric: Metric = "euclidean",
-    create_using: Optional[Graph] = nx.DiGraph,
-    edge_attr: Optional[str] = "distance",
+    create_using: Type = DiGraph,
+    edge_attr: str = "distance",
     index_or_name: Literal["index","name"] = "index",
     n_jobs: int = 1,
     **metric_kwds: Mapping[str, Any]
@@ -54,32 +55,31 @@ def kneighbors_graph(
 
     Parameters
     ----------
-    scdata
-        AnnData or MuData object
-    n_neighbors
-        number of closest neighbors
-    use_rep
-        Use the indicated representation in scdata.obsm
-    n_components
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    n_neighbors: int
+        number of closest neighbors.
+    use_rep: str (optional, default: None)
+        Use the indicated representation in scdata.obsm.
+    n_components: int (optional, default: None)
         Number of principal components or dimensions in the embedding space
-        taken into account for each observation
-    metric
-        Metric used when calculating pairwise distances between observations
-    create_using
-        Graph type to return
-        If graph instance, then cleared it before computing k-nearest neighbors
-    edge_attr
-        Attribute to which the distance values are assigned on each edge
-    index_or_name
-        node names are referring either to index number ('index') or index name ('name')
-    n_jobs
-        Number of allocated processors
+        taken into account for each observation.
+    metric: Metric (default: 'euclidean')
+        Metric used when calculating pairwise distances between observations.
+    create_using: Type (default: nx.DiGraph)
+        Graph type to return. If graph instance, then cleared it before computing k-nearest neighbors.
+    edge_attr: str (default: 'distance')
+        Attribute to which the distance values are assigned on each edge.
+    index_or_name: 'index' | 'name' (default: 'index')
+        node names are referring either to index number ('index') or index name ('name').
+    n_jobs: int (default: 1)
+        Number of allocated processors.
     **metric_kwds
-        Any further parameters passed to the distance function
+        Any further parameters passed to the distance function.
 
     Returns
     -------
-    Return Graph object.
+    Return nx.Graph object storing weighted edges that connects two nodes.
     """
 
     from sklearn import neighbors
@@ -121,24 +121,24 @@ class Knnbs(object):
 
     Parameters
     ----------
-    n_neighbors
-        number of closest neighbors
-    use_rep
-        Use the indicated representation in adata.obsm
-    n_components
+    n_neighbors: int
+        Number of closest neighbors.
+    use_rep: str (default: 'X_pca')
+        Use the indicated representation in adata.obsm.
+    n_components: int (optional, default: None)
         Number of principal components or dimensions in the embedding space
-        taken into account for each observation
-    metric
-        Metric used when calculating pairwise distances between observations
+        taken into account for each observation.
+    metric: Metric (default: 'euclidean')
+        Metric used when calculating pairwise distances between observations.
     **metric_kwds
-        Any further parameters passed to the distance function
+        Any further parameters passed to the distance function.
     """
 
     def __init__(
         self,
         n_neighbors: int,
-        use_rep: Optional[str] = "X_pca",
-        n_components: Optional[str] = None,
+        use_rep: str = "X_pca",
+        n_components: Optional[int] = None,
         metric: Metric = "euclidean",
         **metric_kwds: Mapping[str, Any]
     ):
@@ -207,12 +207,12 @@ class Knnbs(object):
 
         Parameters
         ----------
-        adata
-            AnnData object
-        obs
-            Column name in 'adata.obs' used as reference for clusters
-        n_jobs
-            Number of allocated processors
+        adata: ad.AnnData
+            Unimodal annotated data matrix.
+        obs: str
+            Column name in 'adata.obs' used as reference for clusters.
+        n_jobs: int (default: 1)
+            Number of allocated processors.
 
         Returns
         -------
@@ -269,11 +269,10 @@ class Knnbs(object):
 
         Parameters
         ----------
-        method
-            Algorithm used to compute the shortest path lengths
-            (supported values: 'dijkstra', 'bellman-ford')
-        n_jobs
-            Number of allocated processors
+        method: 'dijkstra' | 'bellman-ford' (default: 'dijkstra')
+            Algorithm used to compute the shortest path lengths.
+        n_jobs: int (default: 1)
+            Number of allocated processors.
     
         Returns
         -------
@@ -328,13 +327,13 @@ class Knnbs(object):
 
         Parameters
         ----------
-        size
-            Number of cells in each macrostate
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
-        key
-            Pandas serie name
-        clusters
-            List of clusters for which cell subpopulations are computed
+        size: int (default: 30)
+            Number of cells in each macrostate.
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+        key: str (default: 'knnbs')
+            Pandas serie name.
+        clusters: Sequence[str] (optional, default: None)
+            List of clusters for which cell subpopulations are computed.
     
         Returns
         -------
@@ -386,13 +385,13 @@ class Knnbs(object):
 
         Parameters
         ----------
-        size
-            Number of cells in each macrostate
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
-        key
-            Pandas serie name
-        clusters
-            List of clusters for which cell subpopulations are computed
+        size: int (default: 30)
+            Number of cells in each macrostate.
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+        key: str (default: 'knnbs')
+            Pandas serie name.
+        clusters: Sequence[str] (optional, default: None)
+            List of clusters for which cell subpopulations are computed.
     
         Returns
         -------
@@ -448,16 +447,16 @@ class Knnbs(object):
         Parameters
         ----------
         size
-            Number of cells in each macrostate
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster
-        key
-            Pandas serie name
-        subclusters_maximizing_distances
+            Number of cells in each macrostate.
+            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+        key: str (default: 'knnbs')
+            Pandas serie name.
+        subclusters_maximizing_distances: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
-            by maximizing distances to other clusters' barycenters
-        subclusters_minimizing_distances
+            by maximizing distances to other clusters' barycenters.
+        subclusters_minimizing_distances: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
-            by minimizing distances to self barycenter 
+            by minimizing distances to self barycenter .
     
         Returns
         -------
@@ -554,44 +553,44 @@ def shared_neighbors(
     scdata: ScData, # type: ignore
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
-    prune_snn: Optional[float] = 1/15,
-    metric: Optional[str] = "euclidean",
+    prune_snn: Union[float, int] = 1/15,
+    metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False
-) -> Union[ad.AnnData, None]:
-    """Compute a shared neighborhood (SNN) graph of observations.
-
-    The neighbor search relies on a previously computed neighborhood graph
-    (such as kNN algorithm).
+) -> Union[ScData, None]: # type: ignore
+    """
+    Compute a shared neighborhood (SNN) graph of observations.
+    The neighbor search relies on a previously computed neighborhood graph (such as kNN algorithm).
+    Be careful: connectivity are not well computed. This issue has to be fixed.
 
     Parameters
     ----------
-    scdata
-        Annotated data matrix
-    knn_key
-        If not specified, the used neighbors data are retrieved from .uns['neighbors'],
-        otherwise the used neighbors data are retrieved from .uns['key_added']
-    snn_key
-        If not specified, the shared neighbors data are stored in .uns['shared_neighbors']
-        If specified, the shared neighbors data are added to .uns['key_added']
-    prune_snn
+    scdata: ad.AnnData | md.MuData
+        Unimodal or multimodal annotated data matrix.
+    knn_key: str (default: 'neighbors')
+        If not specified, the used neighbors data are retrieved from scdata.uns['neighbors'],
+        otherwise the used neighbors data are retrieved from scdata.uns['key_added'].
+    snn_key: str (default: 'shared_neighbors')
+        If not specified, the shared neighbors data are stored in scdata.uns['shared_neighbors']
+        If specified, the shared neighbors data are added to scdata.uns['key_added'].
+    prune_snn: float | int (default: 1/15)
         If zero value, no prunning is performed. If strictly positive, removes edge between two neighbors
-        in the shared neighborhood graph who have a number of neighbors less than the specified value
-        Value can be relative (float between 0 and 1) or absolute (integer between 1 and k)
-    metric
-        Metric used for computing distances between two neighbors by using scdata.obsm
-    normalize_connectivities
+        in the shared neighborhood graph who have a number of neighbors less than the specified value.
+        Value can be relative (float between 0 and 1) or absolute (integer between 1 and k).
+    metric: Metric (default: 'euclidean')
+        Metric used for computing distances between two neighbors by using scdata.obsm.
+    normalize_connectivities: bool (default: True)
         If false, connectivities provide the absolute number of shared neighbors (integer between 0 and k),
-        otherwise provide the relative number of shared neighbors (float between 0 and k)
-    distances_key
-        If specified, distances are stored in .obsp[distances_key],
-        otherwise in .obsp[snn_key+'_distances']
-    connectivities_key
-        If specified, distances are stored in .obsp[connectivities_key],
-        otherwise in .obsp[snn_key+'_connectivities']
-    copy
+        otherwise provide the relative number of shared neighbors (float between 0 and k).
+    distances_key: str (optional, default: None)
+        If specified, distances are stored in scdata.obsp[distances_key],
+        otherwise in scdata.obsp[snn_key+'_distances'].
+    connectivities_key: str (optional, default: None)
+        If specified, distances are stored in scdata.obsp[connectivities_key],
+        otherwise in scdata.obsp[snn_key+'_connectivities'].
+    copy: bool (default: False)
         Return a copy instead of writing to scdata.
 
     Returns

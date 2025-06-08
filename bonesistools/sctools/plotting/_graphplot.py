@@ -33,17 +33,16 @@ def draw_paga(
     node_color: Optional[Union[Sequence[RGB], cycle, Mapping]] = _colors.black,
     outfile: Optional[Path] = None,
     **kwargs
-):
+) -> Union[Axes, None]:
     """
-    Draw the paga graph with Matplotlib.
-    To compute the PAGA matrix, please run 'scanpy.tl.paga'.
-    PAGA can also be computed using 'scvelo'. In this case, please use
+    Draw the paga graph with Matplotlib. To compute the paga matrix, please run 'scanpy.tl.paga'.
+    Paga graph can also be computed using scvelo [1]. In this case, please use
     adata.uns['edges'] = adata.uns["paga"]['edges'] before.
 
     Parameters
     ----------
     adata: ad.AnnData
-        Annotated data matrix.
+        Unimodal annotated data matrix.
     obs: str
         The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
     obsm: str
@@ -66,6 +65,11 @@ def draw_paga(
     Returns
     -------
     Depending on 'outfile', save figure or return axe.
+
+    References
+    ----------
+    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell states through dynamical modeling.
+    Nature biotechnology, 38(12), 1408-1414 (https://doi.org/10.1038/s41587-020-0591-3)
     """
     
     if ax is None:

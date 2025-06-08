@@ -6,7 +6,8 @@ from typing import (
     Union,
     Sequence,
     Tuple,
-    Callable
+    Callable,
+    Any
 )
 from ._typing import RGB
 from .._typing import (
@@ -47,7 +48,7 @@ def __default_plot(
         use_rep: str,
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
-        **kwargs
+        **kwargs: Mapping[str, Any]
     ):
 
         if obs not in scdata.obs:
@@ -107,7 +108,7 @@ def __scatterplot_discrete(
     use_rep: str,
     colors: Optional[Colors] = None,
     n_components: Optional[int] = 2,
-    **kwargs
+    **kwargs: Mapping[str, Any]
 ):
 
     if not hasattr(scdata.obs[obs], "cat"):
@@ -235,7 +236,7 @@ def __scatterplot_continuous(
     use_rep: str,
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
-    **kwargs
+    **kwargs: Mapping[str, Any]
 ):
     
     if colors:
@@ -320,7 +321,7 @@ def __add_labels(
     use_rep: str,
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs
+    **kwargs: Mapping[str, Any]
 ):
 
     barycenters = tl.barycenters(
@@ -365,7 +366,7 @@ def __graph_to_plot(
     scdata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs
+    **kwargs: Mapping[str, Any]
     ):
 
     if ax is None:
@@ -400,7 +401,7 @@ def __add_labels_to_graph(
     scdata: ScData, # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs
+    **kwargs: Mapping[str, Any]
     ):
 
     if ax is None:
@@ -442,7 +443,7 @@ def embedding_plot(
     add_labels_to_graph: bool = False,
     automatic_resize: bool = False,
     default_parameters: Optional[Callable] = None,
-    **kwargs
+    **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
     Draw a scatterplot between the 'n_components' first columns of .obsm['use_rep']
@@ -450,7 +451,7 @@ def embedding_plot(
 
     Parameters
     ----------
-    scdata: ScData
+    scdata: ad.AnnData | md.MuData
         Unimodal or multimodal annotated data matrix.
     obs: str
         The classification is retrieved by scdata.obs['obs'], which must be categorical/qualitative values.
