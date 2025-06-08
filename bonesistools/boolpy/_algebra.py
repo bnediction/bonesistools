@@ -43,7 +43,7 @@ class BooleanDifferentialCalculus(object):
         source_v1, source_v2, target_v1, target_v2
             bool or PartialBoolean
         sign
-            specify the sign effect of source upon target.
+            specify the sign effect of source upon target
 
         Returns
         -------

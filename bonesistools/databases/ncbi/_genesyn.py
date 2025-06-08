@@ -2,7 +2,6 @@
 
 import ctypes
 from collections import namedtuple
-from .._typing import MPBooleanNetwork
 try:
     from sortedcontainers import SortedSet
 except:
@@ -12,7 +11,18 @@ from functools import partial
 
 import warnings
 
-from typing import Union, Any, Sequence, Dict, List, Tuple
+from typing import (
+    Union,
+    Any,
+    Sequence,
+    List,
+    Dict,
+    Tuple,
+    Literal,
+    get_args
+)
+from types import FunctionType
+from .._typing import MPBooleanNetwork
 from pandas._typing import Axis
 try:
     from collections import Sequence as SequenceInstance
@@ -29,7 +39,14 @@ from pandas import DataFrame
 import networkx as nx
 from networkx import Graph
 
-ORGANISMS = {"mouse", "human", "escherichia coli"}
+AliasType = Literal["genename", "geneid", "ensemblid"]
+InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
+
+ORGANISMS = Literal[
+    "mouse",
+    "human",
+    "escherichia coli"
+]
 
 FTP_GENE_INFO = {
     "mouse": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Mus_musculus.gene_info.gz",
@@ -44,14 +61,37 @@ NCBI_FILES = {
 }
 
 class GeneSynonyms(object):
+    """
+    Mapping between gene aliases.
 
-    def __init__(self, organism: str="mouse", force_download: bool=False, show_warnings: bool=False) -> None:
+    Parameters
+    ----------
+    organism: str (default: mouse)
+        Common name of the organism of interest.
+    force_download: bool (default: False)
+        Request to the ncbi ftp protocol for downloading gene info data.
+    show_warnings: bool (default: False)
+        Print warning messages.
+    """
+
+    def __init__(
+        self,
+        organism: str = "mouse",
+        force_download: bool = False,
+        show_warnings: bool = False
+    ) -> None:
+        
+        def valid_alias_type(*args):
+            return Literal[args]
+
         organism = organism.lower().replace("-"," ")
-        if organism in ORGANISMS:
+
+        if organism in get_args(ORGANISMS):
             self.organism = organism
         else:
             raise ValueError(f"invalid argument value for 'organism': {organism}")
         self.ncbi_file = NCBI_FILES[organism]
+
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
             os.system(command_parsing)
@@ -59,27 +99,44 @@ class GeneSynonyms(object):
             pass
         else:
             raise TypeError(f"unsupported argument type for '{force_download}': expected {bool} but received {type(force_download)}")
+
         self.force_download = force_download
         self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
-        self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
+        self.databases = Literal[{db for db in self.gene_aliases_mapping["databases"].keys()}]
+        self.valid_alias_types = valid_alias_type("genename", "geneid", "ensemblid", *self.gene_aliases_mapping["databases"].keys())
+
         return None
     
-    def __get__(self, attribute: str = "gene_aliases_mapping") -> Any:
+    def __get__(
+        self,
+        attribute: str = "gene_aliases_mapping"
+    ) -> Any:
+    
         if attribute == "__upper_gene_names_mapping":
             raise AttributeError(f"attribute '{attribute}' not accessed: private")
         else:
             return getattr(self, attribute)
     
-    def __set__(self, organism: str=None, force_download: bool=False, show_warnings: bool=False) -> None:
-        if organism is None and self.organism in ORGANISMS:
+    def __set__(
+        self,
+        organism: str = None,
+        force_download: bool = False,
+        show_warnings: bool = False
+    ) -> None:
+        
+        def valid_alias_type(*args):
+            return Literal[args]
+    
+        if organism is None and self.organism in get_args(ORGANISMS):
             pass
-        elif organism in ORGANISMS:
+        elif organism in get_args(ORGANISMS):
             self.organism = organism
         else:
             raise ValueError(f"invalid argument value for 'organism': {organism}")
         self.ncbi_file = NCBI_FILES[self.organism]
+        
         if force_download is True:
             command_parsing = f"wget --quiet --show-progress -cO {self.ncbi_file}.gz {FTP_GENE_INFO[self.organism]} && gunzip --quiet {self.ncbi_file}.gz"
             os.system(command_parsing)
@@ -87,16 +144,19 @@ class GeneSynonyms(object):
             pass
         else:
             raise TypeError(f"unsupported argument type for '{force_download}': expected {bool} but received {type(force_download)}")
+        
         self.force_download = force_download
         self.show_warnings = show_warnings
         self.gene_aliases_mapping = self.__aliases_from_NCBI(self.ncbi_file)
         self.__upper_gene_names_mapping = {key.upper(): value for key, value in self.gene_aliases_mapping["genename"].items()}
         self.databases = {_db for _db in self.gene_aliases_mapping["databases"].keys()}
+        self.valid_alias_types = valid_alias_type("genename", "geneid", "ensemblid", *self.gene_aliases_mapping["databases"].keys())
+
         return None
     
     def __call__(
         self,
-        data: Union[Sequence[Tuple[str, str, Dict[str, int]]], DataFrame, Graph],
+        data: Union[InteractionList, DataFrame, Graph],
         *args,
         **kwargs
     ):
@@ -109,19 +169,19 @@ class GeneSynonyms(object):
         else:
             raise TypeError(f"unsupported argument type for 'data': {data}")
 
-    def __aliases_from_NCBI(self, gi_file: Path) -> dict:
+    def __aliases_from_NCBI(self, gi_file: Path) -> Dict:
         """
         Create a dictionary matching each gene name to its NCBI reference gene name.
         For speeding up the task facing a large matrix from NCBI, the parsing of the NCBI gene data is run with awk.
 
         Parameters
         ----------
-        gi_file
-            path to the NCBI gene info data
+        gi_file: Path
+            Path to the NCBI gene info data.
 
         Returns
         -------
-        Return a dictionary where keys correspond to gene name and values correspond to reference gene name
+        Return a mapping between gene name aliases and NCBI reference gene names.
         """
 
         gi_file_cut = Path(f"{gi_file}_cut")
@@ -170,7 +230,7 @@ class GeneSynonyms(object):
                         gene_names.add(_synonym)
                         gene_aliases_mapping["genename"][_synonym] = pointer_to_geneid
                     elif self.show_warnings:
-                        warnings.warn(f"synonym {_synonym} multiple times with ref name: {_reference_name}", stacklevel=10)
+                        warnings.warn(f"synonym {_synonym} multiple times with reference name: {_reference_name}", stacklevel=10)
                 if _ensemblid:
                     gene_aliases_mapping["ensemblid"][_ensemblid] = pointer_to_geneid
                 if _db_name_dict:
@@ -179,30 +239,29 @@ class GeneSynonyms(object):
                             gene_aliases_mapping["databases"][_db] = dict()
                         gene_aliases_mapping["databases"][_db][_name] = pointer_to_geneid
 
-        os.system(f"rm {str(gi_file_cut)}")
+        os.remove(gi_file_cut)
+
         return gene_aliases_mapping
     
-    def get_databases(self):
-        """
-        Provide database names using specific nomenclature.
-        """
-        return self.databases
-
-    def get_geneid(self, alias: str, alias_type: str="genename") -> str:
+    def get_geneid(
+        self,
+        alias: str,
+        alias_type: Union[Literal["genename", "ensemblid"], str] = "genename"
+    ) -> str:
         """
         Provide the geneid with respect to a gene alias.
 
         Parameters
         ----------
-        alias
-            gene alias
-        alias_type
-            genename|ensemblid|<database>
-            see self.get_database() for enumerating database names
+        alias: str
+            Alias for the gene of interest.
+        alias_type: 'genename' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+            See self.databases for enumerating valid database names.
 
         Returns
         -------
-        Given an alias, return its geneid
+        Given a gene alias, return its geneid.
         """
 
         if alias_type == "genename":
@@ -230,21 +289,25 @@ class GeneSynonyms(object):
         else:
             raise ValueError(f"invalid argument value for 'alias_type': {alias_type}")
     
-    def get_reference_name(self, alias: str, alias_type: str="genename") -> str:
+    def get_reference_name(
+        self,
+        alias: str,
+        alias_type: Union[AliasType, str] = "genename"
+    ) -> str:
         """
-        Provide the reference name with respect to a gene alias.
+        Provide the NCBI reference name with respect to a gene alias.
 
         Parameters
         ----------
-        alias
-            gene alias
-        alias_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
+        alias: str
+            Alias for the gene of interest.
+        alias_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+            See self.databases for enumerating valid database names.
 
         Returns
         -------
-        Given an alias, return its reference name
+        Given a gene alias, return its NCBI reference name.
         """
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
@@ -255,21 +318,25 @@ class GeneSynonyms(object):
                 warnings.warn(f"no reference genename correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
-    def get_ensemblid(self, alias: str, alias_type: str="genename") -> str:
+    def get_ensemblid(
+        self,
+        alias: str,
+        alias_type: Union[Literal["genename", "geneid"], str] = "genename"
+    ) -> str:
         """
         Provide the ensemblid with respect to a gene alias.
 
         Parameters
         ----------
-        alias
-            gene alias
-        alias_type
-            genename|geneid|<database>
-            see self.get_database() for enumerating database names
+        alias: str
+            Alias for the gene of interest.
+        alias_type: 'genename' | 'geneid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+            See self.databases for enumerating valid database names.
 
         Returns
         -------
-        Given an alias, return its ensemblid
+        Given a gene alias, return its ensemblid.
         """
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
@@ -280,26 +347,32 @@ class GeneSynonyms(object):
                 warnings.warn(f"no ensemblid correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
     
-    def get_alias_from_database(self, alias: str, database: str, alias_type: str="genename") -> str:
+    def get_alias_from_database(
+        self,
+        alias: str,
+        database: str,
+        alias_type: AliasType = "genename"
+    ) -> str:
         """
-        Provide the database-defined gene name.
+        Provide the database-defined gene name with respect to a gene alias.
 
         Parameters
         ----------
-        database
-            see self.get_database() for enumerating database names
-        alias
-            gene alias
-        alias_type
-            genename|geneid|ensemblid
+        alias: str
+            Alias for the gene of interest.
+        database: <database>
+            Organism-related database name providing gene identifiers.
+            See self.databases for enumerating valid database names.
+        alias_type: 'genename' | 'geneid' | 'ensemblid' (default: 'genename')
+            Identifier type of the given alias.
 
         Returns
         -------
-        Given a gene identifier derived from a database, return its alias
+        Given a gene alias, return its identifier derived from a database.
         """
 
-        if database not in self.get_databases():
-            raise ValueError(f"invalid argument value for 'database': got '{database}' but expected a value in {self.get_databases})")
+        if database not in self.databases:
+            raise ValueError(f"invalid argument value for 'database': got '{database}' but expected a value in {self.databases})")
     
         geneid = self.get_geneid(alias, alias_type) if alias_type != "geneid" else alias
         if geneid in self.gene_aliases_mapping["geneid"]:
@@ -314,128 +387,152 @@ class GeneSynonyms(object):
                 warnings.warn(f"no {database} correspondance for {alias_type} '{alias}'", stacklevel=10)
             return None
 
-    def conversion(self, alias: str, input_type: str="genename", output_type: str="referencename") -> str:
+    def conversion(
+        self,
+        alias: str,
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename"
+    ) -> str:
         """
-        Convert gene alias.
+        Convert gene aliases.
 
         Parameters
         ----------
-        output_type
-            geneid|referencename|ensemblid|<database>
-            see self.get_database() for enumerating database names
+        alias: str
+            Alias for the gene of interest.
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
 
         Returns
         -------
-        Return a function converting gene labels.
+        Given a gene alias, return its desired identifier.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
         if output_type == "referencename":
             output_type = "reference_name"
         if output_type in ["geneid", "reference_name", "ensemblid"]:
             convert = eval(f"self.get_{output_type}")
-        elif output_type in self.get_databases():
+        elif output_type in self.databases:
             convert = partial(self.get_alias_from_database, database=output_type)
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{output_type}'")
         
         return convert(alias=alias, alias_type=input_type)
     
-    def __convert(self, output_type: str="referencename", *args, **kwargs) -> str:
+    def __conversion_function(
+        self,
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
+        *args,
+        **kwargs
+    ) -> FunctionType:
         """
-        Convert gene alias.
+        Function converting gene aliases.
 
         Parameters
         ----------
-        output_type
-            geneid|referencename|ensemblid|<database>
-            see self.get_database() for enumerating database names
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the gene aliases.
 
         Returns
         -------
-        Return a function converting gene labels.
+        Return a function converting gene aliases.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
         if output_type == "referencename":
             output_type = "reference_name"
         if output_type in ["geneid", "reference_name", "ensemblid"]:
             return eval(f"self.get_{output_type}")
-        elif output_type in self.get_databases():
+        elif output_type in self.databases:
             return partial(self.get_alias_from_database, database=output_type)
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{output_type}'")
 
     def sequence_standardization(
         self,
-        gene_sequence: Sequence[str],
-        input_type: str="genename",
-        output_type: str="referencename",
-        keep_if_missing: bool=True
+        aliases: Sequence[str],
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
+        keep_if_missing: bool = True
     ) -> Sequence[str]:
         """
         Create a copy of the input Sequence, with corresponding aliases.
 
         Parameters
         ----------
-        gene_sequence
-            list of genes
-        input_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        output_type
-            referencename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        keep_if_missing
-            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
+        aliases: Sequence[str]
+            List of gene aliases.
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
+        keep_if_missing: bool (default: True)
+            If true, keep origin gene alias instead of None value if origin gene alias is missing from NCBI database.
         
         Returns
         -------
         Return a gene sequence where each gene alias is converted into the user-defined alias type.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
         
         # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
-        standardized_gene_sequence = list()
-        alias_conversion = self.__convert(output_type)
-        for gene in gene_sequence:
-            alias = alias_conversion(alias=gene, alias_type=input_type)
-            alias = gene if (keep_if_missing and alias is None) else alias
-            standardized_gene_sequence.append(alias)
+        standardized_aliases = list()
+        alias_conversion = self.__conversion_function(output_type)
+        for input_alias in aliases:
+            output_alias = alias_conversion(alias=input_alias, alias_type=input_type)
+            output_alias = input_alias if (keep_if_missing and output_alias is None) else output_alias
+            standardized_aliases.append(output_alias)
         
-        standardized_gene_sequence = type(gene_sequence)(standardized_gene_sequence)
+        standardized_aliases = type(aliases)(standardized_aliases)
         
-        return standardized_gene_sequence
+        return standardized_aliases
 
     def interaction_list_standardization(
         self,
-        interactions_list: Sequence[Tuple[str, str, Dict[str, int]]],
-        input_type: str="genename",
-        output_type: str="referencename",
-        keep_if_missing: bool=True
-    ) -> List[Tuple[str, str, Dict[str, int]]]:
+        interaction_list: InteractionList,
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
+        keep_if_missing: bool = True
+    ) -> InteractionList:
         """
         Create a copy of the input list of pairwise interactions, with corresponding aliases.
 
         Parameters
         ----------
         interaction_list
-            list of tuples containing string (source) + string (target) + dict (sign = -1 or 1)
-        input_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        output_type
-            referencename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        keep_if_missing
-            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
-
+            List of tuples containing string (source) + string (target) + dict (sign = -1 or 1).
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
+        keep_if_missing: bool (default: True)
+            If true, keep origin gene alias instead of None value if origin gene alias is missing from NCBI database.
+        
         Returns
         -------
         Return an interaction list where each gene name is converted into the user-defined alias type.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
         # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         standardized_interactions_list = list()
-        alias_conversion = self.__convert(output_type)
-        for interaction in interactions_list:
+        alias_conversion = self.__conversion_function(output_type)
+        for interaction in interaction_list:
             source = alias_conversion(alias=interaction[0], alias_type=input_type)
             source = interaction[0] if (keep_if_missing and source is None) else source
             target = alias_conversion(alias=interaction[0], alias_type=input_type)
@@ -447,54 +544,52 @@ class GeneSynonyms(object):
     def df_standardization(
         self,
         df: DataFrame,
-        axis: Axis=0,
-        input_type: str="genename",
-        output_type: str="referencename",
-        keep_if_missing: bool=True,
+        axis: Axis = 0,
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene name with its reference gene name into 'df'.
+        Replace gene aliases into DataFrame.
 
         Parameters
         ----------
         df
-            DataFrame object where names are expected being standardized
+            DataFrame object where names are expected being standardized.
         axis
-            whether to rename labels from the index (0 or 'index') or columns (1 or 'columns')
-        input_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        output_type
-            referencename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        keep_if_missing
-            if true, keep gene name instead of 'None' value if gene alias is missing from NCBI database.
-        copy
-            return a copy instead of updating 'df'
+            whether to rename labels from the index (0 or 'index') or columns (1 or 'columns').
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
+        copy: bool (default: True)
+            Return a copy instead of updating DataFrame object.
         
         Returns
         -------
         Depending on 'copy', update or return DataFrame object with standardized gene name.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
-        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         df = df.copy() if copy is True else df
-        alias_conversion = self.__convert(output_type)
+        alias_conversion = self.__conversion_function(output_type)
 
         aliases = list()
 
         if axis == 0 or axis == "index":
-            gene_iterator = iter(df.index)
+            iterator = iter(df.index)
         elif axis == 1 or axis == "columns":
-            gene_iterator = iter(df.columns)
+            iterator = iter(df.columns)
         else:
             raise TypeError(f"unsupported argument type for 'axis': {axis}")
 
-        for gene in gene_iterator:
-            alias = alias_conversion(alias=gene, alias_type=input_type)
-            alias = gene if (keep_if_missing and alias is None) else alias
-            aliases.append(alias)
+        for input_alias in iterator:
+            output_alias = alias_conversion(alias=input_alias, alias_type=input_type)
+            output_alias = input_alias if output_alias is None else output_alias
+            aliases.append(output_alias)
 
         if axis == 0 or axis == "index":
             df.index = aliases
@@ -507,41 +602,39 @@ class GeneSynonyms(object):
     def graph_standardization(
         self,
         graph: Graph,
-        input_type: str="genename",
-        output_type: str="referencename",
-        keep_if_missing: bool=True,
-        copy: bool=True
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
+        copy: bool = True
     ) -> Union[Graph, None]:
         """
-        Replace gene name with its reference gene name into 'graph'.
+        Replace gene aliases into Graph.
 
         Parameters
         ----------
         graph
-            graph where nodes must be standardized
-        input_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        output_type
-            referencename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        keep_if_missing
-            if true, keep gene name instead of 'None' value if gene name is missing from NCBI database.
-        copy
-            return a copy instead of updating 'graph'
-        
+            Graph object where nodes are expected being standardized.
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
+        copy: bool (default: True)
+            Return a copy instead of updating Graph object.
+
         Returns
         -------
         Depending on 'copy', update or return Graph object with standardized gene name.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
-        # keep_if_missing = keep_if_missing if (input_type=="genename" and output_type=="referencename") else False
         aliases_mapping = dict()
-        alias_conversion = self.__convert(output_type)
-        for gene in graph.nodes:
-            alias = alias_conversion(alias=gene, alias_type=input_type)
-            alias = gene if (keep_if_missing and alias is None) else alias
-            aliases_mapping[gene] = alias
+        alias_conversion = self.__conversion_function(output_type)
+        for input_alias in graph.nodes:
+            output_alias = alias_conversion(alias=input_alias, alias_type=input_type)
+            output_alias = input_alias if output_alias is None else output_alias
+            aliases_mapping[input_alias] = output_alias
         if copy is True:
             return nx.relabel_nodes(graph, mapping=aliases_mapping, copy=True)
         else:
@@ -551,38 +644,40 @@ class GeneSynonyms(object):
     def bn_standardization(
         self,
         bn: MPBooleanNetwork, # type: ignore
-        input_type: str="genename",
-        output_type: str="referencename",
-        copy: bool=False
+        input_type: Union[AliasType, str] = "genename",
+        output_type: Union[Literal["referencename", "geneid", "ensemblid"], str] = "referencename",
+        copy: bool = False
     ) -> MPBooleanNetwork: # type: ignore
         """
-        Replace gene name with its reference gene name into 'bn'.
+        Replace gene aliases into MPBooleanNetwork.
 
         Parameters
         ----------
-        bn
-            Boolean Network
-        input_type
-            genename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        output_type
-            referencename|geneid|ensemblid|<database>
-            see self.get_database() for enumerating database names
-        copy
-            return a copy instead of updating 'bn' object
+        bn: MPBooleanNetwork
+            MPBooleanNetwork object where variables are expected being standardized.
+        input_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+            Identifier type of the given alias.
+        output_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+            Output identifier type for the given alias.
+        copy: bool (default: True)
+            Return a copy instead of updating MPBooleanNetwork object.
         
         Returns
         -------
         Depending on 'copy', update or return MPBooleanNetwork object with standardized gene name.
+
+        See Also
+        --------
+        self.get_database() for enumerating valid database names.
         """
 
         bn = bn.copy() if copy else bn
 
-        alias_conversion = self.__convert(output_type)
+        alias_conversion = self.__conversion_function(output_type)
         genes = tuple(bn.keys())
-        for gene in genes:
-            alias = alias_conversion(alias=gene, alias_type=input_type)
-            alias = gene if alias is None else alias
-            bn.rename(gene, alias)
+        for input_alias in genes:
+            output_alias = alias_conversion(alias=input_alias, alias_type=input_type)
+            output_alias = input_alias if output_alias is None else output_alias
+            bn.rename(input_alias, output_alias)
                 
         return bn if copy else None

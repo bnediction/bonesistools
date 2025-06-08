@@ -7,34 +7,38 @@ import networkx as nx
 from ..ncbi import GeneSynonyms
 
 def load_grn(
-    organism: Union[str,int]="human",
-    split_complexes=False,
-    remove_pmid: bool=False,
-    gene_synonyms: Optional[GeneSynonyms]=None,
-    input_type: str="genename",
-    output_type: str="referencename",
+    organism: Union[str, int] = "human",
+    split_complexes: bool = False,
+    remove_pmid: bool = False,
+    gene_synonyms: Optional[GeneSynonyms] = None,
+    input_type: str = "genename",
+    output_type: str = "referencename",
     **kwargs
 )-> nx.MultiDiGraph:
     """
-    Provide a Graph Regulatory Network (GRN) derived from Collectri database
-    (<Müller-Dott et al. (2023), Expanding the coverage of regulons from high-confidence
-    prior knowledge for accurate estimation of transcription factor activities>)
+    Provide a Graph Regulatory Network (GRN) derived from Collectri database.
 
     Parameters
     ----------
     organism
-        common name or identifier of the organism of interest (default: human).
+        Common name or identifier of the organism of interest (default: human).
         Identifier can be NCBI ID, EnsemblID or latin name.
     split_complexes
-        specify whether to split complexes into subunits
+        Specify whether to split complexes into subunits.
     remove_pmid
-        specify whether to remove PMIDs in node labels
+        Specify whether to remove PMIDs in node labels.
     kwargs
-        keyword-arguments passed to 'omnipath.interactions.CollecTRI.get'
-        
+        Keyword-arguments passed to omnipath.interactions.CollecTRI.get().
+    
     Returns
     -------
     Return graph from Collectri database.
+
+    References
+    ----------
+    [1] Müller-Dott et al. (2023). Expanding the coverage of regulons from high-confidence
+    prior knowledge for accurate estimation of transcription factor activities.
+    Nucleic Acids Research, 51(20), 10934-10949 (https://doi.org/10.1093/nar/gkad841)
     """
 
     if not isinstance(organism, (str, int)):
