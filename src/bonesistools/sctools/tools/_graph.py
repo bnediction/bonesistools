@@ -11,7 +11,7 @@ import networkx as nx
 def get_paga_graph(
     adata: AnnData,
     obs: str,
-    obsm: str,
+    use_rep: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
 ) -> nx.DiGraph:
@@ -26,8 +26,8 @@ def get_paga_graph(
         Unimodal annotated data matrix.
     obs: str
         The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
-    obsm: str
-        The data points are retrieved by the first columns in .obsm['obsm'].
+    use_rep: str
+        The data points are retrieved by the first columns in .obsm['use_rep'].
     edges: str (default: transitions_confidence)
         The adjacency matrix-based data structure is retrieved by adata.uns['edges'].
     threshold: float (default: 0.01)
@@ -44,7 +44,7 @@ def get_paga_graph(
     """
 
     clusters = adata.obs[obs].cat.categories
-    barycenters = {cluster: np.nanmean(adata.obsm[obsm][adata.obs[obs] == cluster], axis=0) for cluster in clusters}
+    barycenters = {cluster: np.nanmean(adata.obsm[use_rep][adata.obs[obs] == cluster], axis=0) for cluster in clusters}
 
     if edges not in adata.uns:
         if "connectivities" in adata.uns:

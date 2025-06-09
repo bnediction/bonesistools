@@ -25,7 +25,7 @@ from ..tools import get_paga_graph
 def draw_paga(
     adata: AnnData,
     obs: str,
-    obsm: str,
+    use_rep: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
     ax: Optional[Axes] = None,
@@ -45,8 +45,8 @@ def draw_paga(
         Unimodal annotated data matrix.
     obs: str
         The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
-    obsm: str
-        The data points are retrieved by the first columns in adata.obsm['obsm'].
+    use_rep: str
+        The data points are retrieved by the first columns in adata.obsm['use_rep'].
     edges: str (default: 'transitions_confidence')
         The adjacency matrix-based data structure is retrieved by adata.uns['edges'].
     threshold: float (default: 0.01)
@@ -78,7 +78,7 @@ def draw_paga(
     paga = get_paga_graph(
         adata=adata,
         obs=obs,
-        obsm=obsm,
+        use_rep=use_rep,
         edges=edges,
         threshold=threshold
     )

@@ -285,7 +285,10 @@ class Knnbs(object):
         def shortest_path_lengths_from(
             source: str,
         ):
-            distances = pd.Series(data=self.obs.index,index=self.obs.index)
+            distances = pd.Series(
+                data=self.obs.index,
+                index=self.obs.index
+            )
             distances = distances.apply(
                 lambda x: nx.shortest_path_length(
                     self.kneighbors_graph,
@@ -310,7 +313,7 @@ class Knnbs(object):
             warnings.warn("module multiprocess not available: not using CPU parallelization")
             shortest_path_lengths_ls = []
             for category in self.obs.cat.categories:
-                shortest_path_lengths_ls.append((category,shortest_path_lengths_from(category)))
+                shortest_path_lengths_ls.append(shortest_path_lengths_from(category))
         
         shortest_path_lengths_dict = {}
         for k, v in shortest_path_lengths_ls:
