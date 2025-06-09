@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bonesistools"
 description = "BoNesisTools is a python package proposing bioinformatics tools for upstream and downstream analysis of BoNesis framework"
-version = "1.1.1"
+version = "1.1.2"
 license = {file = "LICENSE"}
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [
@@ -68,7 +68,8 @@ default = [
     "decoupler>=1.8",
     "mudata>=0.3.1",
     "mpbn>=4.1",
-    "seaborn"
+    "multiprocess>=0.70.18",
+    "seaborn>=0.12.2"
 ]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]
