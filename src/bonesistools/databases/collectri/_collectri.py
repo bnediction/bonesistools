@@ -78,8 +78,8 @@ def load_grn(
     if genesyn is None:
         return grn
     elif isinstance(genesyn, GeneSynonyms):
-        genesyn.graph_standardization(
-            graph=grn,
+        genesyn(
+            grn,
             gene_type=gene_type,
             alias_type=alias_type,
             copy=False
