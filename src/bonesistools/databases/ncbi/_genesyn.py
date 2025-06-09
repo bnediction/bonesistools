@@ -153,16 +153,18 @@ class GeneSynonyms(object):
     
     def __call__(
         self,
-        data: Union[InteractionList, DataFrame, Graph],
+        data: Union[InteractionList, DataFrame, Graph, MPBooleanNetwork], # type: ignore
         *args: Sequence[Any],
         **kwargs: Mapping[str, Any]
     ):
         if (isinstance(data, SequenceInstance) and not isinstance(data, str)) or isinstance(data, set):
-            return self.sequence_standardization(data, *args, **kwargs)
+            return self.convert_sequence(data, *args, **kwargs)
         elif isinstance(data, DataFrame):
-            return self.df_standardization(data, *args, **kwargs)
+            return self.convert_df(data, *args, **kwargs)
         elif isinstance(data, Graph):
-            return self.graph_standardization(data, *args, **kwargs)
+            return self.convert_graph(data, *args, **kwargs)
+        elif isinstance(data, MPBooleanNetwork):
+            return self.convert_bn(data, *args, **kwargs)
         else:
             raise TypeError(f"unsupported argument type for 'data': {data}")
 
@@ -420,7 +422,7 @@ class GeneSynonyms(object):
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{alias_type}'")
         
-        return convert(gene=gene, alias_type=gene_type)
+        return convert(gene=gene, gene_type=gene_type)
     
     def __conversion_function(
         self,
@@ -434,7 +436,7 @@ class GeneSynonyms(object):
         Parameters
         ----------
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type for the gene identifiers.
+            Gene identifier output format.
 
         Returns
         -------
@@ -470,9 +472,9 @@ class GeneSynonyms(object):
         genes: Sequence[str]
             List of gene identifiers.
         gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-            Input identifier type of genes.
+            Gene identifier input format.
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type of genes.
+            Gene identifier output format.
         keep_if_missing: bool (default: True)
             If true, keep origin gene identifier instead of None value if origin gene identifier is missing from NCBI database.
         
@@ -486,16 +488,16 @@ class GeneSynonyms(object):
         """
         
         # keep_if_missing = keep_if_missing if (gene_type=="genename" and alias_type=="referencename") else False
-        standardized_aliases = list()
+        aliases = list()
         alias_conversion = self.__conversion_function(alias_type)
         for gene in genes:
-            output_alias = alias_conversion(gene=gene, alias_type=gene_type)
+            output_alias = alias_conversion(gene=gene, gene_type=gene_type)
             output_alias = gene if (keep_if_missing and output_alias is None) else output_alias
-            standardized_aliases.append(output_alias)
+            aliases.append(output_alias)
         
-        standardized_aliases = type(genes)(standardized_aliases)
+        aliases = type(genes)(aliases)
         
-        return standardized_aliases
+        return aliases
 
     def convert_interaction_list(
         self,
@@ -513,9 +515,9 @@ class GeneSynonyms(object):
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
             List of tuples containing string (source) + string (target) + dict (sign = -1 or 1).
         gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-            Input identifier type of genes.
+            Gene identifier input format.
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type of genes.
+            Gene identifier output format.
         keep_if_missing: bool (default: True)
             If true, keep origin gene alias instead of None value if origin gene alias is missing from NCBI database.
         
@@ -529,16 +531,16 @@ class GeneSynonyms(object):
         """
 
         # keep_if_missing = keep_if_missing if (gene_type=="genename" and alias_type=="referencename") else False
-        standardized_interactions_list = list()
+        converted_interactions_list = list()
         alias_conversion = self.__conversion_function(alias_type)
         for interaction in interaction_list:
-            source = alias_conversion(gene=interaction[0], alias_type=gene_type)
+            source = alias_conversion(gene=interaction[0], gene_type=gene_type)
             source = interaction[0] if (keep_if_missing and source is None) else source
-            target = alias_conversion(gene=interaction[0], alias_type=gene_type)
+            target = alias_conversion(gene=interaction[0], gene_type=gene_type)
             target = interaction[1] if (keep_if_missing and target is None) else target
-            standardized_interactions_list.append((source, target, interaction[2]))
+            converted_interactions_list.append((source, target, interaction[2]))
 
-        return standardized_interactions_list
+        return converted_interactions_list
 
     def convert_df(
         self,
@@ -559,9 +561,9 @@ class GeneSynonyms(object):
         axis
             whether to rename labels from the index (0 or 'index') or columns (1 or 'columns').
         gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-            Input identifier type of genes.
+            Gene identifier input format.
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type of genes.
+            Gene identifier output format.
         copy: bool (default: True)
             Return a copy instead of updating DataFrame object.
         
@@ -587,7 +589,7 @@ class GeneSynonyms(object):
             raise TypeError(f"unsupported argument type for 'axis': {axis}")
 
         for gene in iterator:
-            output_alias = alias_conversion(gene=gene, alias_type=gene_type)
+            output_alias = alias_conversion(gene=gene, gene_type=gene_type)
             output_alias = gene if output_alias is None else output_alias
             genes.append(output_alias)
 
@@ -615,9 +617,9 @@ class GeneSynonyms(object):
         graph: nx.Graph
             Graph object where gene nodes are converted into the desired identifiers.
         gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-            Input identifier type of genes.
+            Gene identifier input format.
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type of genes.
+            Gene identifier output format.
         copy: bool (default: True)
             Return a copy instead of updating Graph object.
 
@@ -633,7 +635,7 @@ class GeneSynonyms(object):
         aliases_mapping = dict()
         alias_conversion = self.__conversion_function(alias_type)
         for gene in graph.nodes:
-            output_alias = alias_conversion(gene=gene, alias_type=gene_type)
+            output_alias = alias_conversion(gene=gene, gene_type=gene_type)
             output_alias = gene if output_alias is None else output_alias
             aliases_mapping[gene] = output_alias
         if copy is True:
@@ -658,9 +660,9 @@ class GeneSynonyms(object):
         bn: MPBooleanNetwork
             MPBooleanNetwork object where gene variables are converted into the desired identifiers.
         gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-            Input identifier type of genes.
+            Gene identifier input format.
         alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-            Output identifier type of genes.
+            Gene identifier output format.
         copy: bool (default: True)
             Return a copy instead of updating MPBooleanNetwork object.
         
@@ -678,7 +680,7 @@ class GeneSynonyms(object):
         alias_conversion = self.__conversion_function(alias_type)
         genes = tuple(bn.keys())
         for gene in genes:
-            output_alias = alias_conversion(gene=gene, alias_type=gene_type)
+            output_alias = alias_conversion(gene=gene, gene_type=gene_type)
             output_alias = gene if output_alias is None else output_alias
             bn.rename(gene, output_alias)
                 

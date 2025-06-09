@@ -28,7 +28,7 @@ def convert_gene_identifiers(
     copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene identifiers into 'scdata'.
+    Replace gene identifiers into the desired identifier format.
 
     Parameters
     ----------
@@ -38,9 +38,9 @@ def convert_gene_identifiers(
     axis: Axis (default: 'var')
         whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
     gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
-        Input identifier type of genes.
+        Gene identifier input format.
     alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
-        Output identifier type of genes.
+        Gene identifier output format.
     copy: bool (default: False)
         Return a copy instead of updating ScData object.
     
@@ -79,7 +79,7 @@ def standardize_genenames(
     copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
     """
-    Replace gene names with their corresponding NCBI reference names into 'scdata'.
+    Standardize gene names by converting them into their corresponding NCBI reference names.
 
     Parameters
     ----------

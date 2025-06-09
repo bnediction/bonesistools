@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bonesistools"
 description = "BoNesisTools is a python package proposing bioinformatics tools for upstream and downstream analysis of BoNesis framework"
-version = "1.1.0"
+version = "1.1.1"
 license = {file = "LICENSE"}
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [

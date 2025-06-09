@@ -60,8 +60,8 @@ def mitochondrial_genes(
 
     for index in eval(f"adata.{axis}.index"):
         geneid = genesyn.get_geneid(
-            alias=index,
-            alias_type=index_type
+            gene=index,
+            gene_type=index_type
         )
         if geneid in mt_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")
@@ -116,8 +116,8 @@ def ribosomal_genes(
 
     for index in eval(f"adata.{axis}.index"):
         geneid = genesyn.get_geneid(
-            alias=index,
-            alias_type=index_type
+            gene=index,
+            gene_type=index_type
         )
         if geneid in rps_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")

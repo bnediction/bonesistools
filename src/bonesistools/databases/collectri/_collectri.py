@@ -15,9 +15,9 @@ def load_grn(
     organism: Union[str, int] = "human",
     split_complexes: bool = False,
     remove_pmid: bool = False,
-    gene_synonyms: Optional[GeneSynonyms] = None,
-    input_type: str = "genename",
-    output_type: str = "referencename",
+    genesyn: Optional[GeneSynonyms] = None,
+    gene_type: str = "genename",
+    alias_type: str = "referencename",
     **kwargs: Mapping[str, Any]
 )-> nx.MultiDiGraph:
     """
@@ -25,13 +25,19 @@ def load_grn(
 
     Parameters
     ----------
-    organism
-        Common name or identifier of the organism of interest (default: human).
+    organism: str | int (default: 'human')
+        Common name or identifier of the organism of interest.
         Identifier can be NCBI ID, EnsemblID or latin name.
-    split_complexes
+    split_complexes: bool (default: False)
         Specify whether to split complexes into subunits.
-    remove_pmid
+    remove_pmid: bool (default: False)
         Specify whether to remove PMIDs in node labels.
+    gene_synonyms: GeneSynonyms (optional, default: None)
+        If GeneSynonyms object is passed, then gene identifiers are converted into the desired identifier format.
+    gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+        Gene identifier input format.
+    alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+        Gene identifier output format.
     kwargs
         Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
     
@@ -69,16 +75,16 @@ def load_grn(
         edge_attr=True,
         create_using=nx.MultiDiGraph
     )
-    if gene_synonyms is None:
+    if genesyn is None:
         return grn
-    elif isinstance(gene_synonyms, GeneSynonyms):
-        gene_synonyms.graph_standardization(
+    elif isinstance(genesyn, GeneSynonyms):
+        genesyn.graph_standardization(
             graph=grn,
-            input_type=input_type,
-            output_type=output_type,
+            gene_type=gene_type,
+            alias_type=alias_type,
             copy=False
         )
         return grn
     else:
-        raise TypeError(f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(gene_synonyms)}")
+        raise TypeError(f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}")
 
