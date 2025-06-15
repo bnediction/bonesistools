@@ -140,7 +140,7 @@ def __scatterplot_discrete(
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
     fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5)
+    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
 
@@ -265,7 +265,7 @@ def __scatterplot_continuous(
     fig = plt.figure()
     ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
     fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5 if n_components == 2 else 6)
+    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
 
     if scdata.obs[obs].isna().any():
         idx = scdata.obs[obs].isna()

@@ -10,6 +10,8 @@ from typing import (
     Literal,
     Any
 )
+from pandas import Series
+from pandas.core.groupby.generic import SeriesGroupBy
 from ._typing import RGB
 from .._typing import (
     ScData,
@@ -20,22 +22,20 @@ from pathlib import Path
 
 import numpy as np
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.colors import Colormap
 from itertools import cycle
-Colors = Union[Sequence[RGB], cycle, Colormap]
-
 from ._colors import (
     generate_colormap,
     QUALITATIVE_COLORS,
-    black,
-    gray
+    gray,
+    black
 )
 
+Colors = Union[Sequence[RGB], cycle, Colormap]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
 BoxPlots = Mapping[BoxItem, List[Line2D]]
 
@@ -73,7 +73,7 @@ def __get_box_positions(
         positions = np.tile(within_positions, (groups[0], 1))
         for i, row in enumerate(positions):
             row[...] = row + between_positions * i
-        return positions
+        return positions.transpose()
 
 def __apply_box_colors(
     bp,
@@ -84,6 +84,37 @@ def __apply_box_colors(
         if k in items:
             plt.setp(bp.get(k), color=color)
     
+    return None
+
+def __add_points(
+    series: Union[Series, SeriesGroupBy, Mapping[str, SeriesGroupBy]],
+    positions: np.ndarray,
+    scale: float,
+    groups: Optional[Sequence] = None,
+    hues: Optional[Sequence] = None,
+    **kwargs: Mapping[str, Any]
+):
+    ax = plt.gca()
+    if groups is None:
+        pos = positions[0]
+        y = series.dropna()
+        x = np.random.normal(pos, scale=scale, size=len(y))
+        ax.scatter(x, y, **kwargs)
+    elif groups is not None and hues is None:
+        for i, group in enumerate(groups):
+            pos = positions[i]
+            y = series.get_group(group).dropna()
+            x = np.random.normal(pos, scale=scale, size=len(y))
+            ax.scatter(x, y, **kwargs)
+    elif groups is None and hues is not None:
+        raise ValueError(f"invalid argument value for 'groups' and 'hues': expected either both specified or only 'groups' specified")
+    else:
+        for i, hue in enumerate(hues):
+            for j, group in enumerate(groups):
+                pos = positions[i, j]
+                y = series[hue].get_group(group).dropna()
+                x = np.random.normal(pos, scale=scale, size=len(y))
+                ax.scatter(x, y, **kwargs[hue])
     return None
 
 @anndata_or_mudata_checker
@@ -115,8 +146,8 @@ def boxplot(
 
     fig = plt.figure()
     ax = fig.subplots()
-    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 5)
+    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 6)
+    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 8)
 
     if title:
         if isinstance(title, str):
@@ -149,7 +180,7 @@ def boxplot(
     else:
         groups = scdata.obs[groupby].cat.categories
         hues = scdata.obs[hue].cat.categories
-        series = [scdata.obs[scdata.obs[hue] == cat].groupby(by=[groupby])[obs] for cat in hues]
+        series = {cat: scdata.obs[scdata.obs[hue] == cat].groupby(by=[groupby])[obs] for cat in hues}
 
     positions = __get_box_positions(
         widths=widths,
@@ -157,13 +188,47 @@ def boxplot(
         hues=None if hues is None else (len(hues), hue_spacing)
     )
 
-    bps = []
-
     if hue is None:
-        bps.append(
-            plt.boxplot(
-                x=series.dropna() if groupby is None else [series.get_group(group).dropna() for group in groups],
-                positions=positions,
+        bps = plt.boxplot(
+            x=series.dropna() if groupby is None else [series.get_group(group).dropna() for group in groups],
+            positions=positions,
+            notch=notch,
+            sym=sym,
+            vert=vert,
+            widths=widths,
+            patch_artist=patch_artist,
+            showmeans=showmeans,
+            showcaps=showcaps,
+            showbox=showbox,
+            showfliers=showfliers,
+            **kwargs["boxplot"]
+        )
+        if showmedians is False:
+            for median in bps["medians"]:
+                median.set(linewidth=0)
+    else:
+        bps = {}
+        if colors is None:
+            if len(QUALITATIVE_COLORS) >= len(hues):
+                colors = QUALITATIVE_COLORS[0:len(hues)]
+            else:
+                colors = generate_colormap(color_number=len(hues))
+            colors = {k: colors[i] for i, k in enumerate(hues)}
+        if hasattr(colors, "colors"):
+            colors = colors.colors
+        if not isinstance(colors, dict):
+            colors = {k: colors[i] for i, k in enumerate(hues)}
+        if apply_colors_to:
+            if not "medianprops" in kwargs["boxplot"]:
+                kwargs["boxplot"]["medianprops"] = {}
+            if not "color" in kwargs["boxplot"]["medianprops"]:
+                kwargs["boxplot"]["medianprops"]["color"] = black
+        positions_iterator = iter(positions)
+        for k, v in series.items():
+            pos = next(positions_iterator)
+            bps[k] = plt.boxplot(
+                x=[v.get_group(group).dropna() for group in v.groups.keys()],
+                positions=pos,
                 notch=notch,
                 sym=sym,
                 vert=vert,
@@ -175,58 +240,65 @@ def boxplot(
                 showfliers=showfliers,
                 **kwargs["boxplot"]
             )
-        )
-    else:
-        if colors is None:
-            if len(QUALITATIVE_COLORS) >= len(hues):
-                colors = QUALITATIVE_COLORS[0:len(hues)]
-            else:
-                colors = generate_colormap(color_number=len(hues))
-        elif isinstance(colors, Mapping):
-            colors = [colors[_] for _ in hues]
-        if hasattr(colors, "colors"):
-            colors = colors.colors
-
+        if showmedians is False:
+            for bp in bps.values():
+                for median in bp["medians"]:
+                    median.set(linewidth=0)
         if apply_colors_to:
-            if not "medianprops" in kwargs["boxplot"]:
-                kwargs["boxplot"]["medianprops"] = {}
-            if not "color" in kwargs["boxplot"]["medianprops"]:
-                kwargs["boxplot"]["medianprops"]["color"] = black
-
-        series_iterator = iter(series)
-        for pos in positions.transpose():
-            hue_series = next(series_iterator)
-            bps.append(
-                plt.boxplot(
-                    x=[hue_series.get_group(group).dropna() for group in hue_series.groups.keys()],
-                    positions=pos,
-                    notch=notch,
-                    sym=sym,
-                    vert=vert,
-                    widths=widths,
-                    patch_artist=patch_artist,
-                    showmeans=showmeans,
-                    showcaps=showcaps,
-                    showbox=showbox,
-                    showfliers=showfliers,
-                    **kwargs["boxplot"]
-                ))
-
-        if apply_colors_to:
-            for i, bp in enumerate(bps):
+            for v in hues:
                 __apply_box_colors(
-                    bp=bp,
-                    color=colors[i],
+                    bp=bps[v],
+                    color=colors[v],
                     items=apply_colors_to
                 )
-                plt.plot([], c=colors[i], label=hues[i])
+                plt.plot([], c=colors[v], label=v)
             if showlegend is True:
                 plt.legend()
-
-    if showmedians is False:
-        for bp in bps:
-            for median in bp["medians"]:
-                median.set(linewidth=0)
+    
+    if showpoints:
+        if not "scatter" in kwargs:
+            kwargs["scatter"] = {}
+        if hue is None:
+            kwargs["scatter"].update(
+                {
+                    "s": 1 if not "s" in kwargs["scatter"] else kwargs["scatter"]["s"],
+                    "alpha": 0.7 if not "alpha" in kwargs["scatter"] else kwargs["scatter"]["alpha"],
+                    "facecolors": gray if not "facecolors" in kwargs["scatter"] else kwargs["scatter"]["facecolors"],
+                    "edgecolors": "none" if not "edgecolors" in kwargs["scatter"] else kwargs["edgecolors"]["s"]
+                }
+            )
+        else:
+            for v in hues:
+                if v not in kwargs["scatter"]:
+                    kwargs["scatter"][v] = {}
+                kwargs["scatter"][v].update(
+                    {
+                        "s": 1 if not "s" in kwargs["scatter"][v] else kwargs["scatter"][v]["s"],
+                        "alpha": 0.7 if not "alpha" in kwargs["scatter"][v] else kwargs["scatter"][v]["alpha"],
+                        "facecolors": colors[v] if not "facecolors" in kwargs["scatter"][v] else kwargs["scatter"][v]["facecolors"],
+                        "edgecolors": "none" if not "edgecolors" in kwargs["scatter"][v] else kwargs["edgecolors"][v]["s"]
+                    }
+                )
+        __add_points(
+            series=series,
+            positions=positions,
+            scale=widths/8,
+            groups=groups,
+            hues=hues,
+            **kwargs["scatter"]
+        )
+    
+    if groupby is not None:
+        xticks = positions.sum(axis=0)/2 if positions.ndim == 2 else positions
+        plt.xticks(xticks, groups)
+    else:
+        plt.tick_params(
+            axis="x",
+            which="both",
+            bottom=False,
+            top=False,
+            labelbottom=False
+        )
 
     if outfile:
         plt.savefig(outfile, bbox_inches="tight")
