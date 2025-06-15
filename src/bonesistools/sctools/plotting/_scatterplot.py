@@ -436,13 +436,13 @@ def embedding_plot(
     use_rep: str,
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
-    outfile: Optional[Path] = None,
     title: Optional[Union[str, dict]] = None,
     add_labels: bool = False,
     add_graph: bool = False,
     add_labels_to_graph: bool = False,
     automatic_resize: bool = False,
     default_parameters: Optional[Callable] = None,
+    outfile: Optional[Path] = None,
     **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
@@ -461,8 +461,6 @@ def embedding_plot(
         Visualization of the mapping from a list of color values.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
-    outfile: Path (optional, default: None)
-        If specified, save the figure.
     title: Union[str, dict] (optional, default: None)
         Add title to current axe.
     add_labels: bool (default: False)
@@ -476,6 +474,8 @@ def embedding_plot(
         Resize figure. Helpful when the legend is large and comes out of the framework.
     default_parameters: Function (optional, default: None)
         Function specifying default figure parameters.
+    outfile: Path (optional, default: None)
+        If specified, save the figure.
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -564,8 +564,10 @@ def embedding_plot(
     
     if title:
         if isinstance(title, str):
+            fig.canvas.manager.set_window_title(title)
             ax.set_title(title)
         elif isinstance(title, dict):
+            fig.canvas.manager.set_window_title(title["label"])
             ax.set_title(**title)
         else:
             raise TypeError(f"unsupported argument type for 'title': expected {str} or {dict}, but received {type(title)}")

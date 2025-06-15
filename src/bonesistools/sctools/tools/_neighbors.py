@@ -109,7 +109,7 @@ def kneighbors_graph(
     elif index_or_name == "name":
         return nx.relabel_nodes(kneighbors_graph,dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)))
     else:
-        raise ValueError(f"invalid parameter value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
+        raise ValueError(f"invalid argument value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
 
 
 class Knnbs(object):
@@ -153,7 +153,7 @@ class Knnbs(object):
             if n_neighbors.is_integer():
                 self.n_neighbors = n_neighbors
             else:
-                raise ValueError(f"invalid parameter value for 'n_neighbors': expected integer but received '{n_neighbors}'")
+                raise ValueError(f"invalid argument value for 'n_neighbors': expected integer but received '{n_neighbors}'")
         else:
             raise TypeError(f"unsupported argument type for 'n_neighbors': expected {int} but received {type(n_neighbors)}")
 
@@ -168,7 +168,7 @@ class Knnbs(object):
             if n_components.is_integer():
                 self.n_components = n_components
             else:
-                raise ValueError(f"invalid parameter value for 'n_components': expected integer but received '{n_components}'")
+                raise ValueError(f"invalid argument value for 'n_components': expected integer but received '{n_components}'")
         else:
             raise TypeError(f"unsupported argument type for 'n_components': expected {int} but received {type(n_components)}")
         

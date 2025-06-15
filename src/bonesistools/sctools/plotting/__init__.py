@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from ._scatterplot import embedding_plot
+from ._boxplot import boxplot
 from ._graphplot import draw_paga
 from ._kde import kde_plot
 

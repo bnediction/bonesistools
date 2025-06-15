@@ -24,18 +24,19 @@ def set_default_params():
     mpl.rcParams["text.usetex"] = True
     mpl.rcParams["lines.linewidth"] = 1.5
 
-    mpl.rcParams.update({
-        "axes.spines.top"    : False,
-        "axes.spines.bottom" : True,
-        "axes.spines.left"   : True,
-        "axes.spines.right"  : False
-    })
-
-    __margin = 0
-    mpl.rcParams["axes.xmargin"] = __margin
-    mpl.rcParams["axes.ymargin"] = __margin
-    mpl.rcParams["axes.zmargin"] = __margin
-    mpl.rcParams["axes.labelsize"] = 14
+    mpl.rc(
+        "axes",
+        **{
+            "spines.top"    : False,
+            "spines.bottom" : True,
+            "spines.left"   : True,
+            "spines.right"  : False,
+            "xmargin"       : 0,
+            "ymargin"       : 0,
+            "zmargin"       : 0,
+            "labelsize"     : 14
+        }
+    )
 
     mpl.rcParams["axes.prop_cycle"] = cycler.cycler(color=[
         _colors.blue,
@@ -49,6 +50,33 @@ def set_default_params():
         _colors.violet,
         _colors.darkblue
     ])
+
+    mpl.rc(
+        "boxplot",
+        **{
+            "notch"                         : False,
+            "vertical"                      : True,
+            "whiskers"                      : 2,
+            "showmeans"                     : False,
+            "showcaps"                      : True,
+            "showbox"                       : True,
+            "showfliers"                    : True,
+            "flierprops.markerfacecolor"    : None,
+            "flierprops.markerfacecolor"    : _colors.black,
+            "flierprops.linewidth"          : 2.0,
+            "whiskerprops.color"            : _colors.black,
+            "whiskerprops.linewidth"        : 2.0,
+            "whiskerprops.linestyle"        : ":",
+            "capprops.color"                : _colors.black,
+            "capprops.linewidth"            : 2.0,
+            "medianprops.color"             : _colors.blue,
+            "medianprops.linewidth"         : 2.0,
+            "meanprops.color"               : _colors.blue,
+            "meanprops.linewidth"           : 2.0,
+            "meanprops.marker"              : None,
+            "meanprops.linestyle"           : "-"
+        }
+    )
 
     return None
 
