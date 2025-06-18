@@ -12,7 +12,7 @@ import networkx as nx
 from ..ncbi import GeneSynonyms
 
 def load_grn(
-    organism: Union[str, int] = "human",
+    organism: Union[str, int] = "mouse",
     split_complexes: bool = False,
     remove_pmid: bool = False,
     genesyn: Optional[GeneSynonyms] = None,
@@ -25,7 +25,7 @@ def load_grn(
 
     Parameters
     ----------
-    organism: str | int (default: 'human')
+    organism: str | int (default: 'mouse')
         Common name or identifier of the organism of interest.
         Identifier can be NCBI ID, EnsemblID or latin name.
     split_complexes: bool (default: False)

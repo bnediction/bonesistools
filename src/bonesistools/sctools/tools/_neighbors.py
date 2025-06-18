@@ -361,22 +361,23 @@ class Knnbs(object):
         
         shortest_path_length_free_from_self_cluster_df = self.shortest_path_lengths_df.copy(deep=True)
         for idx, obs in self.obs.items():
-            shortest_path_length_free_from_self_cluster_df.at[idx,obs] = np.nan
+            if not pd.isna(obs):
+                shortest_path_length_free_from_self_cluster_df.at[idx,obs] = np.nan
 
         _min_dists = shortest_path_length_free_from_self_cluster_df.min(axis=1, skipna=True)
         _min_dists.name = "min_dist"
-        max_dists = _min_dists.to_frame().merge(
+        min_dists = _min_dists.to_frame().merge(
             right=self.obs.to_frame(),
             left_index=True,
             right_index=True
         )
         for cluster in clusters:
-            _max_dists_cluster = max_dists[max_dists[self.obs.name] == cluster]["min_dist"]
-            if len(_max_dists_cluster) < size:
-                _obs = _max_dists_cluster.index
+            _min_dists_cluster = min_dists[min_dists[self.obs.name] == cluster]["min_dist"]
+            if len(_min_dists_cluster) < size:
+                _obs = _min_dists_cluster.index
             else:
-                _idx = np.argpartition(_max_dists_cluster, kth=len(_max_dists_cluster) - size)[-size:]
-                _obs = _max_dists_cluster.iloc[_idx].index
+                _idx = np.argpartition(_min_dists_cluster, kth=len(_min_dists_cluster) - size)[-size:]
+                _obs = _min_dists_cluster.iloc[_idx].index
             subclusters_series.loc[_obs] = cluster
         
         return subclusters_series
@@ -424,7 +425,8 @@ class Knnbs(object):
             )
             _dists.name = "dist"
             for idx, obs in self.obs.items():
-                _dists.at[idx] = self.shortest_path_lengths_df.loc[idx,obs]
+                if not pd.isna(obs):
+                    _dists.at[idx] = self.shortest_path_lengths_df.loc[idx,obs]
 
         _dists = _dists.to_frame().merge(
             right=self.obs.to_frame(),
