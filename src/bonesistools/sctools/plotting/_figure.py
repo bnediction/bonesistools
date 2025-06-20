@@ -73,7 +73,6 @@ def set_default_params():
             "medianprops.linewidth"         : 2.0,
             "meanprops.color"               : _colors.blue,
             "meanprops.linewidth"           : 2.0,
-            "meanprops.marker"              : None,
             "meanprops.linestyle"           : "-"
         }
     )

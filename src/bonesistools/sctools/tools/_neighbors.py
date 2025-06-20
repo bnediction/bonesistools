@@ -24,9 +24,10 @@ import warnings
 import importlib
 
 import math
+from itertools import combinations
+
 import numpy as np
 import pandas as pd
-import anndata as ad
 
 import networkx as nx
 from networkx import Graph, DiGraph
@@ -255,11 +256,24 @@ class Knnbs(object):
                 _kneighbors_graph.add_edge(key, obs_name, distance=distance)
         
         if nx.number_connected_components(_kneighbors_graph) > 1:
-            raise nx.NetworkXAlgorithmError(f"'kneighbors_graph' not weakly connected")
-        else:
-            self.kneighbors_graph = _kneighbors_graph
-            self.obs = adata.obs[obs]
-            return None
+            warnings.warn(f"'kneighbors_graph' not weakly connected: add edges for joining connected components")
+            scc = list(nx.connected_components(_kneighbors_graph))
+            scc = [list(cc - set(_barycenters.keys())) for cc in scc]
+            for paired_scc in combinations(scc, 2):
+                X = choose_representation(adata[paired_scc[0],:], use_rep=self.use_rep)
+                Y = choose_representation(adata[paired_scc[1],:], use_rep=self.use_rep)
+                dists = pairwise_distances(
+                    X,
+                    Y,
+                    metric=self.metric,
+                    n_jobs=n_jobs
+                )
+                i, j  = np.unravel_index(np.argmin(dists), shape=dists.shape, order="C")
+                _kneighbors_graph.add_edge(paired_scc[0][i], paired_scc[1][j], distance=dists[i,j])
+        
+        self.kneighbors_graph = _kneighbors_graph
+        self.obs = adata.obs[obs]
+        return None
 
     def shortest_path_lengths(
         self,
