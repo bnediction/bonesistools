@@ -68,8 +68,7 @@ default = [
     "decoupler>=1.8",
     "mudata>=0.3.1",
     "mpbn>=4.1",
-    "multiprocess>=0.70.18",
-    "seaborn>=0.12.2"
+    "multiprocess>=0.70.18"
 ]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]
