@@ -11,7 +11,7 @@ import networkx as nx
 
 from ..ncbi import GeneSynonyms
 
-def load_grn(
+def load_collectri_grn(
     organism: Union[str, int] = "mouse",
     split_complexes: bool = False,
     remove_pmid: bool = False,

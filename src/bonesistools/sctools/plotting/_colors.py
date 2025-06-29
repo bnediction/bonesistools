@@ -42,9 +42,10 @@ violet      = rgb([255,  51, 255])
 lightgreen  = rgb([ 20, 250,  80])
 coral       = rgb([255, 127,  80])
 yellow      = rgb([255, 255,   0])
+darkred     = rgb([139,   0,   0])
 darkyellow  = rgb([204, 204,   0])
 lightyellow = rgb([128, 128,   0])
-darkorange  = rgb([255, 140,   0])
+darkorange  = rgb([255, 105,   0])
 lightorange = rgb([255, 165,  90])
 limegreen   = rgb([ 50, 255,  50])
 pink        = rgb([255, 182, 193])
@@ -57,7 +58,7 @@ lightgray   = rgb([211, 211, 211])
 gray        = rgb([112, 128, 144])
 darkgreen   = rgb([  0, 100,   0])
 gold        = rgb([238, 201,   0])
-orange      = rgb([255, 165,   0])
+orange      = rgb([255, 128,   0])
 salmon      = rgb([198, 113, 113])
 maroon      = rgb([128,   0,   0])
 beet        = rgb([142,  56, 142])
@@ -66,6 +67,7 @@ olive       = rgb([142, 142,  56])
 navy        = rgb([  0,   0, 128])
 darkblue    = rgb([  0,   0, 139])
 skyblue     = rgb([135, 206, 235])
+beige       = rgb([255, 255, 204])
 
 COLORS = [
     blue,
@@ -80,6 +82,7 @@ COLORS = [
     magenta,
     darkgreen,
     darkorange,
+    darkred,
     maroon,
     olive,
     orchid,
@@ -125,6 +128,7 @@ QUALITATIVE_COLORS = [
     purple,
     indigo,
     pink,
+    darkred,
     darkgreen,
     gold,
     maroon
@@ -146,7 +150,7 @@ def get_color(color:str):
         "orchid", "magenta", "purple", "indigo", "slateblue",
         "lightgray", "gray", "darkgreen", "gold", "orange",
         "salmon", "maroon", "beet", "teal", "olive",
-        "navy", "darkblue", "skyblue"
+        "navy", "darkblue", "skyblue", "beige", "darkred"
     ]:
         return eval(color)
     else:

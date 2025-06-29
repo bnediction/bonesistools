@@ -6,7 +6,7 @@ It proposes to handle gene alias-related issues or to provide gene regulatory ne
 """
 
 from . import (
-    collectri,
+    omnipath,
     ncbi
 )
 

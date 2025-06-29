@@ -1,8 +1,12 @@
 from typing import (
     Union,
-    List,
-    Self
+    List
 )
+
+try:
+    from typing import Self
+except:
+    from typing_extensions import Self
 
 class Hypercube(dict):
 
@@ -13,6 +17,7 @@ class Hypercube(dict):
                 raise ValueError("unsupported initialization: value not equal to 0, 1 or '*'")
         super().__init__(mapping)
 
+    @property
     def update(self, other: Self) -> None:
 
         if not isinstance(other, dict):
@@ -22,6 +27,7 @@ class Hypercube(dict):
         else:
             return super().update(other)
     
+    @property
     def drop(
         self,
         keys: List[str],

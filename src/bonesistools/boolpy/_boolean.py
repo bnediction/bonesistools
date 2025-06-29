@@ -22,7 +22,16 @@ class PartialBoolean:
 
     @property
     def get(self):
-        return self.value
+        return self.__value
+
+    @property
+    def set(self, value):
+        if isinstance(value, bool):
+            self.__value = 1 if value is True else 0
+        elif value in [0, 1] or math.isnan(value):
+            self.__value = value
+        else:
+            raise ValueError(f"invalid argument value for 'value': {value}")
     
     def __eq__(self, other):
         if not isinstance(other, PartialBoolean):
