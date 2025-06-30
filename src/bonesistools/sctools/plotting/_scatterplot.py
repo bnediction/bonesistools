@@ -476,7 +476,7 @@ def embedding_plot(
         Function specifying default figure parameters.
     outfile: Path (optional, default: None)
         If specified, save the figure.
-    **kwargs
+    **kwargs: Mapping[str, Any]
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width

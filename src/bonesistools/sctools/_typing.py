@@ -45,7 +45,7 @@ Keys = Union[str, Sequence[str]]
 AnnDataList = List[AnnData]
 
 if _mudata_is_available:
-    from mudata import MuData
+    from mudata import MuData # type: ignore
     MuDataList = List[MuData]
     ScData = Union[AnnData, MuData]
 else:

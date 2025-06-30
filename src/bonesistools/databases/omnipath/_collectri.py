@@ -38,7 +38,7 @@ def load_collectri_grn(
         Gene identifier input format.
     alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
         Gene identifier output format.
-    kwargs
+    **kwargs: Mapping[str, Any]
         Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
     
     Returns
@@ -57,7 +57,7 @@ def load_collectri_grn(
     if not isinstance(split_complexes, bool):
         raise TypeError(f"unsupported argument type for 'split_complexes': expected {bool} but received {type(split_complexes)}")
     
-    import decoupler as dc
+    import decoupler as dc # type: ignore
     
     collectri_db = dc.get_collectri(organism=organism, split_complexes=split_complexes, **kwargs)
     collectri_db = collectri_db.rename(columns = {"weight":"sign"})

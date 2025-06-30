@@ -37,7 +37,7 @@ def load_dorothea_grn(
         Gene identifier input format.
     alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
         Gene identifier output format.
-    kwargs
+    **kwargs: Mapping[str, Any]
         Keyword-arguments passed to function 'omnipath.interactions.Dorothea.get'.
     
     Returns
@@ -54,7 +54,7 @@ def load_dorothea_grn(
     if not isinstance(organism, (str, int)):
         raise TypeError(f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}")
     
-    import decoupler as dc
+    import decoupler as dc # type: ignore
     
     dorothea_db = dc.get_dorothea(organism=organism, levels=levels, **kwargs)
     dorothea_db = dorothea_db.rename(columns = {"weight":"sign"})
