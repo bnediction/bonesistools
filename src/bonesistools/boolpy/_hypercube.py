@@ -6,7 +6,7 @@ from typing import (
 try:
     from typing import Self
 except:
-    from typing_extensions import Self
+    from typing_extensions import Self # type: ignore
 
 class Hypercube(dict):
 

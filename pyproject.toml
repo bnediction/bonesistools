@@ -67,8 +67,11 @@ keywords = [
 default = [
     "decoupler>=1.8",
     "mudata>=0.3.1",
-    "mpbn>=4.1",
-    "multiprocess>=0.70.18"
+    "mpbn>=3.3",
+    "multiprocess>=0.70.18",
+    "pydot>=3.0.2",
+    "boolean.py>=4.0"
+
 ]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]

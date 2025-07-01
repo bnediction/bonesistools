@@ -65,9 +65,9 @@ beet        = rgb([142,  56, 142])
 teal        = rgb([ 56, 142, 142])
 olive       = rgb([142, 142,  56])
 navy        = rgb([  0,   0, 128])
-darkblue    = rgb([  0,   0, 139])
 skyblue     = rgb([135, 206, 235])
 beige       = rgb([255, 255, 204])
+burgundy    = rgb([128,   0,  32])
 
 COLORS = [
     blue,
@@ -78,7 +78,6 @@ COLORS = [
     skyblue,
     teal,
     pink,
-    darkblue,
     magenta,
     darkgreen,
     darkorange,
@@ -100,7 +99,8 @@ COLORS = [
     darkyellow,
     darkorange,
     lightyellow,
-    lightorange
+    lightorange,
+    burgundy
 ]
 
 LIGHT_COLORS = [
@@ -146,11 +146,11 @@ def get_color(color:str):
     if color in [
         "black", "white", "blue", "red", "green",
         "violet", "lightgreen", "coral", "yellow", "darkyellow",
-        "lightyellow", "darkorange", "lightorange", "limegreen", "pink",
+        "lightyellow", "darkorange", "darkred", "lightorange", "limegreen", "pink",
         "orchid", "magenta", "purple", "indigo", "slateblue",
         "lightgray", "gray", "darkgreen", "gold", "orange",
         "salmon", "maroon", "beet", "teal", "olive",
-        "navy", "darkblue", "skyblue", "beige", "darkred"
+        "navy", "skyblue", "beige", "burgundy"
     ]:
         return eval(color)
     else:
