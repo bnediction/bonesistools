@@ -44,11 +44,13 @@ def set_default_params():
         _colors.green,
         _colors.orange,
         _colors.purple,
+        _colors.pink,
         _colors.skyblue,
         _colors.teal,
-        _colors.pink,
         _colors.violet,
-        _colors.darkblue
+        _colors.navy,
+        _colors.darkred,
+        _colors.maroon
     ])
 
     mpl.rc(
