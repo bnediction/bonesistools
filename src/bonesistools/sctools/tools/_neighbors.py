@@ -112,7 +112,6 @@ def kneighbors_graph(
     else:
         raise ValueError(f"invalid argument value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'")
 
-
 class Knnbs(object):
     """
     Class for using k-nearest neighbors-based subclusters (knnbs) algorithm.
