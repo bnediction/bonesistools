@@ -17,21 +17,31 @@ class BooleanNetworkEnsemble(list):
 
     def __init__(
         self,
-        bns: List[MPBooleanNetwork]
+        components: List[str] = None,
+        bns: List[MPBooleanNetwork] = None
     ) -> None:
 
-        if bns is None:
-            raise TypeError(f"unsupported type for instancing BooleanNetworkEnsemble: '{type(None)}', not {list}")
-        elif not isinstance(bns, list):
-            raise TypeError(f"unsupported type for instancing BooleanNetworkEnsemble: '{type(bns)}', not {list}")
-        elif not all(isinstance(bn, MPBooleanNetwork) for bn in bns):
-            raise TypeError(f"unsupported argument type: expected all elements being {MPBooleanNetwork}")
+        if components is None and bns is None:
+            raise TypeError(f"unsupported type for instancing BooleanNetworkEnsemble: require either 'components' or 'bns'")
+        elif components is not None and bns is None:
+            super().__init__()
+            self.__components = set(components)
+        elif components is None and bns is not None:
+            if not isinstance(bns, list):
+                raise TypeError(f"unsupported type for instancing BooleanNetworkEnsemble: '{type(bns)}', not {list}")
+            elif not all(isinstance(bn, MPBooleanNetwork) for bn in bns):
+                raise TypeError(f"unsupported argument type: expected all elements being {MPBooleanNetwork}")
+            else:
+                components = set(bns[0])
+                if not all(components == set(bn) for bn in bns[1:]):
+                    raise ValueError("invalid value: different components between elements")
+            super().__init__(bns)
+            self.__components = components
         else:
-            components = set(bns[0])
-            if not all(components == set(bn) for bn in bns[1:]):
+            if not all(set(components) == set(bn) for bn in bns[1:]):
                 raise ValueError("invalid value: different components between elements")
-        super().__init__(bns)
-        self.__components = components
+            super().__init__(bns)
+            self.__components = set(components)
 
     def __setitem__(self, key, value) -> None:
         
@@ -43,14 +53,20 @@ class BooleanNetworkEnsemble(list):
     def append(self, other) -> None:
         
         if isinstance(other, MPBooleanNetwork):
-            super().append(other)
+            if set(other) == self.__components:
+                super().append(other)
+            else:
+                raise ValueError("invalid value: missing or overflow components")
         else:
             raise TypeError(f"unsupported argument type: expected {MPBooleanNetwork}, but received {type(other)}")
 
     def insert(self, index, other) -> None:
         
         if isinstance(other, MPBooleanNetwork):
-            super().insert(index, other)
+            if set(other) == self.__components:
+                super().insert(index, other)
+            else:
+                raise ValueError("invalid value: missing or overflow components")
         else:
             raise TypeError(f"unsupported argument type: expected {MPBooleanNetwork}, but received {type(other)}")
 
@@ -68,6 +84,7 @@ class BooleanNetworkEnsemble(list):
         return clauses
     
     def get_transcription_factors(self):
+        # target => source
 
         def get_transcription_factors_from_clause(clause: frozenset) -> dict:
             transcriptions = {}
@@ -100,14 +117,10 @@ class BooleanNetworkEnsemble(list):
     
     def get_influences(self):
 
-        influences = {}
-        transcription_factors = self.get_transcription_factors()
+        # source => target
+        influences = {components: {} for components in self.__components}
+        transcription_factors = self.get_transcription_factors()        
         for target, sources in transcription_factors.items():
             for source, influence in sources.items():
-                if source in influences.keys():
-                    influences[source][target] = {}
-                else:
-                    influences[source] = {target: {}}
-                for sign, occurrence in influence.items():
-                    influences[source][target][sign] = occurrence
+                influences[source][target] = influence
         return influences

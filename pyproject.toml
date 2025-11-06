@@ -48,7 +48,8 @@ dependencies = [
     "numpy>=1.21",
     "pandas >=1.3.5",
     "scikit-learn>=1.0",
-    "scipy>=1.7"
+    "scipy>=1.7",
+    "mpbn>=3.8"
 ]
 keywords = [
     "bioinformatics",
