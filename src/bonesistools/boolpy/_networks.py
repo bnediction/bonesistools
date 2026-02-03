@@ -1,9 +1,42 @@
 #!/usr/bin/env python
 
-from typing import List, Dict
-from mpbn import MPBooleanNetwork
+import importlib
 
-import mpbn
+from typing import List, Dict
+from ._typing import MPBooleanNetwork
+    
+try:
+    _mpbn_is_available = importlib.util.find_spec("mpbn") is not None
+except:
+    _mpbn_is_available = importlib.find_loader("mpbn") is not None
+
+if _mpbn_is_available:
+    from mpbn.minibn import struct_of_dnf
+else:
+    def struct_of_dnf(ba, f, container=frozenset, sort=False):
+        import boolean.boolean as bpy
+        def make_lit(l):
+            if isinstance(l, ba.NOT):
+                return (l.args[0].obj, False)
+            else:
+                return (l.obj, True)
+        def make_clause(c):
+            if isinstance(c, ba.AND):
+                lits = c.args
+            else:
+                lits = [c]
+            lits = map(make_lit, lits)
+            return container(sorted(lits) if sort else lits)
+        if isinstance(f, bpy._TRUE):
+            return True
+        elif isinstance(f, bpy._FALSE):
+            return False
+        if not isinstance(f, ba.OR):
+            clauses = [f]
+        else:
+            clauses = f.args
+        clauses = map(make_clause, clauses)
+        return container(sorted(clauses) if sort else clauses)
 
 class BooleanNetworkEnsemble(list):
     """
@@ -79,7 +112,7 @@ class BooleanNetworkEnsemble(list):
         clauses = {node: [] for node in self[0]}
         for bn in self:
             for node in bn.keys():
-                clauses[node].append(bn[node] if (bn[node] is True or bn[node] is False) else mpbn.minibn.struct_of_dnf(bn.ba, bn[node]))
+                clauses[node].append(bn[node] if (bn[node] is True or bn[node] is False) else struct_of_dnf(bn.ba, bn[node]))
 
         return clauses
     

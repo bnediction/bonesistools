@@ -3,9 +3,9 @@
 from typing import (
     Optional,
     Union,
+    Mapping,
     Any
 )
-from collections.abc import Mapping
 from anndata import AnnData
 from .._typing import (
     ScData,

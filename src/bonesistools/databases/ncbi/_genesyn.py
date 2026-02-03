@@ -6,27 +6,31 @@ from typing import (
     Sequence,
     Dict,
     Tuple,
-    Literal,
     Callable,
     Any,
-    get_args
 )
-from pandas import DataFrame
-from pandas._typing import Axis
+try:
+    from typing import Literal, get_args
+except ImportError:
+    from typing_extensions import Literal, get_args # type: ignore
 try:
     from collections import Sequence as SequenceInstance
 except:
     from collections.abc import Sequence as SequenceInstance
-from networkx import Graph
-from .._typing import MPBooleanNetwork
 
 import ctypes
 from collections import namedtuple
 from functools import partial
 try:
-    from sortedcontainers import SortedSet
+    from sortedcontainers import SortedSet # type: ignore
 except:
     pass
+
+from pandas import DataFrame
+from pandas._typing import Axis
+
+from networkx import Graph
+from .._typing import MPBooleanNetwork
 
 import os, warnings
 from pathlib import Path

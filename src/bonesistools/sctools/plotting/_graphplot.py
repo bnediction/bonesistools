@@ -4,8 +4,8 @@ from typing import (
     Optional,
     Union,
     Sequence,
+    Mapping
 )
-from collections.abc import Mapping
 from pathlib import Path
 from anndata import AnnData
 from ._typing import RGB

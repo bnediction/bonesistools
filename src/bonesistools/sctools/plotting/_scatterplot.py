@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-from collections.abc import Mapping
 from typing import (
     Optional,
     Union,
     Sequence,
     Tuple,
+    Mapping,
     Callable,
     Any
 )

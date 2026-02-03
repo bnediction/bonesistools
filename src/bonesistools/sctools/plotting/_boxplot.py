@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 
-from collections.abc import Mapping
 from typing import (
     Optional,
     Union,
     Sequence,
     Tuple,
     List,
-    Literal,
+    Mapping,
     Any
 )
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal # type: ignore
 from pandas import Series
 from pandas.core.groupby.generic import SeriesGroupBy
 from ._typing import RGB

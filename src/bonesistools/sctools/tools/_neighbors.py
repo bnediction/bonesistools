@@ -4,14 +4,14 @@ from typing import (
     Optional,
     Union,
     Sequence,
+    Mapping,
     Any,
     Type
 )
-from collections.abc import Mapping
 try:
     from typing import Literal, get_args
 except ImportError:
-    from typing_extensions import Literal, get_args
+    from typing_extensions import Literal, get_args # type: ignore
 from .._typing import (
     AnnData,
     ScData,
