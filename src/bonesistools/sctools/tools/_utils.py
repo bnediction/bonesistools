@@ -6,8 +6,49 @@ from numpy import ndarray
 
 from .._typing import (
     ScData,
+    anndata_checker,
     anndata_or_mudata_checker
 )
+
+@anndata_checker
+def choose_mtx_representation(
+    adata: AnnData,
+    use_raw: Optional[bool] = False,
+    layer: Optional[str] = None,
+    copy: Optional[bool] = True
+) -> ndarray:
+    """
+    Get a matrix representation of data.
+
+    Parameters
+    ----------
+    scdata: ad.AnnData
+        Unimodal or multimodal annotated data matrix.
+    use_raw: bool (optional, default: False)
+        Use adata.raw.X for expression values instead of adata.X.
+    layer: str (optional)
+        Use adata.layers[`layer`] for expression values instead of adata.X.
+    copy: bool (optional, default: True)
+        Return a copy to preserve AnnData object.
+
+    Returns
+    -------
+    Return ndarray object.
+    """
+
+    if use_raw and layer is not None:
+        raise ValueError("arguments 'use_raw' and 'layer' cannot be both specified")
+    elif layer is not None:
+        X = adata.layers[layer]
+    elif use_raw:
+        X = adata.raw.X
+    else:
+        X = adata.X
+    
+    if copy:
+        return X.copy()
+    else:
+        return X
 
 @anndata_or_mudata_checker
 def choose_representation(
@@ -16,7 +57,7 @@ def choose_representation(
     n_components: Optional[int] = None
 ) -> ndarray:
     """
-    Get a matrix representation of data.
+    Get a truncated matrix representation of data.
 
     Parameters
     ----------

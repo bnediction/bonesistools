@@ -126,11 +126,11 @@ QUALITATIVE_COLORS = [
     green,
     orange,
     purple,
-    indigo,
     pink,
     darkred,
     darkgreen,
     gold,
+    indigo,
     maroon
 ]
 

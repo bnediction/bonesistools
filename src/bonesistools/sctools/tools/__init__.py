@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-from ._utils import choose_representation
+from ._utils import (
+    choose_mtx_representation,
+    choose_representation
+)
 
 from ._neighbors import (
     Knnbs,

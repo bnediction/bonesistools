@@ -111,9 +111,7 @@ def __scatterplot_discrete(
     **kwargs: Mapping[str, Any]
 ):
 
-    if not hasattr(scdata.obs[obs], "cat"):
-        raise AttributeError(f"scdata.obs[{obs}] object has not attribute '.cat'")
-    elif "add_legend" in kwargs:
+    if "add_legend" in kwargs:
         add_legend = kwargs["add_legend"]
     else:
         add_legend = False
