@@ -452,9 +452,9 @@ def embedding_plot(
     scdata: ad.AnnData | md.MuData
         Unimodal or multimodal annotated data matrix.
     obs: str
-        The classification is retrieved by scdata.obs['obs'], which must be categorical/qualitative values.
+        Column name in scdata.obs for annotation of observations.
     use_rep: str
-        Use the indicated representation in scdata.obsm.
+        Key in scdata.obsm for observation coordinates.
     colors: matplotlib.colors.Colormap (optional, default: None)
         Visualization of the mapping from a list of color values.
     n_components: 2 or 3 (default: 2)

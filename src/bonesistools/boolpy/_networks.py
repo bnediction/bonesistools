@@ -6,12 +6,12 @@ from typing import List, Dict
 from ._typing import MPBooleanNetwork
     
 try:
-    _mpbn_is_available = importlib.util.find_spec("mpbn") is not None
+    _colomoto_is_available = importlib.util.find_spec("colomoto") is not None
 except:
-    _mpbn_is_available = importlib.find_loader("mpbn") is not None
+    _colomoto_is_available = importlib.find_loader("colomoto") is not None
 
-if _mpbn_is_available:
-    from mpbn.minibn import struct_of_dnf
+if _colomoto_is_available:
+    from colomoto.minibn import struct_of_dnf
 else:
     def struct_of_dnf(ba, f, container=frozenset, sort=False):
         import boolean.boolean as bpy
