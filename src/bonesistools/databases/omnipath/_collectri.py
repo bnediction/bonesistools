@@ -59,7 +59,10 @@ def load_collectri_grn(
     
     import decoupler as dc # type: ignore
     
-    collectri_db = dc.get_collectri(organism=organism, split_complexes=split_complexes, **kwargs)
+    try:
+        collectri_db = dc.get_collectri(organism=organism, split_complexes=split_complexes, **kwargs)
+    except:
+        collectri_db = dc.op.collectri(organism=organism, remove_complexes=split_complexes, **kwargs)
     collectri_db = collectri_db.rename(columns = {"weight":"sign"})
     if isinstance(remove_pmid, bool):
         if remove_pmid:
@@ -68,6 +71,8 @@ def load_collectri_grn(
             pass
     else:
         raise TypeError(f"unsupported argument type for 'remove_pmid': expected {bool} but received {type(remove_pmid)}")
+    collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
+
     grn = nx.from_pandas_edgelist(
         df = collectri_db,
         source="source",

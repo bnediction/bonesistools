@@ -56,8 +56,12 @@ def load_dorothea_grn(
     
     import decoupler as dc # type: ignore
     
-    dorothea_db = dc.get_dorothea(organism=organism, levels=levels, **kwargs)
+    try:
+        dorothea_db = dc.get_dorothea(organism=organism, levels=levels, **kwargs)
+    except:
+        dorothea_db = dc.op.dorothea(organism=organism, levels=levels, **kwargs)
     dorothea_db = dorothea_db.rename(columns = {"weight":"sign"})
+    dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
     grn = nx.from_pandas_edgelist(
         df = dorothea_db,
