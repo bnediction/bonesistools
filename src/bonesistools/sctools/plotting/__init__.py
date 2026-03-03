@@ -3,7 +3,7 @@
 from ._scatterplot import embedding_plot
 from ._boxplot import boxplot
 from ._graphplot import draw_paga
-from ._kde import kde_plot
+from ._density import kde_plot, ecdf_plot
 
 from ._colors import (
     rgb,

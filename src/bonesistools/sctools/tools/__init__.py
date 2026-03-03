@@ -27,8 +27,8 @@ from ._write import (
 
 from ._markers import (
     calculate_logfoldchanges,
-    update_logfoldchanges,
-    hypergeometric_test
+    hypergeometric_test,
+    smirnov_tests
 )
 
 from ._classification import (
