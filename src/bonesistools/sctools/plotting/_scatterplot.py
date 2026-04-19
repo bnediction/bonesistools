@@ -48,6 +48,7 @@ def __default_plot(
         use_rep: str,
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
+        ax: Optional[Axes] = None,
         **kwargs: Mapping[str, Any]
     ):
 
@@ -62,6 +63,7 @@ def __default_plot(
             use_rep,
             colors,
             n_components,
+            ax=ax,
             **kwargs
         )
 
@@ -108,6 +110,7 @@ def __scatterplot_discrete(
     use_rep: str,
     colors: Optional[Colors] = None,
     n_components: Optional[int] = 2,
+    ax: Optional[Axes] = None,
     **kwargs: Mapping[str, Any]
 ):
 
@@ -135,10 +138,13 @@ def __scatterplot_discrete(
         n_components=n_components
     )
 
-    fig = plt.figure()
-    ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
-    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="rectilinear" if n_components == 2 else "3d")
+        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
+        fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
+    else:
+        fig = ax.figure
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
 
@@ -195,7 +201,6 @@ def __scatterplot_discrete(
             )
 
     if add_legend:
-        fig.set_figwidth(kwargs["figwidth"]*1.25 if "figwidth" in kwargs else 6.25)
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width*0.8, box.height])
         if "legend_params" in kwargs:
@@ -234,6 +239,7 @@ def __scatterplot_continuous(
     use_rep: str,
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
+    ax: Optional[Axes] = None,
     **kwargs: Mapping[str, Any]
 ):
     
@@ -260,10 +266,13 @@ def __scatterplot_continuous(
         n_components=n_components
     )
 
-    fig = plt.figure()
-    ax = plt.axes(projection = "rectilinear" if n_components == 2 else "3d")
-    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="rectilinear" if n_components == 2 else "3d")
+        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
+        fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8)
+    else:
+        fig = ax.figure
 
     if scdata.obs[obs].isna().any():
         idx = scdata.obs[obs].isna()
@@ -344,7 +353,7 @@ def __add_labels(
     
     if dim == 2:
         for label, value in barycenters.items():
-            plt.text(
+            ax.text(
                 x=value[0],
                 y=value[1],
                 s=label,
@@ -411,7 +420,7 @@ def __add_labels_to_graph(
 
     if dim == 2:
         for node in flat_tree.nodes:
-            plt.text(
+            ax.text(
                 x=flat_tree_node_pos[node][0],
                 y=flat_tree_node_pos[node][1],
                 s=flat_tree_node_label[node],
@@ -441,6 +450,7 @@ def embedding_plot(
     automatic_resize: bool = False,
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
     **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
@@ -511,6 +521,7 @@ def embedding_plot(
             use_rep,
             colors,
             n_components,
+            ax=ax,
             **kwargs
         )
     elif pd.api.types.is_integer_dtype(scdata.obs[obs]) or \
@@ -523,17 +534,17 @@ def embedding_plot(
             use_rep,
             colors,
             n_components,
+            ax=ax,
             **kwargs
         )
     
     if add_labels:
-        ax = plt.gca()
         _kwargs = {} if "text" not in kwargs else kwargs["text"]
         __add_labels(
             scdata,
             obs=obs,
             use_rep=use_rep,
-            ax=plt.gca(),
+            ax=ax,
             dim=n_components,
             **_kwargs
         )
@@ -541,7 +552,7 @@ def embedding_plot(
     if add_graph:
         __graph_to_plot(
             scdata,
-            ax=plt.gca(),
+            ax=ax,
             dim=n_components
         )
     
@@ -549,7 +560,7 @@ def embedding_plot(
         _kwargs = {"verticalalignment": "bottom" if add_graph else "center"} if "text" not in kwargs else kwargs["text"]
         __add_labels_to_graph(
             scdata,
-            ax=plt.gca(),
+            ax=ax,
             dim=n_components,
             **_kwargs
         )

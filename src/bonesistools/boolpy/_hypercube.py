@@ -188,7 +188,7 @@ class HypercubeCollection(list):
 #            else:
 #                super().append(Hypercube(hypercube))
 
-    def append(self, other):
+    def append(self, other) -> None:
 
         if isinstance(other, dict):
             super().append(other if isinstance(other, Hypercube) else Hypercube(other))
@@ -197,7 +197,7 @@ class HypercubeCollection(list):
                 super().append(hypercube if isinstance(other, Hypercube) else Hypercube(other))
             super().append([hypercube if isinstance(hypercube, Hypercube) else Hypercube(hypercube) for hypercube in self])
 
-    def are_fixed_points(self):
+    def get_fixed_points(self) -> Self:
 
         fixed_points = HypercubeCollection()
         for hypercube in self:
@@ -205,7 +205,7 @@ class HypercubeCollection(list):
                 fixed_points.append(hypercube.copy())
         return fixed_points
 
-    def are_smaller_than(self, other):
+    def get_smaller_than(self, other) -> Self:
 
         if not isinstance(other, dict):
             raise TypeError(f"unsupported method types for are_smaller_than: '{type(self)}' and '{type(other)}'")
@@ -216,9 +216,9 @@ class HypercubeCollection(list):
         for hypercube in self:
             if hypercube.is_smaller_than(other):
                 smaller_hypercubes.append(hypercube.copy())
-        return smaller_hypercubes
+        return HypercubeCollection(smaller_hypercubes)
 
-    def are_larger_than(self, other):
+    def get_larger_than(self, other) -> Self:
 
         if not isinstance(other, dict):
             raise TypeError(f"unsupported method types for are_larger_than: '{type(self)}' and '{type(other)}'")
@@ -229,4 +229,4 @@ class HypercubeCollection(list):
         for hypercube in self:
             if hypercube.is_larger_than(other):
                 larger_hypercubes.append(hypercube.copy())
-        return larger_hypercubes
+        return HypercubeCollection(larger_hypercubes)

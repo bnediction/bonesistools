@@ -9,6 +9,7 @@ from typing import (
     Callable,
     Any
 )
+from pathlib import Path
 from anndata import AnnData
 from ._typing import RGB
 from .._typing import anndata_checker
@@ -34,6 +35,7 @@ def kde_plot(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     default_parameters: Optional[Callable] = None,
+    outfile: Optional[Path] = None,
     **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
@@ -54,6 +56,8 @@ def kde_plot(
         Density function are colored with respect to a list of color values.
     default_parameters: Callable (optional, default: None)
         Function specifying default figure parameters.
+    outfile: Path (optional, default: None)
+        If specified, save the figure.
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -64,7 +68,7 @@ def kde_plot(
 
     Returns
     -------
-    Create matplotlib figure and axe.
+    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
     """
 
     import seaborn as sns
@@ -117,7 +121,12 @@ def kde_plot(
     if default_parameters:
         default_parameters()
     
-    return fig, ax
+    if outfile:
+        plt.savefig(outfile, bbox_inches="tight")
+        plt.close()
+        return None
+    else:
+        return fig, ax
 
 def ecdf_plot(
     adata: AnnData,
@@ -126,6 +135,7 @@ def ecdf_plot(
     obs: Optional[str] = None,
     colors = None,
     default_parameters: Optional[Callable] = None,
+    outfile: Optional[Path] = None,
     **kwargs: Mapping[str, Any]
 ) -> Tuple[Figure, Axes]:
     """
@@ -146,6 +156,8 @@ def ecdf_plot(
         Density function are colored with respect to a list of color values.
     default_parameters: Callable (optional, default: None)
         Function specifying default figure parameters.
+    outfile: Path (optional, default: None)
+        If specified, save the figure.
     **kwargs
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -156,7 +168,7 @@ def ecdf_plot(
 
     Returns
     -------
-    Create matplotlib figure and axe.
+    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
     """
 
     counts = adata[:,gene].layers[layer] if layer else adata[:,gene].X
@@ -203,4 +215,9 @@ def ecdf_plot(
     if default_parameters:
         default_parameters()
     
-    return fig, ax
+    if outfile:
+        plt.savefig(outfile, bbox_inches="tight")
+        plt.close()
+        return None
+    else:
+        return fig, ax
