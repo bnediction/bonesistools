@@ -10,6 +10,7 @@ from typing import (
     Optional,
     Iterable,
     Sequence,
+    Literal,
     Callable
 )
 from .._typing import anndata_checker
@@ -21,6 +22,9 @@ from anndata import AnnData
 from numpy import log2
 
 from ._conversion import anndata_to_dataframe
+
+_CorrMethod = Literal["benjamini-hochberg", "bonferroni"]
+_Alternatives = Literal["two-sided", "less", "greater"]
 
 @anndata_checker
 def calculate_logfoldchanges(
@@ -169,11 +173,11 @@ def hypergeometric_test(
 def smirnov_tests(
     adata: AnnData,
     groupby: str,
-    groups = "all",
+    groups: Union[Literal["all"], Iterable[str]] = "all",
     reference: str = "rest",
     layer: Optional[str] = None,
-    alternative= "two-sided",
-    corr_method = "benjamini-hochberg",
+    alternative: _Alternatives = "two-sided",
+    corr_method: _CorrMethod = "benjamini-hochberg",
     pval_cutoff: Optional[float] = None,
     key_added: Optional[str] = None,
     copy: bool = False
