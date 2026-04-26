@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from ._genesyn import (
-    GeneType,
-    AliasType,
+    InputIdentifierType,
+    OutputIdentifierType,
     GeneSynonyms
 )

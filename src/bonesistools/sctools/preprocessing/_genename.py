@@ -14,8 +14,8 @@ from scipy.sparse import csr_matrix
 import anndata as ad
 
 from ...databases.ncbi import (
-    GeneType,
-    AliasType,
+    InputIdentifierType,
+    OutputIdentifierType,
     GeneSynonyms
 )
 
@@ -23,11 +23,11 @@ from ...databases.ncbi import (
 def convert_gene_identifiers(
     scdata: ScData, # type: ignore
     axis: Axis = "var",
-    gene_type: GeneType = "genename",
-    alias_type: AliasType = "referencename",
+    input_identifier_type: InputIdentifierType = "name",
+    output_identifier_type: OutputIdentifierType = "official_name",
     copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
-    """
+    f"""
     Replace gene identifiers into the desired identifier format.
 
     Parameters
@@ -37,9 +37,9 @@ def convert_gene_identifiers(
         The stored gene identifiers are converted into the desired identifier format.
     axis: Axis (default: 'var')
         whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
-    gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
         Gene identifier input format.
-    alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
         Gene identifier output format.
     copy: bool (default: False)
         Return a copy instead of updating ScData object.
@@ -55,16 +55,16 @@ def convert_gene_identifiers(
         GeneSynonyms()(
             scdata.obs,
             axis="index",
-            gene_type=gene_type,
-            alias_type=alias_type,
+            input_identifier_type=input_identifier_type,
+            output_identifier_type=output_identifier_type,
             copy=False
         )
     elif axis in [1, "var"]:
         GeneSynonyms()(
             scdata.var,
             axis="index",
-            gene_type=gene_type,
-            alias_type=alias_type,
+            input_identifier_type=input_identifier_type,
+            output_identifier_type=output_identifier_type,
             copy=False
         )
     else:
@@ -99,8 +99,8 @@ def standardize_genenames(
     return convert_gene_identifiers(
         scdata=scdata,
         axis=axis,
-        gene_type="genename",
-        alias_type="referencename",
+        input_identifier_type="genename",
+        output_identifier_type="referencename",
         copy=copy
     )
 

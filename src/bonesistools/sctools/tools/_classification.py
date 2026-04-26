@@ -8,26 +8,26 @@ from .._typing import (
 )
 
 from ...databases.ncbi import (
-    GeneType,
-    GeneSynonyms
-)    
+    InputIdentifierType,
+    GeneSynonyms,
+)
 
 @anndata_checker
 def mitochondrial_genes(
     adata: AnnData,  # type: ignore
-    index_type: GeneType = "genename",
+    index_type: InputIdentifierType = "name",
     key: str = "mt",
     axis: Axis = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]: # type: ignore
-    """
+    f"""
     Create a column storing whether gene encodes a mitochondrial protein using current index.
 
     Parameters
     ----------
     adata: ad.AnnData
         Unimodal annotated data matrix.
-    index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+    index_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
         Input identifier type of indices.
     key: str (default: 'mt')
         Column name storing whether gene encodes a mitochondrial protein.
@@ -54,16 +54,16 @@ def mitochondrial_genes(
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     mt_id = set()
-    for k,v in genesyn.gene_aliases_mapping["genename"].items():
+    for k, v in genesyn.gene_aliases_mapping["name"].items():
         if k.startswith("mt-"):
             mt_id.add(v.value.decode())
 
     for index in eval(f"adata.{axis}.index"):
-        geneid = genesyn.get_geneid(
+        gene_id = genesyn.get_gene_id(
             gene=index,
-            gene_type=index_type
+            input_identifier_type=index_type
         )
-        if geneid in mt_id:
+        if gene_id in mt_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")
 
     return adata if copy else None
@@ -71,19 +71,19 @@ def mitochondrial_genes(
 @anndata_checker
 def ribosomal_genes(
     adata: AnnData,  # type: ignore
-    index_type: GeneType = "genename",
+    index_type: InputIdentifierType = "name",
     key: str = "rps",
     axis: Axis = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]: # type: ignore
-    """
+    f"""
     Create a column storing whether gene encodes a ribosomal protein using current index.
 
     Parameters
     ----------
     adata: ad.AnnData
         Unimodal annotated data matrix.
-    index_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+    index_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'genename')
         Input identifier type of indices.
     key: str (default: 'rps')
         Column name storing whether gene encodes a ribosomal protein.
@@ -110,16 +110,16 @@ def ribosomal_genes(
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
     
     rps_id = set()
-    for k,v in genesyn.gene_aliases_mapping["genename"].items():
+    for k,v in genesyn.gene_aliases_mapping["name"].items():
         if k.startswith(("Rps","Rpl","Mrp")):
             rps_id.add(v.value.decode())
 
     for index in eval(f"adata.{axis}.index"):
-        geneid = genesyn.get_geneid(
+        gene_id = genesyn.get_gene_id(
             gene=index,
-            gene_type=index_type
+            input_identifier_type=index_type
         )
-        if geneid in rps_id:
+        if gene_id in rps_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")
 
     return adata if copy else None
