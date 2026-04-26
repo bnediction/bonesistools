@@ -9,15 +9,17 @@ from typing import (
 
 import networkx as nx
 
-from ..ncbi import GeneSynonyms
+from ..ncbi import (
+    OutputIdentifierType,
+    GeneSynonyms
+)
 
 def load_collectri_grn(
     organism: Union[str, int] = "mouse",
     split_complexes: bool = False,
     remove_pmid: bool = False,
     genesyn: Optional[GeneSynonyms] = None,
-    gene_type: str = "genename",
-    alias_type: str = "referencename",
+    gene_identifier_type: OutputIdentifierType = "official_name",
     **kwargs: Mapping[str, Any]
 )-> nx.MultiDiGraph:
     """
@@ -34,9 +36,9 @@ def load_collectri_grn(
         Specify whether to remove PMIDs in node labels.
     gene_synonyms: GeneSynonyms (optional, default: None)
         If GeneSynonyms object is passed, then gene identifiers are converted into the desired identifier format.
-    gene_type: 'genename' | 'geneid' | 'ensemblid' | <database> (default: 'genename')
+    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
         Gene identifier input format.
-    alias_type: 'referencename' | 'geneid' | 'ensemblid' | <database> (default: 'referencename')
+    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
         Gene identifier output format.
     **kwargs: Mapping[str, Any]
         Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
@@ -85,8 +87,8 @@ def load_collectri_grn(
     elif isinstance(genesyn, GeneSynonyms):
         genesyn(
             grn,
-            gene_type=gene_type,
-            alias_type=alias_type,
+            input_identifier_type="name",
+            output_identifier_type=gene_identifier_type,
             copy=False
         )
         return grn
