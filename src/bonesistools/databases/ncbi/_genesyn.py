@@ -21,8 +21,9 @@ except:
 
 import copy
 import ctypes
+import inspect
 from collections import namedtuple
-from functools import partial
+from functools import partial, wraps
 
 from pandas import DataFrame
 from pandas._typing import Axis
@@ -86,6 +87,43 @@ GENE_TYPE_PRIORITY = {
     "biological-region": 10,
     "pseudo": 0
 }
+
+_GENE_SYNONYMS_DEPRECATED_ARGS = {
+    "gene_type": "input_identifier_type",
+    "alias_gene": "output_identifier_type",
+}
+
+def support_legacy_gene_synonyms_args(func):
+    
+    valid_parameters = inspect.signature(func).parameters
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        for old_name, new_name in _GENE_SYNONYMS_DEPRECATED_ARGS.items():
+
+            if old_name not in kwargs:
+                continue
+
+            if new_name not in valid_parameters:
+                continue
+
+            warnings.warn(
+                f"'{old_name}' is deprecated and will be removed in a future version; "
+                f"use '{new_name}' instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+            if new_name in kwargs:
+                raise TypeError(
+                    f"Use either '{old_name}' or '{new_name}', not both."
+                )
+
+            kwargs[new_name] = kwargs.pop(old_name)
+
+        return func(*args, **kwargs)
+
+    return wrapper
 
 class GeneSynonyms:
     """
@@ -383,6 +421,7 @@ class GeneSynonyms:
         else:
             raise TypeError(f"unsupported argument type for 'data': {data}")
 
+    @support_legacy_gene_synonyms_args
     def get_gene_id(
         self,
         gene: str,
@@ -429,6 +468,7 @@ class GeneSynonyms:
         else:
             raise ValueError(f"invalid argument value for 'input_identifier_type': {input_identifier_type}")
     
+    @support_legacy_gene_synonyms_args
     def get_ncbi_name(
         self,
         gene: str,
@@ -458,6 +498,7 @@ class GeneSynonyms:
                 warnings.warn(f"no NCBI reference name correspondence for {input_identifier_type} '{gene}'", stacklevel=10)
             return None
 
+    @support_legacy_gene_synonyms_args
     def get_official_name(
         self,
         gene: str,
@@ -487,6 +528,7 @@ class GeneSynonyms:
                 warnings.warn(f"no official name correspondence for {input_identifier_type} '{gene}'", stacklevel=10)
             return None
 
+    @support_legacy_gene_synonyms_args
     def get_ensembl_id(
         self,
         gene: str,
@@ -516,6 +558,7 @@ class GeneSynonyms:
                 warnings.warn(f"no Ensembl id correspondence for {input_identifier_type} '{gene}'", stacklevel=10)
             return None
     
+    @support_legacy_gene_synonyms_args
     def get_alias_from_database(
         self,
         gene: str,
@@ -556,6 +599,7 @@ class GeneSynonyms:
                 warnings.warn(f"no {database} correspondence for {input_identifier_type} '{gene}'", stacklevel=10)
             return None
 
+    @support_legacy_gene_synonyms_args
     def conversion(
         self,
         gene: str,
@@ -592,6 +636,7 @@ class GeneSynonyms:
         
         return convert(gene=gene, input_identifier_type=input_identifier_type)
     
+    @support_legacy_gene_synonyms_args
     def __conversion_function(
         self,
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
@@ -622,6 +667,7 @@ class GeneSynonyms:
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute 'get_{output_identifier_type}'")
 
+    @support_legacy_gene_synonyms_args
     def convert_sequence(
         self,
         genes: Sequence[str],
@@ -664,6 +710,7 @@ class GeneSynonyms:
         
         return aliases
 
+    @support_legacy_gene_synonyms_args
     def convert_interaction_list(
         self,
         interaction_list: InteractionList,
@@ -706,6 +753,7 @@ class GeneSynonyms:
 
         return converted_interactions_list
 
+    @support_legacy_gene_synonyms_args
     def convert_df(
         self,
         df: DataFrame,
@@ -765,6 +813,7 @@ class GeneSynonyms:
         if copy is True:
             return df
     
+    @support_legacy_gene_synonyms_args
     def convert_graph(
         self,
         graph: Graph,
@@ -808,6 +857,7 @@ class GeneSynonyms:
             nx.relabel_nodes(graph, mapping=aliases_mapping, copy=False)
             return None
 
+    @support_legacy_gene_synonyms_args
     def convert_bn(
         self,
         bn: MPBooleanNetwork, # type: ignore

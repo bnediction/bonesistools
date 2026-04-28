@@ -13,6 +13,6 @@ from ._simple import (
 
 from ._genename import (
     convert_gene_identifiers,
-    standardize_genenames,
+    standardize_gene_identifiers,
     var_names_merge_duplicates
 )

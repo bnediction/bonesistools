@@ -16,9 +16,11 @@ import anndata as ad
 from ...databases.ncbi import (
     InputIdentifierType,
     OutputIdentifierType,
-    GeneSynonyms
+    GeneSynonyms,
+    support_legacy_gene_synonyms_args
 )
 
+@support_legacy_gene_synonyms_args
 @anndata_or_mudata_checker
 def convert_gene_identifiers(
     scdata: ScData, # type: ignore
@@ -72,14 +74,15 @@ def convert_gene_identifiers(
     
     return scdata if copy else None
 
+@support_legacy_gene_synonyms_args
 @anndata_checker
-def standardize_genenames(
+def standardize_gene_identifiers(
     scdata: ScData, # type: ignore
     axis: Axis = "var",
     copy: bool = False
 ) -> Union[ScData, None]: # type: ignore
     """
-    Standardize gene names by converting them into their corresponding NCBI reference names.
+    Standardize gene names by converting them into their corresponding official names.
 
     Parameters
     ----------
@@ -99,8 +102,8 @@ def standardize_genenames(
     return convert_gene_identifiers(
         scdata=scdata,
         axis=axis,
-        input_identifier_type="genename",
-        output_identifier_type="referencename",
+        input_identifier_type="name",
+        output_identifier_type="official_name",
         copy=copy
     )
 

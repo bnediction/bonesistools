@@ -3,5 +3,6 @@
 from ._genesyn import (
     InputIdentifierType,
     OutputIdentifierType,
-    GeneSynonyms
+    GeneSynonyms,
+    support_legacy_gene_synonyms_args
 )
