@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
 from typing import Optional
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal # type: ignore
 from ._typing import RGB
 
 import math
@@ -26,11 +30,17 @@ def rgb2hex(rgb: RGB):
     Return the color in hexadecimal format.
     """
 
+def rgb2hex(rgb):
     r, g, b = rgb
-    if isinstance(r, float) and isinstance(g, float) and isinstance(b, float):
-        r = round(r*255) if 0<r<1 else int(r)
-        g = round(g*255) if 0<g<1 else int(g)
-        b = round(b*255) if 0<b<1 else int(b)
+
+    if all(isinstance(x, (int, float)) for x in (r, g, b)):
+        if all(0 <= x <= 1 for x in (r, g, b)):
+            r, g, b = [round(x * 255) for x in (r, g, b)]
+        else:
+            r, g, b = [int(x) for x in (r, g, b)]
+    else:
+        raise ValueError("invalid argument values for 'rgb': expected numeric values")
+
     return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
 black       = rgb([  0,   0,   0])
@@ -141,7 +151,10 @@ bonesis_cm = ListedColormap(
     name="bonesis"
 )
 
-def get_color(color:str):
+def get_color(
+    color: str,
+    color_type: Literal["rgb", "hex"] = "rgb"
+):
 
     if color in [
         "black", "white", "blue", "red", "green",
@@ -152,7 +165,12 @@ def get_color(color:str):
         "salmon", "maroon", "beet", "teal", "olive",
         "navy", "skyblue", "beige", "burgundy"
     ]:
-        return eval(color)
+        if color_type == "rgb":
+            return eval(color)
+        elif color_type == "hex":
+            return rgb2hex(eval(color))
+        else:
+            raise ValueError(f"invalid argument value for 'color_type': expected 'rgb' or 'hex' but received {color_type}")
     else:
         raise ValueError(f"color not found: {color}")
 

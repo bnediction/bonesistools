@@ -2,7 +2,6 @@
 
 from typing import (
     Union,
-    Sequence,
     List,
     Optional,
     Callable
