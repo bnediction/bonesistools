@@ -225,6 +225,11 @@ def ecdf_plot(
     Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
     """
 
+    def _ecdf(values):
+        values = np.sort(np.asarray(values))
+        y = np.arange(1, len(values) + 1) / len(values)
+        return values, y
+
     counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
 
     if scipy.sparse.issparse(counts):
@@ -260,11 +265,13 @@ def ecdf_plot(
     else:
         fig = ax.figure
 
-    ax.ecdf(counts["counting"], color=colors[0], label="all")
+    x, y = _ecdf(counts["counting"])
+    ax.step(x, y, where="post", color=colors[0], label="all")
     if obs:
         for _cluster, _color in zip(counts[obs].cat.categories, colors[1:]):
             _counts = counts.loc[counts[obs] == _cluster]["counting"]
-            ax.ecdf(_counts, color=_color, label=_cluster)
+            x, y = _ecdf(_counts)
+            ax.step(x, y, where="post", color=_color, label=_cluster)
 
     if "xlabel" in kwargs:
         ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])

@@ -90,9 +90,18 @@ def kneighbors_graph(
         n_jobs=n_jobs,
         **metric_kwds,
     )
-    kneighbors_graph = nx.from_numpy_array(
-        weighted_adjacency_matrix, create_using=create_using, edge_attr=edge_attr
-    )
+    try:
+        kneighbors_graph = nx.from_scipy_sparse_array(
+            weighted_adjacency_matrix,
+            create_using=create_using,
+            edge_attribute=edge_attr,
+        )
+    except AttributeError:
+        kneighbors_graph = nx.from_scipy_sparse_matrix(
+            weighted_adjacency_matrix,
+            create_using=create_using,
+            edge_attribute=edge_attr,
+        )
 
     if index_or_name == "index":
         return kneighbors_graph
