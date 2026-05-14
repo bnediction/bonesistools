@@ -13,6 +13,7 @@ except ImportError:
 
 try:
     from mpbn import MPBooleanNetwork
+
     _mpbn_is_available = True
 except ImportError:
     _mpbn_is_available = False

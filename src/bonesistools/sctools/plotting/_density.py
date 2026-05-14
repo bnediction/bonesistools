@@ -84,12 +84,14 @@ def kde_plot(
     import seaborn as sns
 
     counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
+
     if scipy.sparse.issparse(counts):
-        counts = pd.Series(
-            counts.toarray().squeeze(), index=adata.obs.index, name="counting"
-        )
-    if obs:
-        counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
+        counts = counts.toarray()
+
+    counts = pd.DataFrame(
+        {"counting": np.asarray(counts).squeeze()},
+        index=adata.obs.index,
+    )
 
     if obs:
         if not colors:
@@ -224,10 +226,15 @@ def ecdf_plot(
     """
 
     counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
+
     if scipy.sparse.issparse(counts):
-        counts = pd.Series(
-            counts.toarray().squeeze(), index=adata.obs.index, name="counting"
-        )
+        counts = counts.toarray()
+
+    counts = pd.DataFrame(
+        {"counting": np.asarray(counts).squeeze()},
+        index=adata.obs.index,
+    )
+
     if obs:
         counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
         if not colors:

@@ -559,7 +559,7 @@ def embedding_plot(
         pd.api.types.is_integer_dtype(scdata.obs[obs])
         or pd.api.types.is_bool_dtype(scdata.obs[obs])
         or pd.api.types.is_string_dtype(scdata.obs[obs])
-        or pd.api.types.is_categorical_dtype(scdata.obs[obs])
+        or isinstance(scdata.obs[obs].dtype, pd.CategoricalDtype)
     ):
         fig, ax = __scatterplot_discrete(
             scdata, obs, use_rep, colors, n_components, ax=ax, **kwargs

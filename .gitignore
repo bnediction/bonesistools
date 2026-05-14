@@ -78,14 +78,13 @@ q.log
 !.gitignore
 !.github/workflows/tests.yml
 !.placeholder
+!tests/
+!tests/data/
+!tests/data/*.h5ad
 .*
 *.log
 logs/
-*test*/
 *debug*/
 *tmp*
 *tmp/
 todo.*
-
-### Related-repository ###
-supplemental/

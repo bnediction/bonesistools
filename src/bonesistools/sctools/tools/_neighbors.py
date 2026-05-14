@@ -322,20 +322,30 @@ class Knnbs(object):
                 importlib.find_loader("multiprocess") is not None
             )
 
-        if _multiprocess_is_available:
+        if n_jobs == 1:
+            shortest_path_lengths_ls = [
+                shortest_path_lengths_from(category)
+                for category in self.obs.cat.categories
+            ]
+
+        elif _multiprocess_is_available:
             from multiprocess import Pool
 
             with Pool(processes=n_jobs) as pool:
                 shortest_path_lengths_ls = pool.map(
-                    shortest_path_lengths_from, self.obs.cat.categories
+                    shortest_path_lengths_from,
+                    self.obs.cat.categories,
                 )
+
         else:
             warnings.warn(
                 "module multiprocess not available: not using CPU parallelization"
             )
-            shortest_path_lengths_ls = []
-            for category in self.obs.cat.categories:
-                shortest_path_lengths_ls.append(shortest_path_lengths_from(category))
+
+            shortest_path_lengths_ls = [
+                shortest_path_lengths_from(category)
+                for category in self.obs.cat.categories
+            ]
 
         shortest_path_lengths_dict = {}
         for k, v in shortest_path_lengths_ls:
