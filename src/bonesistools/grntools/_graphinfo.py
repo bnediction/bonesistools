@@ -9,11 +9,8 @@ from ._typing import Graph
 import networkx as nx
 from ._algorithms import depth_first_extraction
 
-def get_edge_sign(
-    grn: Graph,
-    source: Any,
-    target: Any
-):
+
+def get_edge_sign(grn: Graph, source: Any, target: Any):
     """
     Get sign between source and target nodes.
 
@@ -35,11 +32,14 @@ def get_edge_sign(
     signs = {value["sign"] for value in edge_data.values()}
     for sign in signs:
         if sign not in [-1, 1]:
-            raise ValueError(f"invalid value for edge attribute 'sign': expected 0 or 1 but received {sign}")
+            raise ValueError(
+                f"invalid value for edge attribute 'sign': expected 0 or 1 but received {sign}"
+            )
     if len(signs) == 1:
         return list(signs)[0]
     else:
         return 0
+
 
 def get_path_sign(grn: Graph, *nodes) -> int:
     """
@@ -68,9 +68,12 @@ def get_path_sign(grn: Graph, *nodes) -> int:
         elif _sign == 1:
             pass
         else:
-            raise ValueError(f"invalid value for edge sign between nodes {u} and {v}: expected -1, 0 or 1 but got {_sign}")
+            raise ValueError(
+                f"invalid value for edge sign between nodes {u} and {v}: expected -1, 0 or 1 but got {_sign}"
+            )
         u = v
     return path_sign
+
 
 def path_to_string(grn: nx.Graph, *nodes) -> str:
     """
@@ -101,12 +104,13 @@ def path_to_string(grn: nx.Graph, *nodes) -> str:
         u = v
     return string
 
+
 def statistics(
     grn: Graph,
     weights: Sequence[Number],
     radius: int = 3,
     genes: Optional[Sequence[str]] = None,
-    allow_null_path_sign: Optional[bool] = None
+    allow_null_path_sign: Optional[bool] = None,
 ) -> dict:
     """
     Compute statistics (score, path number and maximum score) upon all existing paths within a radius for all gene pairwise in a gene set.
@@ -134,7 +138,9 @@ def statistics(
     genes = genes if genes is not None else set(grn.nodes)
     for source in genes:
         targets = genes.difference([source])
-        paths_from_source = depth_first_extraction(graph=grn, source=source, limit_depth=radius)
+        paths_from_source = depth_first_extraction(
+            graph=grn, source=source, limit_depth=radius
+        )
         _interactions_from_source = {target: [0, 0, 0] for target in targets}
         for _path in paths_from_source:
             _target = _path[-1]
@@ -142,14 +148,20 @@ def statistics(
                 _path_sign = get_path_sign(grn, *_path)
                 if allow_null_path_sign is True or _path_sign != 0:
                     _score, _maxscore, _path_number = _interactions_from_source[_target]
-                    _weight = weights[len(_path)-2]
+                    _weight = weights[len(_path) - 2]
                     _score += _path_sign * _weight
                     _maxscore += _weight
                     _path_number += 1
-                    _interactions_from_source[_target] = [_score, _maxscore, _path_number]
+                    _interactions_from_source[_target] = [
+                        _score,
+                        _maxscore,
+                        _path_number,
+                    ]
         for gene, value in _interactions_from_source.items():
             _score, _maxscore, _path_number = value
-            _interactions_from_source[gene] = namedtuple("Tuple", ["score", "maxscore", "path_number"])(_score, _maxscore, _path_number)
+            _interactions_from_source[gene] = namedtuple(
+                "Tuple", ["score", "maxscore", "path_number"]
+            )(_score, _maxscore, _path_number)
         interactions[source] = _interactions_from_source
         del _interactions_from_source
     return interactions

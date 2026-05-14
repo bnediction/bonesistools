@@ -10,13 +10,7 @@ try:
 except ImportError:
     from typing_extensions import Literal
 
-from typing import (
-    Union,
-    Optional,
-    Iterable,
-    Sequence,
-    Callable
-)
+from typing import Union, Optional, Iterable, Sequence, Callable
 from .._typing import anndata_checker
 
 import pandas as pd
@@ -30,6 +24,7 @@ from ._conversion import anndata_to_dataframe
 _CorrMethod = Literal["benjamini-hochberg", "bonferroni"]
 _Alternatives = Literal["two-sided", "less", "greater"]
 
+
 @anndata_checker
 def calculate_logfoldchanges(
     adata: AnnData,
@@ -38,7 +33,7 @@ def calculate_logfoldchanges(
     column_name: str = "logfoldchanges",
     is_log: bool = False,
     cluster_rebalancing: bool = False,
-    filter_logfoldchanges: Optional[Callable] = None
+    filter_logfoldchanges: Optional[Callable] = None,
 ) -> pd.DataFrame:
     """
     Log2 fold-change is a metric translating how much the transcript's expression
@@ -69,14 +64,14 @@ def calculate_logfoldchanges(
         to correct cluster size effects.
     filter_logfoldchanges: Function (optional, default: None)
         Function filtering results with respect log2 fold-change values.
-    
+
     Returns
     -------
     Return DataFrame storing following values:
     - **group**: group names.
     - **names**: gene names or gene ids.
     - **<column_name>**: log2 fold-change values.
-    
+
     See also
     --------
     Get more information about the difference between log2 fold-changes derived with Seurat and Scanpy here:
@@ -89,8 +84,8 @@ def calculate_logfoldchanges(
         __df.reset_index(names="names", inplace=True)
         __df.insert(0, "group", cluster)
         return __df
-    
-    logfoldchanges_df = pd.DataFrame(columns=["group","names",column_name])
+
+    logfoldchanges_df = pd.DataFrame(columns=["group", "names", column_name])
     counts_df = anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log)
 
     if cluster_rebalancing:
@@ -99,22 +94,35 @@ def calculate_logfoldchanges(
             _mean_in = mean_counts_df.loc[cluster]
             _mean_out = mean_counts_df.drop(index=cluster, inplace=False).mean()
             _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfoldchanges_df = pd.concat([logfoldchanges_df, _logfoldchanges_df.copy()])
+            logfoldchanges_df = pd.concat(
+                [logfoldchanges_df, _logfoldchanges_df.copy()]
+            )
     else:
         for cluster in sorted(adata.obs[groupby].unique().dropna()):
-            _mean_in = counts_df.loc[counts_df[groupby] == cluster, counts_df.columns != groupby].mean()
-            _mean_out = counts_df.loc[counts_df[groupby] != cluster, counts_df.columns != groupby].mean()
+            _mean_in = counts_df.loc[
+                counts_df[groupby] == cluster, counts_df.columns != groupby
+            ].mean()
+            _mean_out = counts_df.loc[
+                counts_df[groupby] != cluster, counts_df.columns != groupby
+            ].mean()
             _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfoldchanges_df = pd.concat([logfoldchanges_df, _logfoldchanges_df.copy()])
+            logfoldchanges_df = pd.concat(
+                [logfoldchanges_df, _logfoldchanges_df.copy()]
+            )
             del _logfoldchanges_df
-    
+
     if filter_logfoldchanges is not None:
         if not callable(filter_logfoldchanges):
-            raise TypeError(f"unsupported argument type for 'filter_logfoldchanges': expected callable object")
+            raise TypeError(
+                f"unsupported argument type for 'filter_logfoldchanges': expected callable object"
+            )
         else:
-            logfoldchanges_df = logfoldchanges_df.loc[filter_logfoldchanges(logfoldchanges_df[column_name].values)]
+            logfoldchanges_df = logfoldchanges_df.loc[
+                filter_logfoldchanges(logfoldchanges_df[column_name].values)
+            ]
 
     return logfoldchanges_df.reset_index(drop=True)
+
 
 def hypergeometric_test(
     adata: AnnData,
@@ -131,7 +139,7 @@ def hypergeometric_test(
     - n is the number of markers,
     - k is the number of gene matching both signature genes and markers.
     Smaller the p-value, higher the probability that genes of the given
-    cluster comes from the cell-type associated to the given signature.    
+    cluster comes from the cell-type associated to the given signature.
 
     Parameters
     ----------
@@ -143,7 +151,7 @@ def hypergeometric_test(
     markers: Sequence[str]
         Set of markers (genes) in a given cluster.
         A marker set is a set of over-expressed genes in a cluster.
-    
+
     Returns
     -------
     Return the p-value.
@@ -152,8 +160,10 @@ def hypergeometric_test(
     from scipy.stats import hypergeom
 
     if not isinstance(adata, AnnData):
-        raise TypeError(f"unsupported argument type for 'adata': expected {AnnData} but received {type(adata)}")
-    
+        raise TypeError(
+            f"unsupported argument type for 'adata': expected {AnnData} but received {type(adata)}"
+        )
+
     background = set(adata.var.index)
     if not isinstance(signature, set):
         signature = set(signature)
@@ -161,18 +171,13 @@ def hypergeometric_test(
         markers = set(markers)
     marked_genes = markers.intersection(signature)
 
-    N = len(background)         # population size
-    K = len(signature)          # number of success states
-    n = len(markers)            # number of draws
-    k = len(marked_genes)       # number of observed successes (matching genes)
-    
-    return hypergeom.sf(
-        k=k,
-        M=N,
-        n=K,
-        N=n,
-        loc=1
-    )
+    N = len(background)  # population size
+    K = len(signature)  # number of success states
+    n = len(markers)  # number of draws
+    k = len(marked_genes)  # number of observed successes (matching genes)
+
+    return hypergeom.sf(k=k, M=N, n=K, N=n, loc=1)
+
 
 def smirnov_tests(
     adata: AnnData,
@@ -184,7 +189,7 @@ def smirnov_tests(
     corr_method: _CorrMethod = "benjamini-hochberg",
     pval_cutoff: Optional[float] = None,
     key_added: Optional[str] = None,
-    copy: bool = False
+    copy: bool = False,
 ) -> Optional[AnnData]:
     """
     Compare whether a subsample and a reference sample have the same distribution
@@ -217,7 +222,7 @@ def smirnov_tests(
         Key in 'adata.uns' where information is saved to.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-    
+
     Returns
     -------
     Return DataFrame ordered by ks statistic storing following values:
@@ -243,11 +248,15 @@ def smirnov_tests(
     elif isinstance(groups, Seq) and not isinstance(groups, str):
         groups = list(groups)
     else:
-        raise TypeError(f"unsupported argument type for 'groups': expected sequence but received {type(groups)}")
+        raise TypeError(
+            f"unsupported argument type for 'groups': expected sequence but received {type(groups)}"
+        )
 
     if reference != "rest" and reference not in adata.obs[groupby].cat.categories:
         cats = sorted(list(adata.obs[groupby].cat.categories))
-        raise ValueError(f"reference '{reference}' not found in adata.obs['groupby'] (avalaible values: {cats}).")
+        raise ValueError(
+            f"reference '{reference}' not found in adata.obs['groupby'] (avalaible values: {cats})."
+        )
 
     if key_added is None:
         key_added = "smirnov_tests"
@@ -256,7 +265,7 @@ def smirnov_tests(
         "groupby": groupby,
         "reference": reference,
         "layer": layer,
-        "corr_method": corr_method
+        "corr_method": corr_method,
     }
 
     if layer is not None:
@@ -274,11 +283,17 @@ def smirnov_tests(
 
     for name in adata.var_names:
         if reference != "rest":
-            ref_sample = np.asarray(X[adata.obs[groupby] == reference, adata.var.index == name].to_numpy()).reshape(-1)
+            ref_sample = np.asarray(
+                X[adata.obs[groupby] == reference, adata.var.index == name].to_numpy()
+            ).reshape(-1)
         for group in groups:
             if reference == "rest":
-                ref_sample = np.asarray(X[adata.obs[groupby] != group, adata.var.index == name]).reshape(-1)
-            sample = np.asarray(X[adata.obs[groupby] == group, adata.var.index == name]).reshape(-1)
+                ref_sample = np.asarray(
+                    X[adata.obs[groupby] != group, adata.var.index == name]
+                ).reshape(-1)
+            sample = np.asarray(
+                X[adata.obs[groupby] == group, adata.var.index == name]
+            ).reshape(-1)
             ks = kstest(sample, ref_sample, alternative=alternative)
             df.loc[index] = [
                 group,
@@ -289,16 +304,12 @@ def smirnov_tests(
                 ks.pvalue,
             ]
             index += 1
-    
-    df.sort_values(
-        by=["statistics"],
-        ascending=False,
-        inplace=True,
-        ignore_index=True
-    )
+
+    df.sort_values(by=["statistics"], ascending=False, inplace=True, ignore_index=True)
 
     if corr_method == "benjamini-hochberg":
         from statsmodels.stats.multitest import multipletests
+
         _, df["pvals_adj"], _, _ = multipletests(
             df["pvals"], alpha=0.05, method="fdr_bh"
         )
@@ -313,4 +324,3 @@ def smirnov_tests(
         return df
     else:
         adata.uns[key_added]["results"] = df
-    

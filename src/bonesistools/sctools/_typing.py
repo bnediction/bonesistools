@@ -1,18 +1,12 @@
 #!/usr/bin/env python
 
 import importlib
-from typing import (
-    Optional,
-    Union,
-    Callable,
-    Sequence,
-    List,
-    Tuple
-)
+from typing import Optional, Union, Callable, Sequence, List, Tuple
+
 try:
     from typing import Literal
 except ImportError:
-    from typing_extensions import Literal # type: ignore
+    from typing_extensions import Literal  # type: ignore
 
 from anndata import AnnData
 from pandas import DataFrame
@@ -25,8 +19,9 @@ try:
 except:
     _mudata_is_available = importlib.find_loader("mudata") is not None
 
+
 class UnionType(object):
-    
+
     def __init__(self, *args):
         self.types = args
 
@@ -34,6 +29,7 @@ class UnionType(object):
         return ",".join(self.types)
 
     __repr__ = __str__
+
 
 DataFrameList = List[DataFrame]
 Suffixes = Tuple[Optional[str], Optional[str]]
@@ -45,7 +41,8 @@ Keys = Union[str, Sequence[str]]
 AnnDataList = List[AnnData]
 
 if _mudata_is_available:
-    from mudata import MuData # type: ignore
+    from mudata import MuData  # type: ignore
+
     MuDataList = List[MuData]
     ScData = Union[AnnData, MuData]
 else:
@@ -76,19 +73,17 @@ Metric = Literal[
     "sokalmichener",
     "sokalsneath",
     "sqeuclidean",
-    "yule"
+    "yule",
 ]
 Metric_Function = Callable[[np.ndarray, np.ndarray], float]
 
 Shortest_Path_Method = Literal["dijkstra", "bellman-ford"]
 
-def type_checker(
-    function: Optional[Callable] = None,
-    **options
-):
+
+def type_checker(function: Optional[Callable] = None, **options):
     """
     Check if the argument types passed to 'function' are correct.
-    
+
     Parameters
     ----------
     function: Callable
@@ -96,7 +91,7 @@ def type_checker(
     **options
         key-value data-structure where 'key' is the argument name
         and 'value' is the expected argument type.
-    
+
     Returns
     -------
     Raise an error if at least one argument type is not correct.
@@ -112,7 +107,7 @@ def type_checker(
             arg_names = function_code.co_varnames
             for key, value in options.items():
                 idx = arg_names.index(key)
-                if (len(args) > idx):
+                if len(args) > idx:
                     arg = args[idx]
                 else:
                     if key in kwargs:
@@ -123,13 +118,18 @@ def type_checker(
                         if isinstance(arg, dtype):
                             types_match = True
                     if types_match == False:
-                        raise TypeError(f"unsupported argument type for key '{key}': expected '{value}' but received {type(key)}")
+                        raise TypeError(
+                            f"unsupported argument type for key '{key}': expected '{value}' but received {type(key)}"
+                        )
                 elif not isinstance(arg, value):
-                    raise TypeError(f"unsupported argument type for key '{key}': expected {value.__name__} but received {type(key)}")
+                    raise TypeError(
+                        f"unsupported argument type for key '{key}': expected {value.__name__} but received {type(key)}"
+                    )
             output = function(*args, **kwargs)
             return output
+
         return wrapper
-    
+
     else:
 
         @wraps(function)
@@ -138,25 +138,23 @@ def type_checker(
 
         return partial_wrapper
 
-def anndata_checker(
-    function: Optional[Callable] = None,
-    n: int = 1
-):
+
+def anndata_checker(function: Optional[Callable] = None, n: int = 1):
     """
     Check if the first arguments are AnnData instances.
-    
+
     Parameters
     ----------
     function: Callable
         Function for which the first argument types are expected being AnnData instances.
     n: int (default: 1)
         Number of arguments to test.
-    
+
     Returns
     -------
     Raise an error if at least one of the first 'n' arguments is not a AnnData instance.
     """
-    
+
     if function is not None:
 
         @wraps(function)
@@ -165,8 +163,11 @@ def anndata_checker(
             for i in range(n):
                 value = next(iterator)
                 if not isinstance(value, AnnData):
-                    raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}")
+                    raise TypeError(
+                        f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}"
+                    )
             return function(*args, **kwargs)
+
         return wrapper
 
     else:
@@ -174,24 +175,23 @@ def anndata_checker(
         @wraps(function)
         def partial_wrapper(function):
             return anndata_checker(function, n)
+
         return partial_wrapper
+
 
 if _mudata_is_available:
 
-    def mudata_checker(
-        function: Optional[Callable] = None,
-        n: int = 1
-    ):
+    def mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
         Check if the first arguments are MuData instances.
-    
+
         Parameters
         ----------
         function: Callable
             Function for which the first argument types are expected being MuData instances.
         n: int (default: 1)
             Number of arguments to test.
-    
+
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a MuData instance.
@@ -205,8 +205,11 @@ if _mudata_is_available:
                 for i in range(n):
                     value = next(iterator)
                     if not isinstance(value, MuData):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {MuData} but received {type(value)}")
+                        raise TypeError(
+                            f"unsupported argument type for '{i+1}'-th argument: expected {MuData} but received {type(value)}"
+                        )
                 return function(*args, **kwargs)
+
             return wrapper
 
         else:
@@ -214,22 +217,20 @@ if _mudata_is_available:
             @wraps(function)
             def partial_wrapper(function):
                 return mudata_checker(function, n)
+
             return partial_wrapper
-    
-    def anndata_or_mudata_checker(
-        function: Optional[Callable] = None,
-        n: int = 1
-    ):
+
+    def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
         Check if the first arguments are AnnData or MuData instances.
-    
+
         Parameters
         ----------
         function: Callable
             Function for which the first argument types are expected being AnnData or MuData instances.
         n: int (default: 1)
             Number of arguments to test.
-    
+
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
@@ -243,8 +244,11 @@ if _mudata_is_available:
                 for i in range(n):
                     value = next(iterator)
                     if not (isinstance(value, AnnData) or isinstance(value, MuData)):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} or {MuData} but received {type(value)}")
+                        raise TypeError(
+                            f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} or {MuData} but received {type(value)}"
+                        )
                 return function(*args, **kwargs)
+
             return wrapper
 
         else:
@@ -252,24 +256,22 @@ if _mudata_is_available:
             @wraps(function)
             def partial_wrapper(function):
                 return mudata_checker(function, n)
+
             return partial_wrapper
 
 else:
 
-    def mudata_checker(
-        function: Optional[Callable] = None,
-        n: int = 1
-    ):
+    def mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
         Check if the first arguments are MuData instances.
-    
+
         Parameters
         ----------
         function: Callable
             Function for which the first argument types are expected being MuData instances.
         n: int (default: 1)
             Number of arguments to test.
-    
+
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a MuData instance.
@@ -280,6 +282,7 @@ else:
             @wraps(function)
             def wrapper(*args, **kwargs):
                 raise ModuleNotFoundError("no module named 'mudata'")
+
             return wrapper
 
         else:
@@ -287,22 +290,20 @@ else:
             @wraps(function)
             def partial_wrapper(function):
                 return mudata_checker(function, n)
+
             return partial_wrapper
 
-    def anndata_or_mudata_checker(
-        function: Optional[Callable] = None,
-        n: int = 1
-    ):
+    def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
         Check if the first arguments are AnnData or MuData instances.
-    
+
         Parameters
         ----------
         function: Callable
             Function for which the first argument types are expected being AnnData or MuData instances.
         n: int (default: 1)
             Number of arguments to test.
-    
+
         Returns
         -------
         Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
@@ -316,8 +317,11 @@ else:
                 for i in range(n):
                     value = next(iterator)
                     if not isinstance(value, AnnData):
-                        raise TypeError(f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}")
+                        raise TypeError(
+                            f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}"
+                        )
                 return function(*args, **kwargs)
+
             return wrapper
 
         else:
@@ -325,4 +329,5 @@ else:
             @wraps(function)
             def partial_wrapper(function):
                 return mudata_checker(function, n)
+
             return partial_wrapper

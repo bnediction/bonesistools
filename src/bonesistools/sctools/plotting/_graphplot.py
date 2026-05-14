@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 
-from typing import (
-    Optional,
-    Union,
-    Sequence,
-    Mapping
-)
+from typing import Optional, Union, Sequence, Mapping
 from pathlib import Path
 from anndata import AnnData
 from ._typing import RGB
@@ -21,6 +16,7 @@ import networkx as nx
 
 from ..tools import get_paga_graph
 
+
 @anndata_checker
 def draw_paga(
     adata: AnnData,
@@ -32,7 +28,7 @@ def draw_paga(
     with_labels: bool = False,
     node_color: Optional[Union[Sequence[RGB], cycle, Mapping]] = _colors.black,
     outfile: Optional[Path] = None,
-    **kwargs
+    **kwargs,
 ) -> Union[Axes, None]:
     """
     Draw the paga graph with Matplotlib. To compute the paga matrix, please run 'scanpy.tl.paga'.
@@ -71,16 +67,12 @@ def draw_paga(
     [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell states through dynamical modeling.
     Nature biotechnology, 38(12), 1408-1414 (https://doi.org/10.1038/s41587-020-0591-3)
     """
-    
+
     if ax is None:
         ax = plt.gca()
-    
+
     paga = get_paga_graph(
-        adata=adata,
-        obs=obs,
-        use_rep=use_rep,
-        edges=edges,
-        threshold=threshold
+        adata=adata, obs=obs, use_rep=use_rep, edges=edges, threshold=threshold
     )
     barycenters = nx.get_node_attributes(paga, "pos")
 
@@ -93,7 +85,7 @@ def draw_paga(
         ax=ax,
         with_labels=with_labels,
         node_color=node_color,
-        **kwargs
+        **kwargs,
     )
 
     if outfile:

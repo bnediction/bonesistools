@@ -14,10 +14,7 @@ from ._colors import (
     LIGHT_COLORS,
     QUALITATIVE_COLORS,
     color_cycle,
-    bonesis_cm
+    bonesis_cm,
 )
 
-from ._figure import (
-    set_default_params,
-    set_default_axis
-)
+from ._figure import set_default_params, set_default_axis

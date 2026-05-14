@@ -7,6 +7,7 @@ import numpy as np
 
 import networkx as nx
 
+
 @anndata_checker
 def get_paga_graph(
     adata: AnnData,
@@ -19,7 +20,7 @@ def get_paga_graph(
     Get the partition-based graph abstraction (paga) graph stored in 'adata' with a graph-based data structure.
     To compute the paga matrix, please run 'scanpy.tl.paga'. Paga can also be computed using scvelo [1].
     In this case, please use adata.uns['edges'] = adata.uns["paga"]['edges'] before.
-    
+
     Parameters
     ----------
     adata: ad.AnnData
@@ -44,7 +45,10 @@ def get_paga_graph(
     """
 
     clusters = adata.obs[obs].cat.categories
-    barycenters = {cluster: np.nanmean(adata.obsm[use_rep][adata.obs[obs] == cluster], axis=0) for cluster in clusters}
+    barycenters = {
+        cluster: np.nanmean(adata.obsm[use_rep][adata.obs[obs] == cluster], axis=0)
+        for cluster in clusters
+    }
 
     if edges not in adata.uns:
         if "connectivities" in adata.uns:
@@ -54,9 +58,13 @@ def get_paga_graph(
     adjacency = adata.uns[edges].copy()
 
     if not isinstance(threshold, float):
-        raise TypeError(f"unsupported argument type for 'threshold': expected {float} but received {type(threshold)}")
+        raise TypeError(
+            f"unsupported argument type for 'threshold': expected {float} but received {type(threshold)}"
+        )
     elif threshold < 0:
-        raise ValueError(f"invalid argument value for 'threshold': expected positive value but received '{threshold}'")
+        raise ValueError(
+            f"invalid argument value for 'threshold': expected positive value but received '{threshold}'"
+        )
     elif threshold > 0:
         adjacency.data[adjacency.data < threshold] = 0
         adjacency.eliminate_zeros()
@@ -66,8 +74,8 @@ def get_paga_graph(
     for node in clusters:
         paga.add_node(node, pos=barycenters[node])
     for i in range(len(adjacency)):
-        for j in range(i+1, len(adjacency)):
-            if adjacency[i,j] > 0:
+        for j in range(i + 1, len(adjacency)):
+            if adjacency[i, j] > 0:
                 paga.add_edge(clusters[j], clusters[i])
             if adjacency[j, i] > 0:
                 paga.add_edge(clusters[i], clusters[j])

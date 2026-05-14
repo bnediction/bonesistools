@@ -4,5 +4,5 @@ from ._genesyn import (
     InputIdentifierType,
     OutputIdentifierType,
     GeneSynonyms,
-    support_legacy_gene_synonyms_args
+    support_legacy_gene_synonyms_args,
 )

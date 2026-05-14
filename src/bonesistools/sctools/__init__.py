@@ -20,7 +20,7 @@ from ._typing import (
     Keys,
     Suffixes,
     ScData,
-    Metric
+    Metric,
 )
 
 from . import tools as tl
@@ -29,4 +29,6 @@ from . import plotting as pl
 
 import sys
 
-sys.modules.update({f"{__name__}.{alias}": globals()[alias] for alias in ["tl", "pp", "pl"]})
+sys.modules.update(
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["tl", "pp", "pl"]}
+)

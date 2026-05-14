@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 from typing import Optional
+
 try:
     from typing import Literal
 except ImportError:
-    from typing_extensions import Literal # type: ignore
+    from typing_extensions import Literal  # type: ignore
 from ._typing import RGB
 
 import math
@@ -13,8 +14,10 @@ import numpy as np
 from itertools import cycle
 from matplotlib.colors import Colormap, ListedColormap
 
+
 def rgb(color):
-    return list(map(lambda x: x/255, color))
+    return list(map(lambda x: x / 255, color))
+
 
 def rgb2hex(rgb: RGB):
     """
@@ -24,11 +27,12 @@ def rgb2hex(rgb: RGB):
     ----------
     color: RGB
         Color in RGB format.
-    
+
     Returns
     -------
     Return the color in hexadecimal format.
     """
+
 
 def rgb2hex(rgb):
     r, g, b = rgb
@@ -43,41 +47,42 @@ def rgb2hex(rgb):
 
     return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
-black       = rgb([  0,   0,   0])
-white       = rgb([255, 255, 255])
-blue        = rgb([  0,  20, 255])
-red         = rgb([255,  80,  50])
-green       = rgb([ 20, 200,  80])
-violet      = rgb([255,  51, 255])
-lightgreen  = rgb([ 20, 250,  80])
-coral       = rgb([255, 127,  80])
-yellow      = rgb([255, 255,   0])
-darkred     = rgb([139,   0,   0])
-darkyellow  = rgb([204, 204,   0])
-lightyellow = rgb([128, 128,   0])
-darkorange  = rgb([255, 105,   0])
-lightorange = rgb([255, 165,  90])
-limegreen   = rgb([ 50, 255,  50])
-pink        = rgb([255, 182, 193])
-orchid      = rgb([218, 112, 214])
-magenta     = rgb([255,   0, 255])
-purple      = rgb([128,   0, 128])
-indigo      = rgb([ 75,   0, 130])
-slateblue   = rgb([ 71,  60, 139])
-lightgray   = rgb([211, 211, 211])
-gray        = rgb([112, 128, 144])
-darkgreen   = rgb([  0, 100,   0])
-gold        = rgb([238, 201,   0])
-orange      = rgb([255, 128,   0])
-salmon      = rgb([198, 113, 113])
-maroon      = rgb([128,   0,   0])
-beet        = rgb([142,  56, 142])
-teal        = rgb([ 56, 142, 142])
-olive       = rgb([142, 142,  56])
-navy        = rgb([  0,   0, 128])
-skyblue     = rgb([135, 206, 235])
-beige       = rgb([255, 255, 204])
-burgundy    = rgb([128,   0,  32])
+
+black = rgb([0, 0, 0])
+white = rgb([255, 255, 255])
+blue = rgb([0, 20, 255])
+red = rgb([255, 80, 50])
+green = rgb([20, 200, 80])
+violet = rgb([255, 51, 255])
+lightgreen = rgb([20, 250, 80])
+coral = rgb([255, 127, 80])
+yellow = rgb([255, 255, 0])
+darkred = rgb([139, 0, 0])
+darkyellow = rgb([204, 204, 0])
+lightyellow = rgb([128, 128, 0])
+darkorange = rgb([255, 105, 0])
+lightorange = rgb([255, 165, 90])
+limegreen = rgb([50, 255, 50])
+pink = rgb([255, 182, 193])
+orchid = rgb([218, 112, 214])
+magenta = rgb([255, 0, 255])
+purple = rgb([128, 0, 128])
+indigo = rgb([75, 0, 130])
+slateblue = rgb([71, 60, 139])
+lightgray = rgb([211, 211, 211])
+gray = rgb([112, 128, 144])
+darkgreen = rgb([0, 100, 0])
+gold = rgb([238, 201, 0])
+orange = rgb([255, 128, 0])
+salmon = rgb([198, 113, 113])
+maroon = rgb([128, 0, 0])
+beet = rgb([142, 56, 142])
+teal = rgb([56, 142, 142])
+olive = rgb([142, 142, 56])
+navy = rgb([0, 0, 128])
+skyblue = rgb([135, 206, 235])
+beige = rgb([255, 255, 204])
+burgundy = rgb([128, 0, 32])
 
 COLORS = [
     blue,
@@ -110,7 +115,7 @@ COLORS = [
     darkorange,
     lightyellow,
     lightorange,
-    burgundy
+    burgundy,
 ]
 
 LIGHT_COLORS = [
@@ -127,7 +132,7 @@ LIGHT_COLORS = [
     indigo,
     gold,
     navy,
-    salmon
+    salmon,
 ]
 
 QUALITATIVE_COLORS = [
@@ -141,43 +146,69 @@ QUALITATIVE_COLORS = [
     darkgreen,
     gold,
     indigo,
-    maroon
+    maroon,
 ]
 
 color_cycle = cycle(COLORS)
 
-bonesis_cm = ListedColormap(
-    colors=COLORS,
-    name="bonesis"
-)
+bonesis_cm = ListedColormap(colors=COLORS, name="bonesis")
 
-def get_color(
-    color: str,
-    color_type: Literal["rgb", "hex"] = "rgb"
-):
+
+def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
 
     if color in [
-        "black", "white", "blue", "red", "green",
-        "violet", "lightgreen", "coral", "yellow", "darkyellow",
-        "lightyellow", "darkorange", "darkred", "lightorange", "limegreen", "pink",
-        "orchid", "magenta", "purple", "indigo", "slateblue",
-        "lightgray", "gray", "darkgreen", "gold", "orange",
-        "salmon", "maroon", "beet", "teal", "olive",
-        "navy", "skyblue", "beige", "burgundy"
+        "black",
+        "white",
+        "blue",
+        "red",
+        "green",
+        "violet",
+        "lightgreen",
+        "coral",
+        "yellow",
+        "darkyellow",
+        "lightyellow",
+        "darkorange",
+        "darkred",
+        "lightorange",
+        "limegreen",
+        "pink",
+        "orchid",
+        "magenta",
+        "purple",
+        "indigo",
+        "slateblue",
+        "lightgray",
+        "gray",
+        "darkgreen",
+        "gold",
+        "orange",
+        "salmon",
+        "maroon",
+        "beet",
+        "teal",
+        "olive",
+        "navy",
+        "skyblue",
+        "beige",
+        "burgundy",
     ]:
         if color_type == "rgb":
             return eval(color)
         elif color_type == "hex":
             return rgb2hex(eval(color))
         else:
-            raise ValueError(f"invalid argument value for 'color_type': expected 'rgb' or 'hex' but received {color_type}")
+            raise ValueError(
+                f"invalid argument value for 'color_type': expected 'rgb' or 'hex' but received {color_type}"
+            )
     else:
         raise ValueError(f"color not found: {color}")
+
 
 def generate_colormap(
     color_number: int = 80,
     shade_number: Optional[int] = None,
-    cm: Colormap = bonesis_cm
+    cm: Colormap = bonesis_cm,
 ) -> ListedColormap:
     """
     Create a colormap from another colormap by adding some new colors.
@@ -197,21 +228,34 @@ def generate_colormap(
     """
 
     if color_number <= 0:
-        raise ValueError(f"invalid argument value for 'color_number': expected non-null positive value but received '{color_number}'")
+        raise ValueError(
+            f"invalid argument value for 'color_number': expected non-null positive value but received '{color_number}'"
+        )
     elif color_number <= cm.N:
         return ListedColormap(cm.colors[0:color_number])
-    
+
     if not isinstance(cm, Colormap):
-        raise TypeError(f"unsupported argument type for 'cm': expected {Colormap} but received {type(cm)}")
+        raise TypeError(
+            f"unsupported argument type for 'cm': expected {Colormap} but received {type(cm)}"
+        )
 
     if shade_number is None:
         shade_number = cm.N
     elif shade_number <= 0:
-        raise ValueError(f"invalid argument value for 'shade_number': expected non-null positive value but received '{shade_number}'")
-    
-    color_number_with_multiply_of_shades = int(math.ceil(color_number / shade_number) * shade_number)
-    linearly_uniform_floats = np.arange(color_number_with_multiply_of_shades) / color_number_with_multiply_of_shades
-    reorganised_array = linearly_uniform_floats.reshape(shade_number, color_number_with_multiply_of_shades // shade_number).transpose()
+        raise ValueError(
+            f"invalid argument value for 'shade_number': expected non-null positive value but received '{shade_number}'"
+        )
+
+    color_number_with_multiply_of_shades = int(
+        math.ceil(color_number / shade_number) * shade_number
+    )
+    linearly_uniform_floats = (
+        np.arange(color_number_with_multiply_of_shades)
+        / color_number_with_multiply_of_shades
+    )
+    reorganised_array = linearly_uniform_floats.reshape(
+        shade_number, color_number_with_multiply_of_shades // shade_number
+    ).transpose()
     partition_number = reorganised_array.shape[0]
 
     flatten_reorganised_array = reorganised_array.reshape(-1)
@@ -223,12 +267,20 @@ def generate_colormap(
 
     lower_half = lower_partitions_half * shade_number
     for i in range(3):
-        initial_cm[0:lower_half, i] *= np.arange(0.2, 1, 0.8/lower_half)
+        initial_cm[0:lower_half, i] *= np.arange(0.2, 1, 0.8 / lower_half)
 
     for i in range(3):
         for j in range(upper_partitions_half):
-            modifier = np.ones(shade_number) - initial_cm[lower_half + j * shade_number: lower_half + (j + 1) * shade_number, i]
+            modifier = (
+                np.ones(shade_number)
+                - initial_cm[
+                    lower_half + j * shade_number : lower_half + (j + 1) * shade_number,
+                    i,
+                ]
+            )
             modifier = j * modifier / upper_partitions_half
-            initial_cm[lower_half + j * shade_number: lower_half + (j + 1) * shade_number, i] += modifier
+            initial_cm[
+                lower_half + j * shade_number : lower_half + (j + 1) * shade_number, i
+            ] += modifier
 
     return ListedColormap(initial_cm)

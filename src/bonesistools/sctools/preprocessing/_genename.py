@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Union, Optional
-from .._typing import (
-    ScData,
-    anndata_checker,
-    anndata_or_mudata_checker,
-    Axis
-)
+from .._typing import ScData, anndata_checker, anndata_or_mudata_checker, Axis
 from pandas import DataFrame
 from anndata import AnnData
 from scipy.sparse import csr_matrix
@@ -17,18 +12,19 @@ from ...databases.ncbi import (
     InputIdentifierType,
     OutputIdentifierType,
     GeneSynonyms,
-    support_legacy_gene_synonyms_args
+    support_legacy_gene_synonyms_args,
 )
+
 
 @support_legacy_gene_synonyms_args
 @anndata_or_mudata_checker
 def convert_gene_identifiers(
-    scdata: ScData, # type: ignore
+    scdata: ScData,  # type: ignore
     axis: Axis = "var",
     input_identifier_type: InputIdentifierType = "name",
     output_identifier_type: OutputIdentifierType = "official_name",
-    copy: bool = False
-) -> Union[ScData, None]: # type: ignore
+    copy: bool = False,
+) -> Union[ScData, None]:  # type: ignore
     f"""
     Replace gene identifiers into the desired identifier format.
 
@@ -59,7 +55,7 @@ def convert_gene_identifiers(
             axis="index",
             input_identifier_type=input_identifier_type,
             output_identifier_type=output_identifier_type,
-            copy=False
+            copy=False,
         )
     elif axis in [1, "var"]:
         GeneSynonyms()(
@@ -67,20 +63,19 @@ def convert_gene_identifiers(
             axis="index",
             input_identifier_type=input_identifier_type,
             output_identifier_type=output_identifier_type,
-            copy=False
+            copy=False,
         )
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
-    
+
     return scdata if copy else None
+
 
 @support_legacy_gene_synonyms_args
 @anndata_checker
 def standardize_gene_identifiers(
-    scdata: ScData, # type: ignore
-    axis: Axis = "var",
-    copy: bool = False
-) -> Union[ScData, None]: # type: ignore
+    scdata: ScData, axis: Axis = "var", copy: bool = False  # type: ignore
+) -> Union[ScData, None]:  # type: ignore
     """
     Standardize gene names by converting them into their corresponding official names.
 
@@ -93,7 +88,7 @@ def standardize_gene_identifiers(
         whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
     copy: bool (default: False)
         Return a copy instead of updating ScData object.
-        
+
     Returns
     -------
     Depending on 'copy', update 'scdata' or return ScData object.
@@ -104,13 +99,13 @@ def standardize_gene_identifiers(
         axis=axis,
         input_identifier_type="name",
         output_identifier_type="official_name",
-        copy=copy
+        copy=copy,
     )
+
 
 @anndata_checker
 def var_names_merge_duplicates(
-    adata: AnnData,
-    var_names_column: Optional[str] = None
+    adata: AnnData, var_names_column: Optional[str] = None
 ) -> Union[AnnData, None]:
     """
     Merge the duplicated index names in adata.var by summing the counts between each duplicated index elements.
@@ -123,7 +118,7 @@ def var_names_merge_duplicates(
         If specify, give a priority order for which row in adata.var is saved when rows are merged.
         For instance, if multiple rows have same index but different cell values,
         the row with cell value at 'var_names_column' column is considered as the main information over others.
-    
+
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
@@ -137,11 +132,15 @@ def var_names_merge_duplicates(
 
     obs = DataFrame(adata.obs.index).set_index(0)
     adatas = list()
-    duplicated_var_names = {adata.var_names[idx] for idx, value in enumerate(adata.var_names.duplicated()) if value}
+    duplicated_var_names = {
+        adata.var_names[idx]
+        for idx, value in enumerate(adata.var_names.duplicated())
+        if value
+    }
 
     for var_name in duplicated_var_names:
-        adata_spec = adata[:,adata.var.index == var_name]
-        adata = adata[:,adata.var.index != var_name]
+        adata_spec = adata[:, adata.var.index == var_name]
+        adata = adata[:, adata.var.index != var_name]
 
         X = csr_matrix(adata_spec.X.sum(axis=1))
         if var_name in list(adata_spec.var[var_names]):
@@ -155,12 +154,7 @@ def var_names_merge_duplicates(
     adatas.append(adata)
 
     adata = ad.concat(
-        adatas=adatas,
-        join="outer",
-        axis=1,
-        merge="same",
-        uns_merge="first",
-        label=None
+        adatas=adatas, join="outer", axis=1, merge="same", uns_merge="first", label=None
     )
 
     if var_names_column is None:

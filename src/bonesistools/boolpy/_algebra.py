@@ -6,6 +6,7 @@ from ._boolean import PartialBoolean
 
 import math
 
+
 class BooleanDifferentialCalculus(object):
 
     def __init__(self) -> None:
@@ -33,14 +34,14 @@ class BooleanDifferentialCalculus(object):
             return 1
         elif _v1 > _v2:
             return -1
-        
+
     def pairwise_predecessor_test(
         self,
         source_v1: Union[bool, PartialBoolean],
         source_v2: Union[bool, PartialBoolean],
         target_v1: Union[bool, PartialBoolean],
         target_v2: Union[bool, PartialBoolean],
-        sign: int
+        sign: int,
     ) -> Union[bool, None]:
         """
         By assuming there is two conditions 1 and 2, estimate which one preceeds the other one with respect to two nodes.

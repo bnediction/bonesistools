@@ -12,19 +12,19 @@ except:
     _pydot_is_available = importlib.find_loader("pydot") is not None
 
 if _mpbn_is_available:
-    from colomoto.minibn import BooleanNetwork # type: ignore
+    from colomoto.minibn import BooleanNetwork  # type: ignore
 else:
     BooleanNetwork = type(NotImplemented)
 
 if _pydot_is_available:
-    from pydot import Dot # type: ignore
+    from pydot import Dot  # type: ignore
 else:
     Dot = type(NotImplemented)
 
+
 def bn_to_pydot(
-    bn: BooleanNetwork, # type: ignore
-    **kwargs
-) -> Dot: # type: ignore
+    bn: BooleanNetwork, **kwargs  # type: ignore
+) -> Dot:  # type: ignore
     """
     Convert Boolean network into pydot graph.
 
@@ -34,14 +34,14 @@ def bn_to_pydot(
         Boolean network.
     **kwargs: Mapping[str, Any]
         Keyword-arguments passed to update pydot graph.
-    
+
     Returns
     -------
     Return pydot graph from Boolean network-based influence graph.
     """
 
-    import boolean # type: ignore
-    
+    import boolean  # type: ignore
+
     edges = set()
     ig = nx.MultiDiGraph()
     for target, f in bn.items():
@@ -53,15 +53,15 @@ def bn_to_pydot(
             else:
                 source = literal.obj
                 sign = 1
-            edges.add((source,target,sign))
-    for (source, target, sign) in edges:
+            edges.add((source, target, sign))
+    for source, target, sign in edges:
         ig.add_edge(
             source,
             target,
             sign=sign,
-            color="green4" if sign==1 else "red2",
-            arrowhead="normal" if sign==1 else "tee",
-            penwidth=2
+            color="green4" if sign == 1 else "red2",
+            arrowhead="normal" if sign == 1 else "tee",
+            penwidth=2,
         )
     dot = nx.drawing.nx_pydot.to_pydot(ig)
     for k, v in kwargs.items():

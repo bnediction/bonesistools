@@ -1,77 +1,81 @@
-from typing import (
-    Union,
-    List
-)
+from typing import Union, List
 
 try:
     from typing import Self
 except:
-    from typing_extensions import Self # type: ignore
+    from typing_extensions import Self  # type: ignore
+
 
 class Hypercube(dict):
 
     def __init__(self, mapping: dict) -> Self:
 
         for v in mapping.values():
-            if v not in [0,1,"*"]:
-                raise ValueError("unsupported initialization: value not equal to 0, 1 or '*'")
+            if v not in [0, 1, "*"]:
+                raise ValueError(
+                    "unsupported initialization: value not equal to 0, 1 or '*'"
+                )
         super().__init__(mapping)
 
     @property
     def update(self, other: Self) -> None:
 
         if not isinstance(other, dict):
-            raise TypeError(f"unsupported method type for 'update': '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"unsupported method type for 'update': '{type(self)}' and '{type(other)}'"
+            )
         elif not isinstance(other, Hypercube):
             return super().update(Hypercube(other))
         else:
             return super().update(other)
-    
+
     @property
-    def drop(
-        self,
-        keys: List[str],
-        inplace: bool=False
-    ) -> Union[Self, None]:
+    def drop(self, keys: List[str], inplace: bool = False) -> Union[Self, None]:
 
         if inplace is False:
             self = self.copy()
 
         for k in keys:
             del self[k]
-        
+
         return self if inplace is False else None
-    
+
     def is_fixed_point(self) -> bool:
 
         return False if "*" in self.values() else True
 
     def __eq__(self, other: Self) -> bool:
-        
+
         if not isinstance(other, dict):
-            raise TypeError(f"'==' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'==' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'==' not supported for different components")
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
-        
+
         return super().__eq__(other)
 
     def __ne__(self, other: Self) -> bool:
-        
+
         if not isinstance(other, dict):
-            raise TypeError(f"'!=' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'!=' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'==' not supported for different components")
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
-        
+
         return super().__ne__(other)
 
     def __le__(self, other: Self) -> bool:
 
         if not isinstance(other, dict):
-            raise TypeError(f"'<=' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'<=' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'<=' not supported for different components")
         elif not isinstance(other, Hypercube):
@@ -82,11 +86,13 @@ class Hypercube(dict):
             if v2 != "*" and v1 != v2:
                 return False
         return True
-    
+
     def __lt__(self, other: Self) -> bool:
 
         if not isinstance(other, dict):
-            raise TypeError(f"'<' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'<' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'<' not supported for different components")
         elif not isinstance(other, Hypercube):
@@ -95,16 +101,18 @@ class Hypercube(dict):
         smaller = False
         for c, v1 in self.items():
             v2 = other[c]
-            if v2 == "*" and v1 in [0,1]:
+            if v2 == "*" and v1 in [0, 1]:
                 smaller = True
             if v2 != "*" and v1 != v2:
                 return False
         return smaller
-    
+
     def __ge__(self, other: Self) -> bool:
 
         if not isinstance(other, dict):
-            raise TypeError(f"'>=' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'>=' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'>=' not supported for different components")
         elif not isinstance(other, Hypercube):
@@ -119,7 +127,9 @@ class Hypercube(dict):
     def __gt__(self, other: Self) -> bool:
 
         if not isinstance(other, dict):
-            raise TypeError(f"'>' not supported between instances of '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"'>' not supported between instances of '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("'>' not supported for different components")
         elif not isinstance(other, Hypercube):
@@ -128,7 +138,7 @@ class Hypercube(dict):
         larger = False
         for c, v1 in self.items():
             v2 = other[c]
-            if v1 == "*" and v2 in [0,1]:
+            if v1 == "*" and v2 in [0, 1]:
                 larger = True
             if v1 != "*" and v1 != v2:
                 return False
@@ -138,14 +148,16 @@ class Hypercube(dict):
     is_larger_than = __ge__
 
     def identical(self, other: Self) -> set:
-        
+
         if not isinstance(other, dict):
-            raise TypeError(f"unsupported method type for 'intersection': '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"unsupported method type for 'intersection': '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("invalid method value: different components")
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
-        
+
         subset = set()
         for c, v1 in self.items():
             v2 = other[c]
@@ -154,14 +166,16 @@ class Hypercube(dict):
         return subset
 
     def different(self, other: Self) -> set:
-        
+
         if not isinstance(other, dict):
-            raise TypeError(f"unsupported method type for 'different': '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"unsupported method type for 'different': '{type(self)}' and '{type(other)}'"
+            )
         elif self.keys() != other.keys():
             raise ValueError("invalid method value: different components")
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
-        
+
         subset = set()
         for c, v1 in self.items():
             v2 = other[c]
@@ -169,24 +183,34 @@ class Hypercube(dict):
                 subset.add(c)
         return subset
 
+
 class HypercubeCollection(list):
 
-    def __init__(
-        self,
-        hypercubes: List[Hypercube] = None
-    ) -> None:
+    def __init__(self, hypercubes: List[Hypercube] = None) -> None:
 
         if hypercubes is None:
             super().__init__()
         elif not isinstance(hypercubes, list):
-            raise TypeError(f"unsupported type for instancing HypercubeCollection: '{type(hypercubes)}', not {list}")
+            raise TypeError(
+                f"unsupported type for instancing HypercubeCollection: '{type(hypercubes)}', not {list}"
+            )
         else:
-            super().__init__([hypercube if isinstance(hypercube, Hypercube) else Hypercube(hypercube) for hypercube in hypercubes])
-#        for hypercube in hypercubes:
-#            if isinstance(hypercube, Hypercube):
-#                super().append(hypercube)
-#            else:
-#                super().append(Hypercube(hypercube))
+            super().__init__(
+                [
+                    (
+                        hypercube
+                        if isinstance(hypercube, Hypercube)
+                        else Hypercube(hypercube)
+                    )
+                    for hypercube in hypercubes
+                ]
+            )
+
+    #        for hypercube in hypercubes:
+    #            if isinstance(hypercube, Hypercube):
+    #                super().append(hypercube)
+    #            else:
+    #                super().append(Hypercube(hypercube))
 
     def append(self, other) -> None:
 
@@ -194,8 +218,19 @@ class HypercubeCollection(list):
             super().append(other if isinstance(other, Hypercube) else Hypercube(other))
         elif isinstance(other, list):
             for hypercube in other:
-                super().append(hypercube if isinstance(other, Hypercube) else Hypercube(other))
-            super().append([hypercube if isinstance(hypercube, Hypercube) else Hypercube(hypercube) for hypercube in self])
+                super().append(
+                    hypercube if isinstance(other, Hypercube) else Hypercube(other)
+                )
+            super().append(
+                [
+                    (
+                        hypercube
+                        if isinstance(hypercube, Hypercube)
+                        else Hypercube(hypercube)
+                    )
+                    for hypercube in self
+                ]
+            )
 
     def get_fixed_points(self) -> Self:
 
@@ -208,7 +243,9 @@ class HypercubeCollection(list):
     def get_smaller_than(self, other) -> Self:
 
         if not isinstance(other, dict):
-            raise TypeError(f"unsupported method types for are_smaller_than: '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"unsupported method types for are_smaller_than: '{type(self)}' and '{type(other)}'"
+            )
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
 
@@ -221,7 +258,9 @@ class HypercubeCollection(list):
     def get_larger_than(self, other) -> Self:
 
         if not isinstance(other, dict):
-            raise TypeError(f"unsupported method types for are_larger_than: '{type(self)}' and '{type(other)}'")
+            raise TypeError(
+                f"unsupported method types for are_larger_than: '{type(self)}' and '{type(other)}'"
+            )
         elif not isinstance(other, Hypercube):
             other = Hypercube(other)
 

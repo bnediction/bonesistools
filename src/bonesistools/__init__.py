@@ -15,4 +15,6 @@ from . import grntools as grn
 
 import sys as _sys
 
-_sys.modules.update({f"{__name__}.{alias}": globals()[alias] for alias in ["sct", "bpy", "dbs", "grn"]})
+_sys.modules.update(
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["sct", "bpy", "dbs", "grn"]}
+)

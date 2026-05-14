@@ -1,18 +1,11 @@
 #!/usr/bin/env python
 
-from typing import (
-    Optional,
-    Union,
-    Mapping,
-    Any
-)
+from typing import Optional, Union, Mapping, Any
 
 import networkx as nx
 
-from ..ncbi import (
-    OutputIdentifierType,
-    GeneSynonyms
-)
+from ..ncbi import OutputIdentifierType, GeneSynonyms
+
 
 def load_collectri_grn(
     organism: Union[str, int] = "mouse",
@@ -20,8 +13,8 @@ def load_collectri_grn(
     remove_pmid: bool = False,
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
-    **kwargs: Mapping[str, Any]
-)-> nx.MultiDiGraph:
+    **kwargs: Mapping[str, Any],
+) -> nx.MultiDiGraph:
     """
     Provide a Graph Regulatory Network (GRN) derived from Collectri database [1].
 
@@ -42,7 +35,7 @@ def load_collectri_grn(
         Gene identifier output format.
     **kwargs: Mapping[str, Any]
         Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
-    
+
     Returns
     -------
     Return graph from Collectri database.
@@ -55,32 +48,42 @@ def load_collectri_grn(
     """
 
     if not isinstance(organism, (str, int)):
-        raise TypeError(f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}")
+        raise TypeError(
+            f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}"
+        )
     if not isinstance(split_complexes, bool):
-        raise TypeError(f"unsupported argument type for 'split_complexes': expected {bool} but received {type(split_complexes)}")
-    
-    import decoupler as dc # type: ignore
-    
+        raise TypeError(
+            f"unsupported argument type for 'split_complexes': expected {bool} but received {type(split_complexes)}"
+        )
+
+    import decoupler as dc  # type: ignore
+
     try:
-        collectri_db = dc.get_collectri(organism=organism, split_complexes=split_complexes, **kwargs)
+        collectri_db = dc.get_collectri(
+            organism=organism, split_complexes=split_complexes, **kwargs
+        )
     except:
-        collectri_db = dc.op.collectri(organism=organism, remove_complexes=split_complexes, **kwargs)
-    collectri_db = collectri_db.rename(columns = {"weight":"sign"})
+        collectri_db = dc.op.collectri(
+            organism=organism, remove_complexes=split_complexes, **kwargs
+        )
+    collectri_db = collectri_db.rename(columns={"weight": "sign"})
     if isinstance(remove_pmid, bool):
         if remove_pmid:
             collectri_db = collectri_db.drop("PMID", axis=1)
         else:
             pass
     else:
-        raise TypeError(f"unsupported argument type for 'remove_pmid': expected {bool} but received {type(remove_pmid)}")
+        raise TypeError(
+            f"unsupported argument type for 'remove_pmid': expected {bool} but received {type(remove_pmid)}"
+        )
     collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
     grn = nx.from_pandas_edgelist(
-        df = collectri_db,
+        df=collectri_db,
         source="source",
         target="target",
         edge_attr=True,
-        create_using=nx.MultiDiGraph
+        create_using=nx.MultiDiGraph,
     )
     if genesyn is None:
         return grn
@@ -89,9 +92,10 @@ def load_collectri_grn(
             grn,
             input_identifier_type="name",
             output_identifier_type=gene_identifier_type,
-            copy=False
+            copy=False,
         )
         return grn
     else:
-        raise TypeError(f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}")
-
+        raise TypeError(
+            f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}"
+        )

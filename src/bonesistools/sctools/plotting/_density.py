@@ -1,14 +1,6 @@
 #!/usr/bin/env python
 
-from typing import (
-    Optional,
-    Union,
-    Mapping,
-    Sequence,
-    Tuple,
-    Callable,
-    Any
-)
+from typing import Optional, Union, Mapping, Sequence, Tuple, Callable, Any
 from pathlib import Path
 from anndata import AnnData
 from ._typing import RGB
@@ -28,6 +20,7 @@ from . import _colors
 
 Colors = Union[Sequence[RGB], cycle]
 
+
 @anndata_checker
 def kde_plot(
     adata: AnnData,
@@ -42,7 +35,7 @@ def kde_plot(
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any]
+    **kwargs: Mapping[str, Any],
 ) -> Optional[Tuple[Figure, Axes]]:
     """
     Draw gene-related density function using kernel density estimation.
@@ -84,13 +77,17 @@ def kde_plot(
     """
 
     if obs is None and not_all is True:
-        raise ValueError(f"invalid argument value for 'obs' and 'not_all': expected 'not_all' assigned to False when 'obs' is not specified")
+        raise ValueError(
+            f"invalid argument value for 'obs' and 'not_all': expected 'not_all' assigned to False when 'obs' is not specified"
+        )
 
     import seaborn as sns
 
-    counts = adata[:,gene].layers[layer] if layer else adata[:,gene].X
+    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
     if scipy.sparse.issparse(counts):
-        counts = pd.Series(counts.toarray().squeeze(), index=adata.obs.index, name="counting")
+        counts = pd.Series(
+            counts.toarray().squeeze(), index=adata.obs.index, name="counting"
+        )
     if obs:
         counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
 
@@ -102,15 +99,18 @@ def kde_plot(
             else:
                 colors = _colors.generate_colormap(color_number=cluster_number)
         elif isinstance(colors, Mapping):
-            colors = [colors[cluster] for cluster in adata.obs[obs].astype("category").cat.categories]
+            colors = [
+                colors[cluster]
+                for cluster in adata.obs[obs].astype("category").cat.categories
+            ]
         if hasattr(colors, "colors"):
             colors = colors.colors
-    
+
     if ax is None:
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
-    
+
     q = np.quantile(counts["counting"], 0.99)
 
     if not_all is False:
@@ -120,11 +120,13 @@ def kde_plot(
             color=_colors.gray,
             fill=True,
             clip=(min(counts["counting"]), q) if clip is True else None,
-            label="all"
+            label="all",
         )
 
     if obs:
-        for _cluster, _color in zip(adata.obs[obs].astype("category").cat.categories, colors):
+        for _cluster, _color in zip(
+            adata.obs[obs].astype("category").cat.categories, colors
+        ):
             if len(_color) == 4:
                 if isinstance(_color, np.ndarray):
                     _color = _color.tolist()
@@ -135,14 +137,14 @@ def kde_plot(
                 color=_color,
                 fill=False,
                 clip=(min(counts["counting"]), q) if clip is True else None,
-                label=_cluster
+                label=_cluster,
             )
 
     if "xlabel" in kwargs:
         ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])
     if "ylabel" in kwargs:
         ax.set_ylabel("" if kwargs["ylabel"] is None else kwargs["ylabel"])
-    
+
     if title:
         if isinstance(title, str):
             fig.canvas.manager.set_window_title(title)
@@ -154,12 +156,20 @@ def kde_plot(
     if obs and show_legend:
         ax.legend(loc="upper right")
 
-    ax.xaxis.set_major_formatter(kwargs["formatter"]) if "formatter" in kwargs else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-    ax.yaxis.set_major_formatter(kwargs["formatter"]) if "formatter" in kwargs else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
-    
+    (
+        ax.xaxis.set_major_formatter(kwargs["formatter"])
+        if "formatter" in kwargs
+        else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
+    )
+    (
+        ax.yaxis.set_major_formatter(kwargs["formatter"])
+        if "formatter" in kwargs
+        else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
+    )
+
     if default_parameters:
         default_parameters()
-    
+
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")
         plt.close(fig)
@@ -167,17 +177,18 @@ def kde_plot(
     else:
         return fig, ax
 
+
 def ecdf_plot(
     adata: AnnData,
     gene: str,
     layer: Optional[str] = None,
     obs: Optional[str] = None,
-    colors = None,
+    colors=None,
     show_legend: bool = True,
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any]
+    **kwargs: Mapping[str, Any],
 ) -> Optional[Tuple[Figure, Axes]]:
     """
     Draw gene-related cumulative density function.
@@ -212,36 +223,41 @@ def ecdf_plot(
     Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
     """
 
-    counts = adata[:,gene].layers[layer] if layer else adata[:,gene].X
+    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
     if scipy.sparse.issparse(counts):
-        counts = pd.Series(counts.toarray().squeeze(), index=adata.obs.index, name="counting")
+        counts = pd.Series(
+            counts.toarray().squeeze(), index=adata.obs.index, name="counting"
+        )
     if obs:
         counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
         if not colors:
-            colors = [_colors.gray, *_colors.COLORS[1:len(adata.obs[obs].astype("category").cat.categories)+1]]
+            colors = [
+                _colors.gray,
+                *_colors.COLORS[
+                    1 : len(adata.obs[obs].astype("category").cat.categories) + 1
+                ],
+            ]
         elif isinstance(colors, Mapping):
-            colors = [_colors.gray, *[colors[cluster] for cluster in adata.obs[obs].astype("category").cat.categories]]
+            colors = [
+                _colors.gray,
+                *[
+                    colors[cluster]
+                    for cluster in adata.obs[obs].astype("category").cat.categories
+                ],
+            ]
     elif not colors:
         colors = [_colors.blue]
-    
+
     if ax is None:
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
 
-    ax.ecdf(
-        counts["counting"],
-        color=colors[0],
-        label="all"
-    )
+    ax.ecdf(counts["counting"], color=colors[0], label="all")
     if obs:
         for _cluster, _color in zip(counts[obs].cat.categories, colors[1:]):
             _counts = counts.loc[counts[obs] == _cluster]["counting"]
-            ax.ecdf(
-                _counts,
-                color=_color,
-                label=_cluster
-            )
+            ax.ecdf(_counts, color=_color, label=_cluster)
 
     if "xlabel" in kwargs:
         ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])
@@ -249,16 +265,24 @@ def ecdf_plot(
         ax.set_ylabel("" if kwargs["ylabel"] is None else kwargs["ylabel"])
 
     if min(counts["counting"]) == 0:
-        ax.set_xlim(min(counts["counting"]), max(counts["counting"])*1.1)
+        ax.set_xlim(min(counts["counting"]), max(counts["counting"]) * 1.1)
     if obs and show_legend:
         ax.legend(loc="upper right")
 
-    ax.xaxis.set_major_formatter(kwargs["formatter"]) if "formatter" in kwargs else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-    ax.yaxis.set_major_formatter(kwargs["formatter"]) if "formatter" in kwargs else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
-    
+    (
+        ax.xaxis.set_major_formatter(kwargs["formatter"])
+        if "formatter" in kwargs
+        else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
+    )
+    (
+        ax.yaxis.set_major_formatter(kwargs["formatter"])
+        if "formatter" in kwargs
+        else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
+    )
+
     if default_parameters:
         default_parameters()
-    
+
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")
         plt.close(fig)

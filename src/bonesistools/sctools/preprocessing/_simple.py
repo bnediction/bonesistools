@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 
-from typing import (
-    Union,
-    List,
-    Optional,
-    Callable
-)
+from typing import Union, List, Optional, Callable
 from anndata import AnnData
 from pandas import DataFrame
 from numpy import nan
@@ -17,7 +12,7 @@ from .._typing import (
     DataFrameList,
     Axis,
     Keys,
-    Suffixes
+    Suffixes,
 )
 
 import pandas as pd
@@ -28,10 +23,9 @@ from sklearn.linear_model import LinearRegression
 
 from ..tools import anndata_to_dataframe
 
-@type_checker(dfs=UnionType(DataFrame,List))
-def __generate_unique_index_name(
-    dfs: Union[DataFrame,DataFrameList]
-) -> str:
+
+@type_checker(dfs=UnionType(DataFrame, List))
+def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
     dfs = [dfs] if isinstance(dfs, DataFrame) else dfs
     column_names = set()
     for df in dfs:
@@ -43,12 +37,10 @@ def __generate_unique_index_name(
         _i += 1
     return index_name
 
+
 @anndata_checker
 def set_index(
-    adata: AnnData,
-    keys: Keys,
-    axis: Axis = 0,
-    copy: bool = False
+    adata: AnnData, keys: Keys, axis: Axis = 0, copy: bool = False
 ) -> Union[AnnData, None]:
     """
     Create a MultiIndex for 'adata.obs' or 'adata.var' using current index and existing columns.
@@ -63,26 +55,28 @@ def set_index(
         Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-    
+
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
     """
 
     adata = adata.copy() if copy else adata
-    
+
     if isinstance(keys, str):
         keys = [keys]
     elif not isinstance(keys, List):
-        raise TypeError(f"unsupported argument type for 'keys': expected {str} or {List} but received {type(keys)}")
-    
+        raise TypeError(
+            f"unsupported argument type for 'keys': expected {str} or {List} but received {type(keys)}"
+        )
+
     if axis in [0, "obs"]:
         df = adata.obs.copy()
     elif axis in [1, "var"]:
         df = adata.var.copy()
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
-    
+
     index_name = __generate_unique_index_name(df)
     df[index_name] = df.index
     df = df.set_index([index_name, *keys])
@@ -91,15 +85,13 @@ def set_index(
         adata.obs = df
     elif axis in [1, "var"]:
         adata.var = df
-    
+
     return adata if copy else None
+
 
 @anndata_checker
 def filter_obs(
-    adata: AnnData,
-    obs: str,
-    function: Callable,
-    copy: bool = False
+    adata: AnnData, obs: str, function: Callable, copy: bool = False
 ) -> Union[AnnData, None]:
     """
     Filter observations based on a column in 'adata.obs'.
@@ -126,22 +118,24 @@ def filter_obs(
         if obs not in adata.obs:
             raise KeyError(f"key '{obs}' not found in adata.obs")
     else:
-        raise TypeError(f"unsupported argument type for 'obs': expected {str} but received {type(obs)}")
+        raise TypeError(
+            f"unsupported argument type for 'obs': expected {str} but received {type(obs)}"
+        )
 
     if not callable(function):
-        raise TypeError(f"unsupported argument type for 'function': expected callable object")
-    
+        raise TypeError(
+            f"unsupported argument type for 'function': expected callable object"
+        )
+
     obs_subset = function(adata.obs[obs].values)
     adata._inplace_subset_obs(obs_subset)
 
     return adata if copy else None
 
+
 @anndata_checker
 def filter_var(
-    adata: AnnData,
-    var: str,
-    function: Callable,
-    copy: bool = False
+    adata: AnnData, var: str, function: Callable, copy: bool = False
 ) -> Union[AnnData, None]:
     """
     Filter variables based on a column in 'adata.var'.
@@ -168,21 +162,26 @@ def filter_var(
         if var not in adata.var:
             raise KeyError(f"key '{var}' not found in adata.var")
     else:
-        raise TypeError(f"unsupported argument type for 'var': expected {str} but received {type(var)}")
+        raise TypeError(
+            f"unsupported argument type for 'var': expected {str} but received {type(var)}"
+        )
 
     if not callable(function):
-        raise TypeError(f"unsupported argument type for 'function': expected callable object")
-    
+        raise TypeError(
+            f"unsupported argument type for 'function': expected callable object"
+        )
+
     var_subset = function(adata.var[var].values)
     adata._inplace_subset_var(var_subset)
 
     return adata if copy else None
 
+
 def __linear_regress_out_feature(
     interest: np.ndarray,
     regressors: np.ndarray,
     intercept: bool = False,
-    n_jobs: int = 1
+    n_jobs: int = 1,
 ):
 
     regression_model = LinearRegression(fit_intercept=False, n_jobs=n_jobs)
@@ -194,8 +193,9 @@ def __linear_regress_out_feature(
         predicted = interest - prediction + intercept
     else:
         predicted = interest - prediction
-    
-    return predicted[:,0]
+
+    return predicted[:, 0]
+
 
 @anndata_checker
 def regress_out(
@@ -204,7 +204,7 @@ def regress_out(
     layer: Optional[str] = None,
     intercept: bool = False,
     copy: bool = False,
-    n_jobs: int = 1
+    n_jobs: int = 1,
 ) -> Union[AnnData, None]:
     """
     Regress out unwanted sources of variation.
@@ -239,24 +239,22 @@ def regress_out(
     if issparse(counts):
         counts = counts.toarray()
     regressors = adata.obs[keys]
-    regressors.insert(0, 'ones', 1.0)
+    regressors.insert(0, "ones", 1.0)
     regressors = regressors.to_numpy()
 
     for i in range(adata.n_vars):
-        interest = counts[:,i].reshape(-1, 1)
-        counts[:,i] = __linear_regress_out_feature(
-            interest,
-            regressors,
-            intercept=intercept,
-            n_jobs=n_jobs
+        interest = counts[:, i].reshape(-1, 1)
+        counts[:, i] = __linear_regress_out_feature(
+            interest, regressors, intercept=intercept, n_jobs=n_jobs
         )
-    
+
     if layer is None:
         adata.X = counts
     else:
         adata.layers[layer] = counts
-    
+
     return adata if copy else None
+
 
 @anndata_checker(n=2)
 def merge(
@@ -264,7 +262,7 @@ def merge(
     right_ad: AnnData,
     axis: Axis = 0,
     suffixes: Suffixes = ("_x", "_y"),
-    copy: bool = False
+    copy: bool = False,
 ) -> Union[AnnData, None]:
     """
     Merge dataframes from 'adata.obs' or 'adata.var' with an index-based join.
@@ -284,12 +282,12 @@ def merge(
         to add to overlapping column names in 'left_ad' and 'right_ad' respectively.
     copy: bool (default: False)
         Return a copy instead of updating 'left_ad' object.
-    
+
     Returns
     -------
     Depending on 'copy', update 'left_ad' or return AnnData object.
     """
-    
+
     left_ad = left_ad.copy() if copy else left_ad
 
     if axis in [0, "obs"]:
@@ -302,11 +300,7 @@ def merge(
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
 
     df = left_df.merge(
-        right=right_df,
-        how="left",
-        left_index=True,
-        right_index=True,
-        suffixes=suffixes
+        right=right_df, how="left", left_index=True, right_index=True, suffixes=suffixes
     )
 
     if axis in [0, "obs"]:
@@ -316,12 +310,10 @@ def merge(
 
     return left_ad if copy else None
 
+
 @anndata_checker(n=2)
 def transfer_layer(
-    left_ad: AnnData,
-    right_ad: AnnData,
-    layers: Keys,
-    copy: bool = False
+    left_ad: AnnData, right_ad: AnnData, layers: Keys, copy: bool = False
 ) -> Union[AnnData, None]:
     """
     Transfer layers from 'right_ad.layers' to 'left_ad.layers' by preserving
@@ -339,25 +331,23 @@ def transfer_layer(
         Sequence where each element is a string indicating the layer to add in 'left_ad'.
     copy: bool (default: False)
         Return a copy instead of updating 'left_ad' object.
-    
+
     Returns
     -------
     Depending on 'copy', update 'left_ad' or return AnnData object.
     """
-    
+
     left_ad = left_ad.copy() if copy else left_ad
 
     if isinstance(layers, str):
         layers = [layers]
     elif not isinstance(layers, List):
-        raise TypeError(f"unsupported argument type for 'layers': expected {str} or {List} but received {type(layers)}")
+        raise TypeError(
+            f"unsupported argument type for 'layers': expected {str} or {List} but received {type(layers)}"
+        )
 
     for layer in layers:
-        df = anndata_to_dataframe(
-            adata=right_ad,
-            obs=None,
-            layer=layer
-        )
+        df = anndata_to_dataframe(adata=right_ad, obs=None, layer=layer)
         left_cols = set(left_ad.var.index)
         left_idx = set(left_ad.obs.index)
         right_cols = set(right_ad.var.index)
@@ -366,20 +356,21 @@ def transfer_layer(
         cols_to_add = list(left_cols.difference(right_cols))
         idx_to_add = list(left_idx.difference(right_idx))
         if cols_to_add:
-            df.loc[:,cols_to_add] = nan
-        df = pd.concat([df, pd.DataFrame(data=nan, columns=df.columns, index=idx_to_add)])
+            df.loc[:, cols_to_add] = nan
+        df = pd.concat(
+            [df, pd.DataFrame(data=nan, columns=df.columns, index=idx_to_add)]
+        )
 
         cols_to_remove = list(right_cols.difference(left_cols))
         index_to_remove = list(right_idx.difference(left_idx))
-        df.drop(
-            columns=cols_to_remove,
-            index=index_to_remove,
-            inplace=True
+        df.drop(columns=cols_to_remove, index=index_to_remove, inplace=True)
+
+        left_ad.layers[layer] = df[left_ad.var.index.tolist()].reindex(
+            left_ad.obs.index.tolist()
         )
 
-        left_ad.layers[layer] = df[left_ad.var.index.tolist()].reindex(left_ad.obs.index.tolist())
-
     return left_ad if copy else None
+
 
 @anndata_checker
 def transfer_obs_sti(
@@ -388,7 +379,7 @@ def transfer_obs_sti(
     obs: Keys,
     conditions: Keys,
     condition_colname: str = "condition",
-    copy: bool = False
+    copy: bool = False,
 ) -> Union[AnnData, None]:
     """
     Transfer observations from specific to integrated dataset, i.e. transfer columns
@@ -411,17 +402,17 @@ def transfer_obs_sti(
         Column name in integrated 'adata.obs' related to conditions.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-        
+
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
     """
-    
+
     adata = adata.copy() if copy else adata
-    
+
     all_samples_df = []
     for _condition, _adata in zip(conditions, adatas):
-        _df = _adata.obs.loc[:,obs].copy()
+        _df = _adata.obs.loc[:, obs].copy()
         _df[condition_colname] = _condition
         all_samples_df.append(_df)
         del _df
@@ -438,20 +429,15 @@ def transfer_obs_sti(
     one_sample_df = one_sample_df.set_index([index_name, condition_colname])
 
     merge_df = one_sample_df.merge(
-        right=all_samples_df,
-        how="left",
-        left_index=True,
-        right_index=True
+        right=all_samples_df, how="left", left_index=True, right_index=True
     )
-    merge_df.reset_index(
-        level=(condition_colname,),
-        inplace=True
-    )
+    merge_df.reset_index(level=(condition_colname,), inplace=True)
     merge_df.index.name = None
 
     adata.obs = merge_df
 
     return adata if copy else None
+
 
 @anndata_checker
 def transfer_obs_its(
@@ -460,7 +446,7 @@ def transfer_obs_its(
     obs: Keys,
     conditions: Keys,
     condition_colname: str = "condition",
-    copy: bool = False
+    copy: bool = False,
 ) -> Union[AnnDataList, None]:
     """
     Transfer observations from integrated to specific datasets,
@@ -482,7 +468,7 @@ def transfer_obs_its(
         Column name in integrated 'adata.obs' related to conditions.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-        
+
     Returns
     -------
     Depending on 'copy', update 'adatas' object or return a list of AnnData objects.
@@ -497,12 +483,9 @@ def transfer_obs_its(
         _cond = adata.obs[condition_colname] == _condition
         df = adata.obs.loc[_cond][obs]
         _adata.obs = _adata.obs.merge(
-            right=df,
-            how="left",
-            left_index=True,
-            right_index=True
+            right=df, how="left", left_index=True, right_index=True
         )
         if copy:
             adatas_cp.append(_adata)
-    
+
     return adatas_cp if copy else None

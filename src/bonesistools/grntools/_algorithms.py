@@ -5,11 +5,8 @@ from ._typing import Graph
 
 from collections import deque
 
-def depth_first_extraction(
-    graph: Graph,
-    source: Any,
-    limit_depth: int = 3
-    ) -> list:
+
+def depth_first_extraction(graph: Graph, source: Any, limit_depth: int = 3) -> list:
     """
     Extract all existing paths from a node within a given distance
     by a recursive implementation of depth-first extraction (DFE) algorithm.
@@ -24,7 +21,7 @@ def depth_first_extraction(
         Starting node for paths.
     limit_depth: int (default: 3)
         Maximum length required for a path to pass filtering.
-    
+
     Returns
     -------
     Return a list of paths from 'source' within a distance.
@@ -35,9 +32,9 @@ def depth_first_extraction(
             stack.append(_target)
             __paths.append(list(stack))
             if depth < __limit_depth:
-                dfe_exploration(graph, _target, stack, depth=depth+1)
+                dfe_exploration(graph, _target, stack, depth=depth + 1)
             del stack[-1]
-            
+
     global __paths, __limit_depth
     __paths = list()
     __limit_depth = limit_depth

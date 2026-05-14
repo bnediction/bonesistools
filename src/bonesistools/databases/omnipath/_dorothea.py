@@ -1,27 +1,19 @@
 #!/usr/bin/env python
 
-from typing import (
-    Optional,
-    Union,
-    Mapping,
-    List,
-    Any
-)
+from typing import Optional, Union, Mapping, List, Any
 
 import networkx as nx
 
-from ..ncbi import (
-    OutputIdentifierType,
-    GeneSynonyms
-)
+from ..ncbi import OutputIdentifierType, GeneSynonyms
+
 
 def load_dorothea_grn(
     organism: Union[str, int] = "mouse",
     levels: List[str] = ["A", "B", "C"],
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
-    **kwargs: Mapping[str, Any]
-)-> nx.MultiDiGraph:
+    **kwargs: Mapping[str, Any],
+) -> nx.MultiDiGraph:
     """
     Provide a Graph Regulatory Network (GRN) derived from DoRothEA database [1].
 
@@ -41,7 +33,7 @@ def load_dorothea_grn(
         Gene identifier output format.
     **kwargs: Mapping[str, Any]
         Keyword-arguments passed to function 'omnipath.interactions.Dorothea.get'.
-    
+
     Returns
     -------
     Return graph from DoRothEA database.
@@ -54,23 +46,25 @@ def load_dorothea_grn(
     """
 
     if not isinstance(organism, (str, int)):
-        raise TypeError(f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}")
-    
-    import decoupler as dc # type: ignore
-    
+        raise TypeError(
+            f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}"
+        )
+
+    import decoupler as dc  # type: ignore
+
     try:
         dorothea_db = dc.get_dorothea(organism=organism, levels=levels, **kwargs)
     except:
         dorothea_db = dc.op.dorothea(organism=organism, levels=levels, **kwargs)
-    dorothea_db = dorothea_db.rename(columns = {"weight":"sign"})
+    dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
     dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
     grn = nx.from_pandas_edgelist(
-        df = dorothea_db,
+        df=dorothea_db,
         source="source",
         target="target",
         edge_attr=True,
-        create_using=nx.MultiDiGraph
+        create_using=nx.MultiDiGraph,
     )
     if genesyn is None:
         return grn
@@ -79,8 +73,10 @@ def load_dorothea_grn(
             grn,
             input_identifier_type="name",
             output_identifier_type=gene_identifier_type,
-            copy=False
+            copy=False,
         )
         return grn
     else:
-        raise TypeError(f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}")
+        raise TypeError(
+            f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}"
+        )

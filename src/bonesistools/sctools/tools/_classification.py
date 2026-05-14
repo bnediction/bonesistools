@@ -12,6 +12,7 @@ from ...databases.ncbi import (
     GeneSynonyms,
 )
 
+
 @anndata_checker
 def mitochondrial_genes(
     adata: AnnData,  # type: ignore
@@ -19,7 +20,7 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: Axis = 1,
     copy: bool = False,
-) -> Union[AnnData, None]: # type: ignore
+) -> Union[AnnData, None]:  # type: ignore
     f"""
     Create a column storing whether gene encodes a mitochondrial protein using current index.
 
@@ -52,21 +53,19 @@ def mitochondrial_genes(
         adata.var[key] = False
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
-    
+
     mt_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():
         if k.startswith("mt-"):
             mt_id.add(v.value.decode())
 
     for index in eval(f"adata.{axis}.index"):
-        gene_id = genesyn.get_gene_id(
-            gene=index,
-            input_identifier_type=index_type
-        )
+        gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
         if gene_id in mt_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")
 
     return adata if copy else None
+
 
 @anndata_checker
 def ribosomal_genes(
@@ -75,7 +74,7 @@ def ribosomal_genes(
     key: str = "rps",
     axis: Axis = 1,
     copy: bool = False,
-) -> Union[AnnData, None]: # type: ignore
+) -> Union[AnnData, None]:  # type: ignore
     f"""
     Create a column storing whether gene encodes a ribosomal protein using current index.
 
@@ -108,17 +107,14 @@ def ribosomal_genes(
         adata.var[key] = False
     else:
         raise TypeError(f"unsupported argument type for 'axis': {axis}")
-    
+
     rps_id = set()
-    for k,v in genesyn.gene_aliases_mapping["name"].items():
-        if k.startswith(("Rps","Rpl","Mrp")):
+    for k, v in genesyn.gene_aliases_mapping["name"].items():
+        if k.startswith(("Rps", "Rpl", "Mrp")):
             rps_id.add(v.value.decode())
 
     for index in eval(f"adata.{axis}.index"):
-        gene_id = genesyn.get_gene_id(
-            gene=index,
-            input_identifier_type=index_type
-        )
+        gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
         if gene_id in rps_id:
             exec(f"adata.{axis}.at['{index}','{key}'] = True")
 

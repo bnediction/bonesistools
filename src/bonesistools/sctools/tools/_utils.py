@@ -4,18 +4,15 @@ from typing import Optional
 from anndata import AnnData
 from numpy import ndarray
 
-from .._typing import (
-    ScData,
-    anndata_checker,
-    anndata_or_mudata_checker
-)
+from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
+
 
 @anndata_checker
 def choose_mtx_representation(
     adata: AnnData,
     use_raw: Optional[bool] = False,
     layer: Optional[str] = None,
-    copy: Optional[bool] = True
+    copy: Optional[bool] = True,
 ) -> ndarray:
     """
     Get a matrix representation of data.
@@ -44,17 +41,18 @@ def choose_mtx_representation(
         X = adata.raw.X
     else:
         X = adata.X
-    
+
     if copy:
         return X.copy()
     else:
         return X
 
+
 @anndata_or_mudata_checker
 def choose_representation(
-    scdata: ScData, # type: ignore
+    scdata: ScData,  # type: ignore
     use_rep: str = "X_pca",
-    n_components: Optional[int] = None
+    n_components: Optional[int] = None,
 ) -> ndarray:
     """
     Get a truncated matrix representation of data.
@@ -79,20 +77,23 @@ def choose_representation(
 
     if use_rep not in scdata.obsm_keys():
         if use_rep == "X_pca":
-            raise KeyError("key 'X_pca' not found in scdata.obsm: please run scanpy.tl.pca")
+            raise KeyError(
+                "key 'X_pca' not found in scdata.obsm: please run scanpy.tl.pca"
+            )
         else:
             raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
     if n_components is None:
         return scdata.obsm[use_rep]
     else:
-        return scdata.obsm[use_rep][:,:n_components]
+        return scdata.obsm[use_rep][:, :n_components]
+
 
 @anndata_or_mudata_checker
 def _get_distances(
-    scdata: ScData, # type: ignore
+    scdata: ScData,  # type: ignore
     obsp: Optional[str] = None,
-    neighbors_key: Optional[str] = None
+    neighbors_key: Optional[str] = None,
 ) -> ndarray:
     """
     Get distance matrix already computed.
@@ -112,7 +113,9 @@ def _get_distances(
     """
 
     if obsp is not None and neighbors_key is not None:
-        raise ValueError("arguments 'obsp' and 'neighbors_key' cannot be both specified")
+        raise ValueError(
+            "arguments 'obsp' and 'neighbors_key' cannot be both specified"
+        )
     elif obsp is not None:
         return scdata.obsp[obsp]
     elif neighbors_key is not None:
@@ -123,13 +126,16 @@ def _get_distances(
             distances_key = scdata.uns["neighbors"]["distances_key"]
             return scdata.obsp[distances_key]
         else:
-            raise KeyError("distances not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'")
+            raise KeyError(
+                "distances not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
+            )
+
 
 @anndata_or_mudata_checker
 def _get_connectivities(
-    scdata: ScData, # type: ignore
+    scdata: ScData,  # type: ignore
     obsp: Optional[str] = None,
-    neighbors_key: Optional[str] = None
+    neighbors_key: Optional[str] = None,
 ) -> ndarray:
     """
     Get connectivity matrix already computed.
@@ -149,7 +155,9 @@ def _get_connectivities(
     """
 
     if obsp is not None and neighbors_key is not None:
-        raise ValueError("arguments 'obsp' and 'neighbors_key' cannot be both specified")
+        raise ValueError(
+            "arguments 'obsp' and 'neighbors_key' cannot be both specified"
+        )
     elif obsp is not None:
         return scdata.obsp[obsp]
     elif neighbors_key is not None:
@@ -160,4 +168,6 @@ def _get_connectivities(
             connectivities_key = scdata.uns["neighbors"]["connectivities_key"]
             return scdata.obsp[connectivities_key]
         else:
-            raise KeyError("connectivities not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'")
+            raise KeyError(
+                "connectivities not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
+            )

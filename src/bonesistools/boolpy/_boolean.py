@@ -4,6 +4,7 @@ from typing import Union
 
 import math
 
+
 class PartialBoolean:
 
     def __init__(self, value: Union[bool, float, int]):
@@ -13,10 +14,10 @@ class PartialBoolean:
             self.__value = value
         else:
             raise ValueError(f"invalid argument value for 'value': {value}")
-    
+
     def __repr__(self):
         return f"Boolean({self.__value})"
-    
+
     def __str__(self):
         return f"{self.__value}"
 
@@ -32,10 +33,12 @@ class PartialBoolean:
             self.__value = value
         else:
             raise ValueError(f"invalid argument value for 'value': {value}")
-    
+
     def __eq__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'==' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'==' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         elif math.isnan(self.__value):
             return True if math.isnan(other.__value) else False
         else:
@@ -43,13 +46,17 @@ class PartialBoolean:
 
     def __ne__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'!=' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'!=' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         else:
             return not self == other
-    
+
     def __lt__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'<' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'<' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         elif math.isnan(self.__value):
             if math.isnan(other.__value):
                 return False
@@ -59,10 +66,12 @@ class PartialBoolean:
             return True if self.__value == 0 else False
         else:
             return self.__value < other.__value
-    
+
     def __le__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'<=' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'<=' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         elif math.isnan(self.__value):
             if math.isnan(other.__value):
                 return True
@@ -72,10 +81,12 @@ class PartialBoolean:
             return True if self.__value == 0 else False
         else:
             return self.__value <= other.__value
-    
+
     def __gt__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'>' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'>' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         elif math.isnan(self.__value):
             if math.isnan(other.__value):
                 return False
@@ -85,10 +96,12 @@ class PartialBoolean:
             return False if self.__value == 0 else True
         else:
             return self.__value > other.__value
-    
+
     def __ge__(self, other):
         if not isinstance(other, PartialBoolean):
-            raise TypeError(f"'>=' not supported between instances of {PartialBoolean} and {type(other)}")
+            raise TypeError(
+                f"'>=' not supported between instances of {PartialBoolean} and {type(other)}"
+            )
         elif math.isnan(self.__value):
             if math.isnan(other.__value):
                 return True
