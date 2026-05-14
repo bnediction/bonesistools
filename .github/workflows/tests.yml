@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  import-test:
+  test:
     runs-on: ubuntu-22.04
 
     strategy:
@@ -21,28 +21,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install package
-        run: pip install -e .
-
-      - name: Check import
-        run: python -c "import bonesistools"
-
-  full-test:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
       - name: Install package with all extras
         run: pip install -e ".[all]"
 
       - name: Install test dependencies
         run: pip install pytest
+
+      - name: Check package import
+        run: python -c "import bonesistools"
 
       - name: Run tests
         run: pytest
