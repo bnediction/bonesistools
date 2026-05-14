@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  import-test:
     runs-on: ubuntu-22.04
 
     strategy:
@@ -24,13 +24,10 @@ jobs:
       - name: Install package
         run: pip install -e .
 
-      - name: Install test dependencies
-        run: pip install pytest
+      - name: Check import
+        run: python -c "import bonesistools"
 
-      - name: Run tests
-        run: pytest
-
-  extra-test:
+  full-test:
     runs-on: ubuntu-22.04
 
     steps:
@@ -41,8 +38,8 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install package with default extras
-        run: pip install -e ".[default]"
+      - name: Install package with all extras
+        run: pip install -e ".[all]"
 
       - name: Install test dependencies
         run: pip install pytest

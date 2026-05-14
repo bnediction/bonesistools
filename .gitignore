@@ -81,7 +81,6 @@ q.log
 !tests/
 !tests/data/
 !tests/data/*.h5ad
-.*
 *.log
 logs/
 *debug*/
