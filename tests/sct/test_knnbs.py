@@ -1,13 +1,11 @@
-from pathlib import Path
 import warnings
 
-import anndata as ad
 import bonesistools as bt
 import networkx as nx
 import pandas as pd
 
-DATA = Path(__file__).parents[1] / "data" / "nestorowa_tiny.h5ad"
-ADATA = ad.read_h5ad(DATA)
+ADATA = bt.sct.datasets.nestorowa()
+
 
 def test_kneighbors_graph_returns_graph_with_named_nodes():
 

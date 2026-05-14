@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, List, Union
 if TYPE_CHECKING:
     from typing import Self
 
+
 class Hypercube(dict):
 
     def __init__(self, mapping: dict) -> Self:

@@ -26,6 +26,7 @@ from ._typing import (
 from . import tools as tl
 from . import preprocessing as pp
 from . import plotting as pl
+from . import datasets
 
 import sys
 

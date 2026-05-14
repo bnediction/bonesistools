@@ -1,6 +1,3 @@
-from pathlib import Path
-
-import anndata as ad
 import bonesistools as bt
 
 from matplotlib.axes import Axes
@@ -8,8 +5,8 @@ from matplotlib.figure import Figure
 
 bt.sct.pl.set_default_params()
 
-DATA = Path(__file__).parents[1] / "data" / "nestorowa_tiny.h5ad"
-ADATA = ad.read_h5ad(DATA)
+ADATA = bt.sct.datasets.nestorowa()
+
 
 def test_embedding_plot_with_test_representation():
     adata = ADATA.copy()

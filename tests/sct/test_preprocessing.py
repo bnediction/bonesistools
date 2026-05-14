@@ -1,12 +1,7 @@
-from pathlib import Path
-
-import anndata as ad
 import bonesistools as bt
 
+ADATA = bt.sct.datasets.nestorowa()
 
-DATA = Path(__file__).parents[1] / "data" / "nestorowa_tiny.h5ad"
-
-ADATA = ad.read_h5ad(DATA)
 
 def test_mitochondrial_and_ribosomal_gene_classification():
 
@@ -35,7 +30,7 @@ def test_mitochondrial_and_ribosomal_gene_classification():
 
 
 def test_filter_var_removes_genes():
-    
+
     adata = ADATA.copy()
     initial_n_vars = adata.n_vars
 
@@ -53,7 +48,7 @@ def test_filter_var_removes_genes():
 
 
 def test_filter_obs_removes_cells():
-    
+
     adata = ADATA.copy()
     initial_n_obs = adata.n_obs
 
