@@ -81,6 +81,9 @@ q.log
 !tests/
 !tests/data/
 !tests/data/*.h5ad
+!src/bonesistools/sctools/datasets/
+!src/bonesistools/sctools/datasets/*.h5ad
+
 *.log
 logs/
 *debug*/
