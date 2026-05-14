@@ -12,13 +12,10 @@ except ImportError:
     from typing_extensions import Literal  # type: ignore
 
 try:
-    _mpbn_is_available = importlib.util.find_spec("mpbn") is not None
-except:
-    _mpbn_is_available = importlib.find_loader("mpbn") is not None
-
-if _mpbn_is_available:
     from mpbn import MPBooleanNetwork
-else:
+    _mpbn_is_available = True
+except ImportError:
+    _mpbn_is_available = False
     MPBooleanNetwork = type(NotImplemented)
 
 AxisInt = int

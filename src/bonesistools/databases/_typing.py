@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 
-import importlib
-
 try:
-    _mpbn_is_available = importlib.util.find_spec("mpbn") is not None
-except:
-    _mpbn_is_available = importlib.find_loader("mpbn") is not None
-
-if _mpbn_is_available:
     from mpbn import MPBooleanNetwork
-else:
+    _mpbn_is_available = True
+    _mpbn_import_error = None
+except ImportError as error:
+    _mpbn_is_available = False
+    _mpbn_import_error = error
     MPBooleanNetwork = type(NotImplemented)
