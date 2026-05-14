@@ -1,10 +1,9 @@
-from typing import Union, List
+from __future__ import annotations
 
-try:
+from typing import TYPE_CHECKING, List, Union
+
+if TYPE_CHECKING:
     from typing import Self
-except:
-    from typing_extensions import Self  # type: ignore
-
 
 class Hypercube(dict):
 
