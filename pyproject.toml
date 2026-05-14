@@ -71,7 +71,8 @@ default = [
     "mpbn>=3.3",
     "multiprocess>=0.70.18",
     "pydot>=3.0.2",
-    "boolean.py>=4.0"
+    "boolean.py>=4.0",
+    "seaborn>=0.11"
 ]
 collectri = [ "decoupler>=1.8" ]
 mudata = [ "mudata>=0.3.1" ]
