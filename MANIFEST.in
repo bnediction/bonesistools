@@ -1,1 +1,2 @@
 include src/bonesistools/databases/ncbi/data/gi/*.tsv
+include src/bonesistools/sctools/datasets/*.h5ad
