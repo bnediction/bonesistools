@@ -76,6 +76,7 @@ q.log
 
 ### Others ###
 !.gitignore
+!.github/workflows/tests.yml
 !.placeholder
 .*
 *.log
