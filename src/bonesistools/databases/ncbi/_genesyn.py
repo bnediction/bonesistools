@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from typing import (
+    TYPE_CHECKING,
     Union,
     Optional,
     Mapping,
@@ -10,6 +11,9 @@ from typing import (
     Callable,
     Any,
 )
+
+if TYPE_CHECKING:
+    from ...boolpy.boolean_network._typing import BooleanNetwork
 
 try:
     from typing import Literal, get_args
@@ -38,11 +42,11 @@ from pathlib import Path
 import re
 
 import networkx as nx
-from .._typing import MPBooleanNetwork
 
-InputIdentifierType = Literal["name", "gene_id", "ensembl_id"]
-
-OutputIdentifierType = Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"]
+from ._typing import (
+    InputIdentifierType,
+    OutputIdentifierType,
+)
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 
@@ -397,10 +401,13 @@ class GeneSynonyms:
 
     def __call__(
         self,
-        data: Union[InteractionList, DataFrame, Graph, MPBooleanNetwork],  # type: ignore
+        data: Union[InteractionList, DataFrame, Graph, "BooleanNetwork"],
         *args: Sequence[Any],
         **kwargs: Mapping[str, Any],
     ):
+        
+        from ...boolpy.boolean_network._typing import is_boolean_network_like
+
         if (
             isinstance(data, SequenceInstance) and not isinstance(data, str)
         ) or isinstance(data, set):
@@ -409,7 +416,7 @@ class GeneSynonyms:
             return self.convert_df(data, *args, **kwargs)
         elif isinstance(data, Graph):
             return self.convert_graph(data, *args, **kwargs)
-        elif isinstance(data, MPBooleanNetwork):
+        elif is_boolean_network_like(data):
             return self.convert_bn(data, *args, **kwargs)
         else:
             raise TypeError(f"unsupported argument type for 'data': {data}")
@@ -924,29 +931,29 @@ class GeneSynonyms:
     @support_legacy_gene_synonyms_args
     def convert_bn(
         self,
-        bn: MPBooleanNetwork,  # type: ignore
+        bn: "BooleanNetwork",
         input_identifier_type: Union[InputIdentifierType, str] = "name",
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
         copy: bool = False,
-    ) -> MPBooleanNetwork:  # type: ignore
+    ) -> "BooleanNetwork":
         """
-        Replace gene identifiers in MPBooleanNetwork object with corresponding aliases.
+        Replace gene identifiers in BooleanNetwork object with corresponding aliases.
         Each gene identifier is converted into the user-defined alias type.
 
         Parameters
         ----------
-        bn: MPBooleanNetwork
-            MPBooleanNetwork object where gene variables are converted into the desired identifiers.
+        bn: BooleanNetwork
+            BooleanNetwork object where gene variables are converted into the desired identifiers.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
             Gene identifier input format.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
             Gene identifier output format.
         copy: bool (default: True)
-            Return a copy instead of updating MPBooleanNetwork object.
+            Return a copy instead of updating BooleanNetwork object.
 
         Returns
         -------
-        Depending on 'copy', update 'bn' or return MPBooleanNetwork object.
+        Depending on 'copy', update 'bn' or return BooleanNetwork object.
 
         See Also
         --------
@@ -1071,21 +1078,21 @@ class GeneSynonyms:
         )
 
     def standardize_bn(
-        self, bn: MPBooleanNetwork, copy: bool = False  # type: ignore
-    ) -> MPBooleanNetwork:  # type: ignore
+        self, bn: "BooleanNetwork", copy: bool = False
+    ) -> "BooleanNetwork":
         """
-        Replace gene names in MPBooleanNetwork object with corresponding official names.
+        Replace gene names in BooleanNetwork object with corresponding official names.
 
         Parameters
         ----------
-        bn: MPBooleanNetwork
-            MPBooleanNetwork object where gene variables are expected being standardized.
+        bn: BooleanNetwork
+            BooleanNetwork object where gene variables are expected being standardized.
         copy: bool (default: True)
-            Return a copy instead of updating MPBooleanNetwork object.
+            Return a copy instead of updating BooleanNetwork object.
 
         Returns
         -------
-        Depending on 'copy', update 'bn' or return MPBooleanNetwork object.
+        Depending on 'copy', update 'bn' or return BooleanNetwork object.
         """
 
         return self.convert_bn(

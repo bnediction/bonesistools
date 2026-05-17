@@ -6,12 +6,10 @@ from typing import Any, Mapping, Optional, Union
 import networkx as nx
 import pandas as pd
 
-from bonesistools.databases.ncbi import GeneSynonyms
-
-from ..databases.ncbi import (
+from ...databases.ncbi._genesyn import GeneSynonyms
+from ...databases.ncbi._typing import (
     InputIdentifierType,
     OutputIdentifierType,
-    GeneSynonyms,
 )
 
 def read_interaction_graph(

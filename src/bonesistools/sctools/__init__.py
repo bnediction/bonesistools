@@ -1,35 +1,33 @@
 #!/usr/bin/env python
 
 """
-sctools handles and performs operations on unimodal and multimodal annotated data matrix (anndata/mudata). \
-It offers a range of efficient features not available in Scanpy package, proposes some corrections \
-on Scanpy-based functions when inconsistencies have been highlighted, and matplotlib-based visualizations.
+Utilities for single-cell and multimodal annotated data.
+
+The `sct` package provides preprocessing, analysis and plotting tools
+for AnnData and MuData objects, following a Scanpy-like API while
+offering additional and complementary features.
+
+Sub-packages
+------------
+pp
+    Preprocessing utilities.
+tl
+    Analysis and inference tools.
+pl
+    Plotting utilities.
+datasets
+    Bundled example datasets.
 """
 
-from ._typing import (
-    UnionType,
-    type_checker,
-    anndata_checker,
-    mudata_checker,
-    anndata_or_mudata_checker,
-    AnnDataList,
-    MuDataList,
-    DataFrameList,
-    AxisInt,
-    Axis,
-    Keys,
-    Suffixes,
-    ScData,
-    Metric,
-)
+from . import _typing as typing
 
 from . import tools as tl
 from . import preprocessing as pp
 from . import plotting as pl
 from . import datasets
 
-import sys
+import sys as _sys
 
-sys.modules.update(
+_sys.modules.update(
     {f"{__name__}.{alias}": globals()[alias] for alias in ["tl", "pp", "pl"]}
 )

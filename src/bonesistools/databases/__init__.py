@@ -1,10 +1,17 @@
 #!/usr/bin/env python
 
 """
-databases requests information from bioinformatics databases. \
-It proposes to handle gene alias-related issues or to provide gene regulatory networks.
+Interfaces to biological databases and prior knowledge resources.
+
+The `dbs` package provides utilities for retrieving, parsing and
+standardising biological information from external resources.
+
+Current sub-packages
+--------------------
+ncbi
+    Gene nomenclature and synonym handling utilities.
+omnipath
+    Access to regulatory and interaction prior knowledge databases.
 """
 
 from . import omnipath, ncbi
-
-from ._typing import MPBooleanNetwork

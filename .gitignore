@@ -83,7 +83,7 @@ q.log
 !tests/data/*.h5ad
 !src/bonesistools/sctools/datasets/
 !src/bonesistools/sctools/datasets/*.h5ad
-
+.coverage
 *.log
 logs/
 *debug*/
