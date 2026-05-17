@@ -405,7 +405,7 @@ class GeneSynonyms:
         *args: Sequence[Any],
         **kwargs: Mapping[str, Any],
     ):
-        
+
         from ...boolpy.boolean_network._typing import is_boolean_network_like
 
         if (

@@ -12,6 +12,7 @@ from ...databases.ncbi._typing import (
     OutputIdentifierType,
 )
 
+
 def read_interaction_graph(
     infile: Union[str, Path],
     genesyn: Optional[GeneSynonyms] = None,
@@ -67,9 +68,7 @@ def read_interaction_graph(
     missing_columns = required_columns - set(interaction_graph.columns)
 
     if missing_columns:
-        raise ValueError(
-            f"invalid file: missing columns {sorted(missing_columns)}"
-        )
+        raise ValueError(f"invalid file: missing columns {sorted(missing_columns)}")
 
     interaction_graph["sign"] = interaction_graph["sign"].astype(float)
 

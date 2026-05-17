@@ -3,6 +3,7 @@
 from typing import List, Dict
 from ._typing import BooleanNetwork, is_boolean_network_like
 
+
 def dnf_to_structure(ba, expr, container=frozenset, sort=False):
     """
     Convert a Boolean expression in disjunctive normal form into a nested
@@ -66,6 +67,7 @@ def dnf_to_structure(ba, expr, container=frozenset, sort=False):
     clauses = map(make_clause, clauses)
     return container(sorted(clauses) if sort else clauses)
 
+
 class BooleanNetworkEnsemble(list):
     """
     Store and analyse an ensemble of Boolean networks sharing the same components.
@@ -90,46 +92,46 @@ class BooleanNetworkEnsemble(list):
         components: List[str] = None,
         bns: List[BooleanNetwork] = None,
     ) -> None:
-    
+
         if components is None and bns is None:
             raise TypeError(
                 "cannot instantiate BooleanNetworkEnsemble: "
                 "either 'components' or 'bns' must be provided"
             )
-    
+
         if components is not None and bns is not None:
             raise TypeError(
                 "cannot instantiate BooleanNetworkEnsemble: "
                 "'components' and 'bns' are mutually exclusive"
             )
-    
+
         if components is not None:
             super().__init__()
             self.__components = set(components)
             return
-    
+
         if not isinstance(bns, list):
             raise TypeError(
                 f"unsupported argument type for 'bns': expected {list}, "
                 f"but received {type(bns)}"
             )
-    
+
         if len(bns) == 0:
             raise ValueError(
                 "cannot infer components from an empty Boolean network list"
             )
-    
+
         if not all(is_boolean_network_like(bn) for bn in bns):
             raise TypeError(
                 "unsupported argument type for 'bns': "
                 "all elements must be Boolean network-like objects"
             )
-    
+
         self.__components = set(bns[0])
-    
+
         if not all(set(bn) == self.__components for bn in bns[1:]):
             raise ValueError("invalid value: different components between networks")
-    
+
         super().__init__(bns)
 
     def __setitem__(self, key, value) -> None:
@@ -233,9 +235,7 @@ class BooleanNetworkEnsemble(list):
                 if rule is True or rule is False or rule in [0, 1]:
                     clauses[component].append(bool(rule))
                 else:
-                    clauses[component].append(
-                        dnf_to_structure(bn.ba, rule)
-                    )
+                    clauses[component].append(dnf_to_structure(bn.ba, rule))
 
         return clauses
 
@@ -262,16 +262,16 @@ class BooleanNetworkEnsemble(list):
             return transcription_factors
 
         clauses = self.get_clauses()
-        transcription_factors = {
-            component: {} for component in self.__components
-        }
+        transcription_factors = {component: {} for component in self.__components}
 
         for target, clause_set in clauses.items():
             for clause in clause_set:
                 if clause is True or clause is False:
                     continue
 
-                for factor, sign in get_transcription_factors_from_clause(clause).items():
+                for factor, sign in get_transcription_factors_from_clause(
+                    clause
+                ).items():
                     if factor not in transcription_factors[target]:
                         transcription_factors[target][factor] = {}
 

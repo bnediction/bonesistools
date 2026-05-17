@@ -36,6 +36,7 @@ _DEPRECATED = {
     "bn_to_pydot": ("bn", "bn_to_pydot"),
 }
 
+
 def __getattr__(name):
     if name in _DEPRECATED:
         module_alias, attr = _DEPRECATED[name]
@@ -47,6 +48,7 @@ def __getattr__(name):
         return getattr(globals()[module_alias], attr)
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ba",

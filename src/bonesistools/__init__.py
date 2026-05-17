@@ -32,6 +32,7 @@ _sys.modules.update(
     {f"{__name__}.{alias}": globals()[alias] for alias in ["sct", "bpy", "dbs"]}
 )
 
+
 def __getattr__(name):
     if name == "grn":
         _warnings.warn(
@@ -45,6 +46,7 @@ def __getattr__(name):
         return grn
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "pp",
