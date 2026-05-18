@@ -36,10 +36,7 @@ __all__ = [
 ]
 
 _sys.modules.update(
-    {
-        f"{__name__}.{alias}": globals()[alias]
-        for alias in ["sct", "bpy", "dbs"]
-    }
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["sct", "bpy", "dbs"]}
 )
 
 _sys.modules.update(
@@ -50,10 +47,7 @@ _sys.modules.update(
 )
 
 _sys.modules.update(
-    {
-        f"{__name__}.bpy.{alias}": getattr(bpy, alias)
-        for alias in ["ba", "bn", "ig"]
-    }
+    {f"{__name__}.bpy.{alias}": getattr(bpy, alias) for alias in ["ba", "bn", "ig"]}
 )
 
 
@@ -72,6 +66,7 @@ def __getattr__(name):
         return grn
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 def __dir__():
     return sorted(set(globals()) | set(__all__))

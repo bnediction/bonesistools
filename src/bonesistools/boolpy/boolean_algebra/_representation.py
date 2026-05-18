@@ -3,6 +3,7 @@
 from boolean import Expression
 from boolean.boolean import _FALSE, _TRUE
 
+
 def rule_to_string(rule: Expression) -> str:
     """
     Convert a Boolean rule into a readable string representation.
@@ -16,9 +17,4 @@ def rule_to_string(rule: Expression) -> str:
     if isinstance(rule, _FALSE):
         return "0"
 
-    return (
-        str(rule)
-        .replace("~", "!")
-        .replace("&", " & ")
-        .replace("|", " | ")
-    )
+    return str(rule).replace("~", "!").replace("&", " & ").replace("|", " | ")

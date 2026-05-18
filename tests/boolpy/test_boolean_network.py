@@ -163,7 +163,7 @@ def test_boolean_network_string_representation():
 
 
 def test_boolean_network_repr_is_string_representation():
-    
+
     bn = bt.bpy.bn.BooleanNetwork(
         {
             "A": "B & ~C",
@@ -230,7 +230,7 @@ def test_boolean_network_structural_inequality():
 
 
 def test_boolean_network_equivalence_truth_table_only():
-    
+
     bn1 = bt.bpy.bn.BooleanNetwork(
         {
             "A": "(B & C) | (~B & D) | (C & D)",

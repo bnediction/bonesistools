@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from collections.abc import Callable, Iterable
-from typing import Any, Literal
+from typing import Any
+
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal  # type: ignore
 
 from itertools import product
 
@@ -19,14 +26,14 @@ DNFStructure = Iterable[Clause]
 
 BA = BooleanAlgebra()
 
+
 def _eval_as_bool(
     ba: BooleanAlgebra,
     expr: Expression,
     assignment: dict,
 ) -> bool:
     assignment = {
-        symbol: ba.TRUE if value else ba.FALSE
-        for symbol, value in assignment.items()
+        symbol: ba.TRUE if value else ba.FALSE for symbol, value in assignment.items()
     }
 
     value = expr.subs(assignment).simplify()
@@ -37,9 +44,8 @@ def _eval_as_bool(
     if isinstance(value, _FALSE):
         return False
 
-    raise ValueError(
-        f"expression did not evaluate to a Boolean constant: {value!r}"
-    )
+    raise ValueError(f"expression did not evaluate to a Boolean constant: {value!r}")
+
 
 def expressions_equivalent(
     expr1: Expression,

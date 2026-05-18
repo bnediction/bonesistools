@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
-from typing import List, Dict, Literal
+from typing import List, Dict
 from ._typing import BooleanNetworkLike, is_boolean_network_like
+
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal  # type: ignore
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -13,11 +18,7 @@ from boolean.boolean import (
     _TRUE,
     _FALSE,
 )
-from ..boolean_algebra import (
-    rule_to_string,
-    expressions_equivalent,
-    dnf_to_structure
-)
+from ..boolean_algebra import rule_to_string, expressions_equivalent, dnf_to_structure
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
 
@@ -48,7 +49,7 @@ class BooleanNetwork(dict):
         self,
         rules: Optional[Mapping[str, Any]] = None,
         ba: Optional[BooleanAlgebra] = None,
-        check: bool = True
+        check: bool = True,
     ) -> None:
         """
         Initialize a Boolean network.
@@ -63,7 +64,7 @@ class BooleanNetwork(dict):
             Whether to validate that all symbols referenced by Boolean
             rules are defined as network components.
         """
-        
+
         self.ba = BooleanAlgebra() if ba is None else ba
         super().__init__()
 
@@ -80,10 +81,9 @@ class BooleanNetwork(dict):
         """
 
         return "\n".join(
-            f"{component} <- {rule_to_string(rule)}"
-            for component, rule in self.items()
+            f"{component} <- {rule_to_string(rule)}" for component, rule in self.items()
         )
-    
+
     __repr__ = __str__
 
     def __eq__(self, other: object) -> bool:
@@ -105,10 +105,7 @@ class BooleanNetwork(dict):
         if set(self.keys()) != set(other.keys()):
             return False
 
-        return all(
-            self[component] == other[component]
-            for component in self
-        )
+        return all(self[component] == other[component] for component in self)
 
     def __ne__(self, other: object) -> bool:
         eq = self.__eq__(other)
@@ -132,11 +129,7 @@ class BooleanNetwork(dict):
         Return the set of symbols referenced by Boolean rules.
         """
 
-        return {
-            str(symbol)
-            for rule in self.values()
-            for symbol in rule.symbols
-        }
+        return {str(symbol) for rule in self.values() for symbol in rule.symbols}
 
     @property
     def undefined_symbols(self) -> set[str]:
@@ -160,11 +153,8 @@ class BooleanNetwork(dict):
         Return readable string representations of Boolean rules.
         """
 
-        return {
-            component: rule_to_string(rule)
-            for component, rule in self.items()
-        }
-    
+        return {component: rule_to_string(rule) for component, rule in self.items()}
+
     def validate(self) -> None:
         """
         Validate the Boolean network structure.
@@ -266,7 +256,7 @@ class BooleanNetwork(dict):
         file.write_text(content)
 
         return None
-    
+
     def _coerce_rule(self, rule: Any) -> Expression:
         """
         Coerce a Boolean rule into an internal `boolean.py` expression.
@@ -305,6 +295,7 @@ class BooleanNetwork(dict):
             f"unsupported Boolean rule type: expected str, bool, int or "
             f"Expression, but received {type(rule)}"
         )
+
 
 class BooleanNetworkEnsemble(list):
     """
