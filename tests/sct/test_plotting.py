@@ -4,6 +4,7 @@ import pytest
 
 import bonesistools as bt
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -124,7 +125,7 @@ def test_boxplot_with_hue():
     adata.obs.iloc[:1000, adata.obs.columns.get_loc("condition")] = "condition1"
     adata.obs["condition"] = adata.obs["condition"].astype("category")
 
-    fig, ax, bps = bt.sct.pl.boxplot(
+    fig, _, bps = bt.sct.pl.boxplot(
         adata,
         obs="n_counts",
         groupby="label",
@@ -159,6 +160,9 @@ def test_boxplot_invalid_sort():
 
 
 def test_boxplot_outfile(tmp_path):
+
+    mpl.rcParams["text.usetex"] = False
+
     adata = bt.sct.datasets.nestorowa()
 
     adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
