@@ -190,8 +190,9 @@ def boxplot(
     else:
         if sort is None:
             groups = scdata.obs[groupby].cat.categories
+            series = scdata.obs.groupby(by=groupby, observed=True)[obs]
         elif sort in ["ascending", "descending"]:
-            series = scdata.obs.groupby(by=groupby)[obs]
+            series = scdata.obs.groupby(by=groupby, observed=True)[obs]
             groups = series.median().sort_values(ascending=(sort == "ascending")).index
         else:
             raise ValueError(
@@ -202,7 +203,9 @@ def boxplot(
         else:
             hues = scdata.obs[hue].cat.categories
             series = {
-                h: scdata.obs[scdata.obs[hue] == h].groupby(by=[groupby])[obs]
+                h: scdata.obs[scdata.obs[hue] == h].groupby(by=groupby, observed=True)[
+                    obs
+                ]
                 for h in hues
             }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Mapping, Optional, Set, Union
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 try:
@@ -78,6 +78,21 @@ class BooleanNetwork(dict):
 
         if check:
             self.validate()
+
+    def __setitem__(self, component: str, rule: Any) -> None:
+        """
+        Set the Boolean rule associated with a component.
+
+        Components must be strings. Rules are coerced into `boolean.py`
+        expressions using `_coerce_rule`.
+        """
+
+        if not isinstance(component, str):
+            raise TypeError(
+                "Boolean network components must be strings, " f"got {type(component)}"
+            )
+
+        super().__setitem__(component, self._coerce_rule(rule))
 
     def __str__(self) -> str:
         """
@@ -234,7 +249,7 @@ class BooleanNetwork(dict):
 
         return True
 
-    def influences(self) -> set[tuple[str, str, int]]:
+    def influences(self) -> Set[Tuple[str, str, int]]:
         """
         Return the signed influences induced by Boolean rules.
 

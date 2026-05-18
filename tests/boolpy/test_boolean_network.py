@@ -150,6 +150,17 @@ def test_boolean_network_rules_property():
     }
 
 
+def test_boolean_network_setitem_coerces_rules():
+
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1})
+
+    bn["B"] = "A & ~C"
+    bn["C"] = 0
+
+    assert bn.rule("B") == "A & !C"
+    assert bn["C"] is bn.ba.FALSE
+
+
 def test_boolean_network_string_representation():
 
     bn = bt.bpy.bn.BooleanNetwork(
