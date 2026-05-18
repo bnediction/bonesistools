@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, Tuple
 
 try:
     from typing import Literal
@@ -20,7 +20,7 @@ from boolean.boolean import _TRUE, _FALSE
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
 
-RegulatoryLiteral = tuple[str, bool]
+RegulatoryLiteral = Tuple[str, bool]
 Clause = Iterable[RegulatoryLiteral]
 DNFStructure = Iterable[Clause]
 
