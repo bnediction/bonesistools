@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any, Dict, List, Mapping, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Set, Union
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 try:
@@ -11,6 +11,8 @@ except ImportError:
 from pathlib import Path
 from typing import Any, Optional, Union
 
+import networkx as nx
+
 from boolean.boolean import (
     BooleanAlgebra,
     Expression,
@@ -18,6 +20,9 @@ from boolean.boolean import (
     _FALSE,
 )
 from ..boolean_algebra import rule_to_string, expressions_equivalent, dnf_to_structure
+
+if TYPE_CHECKING:
+    from pydot import Dot
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
 
@@ -228,6 +233,73 @@ class BooleanNetwork(dict):
                 return False
 
         return True
+
+    def influences(self) -> set[tuple[str, str, int]]:
+        """
+        Return the signed influences induced by Boolean rules.
+
+        Each influence is represented as `(source, target, sign)`, where
+        `sign` is `1` for positive literals and `-1` for negative literals.
+        """
+
+        influences = set()
+
+        for target, rule in self.items():
+            for literal in rule.simplify().literalize().get_literals():
+                if isinstance(literal, self.ba.NOT):
+                    source = literal.args[0].obj
+                    sign = -1
+                else:
+                    source = literal.obj
+                    sign = 1
+
+                influences.add((source, target, sign))
+
+        return influences
+
+    def to_networkx(self) -> nx.MultiDiGraph:
+        """
+        Convert the Boolean network into a signed NetworkX influence graph.
+
+        Nodes correspond to Boolean network components. Edges correspond to
+        signed regulatory influences extracted from Boolean rules.
+        """
+
+        graph = nx.MultiDiGraph()
+
+        for component in self.components:
+            graph.add_node(component)
+
+        for source, target, sign in self.influences():
+            graph.add_edge(source, target, sign=sign)
+
+        return graph
+
+    def to_pydot(self, **kwargs) -> "Dot":
+        """
+        Convert the Boolean network into a pydot influence graph.
+
+        Keyword arguments are passed to the resulting pydot graph using
+        `dot.set(key, value)`.
+        """
+
+        graph = self.to_networkx()
+
+        for _, _, edge_data in graph.edges(data=True):
+            sign = edge_data["sign"]
+
+            edge_data.update(
+                color="green4" if sign == 1 else "red2",
+                arrowhead="normal" if sign == 1 else "tee",
+                penwidth=2,
+            )
+
+        dot = nx.drawing.nx_pydot.to_pydot(graph)
+
+        for key, value in kwargs.items():
+            dot.set(key, value)
+
+        return dot
 
     def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
         """

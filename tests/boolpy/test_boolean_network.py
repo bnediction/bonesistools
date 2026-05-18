@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import pytest
+
 from boolean import BooleanAlgebra
 
 import bonesistools as bt
@@ -254,6 +255,7 @@ def test_boolean_network_equivalence_truth_table_only():
 
 
 def test_boolean_network_not_equivalent_truth_table():
+
     bn1 = bt.bpy.bn.BooleanNetwork(
         {
             "A": "B & C",
@@ -274,6 +276,7 @@ def test_boolean_network_not_equivalent_truth_table():
 
 
 def test_boolean_network_equivalence_requires_same_components():
+
     bn1 = bt.bpy.bn.BooleanNetwork({"A": 1})
     bn2 = bt.bpy.bn.BooleanNetwork({"A": 1, "B": 0})
 
@@ -281,7 +284,75 @@ def test_boolean_network_equivalence_requires_same_components():
 
 
 def test_boolean_network_equivalence_rejects_unknown_method():
+
     bn = bt.bpy.bn.BooleanNetwork({"A": 1})
 
     with pytest.raises(ValueError):
         bn.equivalent(bn, method="unknown")
+
+
+def test_boolean_network_influences():
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    assert bn.influences() == {
+        ("B", "A", 1),
+        ("C", "A", -1),
+    }
+
+
+def test_boolean_network_to_networkx():
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    graph = bn.to_networkx()
+
+    assert set(graph.nodes) == {"A", "B", "C"}
+    assert graph.has_edge("B", "A")
+    assert graph.has_edge("C", "A")
+
+    assert graph["B"]["A"][0]["sign"] == 1
+    assert graph["C"]["A"][0]["sign"] == -1
+
+
+def test_boolean_network_to_pydot():
+
+    pytest.importorskip("pydot")
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    dot = bn.to_pydot(rankdir="LR")
+
+    assert dot.get_rankdir() == "LR"
+
+    edges = {
+        (edge.get_source().strip('"'), edge.get_destination().strip('"')): edge
+        for edge in dot.get_edges()
+    }
+
+    assert ("B", "A") in edges
+    assert ("C", "A") in edges
+
+    assert edges[("B", "A")].get_color() == "green4"
+    assert edges[("B", "A")].get_arrowhead() == "normal"
+
+    assert edges[("C", "A")].get_color() == "red2"
+    assert edges[("C", "A")].get_arrowhead() == "tee"

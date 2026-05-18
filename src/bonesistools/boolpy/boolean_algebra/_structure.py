@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Tuple
+from typing import Union, Any, Callable, Iterable, Tuple
 
 try:
     from typing import Literal
@@ -22,6 +22,7 @@ EquivalenceMethod = Literal["simplify", "truth_table"]
 RegulatoryLiteral = Tuple[str, bool]
 Clause = Iterable[RegulatoryLiteral]
 DNFStructure = Iterable[Clause]
+DNFValue = Union[bool, DNFStructure]
 
 BA = BooleanAlgebra()
 
@@ -104,12 +105,44 @@ def expressions_equivalent(
     )
 
 
+def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:
+    if isinstance(literal, ba.NOT):
+        if not literal.args[0].isliteral:
+            raise ValueError(f"invalid DNF literal: {literal!r}")
+
+        return literal.args[0].obj, False
+
+    if literal.isliteral:
+        return literal.obj, True
+
+    raise ValueError(f"invalid DNF literal: {literal!r}")
+
+
+def _clause_to_structure(
+    ba: BooleanAlgebra,
+    clause: Expression,
+    container: Callable[[Iterable[Any]], Any],
+    sort: bool,
+):
+    if isinstance(clause, ba.AND):
+        literals = clause.args
+    else:
+        literals = (clause,)
+
+    literals = [_literal_to_pair(ba, literal) for literal in literals]
+
+    if sort:
+        literals = sorted(literals)
+
+    return container(literals)
+
+
 def dnf_to_structure(
     ba: BooleanAlgebra,
     expr: Expression,
     container: Callable[[Iterable[Any]], Any] = frozenset,
     sort: bool = False,
-) -> DNFStructure:
+) -> DNFValue:
     """
     Convert a Boolean expression in disjunctive normal form into a nested
     Python structure.
@@ -142,20 +175,6 @@ def dnf_to_structure(
     `{{('A', True), ('B', False)}, {('C', True)}}`
     """
 
-    def make_literal(literal):
-        if isinstance(literal, ba.NOT):
-            return (literal.args[0].obj, False)
-        return (literal.obj, True)
-
-    def make_clause(clause):
-        if isinstance(clause, ba.AND):
-            literals = clause.args
-        else:
-            literals = [clause]
-
-        literals = map(make_literal, literals)
-        return container(sorted(literals) if sort else literals)
-
     if isinstance(expr, _TRUE):
         return True
 
@@ -165,7 +184,14 @@ def dnf_to_structure(
     if isinstance(expr, ba.OR):
         clauses = expr.args
     else:
-        clauses = [expr]
+        clauses = (expr,)
 
-    clauses = map(make_clause, clauses)
-    return container(sorted(clauses) if sort else clauses)
+    clauses = [
+        _clause_to_structure(ba, clause, container=container, sort=sort)
+        for clause in clauses
+    ]
+
+    if sort:
+        clauses = sorted(clauses, key=repr)
+
+    return container(clauses)
