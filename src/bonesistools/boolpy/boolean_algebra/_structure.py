@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from typing import Any, Tuple
+from typing import Any, Callable, Iterable, Literal, Tuple
 
 try:
     from typing import Literal
