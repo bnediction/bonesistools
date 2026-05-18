@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import List, Dict
+from typing import Any, Dict, List, Mapping, Optional, Set, Union
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 try:
@@ -8,7 +8,6 @@ try:
 except ImportError:
     from typing_extensions import Literal  # type: ignore
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -116,7 +115,7 @@ class BooleanNetwork(dict):
         return not eq
 
     @property
-    def components(self) -> set[str]:
+    def components(self) -> Set[str]:
         """
         Return the set of components defined by the Boolean network.
         """
@@ -124,7 +123,7 @@ class BooleanNetwork(dict):
         return set(self.keys())
 
     @property
-    def symbols(self) -> set[str]:
+    def symbols(self) -> Set[str]:
         """
         Return the set of symbols referenced by Boolean rules.
         """
@@ -132,7 +131,7 @@ class BooleanNetwork(dict):
         return {str(symbol) for rule in self.values() for symbol in rule.symbols}
 
     @property
-    def undefined_symbols(self) -> set[str]:
+    def undefined_symbols(self) -> Set[str]:
         """
         Return symbols referenced by rules but not defined as components.
         """
@@ -148,7 +147,7 @@ class BooleanNetwork(dict):
         return self.symbols <= self.components
 
     @property
-    def rules(self) -> dict[str, str]:
+    def rules(self) -> Dict[str, str]:
         """
         Return readable string representations of Boolean rules.
         """
@@ -433,7 +432,7 @@ class BooleanNetworkEnsemble(list):
 
         super().insert(index, other)
 
-    def get_components(self) -> set:
+    def get_components(self) -> Set:
         """
         Return the set of components shared by all Boolean networks.
 
@@ -468,7 +467,7 @@ class BooleanNetworkEnsemble(list):
 
         return clauses
 
-    def get_transcription_factors(self) -> dict:
+    def get_transcription_factors(self) -> Dict:
         """
         Count regulators associated with each target across the ensemble.
 
@@ -480,7 +479,7 @@ class BooleanNetworkEnsemble(list):
             literals.
         """
 
-        def get_transcription_factors_from_clause(clause: frozenset) -> dict:
+        def get_transcription_factors_from_clause(clause: frozenset) -> Dict:
             transcription_factors = {}
 
             for conjunction in clause:
@@ -511,7 +510,7 @@ class BooleanNetworkEnsemble(list):
 
         return transcription_factors
 
-    def get_influences(self) -> dict:
+    def get_influences(self) -> Dict:
         """
         Return regulator-target influences counted across the ensemble.
 
