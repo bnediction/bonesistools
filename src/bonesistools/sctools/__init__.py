@@ -19,15 +19,28 @@ datasets
     Bundled example datasets.
 """
 
-from . import _typing as typing
+import sys as _sys
 
+from . import _typing as typing
+from . import datasets
 from . import tools as tl
 from . import preprocessing as pp
 from . import plotting as pl
-from . import datasets
 
-import sys as _sys
+__all__ = [
+    "tl",
+    "pp",
+    "pl",
+    "datasets",
+    "typing",
+]
 
 _sys.modules.update(
-    {f"{__name__}.{alias}": globals()[alias] for alias in ["tl", "pp", "pl"]}
+    {
+        f"{__name__}.{alias}": globals()[alias]
+        for alias in ["tl", "pp", "pl", "datasets"]
+    }
 )
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

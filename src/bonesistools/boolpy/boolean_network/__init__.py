@@ -9,11 +9,12 @@ for Boolean network-like objects used in logical modelling frameworks.
 
 from . import _typing as typing
 
-from ._networks import BooleanNetworkEnsemble
+from ._network import BooleanNetwork, BooleanNetworkEnsemble
 from ._hypercube import Hypercube, HypercubeCollection
 from ._bnet import bn_to_pydot
 
 __all__ = [
+    "BooleanNetwork",
     "BooleanNetworkEnsemble",
     "Hypercube",
     "HypercubeCollection",

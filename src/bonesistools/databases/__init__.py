@@ -15,3 +15,11 @@ omnipath
 """
 
 from . import omnipath, ncbi
+
+__all__ = [
+    "omnipath",
+    "ncbi",
+]
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

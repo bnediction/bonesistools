@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import bonesistools as bt
 
 GENE_IDS = [

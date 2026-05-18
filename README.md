@@ -14,16 +14,24 @@ import bonesistools as bt
 ```
 
 `BoNesisTools` exposes four main namespaces:
+
 - `bt.sct` — single-cell and multimodal annotated data tools
-- `bt.bpy` — Boolean algebra and Boolean network utilities
-- `bt.grn` — gene regulatory network algorithms
+- `bt.bpy` — Boolean modelling utilities
 - `bt.dbs` — biological database interfaces
+- `bt.grn` — deprecated alias for `bt.bpy.ig`
 
 `bt.sct` follows a [Scanpy](https://github.com/scverse/scanpy)-like API while providing additional and complementary features for single-cell analyses:
+
 - preprocessing: `bt.sct.pp`
 - tools: `bt.sct.tl`
 - plotting: `bt.sct.pl`
 - datasets: `bt.sct.datasets`
+
+`bt.bpy` provides utilities for Boolean modelling:
+
+- Boolean algebra and partial Boolean abstractions: `bt.bpy.ba`
+- Boolean network utilities: `bt.bpy.bn`
+- interaction and influence graph utilities: `bt.bpy.ig`
 
 ## Installation
 

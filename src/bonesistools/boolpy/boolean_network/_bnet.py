@@ -2,6 +2,8 @@
 
 import importlib
 
+import boolean
+
 import networkx as nx
 
 try:
@@ -39,8 +41,6 @@ def bn_to_pydot(
     -------
     Return pydot graph from Boolean network-based influence graph.
     """
-
-    import boolean  # type: ignore
 
     edges = set()
     ig = nx.MultiDiGraph()

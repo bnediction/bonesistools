@@ -10,3 +10,5 @@ differential calculus.
 
 from ._algebra import BooleanDifferentialCalculus
 from ._boolean import PartialBoolean
+from ._structure import expressions_equivalent, dnf_to_structure
+from ._representation import rule_to_string

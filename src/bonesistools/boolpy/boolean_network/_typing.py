@@ -7,16 +7,13 @@ try:
 except ImportError:
     from typing_extensions import Protocol, runtime_checkable
 
-try:
-    from boolean.boolean import Expression
-except ImportError:
-    Expression = type(NotImplemented)
+from boolean import Expression
 
 BooleanRule = Union[Expression, bool, int]
 
 
 @runtime_checkable
-class BooleanNetwork(Protocol):
+class BooleanNetworkLike(Protocol):
     """
     Protocol for Boolean network-like objects.
 
@@ -40,7 +37,7 @@ def is_boolean_rule_like(obj: Any) -> bool:
 
 
 def is_boolean_network_like(obj: Any) -> bool:
-    if not isinstance(obj, BooleanNetwork):
+    if not isinstance(obj, BooleanNetworkLike):
         return False
 
     try:

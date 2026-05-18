@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import bonesistools as bt
 
 from matplotlib.axes import Axes

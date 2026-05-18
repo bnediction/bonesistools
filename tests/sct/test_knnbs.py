@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import warnings
 
 import bonesistools as bt

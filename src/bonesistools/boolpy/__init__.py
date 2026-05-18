@@ -55,3 +55,6 @@ __all__ = [
     "bn",
     "ig",
 ]
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
