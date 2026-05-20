@@ -1,113 +1,167 @@
 #!/usr/bin/env python
 
-from typing import Union
+from __future__ import annotations
 
-import math
+from typing import Any, Union
+
+from functools import total_ordering
+
+PartialBooleanValue = Union[bool, int, str]
 
 
+@total_ordering
 class PartialBoolean:
+    """
+    Partial Boolean value in {0, *, 1}.
 
-    def __init__(self, value: Union[bool, float, int]):
-        if isinstance(value, bool):
-            self.__value = 1 if value is True else 0
-        elif value in [0, 1] or math.isnan(value):
-            self.__value = value
-        else:
-            raise ValueError(f"invalid argument value for 'value': {value}")
+    A PartialBoolean represents a Boolean abstraction where:
+        - 0 denotes an inactive Boolean state,
+        - 1 denotes an active Boolean state,
+        - "*" denotes an intermediate or unspecified Boolean state.
 
-    def __repr__(self):
-        return f"Boolean({self.__value})"
+    The ordering follows the biological interpretation:
+        0 < * < 1
 
-    def __str__(self):
-        return f"{self.__value}"
+    The `*` value may additionally be interpreted as representing both
+    Boolean states {0,1} in combinatorial or logical contexts such as
+    hypercube expansions and trap-space computations.
+
+    Parameters
+    ----------
+    value: bool or int or str
+        Partial Boolean value. Supported values are:
+            - False, 0
+            - True, 1
+            - "*"
+
+    Raises
+    ------
+    ValueError
+        If the provided value is not supported.
+    """
+
+    __slots__ = ("_value",)
+
+    def __init__(self, value: PartialBooleanValue) -> None:
+
+        self._value = self._coerce_value(value)
 
     @property
-    def get(self):
-        return self.__value
+    def value(self) -> Union[int, str]:
+        """
+        Underlying PartialBoolean value.
+        """
+
+        return self._value
 
     @property
-    def set(self, value):
+    def is_fixed(self) -> bool:
+        """
+        Whether the PartialBoolean is fixed to a Boolean value.
+
+        Returns
+        -------
+        bool
+            True if the value is 0 or 1.
+        """
+
+        return self._value in [0, 1]
+
+    @property
+    def is_free(self) -> bool:
+        """
+        Whether the PartialBoolean is unspecified.
+
+        Returns
+        -------
+        bool
+            True if the value is "*".
+        """
+
+        return self._value == "*"
+
+    def __repr__(self) -> str:
+
+        return f"PartialBoolean({self._value!r})"
+
+    def __str__(self) -> str:
+
+        return str(self._value)
+
+    def __bool__(self) -> bool:
+
+        if self.is_free:
+            raise ValueError("cannot convert free PartialBoolean to bool")
+
+        return bool(self._value)
+
+    def __eq__(self, other: object) -> bool:
+
+        if not isinstance(other, PartialBoolean):
+
+            try:
+                other = PartialBoolean(other)
+
+            except (TypeError, ValueError):
+                return NotImplemented
+
+        return self._value == other._value
+
+    def __ne__(self, other: object) -> bool:
+
+        result = self.__eq__(other)
+
+        if result is NotImplemented:
+            return NotImplemented
+
+        return not result
+
+    def __lt__(self, other: object) -> bool:
+
+        if not isinstance(other, PartialBoolean):
+            other = PartialBoolean(other)
+
+        order = {
+            0: 0,
+            "*": 1,
+            1: 2,
+        }
+
+        return order[self._value] < order[other._value]
+
+    def __hash__(self) -> int:
+
+        return hash(self._value)
+
+    @staticmethod
+    def _coerce_value(value: Any) -> Union[int, str]:
+        """
+        Convert supported values into canonical PartialBoolean values.
+
+        Parameters
+        ----------
+        value: Any
+            Value to convert.
+
+        Returns
+        -------
+        int or str
+            Canonical PartialBoolean value.
+
+        Raises
+        ------
+        ValueError
+            If the provided value is not supported.
+        """
+
         if isinstance(value, bool):
-            self.__value = 1 if value is True else 0
-        elif value in [0, 1] or math.isnan(value):
-            self.__value = value
-        else:
-            raise ValueError(f"invalid argument value for 'value': {value}")
+            return int(value)
 
-    def __eq__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'==' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        elif math.isnan(self.__value):
-            return True if math.isnan(other.__value) else False
-        else:
-            return self.__value == other.__value
+        if value in [0, 1, "*"]:
+            return value
 
-    def __ne__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'!=' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        else:
-            return not self == other
-
-    def __lt__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'<' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        elif math.isnan(self.__value):
-            if math.isnan(other.__value):
-                return False
-            else:
-                return False if other.__value == 0 else True
-        elif math.isnan(other.__value):
-            return True if self.__value == 0 else False
-        else:
-            return self.__value < other.__value
-
-    def __le__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'<=' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        elif math.isnan(self.__value):
-            if math.isnan(other.__value):
-                return True
-            else:
-                return False if other.__value == 0 else True
-        elif math.isnan(other.__value):
-            return True if self.__value == 0 else False
-        else:
-            return self.__value <= other.__value
-
-    def __gt__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'>' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        elif math.isnan(self.__value):
-            if math.isnan(other.__value):
-                return False
-            else:
-                return True if other.__value == 0 else False
-        elif math.isnan(other.__value):
-            return False if self.__value == 0 else True
-        else:
-            return self.__value > other.__value
-
-    def __ge__(self, other):
-        if not isinstance(other, PartialBoolean):
-            raise TypeError(
-                f"'>=' not supported between instances of {PartialBoolean} and {type(other)}"
-            )
-        elif math.isnan(self.__value):
-            if math.isnan(other.__value):
-                return True
-            else:
-                return True if other.__value == 0 else False
-        elif math.isnan(other.__value):
-            return False if self.__value == 0 else True
-        else:
-            return self.__value >= other.__value
+        raise ValueError(
+            "unsupported PartialBoolean value: "
+            f"expected 0, 1, False, True or '*', "
+            f"but received {value!r}"
+        )
