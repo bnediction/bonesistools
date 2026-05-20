@@ -9,6 +9,7 @@ from typing import Dict, Optional, Set, Union
 from ._boolean import PartialBoolean
 from ._typing import PartialBooleanLike, HypercubeLike, is_hypercube_like
 
+
 class Hypercube(MutableMapping):
     """
     Partial Boolean hypercube.
@@ -29,7 +30,7 @@ class Hypercube(MutableMapping):
 
     >>> Hypercube({"A": 0})
     >>> Hypercube({"A": 0, "B": "*"})
-    
+
     Parameters
     ----------
     mapping: Mapping[str, PartialBooleanLike] (optional, default: None)
@@ -327,6 +328,7 @@ class Hypercube(MutableMapping):
             f"but received {type(other)}"
         )
 
+
 class HypercubeCollection(MutableSet):
     """
     Mutable set of hypercubes.
@@ -547,11 +549,11 @@ class HypercubeCollection(MutableSet):
     def fully_specified(self) -> "HypercubeCollection":
         """
         Return hypercubes with all collection components fixed.
-    
+
         Missing components are interpreted as free values. A hypercube is therefore
         considered fully specified only if every component appearing in the
         collection is fixed in that hypercube.
-    
+
         Returns
         -------
         HypercubeCollection
