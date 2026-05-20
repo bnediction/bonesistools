@@ -1,30 +1,26 @@
 #!/usr/bin/env python
 
-from __future__ import annotations
-
 from typing import Any, Union
-
-from functools import total_ordering
 
 PartialBooleanValue = Union[bool, int, str]
 
 
-@total_ordering
 class PartialBoolean:
     """
-    Partial Boolean value in {0, *, 1}.
+    Partial Boolean value in {0, 1, *}.
 
     A PartialBoolean represents a Boolean abstraction where:
         - 0 denotes an inactive Boolean state,
         - 1 denotes an active Boolean state,
-        - "*" denotes an intermediate or unspecified Boolean state.
+        - "*" denotes a free, unspecified or unresolved Boolean state.
 
-    The ordering follows the biological interpretation:
-        0 < * < 1
+    No ordering is defined between PartialBoolean values. In particular,
+    expressions such as `PartialBoolean(0) < PartialBoolean(1)` are not
+    supported, because ordering depends on the intended semantics.
 
-    The `*` value may additionally be interpreted as representing both
-    Boolean states {0,1} in combinatorial or logical contexts such as
-    hypercube expansions and trap-space computations.
+    The method `contains` provides the combinatorial interpretation used for
+    hypercubes: "*" contains both Boolean values 0 and 1, while fixed values
+    only contain themselves.
 
     Parameters
     ----------
@@ -70,7 +66,7 @@ class PartialBoolean:
     @property
     def is_free(self) -> bool:
         """
-        Whether the PartialBoolean is unspecified.
+        Whether the PartialBoolean is free.
 
         Returns
         -------
@@ -79,6 +75,33 @@ class PartialBoolean:
         """
 
         return self._value == "*"
+
+    def contains(self, other: object) -> bool:
+        """
+        Test whether the PartialBoolean contains another partial Boolean value.
+
+        The containment relation follows the combinatorial interpretation:
+        "*" contains 0, 1 and "*", while fixed values only contain themselves.
+
+        Parameters
+        ----------
+        other: object
+            PartialBoolean-like value to test.
+
+        Returns
+        -------
+        bool
+            Whether `other` is contained in the current PartialBoolean.
+
+        Raises
+        ------
+        ValueError
+            If `other` cannot be interpreted as a PartialBoolean value.
+        """
+
+        other = other if isinstance(other, PartialBoolean) else PartialBoolean(other)
+
+        return self.is_free or self == other
 
     def __repr__(self) -> str:
 
@@ -115,19 +138,6 @@ class PartialBoolean:
             return NotImplemented
 
         return not result
-
-    def __lt__(self, other: object) -> bool:
-
-        if not isinstance(other, PartialBoolean):
-            other = PartialBoolean(other)
-
-        order = {
-            0: 0,
-            "*": 1,
-            1: 2,
-        }
-
-        return order[self._value] < order[other._value]
 
     def __hash__(self) -> int:
 

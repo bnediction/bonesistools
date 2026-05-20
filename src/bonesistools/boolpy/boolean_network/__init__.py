@@ -11,7 +11,6 @@ from . import _typing as typing
 
 from ._parser import read_bnet, read_bnet_directory
 from ._network import ratio_edge_style, BooleanNetwork, BooleanNetworkEnsemble
-from ._hypercube import Hypercube, HypercubeCollection
 
 __all__ = [
     "read_bnet",
@@ -19,8 +18,6 @@ __all__ = [
     "ratio_edge_style",
     "BooleanNetwork",
     "BooleanNetworkEnsemble",
-    "Hypercube",
-    "HypercubeCollection",
     "bn_to_pydot",
     "typing",
 ]

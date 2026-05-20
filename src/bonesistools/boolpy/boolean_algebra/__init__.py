@@ -10,13 +10,36 @@ differential calculus.
 
 from ._algebra import BooleanDifferentialCalculus
 from ._boolean import PartialBoolean
+from ._hypercube import Hypercube, HypercubeCollection
 from ._structure import expressions_equivalent, dnf_to_structure
 from ._representation import rule_to_string
+from ._parser import read_hypercube
+from ._typing import (
+    BooleanRule,
+    PartialBooleanLike,
+    HypercubeLike,
+    is_boolean_expression_available,
+    is_boolean_expression_like,
+    is_boolean_rule_like,
+    is_partial_boolean_like,
+    is_hypercube_like,
+)
 
 __all__ = [
-    BooleanDifferentialCalculus,
-    PartialBoolean,
-    expressions_equivalent,
-    dnf_to_structure,
-    rule_to_string,
+    "BooleanDifferentialCalculus",
+    "PartialBoolean",
+    "Hypercube",
+    "HypercubeCollection",
+    "expressions_equivalent",
+    "dnf_to_structure",
+    "rule_to_string",
+    "read_hypercube",
+    "BooleanRule",
+    "PartialBooleanLike",
+    "HypercubeLike",
+    "is_boolean_expression_available",
+    "is_boolean_expression_like",
+    "is_boolean_rule_like",
+    "is_partial_boolean_like",
+    "is_hypercube_like",
 ]

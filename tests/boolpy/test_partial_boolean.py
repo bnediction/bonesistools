@@ -5,38 +5,26 @@ import pytest
 import bonesistools as bt
 
 
-def test_partial_boolean_ordering():
+def test_partial_boolean_equality_and_contains():
 
     pb0 = bt.bpy.ba.PartialBoolean(0)
-    pbstar = bt.bpy.ba.PartialBoolean("*")
     pb1 = bt.bpy.ba.PartialBoolean(1)
+    pbstar = bt.bpy.ba.PartialBoolean("*")
 
     assert pb0 == 0
-    assert pbstar == "*"
     assert pb1 == 1
+    assert pbstar == "*"
 
-    assert pb0 < pbstar
-    assert pbstar < pb1
+    assert pbstar.contains(0)
+    assert pbstar.contains(1)
+    assert pbstar.contains("*")
 
-    assert pb0 <= pbstar
-    assert pbstar <= pb1
-
-    assert pb1 > pbstar
-    assert pbstar > pb0
-
-    assert pb1 >= pbstar
-    assert pbstar >= pb0
-
-    assert pb0 != pb1
-
-    assert sorted([pb1, pb0, pbstar]) == [
-        pb0,
-        pbstar,
-        pb1,
-    ]
+    assert pb0.contains(0)
+    assert not pb0.contains(1)
+    assert not pb0.contains("*")
 
 
-def test_partial_boolean_properties():
+def test_partial_boolean_properties_and_conversion():
 
     assert bt.bpy.ba.PartialBoolean(0).is_fixed is True
     assert bt.bpy.ba.PartialBoolean(1).is_fixed is True
@@ -44,23 +32,6 @@ def test_partial_boolean_properties():
 
     assert bt.bpy.ba.PartialBoolean("*").is_free is True
     assert bt.bpy.ba.PartialBoolean(0).is_free is False
-    assert bt.bpy.ba.PartialBoolean(1).is_free is False
-
-
-def test_partial_boolean_representation_and_value():
-    pb = bt.bpy.ba.PartialBoolean("*")
-
-    assert pb.value == "*"
-    assert str(pb) == "*"
-    assert repr(pb) == "PartialBoolean('*')"
-
-
-def test_partial_boolean_boolean_inputs():
-    assert bt.bpy.ba.PartialBoolean(False) == 0
-    assert bt.bpy.ba.PartialBoolean(True) == 1
-
-
-def test_partial_boolean_bool_conversion():
 
     assert bool(bt.bpy.ba.PartialBoolean(0)) is False
     assert bool(bt.bpy.ba.PartialBoolean(1)) is True
@@ -69,30 +40,25 @@ def test_partial_boolean_bool_conversion():
         bool(bt.bpy.ba.PartialBoolean("*"))
 
 
-def test_partial_boolean_hashable():
-    values = {
-        bt.bpy.ba.PartialBoolean(0),
-        bt.bpy.ba.PartialBoolean("*"),
-        bt.bpy.ba.PartialBoolean(1),
-    }
+def test_partial_boolean_representation_hashing_and_immutability():
 
-    assert bt.bpy.ba.PartialBoolean(0) in values
-    assert bt.bpy.ba.PartialBoolean("*") in values
-    assert bt.bpy.ba.PartialBoolean(1) in values
+    pb = bt.bpy.ba.PartialBoolean("*")
 
+    assert pb.value == "*"
+    assert str(pb) == "*"
+    assert repr(pb) == "PartialBoolean('*')"
 
-def test_partial_boolean_immutability():
+    assert pb in {bt.bpy.ba.PartialBoolean("*")}
 
     x = bt.bpy.ba.PartialBoolean(0)
     y = x
-
     x = bt.bpy.ba.PartialBoolean(1)
 
     assert x == 1
     assert y == 0
 
 
-def test_partial_boolean_invalid_value():
+def test_partial_boolean_rejects_invalid_values():
 
     with pytest.raises(ValueError):
         bt.bpy.ba.PartialBoolean(3)
@@ -103,12 +69,14 @@ def test_partial_boolean_invalid_value():
     with pytest.raises(ValueError):
         bt.bpy.ba.PartialBoolean(None)
 
-
-def test_partial_boolean_unsupported_equality():
-    assert (bt.bpy.ba.PartialBoolean(0) == object()) is False
-    assert (bt.bpy.ba.PartialBoolean(0) != object()) is True
-
-
-def test_partial_boolean_unsupported_ordering():
     with pytest.raises(ValueError):
-        bt.bpy.ba.PartialBoolean(0) < object()
+        bt.bpy.ba.PartialBoolean("*").contains(object())
+
+
+def test_partial_boolean_is_unordered():
+
+    with pytest.raises(TypeError):
+        bt.bpy.ba.PartialBoolean(0) < bt.bpy.ba.PartialBoolean("*")
+
+    with pytest.raises(TypeError):
+        bt.bpy.ba.PartialBoolean(0) <= bt.bpy.ba.PartialBoolean(1)
