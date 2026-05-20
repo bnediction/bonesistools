@@ -94,6 +94,9 @@ def kde_plot(
     )
 
     if obs:
+        if obs not in adata.obs:
+            raise KeyError(f"{obs!r} is not a valid observation key in `adata.obs`.")
+        counts[obs] = adata.obs[obs]
         if not colors:
             cluster_number = len(adata.obs[obs].astype("category").cat.categories)
             if len(_colors.QUALITATIVE_COLORS) >= cluster_number:
@@ -125,7 +128,7 @@ def kde_plot(
             label="all",
         )
 
-    if obs:
+    if obs is not None:
         for _cluster, _color in zip(
             adata.obs[obs].astype("category").cat.categories, colors
         ):
@@ -267,7 +270,7 @@ def ecdf_plot(
 
     x, y = _ecdf(counts["counting"])
     ax.step(x, y, where="post", color=colors[0], label="all")
-    if obs:
+    if obs is not None:
         for _cluster, _color in zip(counts[obs].cat.categories, colors[1:]):
             _counts = counts.loc[counts[obs] == _cluster]["counting"]
             x, y = _ecdf(_counts)

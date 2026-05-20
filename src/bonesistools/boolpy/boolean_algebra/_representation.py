@@ -17,4 +17,4 @@ def rule_to_string(rule: Expression) -> str:
     if isinstance(rule, _FALSE):
         return "0"
 
-    return str(rule).replace("~", "!").replace("&", " & ").replace("|", " | ")
+    return str(rule).replace("&", " & ").replace("|", " | ")

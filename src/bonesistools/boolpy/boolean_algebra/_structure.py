@@ -165,7 +165,7 @@ def dnf_to_structure(
 
     Returns
     -------
-    DNFStructure
+    DNFValue
         Return True or False for constant expressions. Otherwise, return a
         nested structure representing the DNF.
 

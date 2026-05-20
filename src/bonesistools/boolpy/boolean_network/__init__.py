@@ -9,10 +9,14 @@ for Boolean network-like objects used in logical modelling frameworks.
 
 from . import _typing as typing
 
-from ._network import BooleanNetwork, BooleanNetworkEnsemble
+from ._parser import read_bnet, read_bnet_directory
+from ._network import ratio_edge_style, BooleanNetwork, BooleanNetworkEnsemble
 from ._hypercube import Hypercube, HypercubeCollection
 
 __all__ = [
+    "read_bnet",
+    "read_bnet_directory",
+    "ratio_edge_style",
     "BooleanNetwork",
     "BooleanNetworkEnsemble",
     "Hypercube",

@@ -1,6 +1,20 @@
 #!/usr/bin/env python
 
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Mapping, Optional, Set, Union
+from collections.abc import MutableSequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    Mapping,
+    Optional,
+    Union,
+    Dict,
+    FrozenSet,
+    List,
+    Set,
+    Tuple,
+)
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 try:
@@ -9,7 +23,6 @@ except ImportError:
     from typing_extensions import Literal  # type: ignore
 
 from pathlib import Path
-from typing import Any, Optional, Union
 
 import networkx as nx
 
@@ -25,6 +38,9 @@ if TYPE_CHECKING:
     from pydot import Dot
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
+NodeStyle = Literal["count", "stability"]
+
+from ..plotting import ratio_edge_style, count_node_style, stability_node_style
 
 
 class BooleanNetwork(dict):
@@ -173,6 +189,17 @@ class BooleanNetwork(dict):
         """
 
         return {component: rule_to_string(rule) for component, rule in self.items()}
+
+    @classmethod
+    def from_bnet(
+        cls,
+        file: Union[str, Path],
+        ba: Optional[BooleanAlgebra] = None,
+        check: bool = True,
+    ) -> "BooleanNetwork":
+        from ._parser import read_bnet
+
+        return read_bnet(file, ba=ba, check=check)
 
     def validate(self) -> None:
         """
@@ -358,7 +385,7 @@ class BooleanNetwork(dict):
         `BooleanAlgebra.FALSE` rather than Python booleans.
         """
         if isinstance(rule, Expression):
-            return rule
+            return self.ba.parse(rule_to_string(rule))
 
         if isinstance(rule, bool):
             return self.ba.TRUE if rule else self.ba.FALSE
@@ -383,29 +410,34 @@ class BooleanNetwork(dict):
         )
 
 
-class BooleanNetworkEnsemble(list):
+class BooleanNetworkEnsemble(MutableSequence):
     """
-    Store and analyse an ensemble of Boolean networks sharing the same components.
+    Mutable sequence of Boolean networks sharing the same components.
+
+    A Boolean network ensemble stores Boolean-network-like objects while
+    enforcing that all networks are defined over the same component set.
 
     Parameters
     ----------
-    components: list[str] (optional, default: None)
-        Component names expected in each Boolean network. If specified without
+    components: Iterable[str] (optional, default: None)
+        Components expected in each Boolean network. If specified without
         `bns`, initialise an empty ensemble with this component set.
-    bns: list[BooleanNetwork] (optional, default: None)
-        Boolean networks used to initialise the ensemble. All networks must
-        contain the same components.
+    bns: Iterable[BooleanNetworkLike] (optional, default: None)
+        Boolean-network-like objects used to initialise the ensemble. All
+        networks must contain exactly the same components.
 
     Notes
     -----
-    Boolean networks are expected to behave as mappings from component names to
-    Boolean rules.
+    This class behaves like a mutable sequence: networks can be accessed by
+    index, appended, inserted, replaced and deleted. Inserted or replaced
+    networks are validated before being stored.
     """
 
     def __init__(
         self,
-        components: List[str] = None,
-        bns: List[BooleanNetworkLike] = None,
+        components: Optional[Iterable[str]] = None,
+        bns: Optional[Iterable[BooleanNetworkLike]] = None,
+        ba: Optional[BooleanAlgebra] = None,
     ) -> None:
 
         if components is None and bns is None:
@@ -420,20 +452,18 @@ class BooleanNetworkEnsemble(list):
                 "'components' and 'bns' are mutually exclusive"
             )
 
+        self.__ba = BooleanAlgebra() if ba is None else ba
+        self._networks = []
+
         if components is not None:
-            super().__init__()
-            self.__components = set(components)
+            self._components = set(components)
             return
 
-        if not isinstance(bns, list):
-            raise TypeError(
-                f"unsupported argument type for 'bns': expected {list}, "
-                f"but received {type(bns)}"
-            )
+        bns = list(bns)
 
         if len(bns) == 0:
             raise ValueError(
-                "cannot infer components from an empty Boolean network list"
+                "cannot infer components from an empty Boolean network collection"
             )
 
         if not all(is_boolean_network_like(bn) for bn in bns):
@@ -442,54 +472,75 @@ class BooleanNetworkEnsemble(list):
                 "all elements must be Boolean network-like objects"
             )
 
-        self.__components = set(bns[0])
+        self._components = set(bns[0])
 
-        if not all(set(bn) == self.__components for bn in bns[1:]):
-            raise ValueError("invalid value: different components between networks")
+        for bn in bns:
+            self._networks.append(self._coerce_network(bn))
 
-        super().__init__(bns)
-
-    def __setitem__(self, key, value) -> None:
-        if not is_boolean_network_like(value):
-            raise TypeError(
-                "unsupported argument type: expected Boolean network-like object, "
-                f"but received {type(value)}"
-            )
-
-        if set(value) != self.__components:
-            raise ValueError("invalid value: missing or additional components")
-
-        super().__setitem__(key, value)
-
-    def append(self, other) -> None:
+    def __len__(self) -> int:
         """
-        Append a Boolean network to the ensemble.
+        Return the number of Boolean networks in the ensemble.
+        """
+
+        return len(self._networks)
+
+    def __getitem__(self, index):
+        """
+        Return one or more Boolean networks from the ensemble.
 
         Parameters
         ----------
-        other: BooleanNetwork
-            Boolean network-like object to append.
+        index: int or slice
+            Index or slice selecting Boolean networks.
+
+        Returns
+        -------
+        BooleanNetworkLike or List[BooleanNetworkLike]
+            Selected Boolean network or List of Boolean networks.
+        """
+
+        return self._networks[index]
+
+    def __setitem__(self, index, value) -> None:
+        """
+        Replace one or more Boolean networks in the ensemble.
+
+        Parameters
+        ----------
+        index: int or slice
+            Index or slice selecting positions to replace.
+        value: BooleanNetworkLike or Iterable[BooleanNetworkLike]
+            Boolean-network-like object, or iterable of Boolean-network-like
+            objects when `index` is a slice.
 
         Raises
         ------
         TypeError
-            If `other` is not a Boolean network-like object.
+            If a provided object is not a Boolean-network-like object.
         ValueError
-            If `other` does not contain exactly the expected components.
+            If a provided object does not contain exactly the expected
+            components.
         """
 
-        if not is_boolean_network_like(other):
-            raise TypeError(
-                "unsupported argument type: expected Boolean network-like object, "
-                f"but received {type(other)}"
-            )
+        if isinstance(index, slice):
+            self._networks[index] = [self._coerce_network(bn) for bn in value]
+            return
 
-        if set(other) != self.__components:
-            raise ValueError("invalid value: missing or additional components")
+        self._networks[index] = self._coerce_network(value)
 
-        super().append(other)
+    def __delitem__(self, index) -> None:
+        """
+        Delete one or more Boolean networks from the ensemble.
 
-    def insert(self, index, other) -> None:
+        Parameters
+        ----------
+        index: int or slice
+            Index or slice selecting Boolean networks to delete.
+        """
+
+        del self._networks[index]
+
+    def insert(self, index: int, value: BooleanNetworkLike) -> None:
         """
         Insert a Boolean network into the ensemble.
 
@@ -497,123 +548,318 @@ class BooleanNetworkEnsemble(list):
         ----------
         index: int
             Position where the Boolean network is inserted.
-        other: BooleanNetwork
-            Boolean network-like object to insert.
+        value: BooleanNetworkLike
+            Boolean-network-like object to insert.
 
         Raises
         ------
         TypeError
-            If `other` is not a Boolean network-like object.
+            If `value` is not a Boolean-network-like object.
         ValueError
-            If `other` does not contain exactly the expected components.
+            If `value` does not contain exactly the expected components.
         """
 
-        if not is_boolean_network_like(other):
-            raise TypeError(
-                "unsupported argument type: expected Boolean network-like object, "
-                f"but received {type(other)}"
-            )
+        self._check_network(value)
+        self._networks.insert(index, self._coerce_network(value))
 
-        if set(other) != self.__components:
-            raise ValueError("invalid value: missing or additional components")
-
-        super().insert(index, other)
-
-    def get_components(self) -> Set:
+    @property
+    def components(self) -> FrozenSet[str]:
         """
         Return the set of components shared by all Boolean networks.
+        """
+
+        return frozenset(self._components)
+
+    @property
+    def ba(self) -> BooleanAlgebra:
+        """
+        Boolean algebra shared by all Boolean networks in the ensemble.
+        """
+
+        return self._ba
+
+    def rule_structures(self) -> Dict[str, List]:
+        """
+        Return Boolean rules encoded as DNF-like structures.
 
         Returns
         -------
-        set
-            Copy of the component set.
-        """
-
-        return self.__components.copy()
-
-    def get_clauses(self) -> Dict[str, list]:
-        """
-        Return Boolean rules encoded as DNF-like structures for each component.
-
-        Returns
-        -------
-        dict[str, list]
+        Dict[str, List]
             Dictionary mapping each component to the list of rules observed
-            across the ensemble. Constant rules are kept as booleans; non-constant
-            rules are converted into nested DNF structures.
+            across the ensemble. Constant rules are stored as Python booleans;
+            non-constant rules are converted into nested DNF structures.
         """
 
-        clauses = {component: [] for component in self.__components}
+        rule_structures = {component: [] for component in self._components}
 
         for bn in self:
             for component, rule in bn.items():
-                if isinstance(rule, (_TRUE, _FALSE)):
-                    clauses[component].append(bool(rule))
+                if isinstance(rule, _TRUE):
+                    rule_structures[component].append(True)
+
+                elif isinstance(rule, _FALSE):
+                    rule_structures[component].append(False)
+
                 else:
-                    clauses[component].append(dnf_to_structure(bn.ba, rule))
+                    rule_structures[component].append(dnf_to_structure(bn.ba, rule))
 
-        return clauses
+        return rule_structures
 
-    def get_transcription_factors(self) -> Dict:
+    def regulator_counts(self) -> Dict:
         """
-        Count regulators associated with each target across the ensemble.
+        Count signed regulators associated with each target across the ensemble.
+
+        Each signed regulator is counted at most once per Boolean network,
+        regardless of how many times it appears in the rule structure.
+        """
+
+        counts = {component: {} for component in self._components}
+
+        for bn in self:
+            for target, rule in bn.items():
+                influences = set()
+
+                for literal in rule.simplify().literalize().get_literals():
+                    if isinstance(literal, bn.ba.NOT):
+                        regulator = literal.args[0].obj
+                        sign = False
+                    else:
+                        regulator = literal.obj
+                        sign = True
+
+                    influences.add((regulator, sign))
+
+                for regulator, sign in influences:
+                    if regulator not in counts[target]:
+                        counts[target][regulator] = {}
+
+                    if sign not in counts[target][regulator]:
+                        counts[target][regulator][sign] = 0
+
+                    counts[target][regulator][sign] += 1
+
+        return counts
+
+    def influence_counts(self) -> Dict:
+        """
+        Count signed regulator-target influences across the ensemble.
 
         Returns
         -------
-        dict
-            Nested dictionary of the form target -> source -> sign -> count,
-            where sign is True for positive literals and False for negative
-            literals.
-        """
-
-        def get_transcription_factors_from_clause(clause: frozenset) -> Dict:
-            transcription_factors = {}
-
-            for conjunction in clause:
-                for factor, sign in conjunction:
-                    if factor not in transcription_factors:
-                        transcription_factors[factor] = sign
-
-            return transcription_factors
-
-        clauses = self.get_clauses()
-        transcription_factors = {component: {} for component in self.__components}
-
-        for target, clause_set in clauses.items():
-            for clause in clause_set:
-                if clause is True or clause is False:
-                    continue
-
-                for factor, sign in get_transcription_factors_from_clause(
-                    clause
-                ).items():
-                    if factor not in transcription_factors[target]:
-                        transcription_factors[target][factor] = {}
-
-                    if sign not in transcription_factors[target][factor]:
-                        transcription_factors[target][factor][sign] = 0
-
-                    transcription_factors[target][factor][sign] += 1
-
-        return transcription_factors
-
-    def get_influences(self) -> Dict:
-        """
-        Return regulator-target influences counted across the ensemble.
-
-        Returns
-        -------
-        dict
+        Dict
             Nested dictionary of the form source -> target -> sign -> count,
             where sign is True for positive influences and False for negative
             influences.
         """
 
-        influences = {component: {} for component in self.__components}
-        transcription_factors = self.get_transcription_factors()
+        influences = {component: {} for component in self._components}
+        regulator_counts = self.regulator_counts()
 
-        for target, sources in transcription_factors.items():
-            for source, influence in sources.items():
-                influences[source][target] = influence
+        for target, regulators in regulator_counts.items():
+            for source, signs in regulators.items():
+                if source not in influences:
+                    influences[source] = {}
+
+                influences[source][target] = signs
 
         return influences
+
+    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph:
+        """
+        Convert the Boolean network ensemble into an aggregated signed influence graph.
+
+        Nodes correspond to Boolean network components. Each node stores the number
+        of distinct Boolean rule structures observed for the corresponding component
+        and the stability of the most frequent rule structure. Edges correspond to
+        signed influences aggregated across the ensemble and store their occurrence
+        count.
+
+        Parameters
+        ----------
+        remove_isolated_nodes: bool (default: False)
+            If True, remove components with no incoming or outgoing influence.
+
+        Returns
+        -------
+        nx.MultiDiGraph
+            Aggregated signed influence graph.
+        """
+
+        graph = nx.MultiDiGraph()
+
+        rule_structures = self.rule_structures()
+
+        function_counts = {}
+        function_stabilities = {}
+
+        for component, structures in rule_structures.items():
+            structure_counts = {}
+
+            for structure in structures:
+                if structure not in structure_counts:
+                    structure_counts[structure] = 0
+
+                structure_counts[structure] += 1
+
+            function_counts[component] = len(structure_counts)
+            function_stabilities[component] = (
+                max(structure_counts.values()) / len(self) if structure_counts else 0
+            )
+
+        influence_counts = self.influence_counts()
+
+        for component in self.components:
+            graph.add_node(
+                component,
+                function_count=function_counts[component],
+                function_stability=function_stabilities[component],
+            )
+
+        for source, targets in influence_counts.items():
+            for target, signs in targets.items():
+                for sign, count in signs.items():
+                    graph.add_edge(
+                        source,
+                        target,
+                        sign=sign,
+                        count=count,
+                        ratio=count / len(self),
+                    )
+
+        if remove_isolated_nodes:
+            isolated = list(nx.isolates(graph))
+            graph.remove_nodes_from(isolated)
+
+        return graph
+
+    def to_pydot(
+        self,
+        remove_isolated_nodes: bool = False,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        node_style: Union[
+            Literal["count", "stability"],
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        program: str = "dot",
+        **kwargs,
+    ) -> "Dot":
+        """
+        Convert the Boolean network ensemble into an aggregated pydot graph.
+
+        The resulting graph represents signed influences aggregated across the
+        ensemble. Edge occurrence counts correspond to the number of Boolean
+        networks in which a signed influence is observed. Node attributes include
+        both the number of distinct rule structures and the stability of the most
+        frequent rule structure.
+
+        Parameters
+        ----------
+        remove_isolated_nodes: bool (default: False)
+            If True, remove components with no incoming or outgoing influence.
+        show_edge_labels: bool (default: True)
+            If True, display edge occurrence counts as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to their occurrence ratio in
+            the ensemble. The callable receives a ratio between 0 and 1 and must
+            return a mapping of pydot edge attributes.
+            If assigned to True, use `ratio_edge_style`.
+            If assigned to False or None, no additional edge styling is applied.
+        node_style: Literal["count", "stability"] or Callable[[Mapping[str, Any]], Mapping[str, Any]] or bool or None
+            Node styling strategy.
+            If assigned to `"count"`, nodes are styled according to the number of
+            distinct rule structures observed for the component.
+            If assigned to `"stability"`, nodes are styled according to the
+            frequency of the most common rule structure.
+            If assigned to a callable, the callable receives the node attributes
+            and must return a mapping of pydot node attributes.
+            If assigned to False or None, no additional node styling is applied.
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting pydot graph.
+        **kwargs: Mapping[str, Any]
+            Keyword arguments passed to the resulting pydot graph using
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        Dot
+            Aggregated signed influence graph as a pydot object.
+        """
+
+        graph = self.to_networkx(remove_isolated_nodes=remove_isolated_nodes)
+
+        if edge_style is True:
+            edge_style = ratio_edge_style
+
+        if node_style == "count":
+            node_style = count_node_style
+
+        elif node_style == "stability":
+            node_style = stability_node_style
+
+        for _, data in graph.nodes(data=True):
+
+            if node_style not in (None, False):
+                data.update(node_style(data))
+
+        for _, _, data in graph.edges(data=True):
+            sign = data["sign"]
+            count = data["count"]
+            ratio = data["ratio"]
+
+            data.update(
+                color="green4" if sign is True else "red2",
+                arrowhead="normal" if sign is True else "tee",
+                penwidth="2",
+            )
+
+            if show_edge_labels:
+                data["label"] = str(count)
+
+            if edge_style not in (None, False):
+                data.update(edge_style(ratio))
+
+        dot = nx.drawing.nx_pydot.to_pydot(graph)
+
+        dot.set_prog(program)
+
+        for key, value in kwargs.items():
+            dot.set(key, value)
+
+        return dot
+
+    def _check_network(self, bn: BooleanNetworkLike) -> None:
+        """
+        Validate a Boolean-network-like object before insertion.
+
+        Parameters
+        ----------
+        bn: BooleanNetworkLike
+            Boolean-network-like object to validate.
+
+        Raises
+        ------
+        TypeError
+            If `bn` is not a Boolean-network-like object.
+        ValueError
+            If `bn` does not contain exactly the expected components.
+        """
+
+        if not is_boolean_network_like(bn):
+            raise TypeError(
+                "unsupported argument type: expected Boolean network-like object, "
+                f"but received {type(bn)}"
+            )
+
+        if set(bn) != self._components:
+            raise ValueError("invalid value: missing or additional components")
+
+    def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:
+        self._check_network(bn)
+        return BooleanNetwork(bn, ba=self.__ba, check=False)

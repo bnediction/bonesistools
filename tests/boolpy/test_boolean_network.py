@@ -12,14 +12,14 @@ def test_boolean_network_coerces_string_rules():
     ba = BooleanAlgebra()
     bn = bt.bpy.bn.BooleanNetwork(
         {
-            "A": "B & ~C",
+            "A": "B & !C",
             "B": 0,
             "C": 1,
         },
         ba=ba,
     )
 
-    assert bn.rule("A") == "B & !C"
+    assert bn.rule("A") == "B & ~C"
     assert bn.rule("B") == "0"
     assert bn.rule("C") == "1"
 
@@ -144,7 +144,7 @@ def test_boolean_network_rules_property():
     )
 
     assert bn.rules == {
-        "A": "B & !C",
+        "A": "B & ~C",
         "B": "0",
         "C": "1",
     }
@@ -157,7 +157,7 @@ def test_boolean_network_setitem_coerces_rules():
     bn["B"] = "A & ~C"
     bn["C"] = 0
 
-    assert bn.rule("B") == "A & !C"
+    assert bn.rule("B") == "A & ~C"
     assert bn["C"] is bn.ba.FALSE
 
 
@@ -171,7 +171,7 @@ def test_boolean_network_string_representation():
         }
     )
 
-    assert str(bn) == "A <- B & !C\nB <- 0\nC <- 1"
+    assert str(bn) == "A <- B & ~C\nB <- 0\nC <- 1"
 
 
 def test_boolean_network_repr_is_string_representation():

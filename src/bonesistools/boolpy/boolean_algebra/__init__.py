@@ -12,3 +12,11 @@ from ._algebra import BooleanDifferentialCalculus
 from ._boolean import PartialBoolean
 from ._structure import expressions_equivalent, dnf_to_structure
 from ._representation import rule_to_string
+
+__all__ = [
+    BooleanDifferentialCalculus,
+    PartialBoolean,
+    expressions_equivalent,
+    dnf_to_structure,
+    rule_to_string,
+]
