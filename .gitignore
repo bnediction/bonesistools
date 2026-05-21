@@ -84,6 +84,7 @@ q.log
 !src/bonesistools/sctools/datasets/
 !src/bonesistools/sctools/datasets/*.h5ad
 .coverage
+src/bonesistools/databases/omnipath/.cache/
 *.log
 logs/
 *debug*/
