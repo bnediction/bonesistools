@@ -37,7 +37,7 @@ def mitochondrial_genes(
         `adata.var`.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-    
+
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
@@ -100,7 +100,7 @@ def ribosomal_genes(
         `adata.var`.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
-    
+
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.

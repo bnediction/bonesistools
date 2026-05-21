@@ -824,9 +824,7 @@ class BooleanNetworkEnsemble(MutableSequence):
             )
 
         edges_to_remove = [
-            (u, v)
-            for u, v, data in graph.edges(data=True)
-            if data["ratio"] < min_ratio
+            (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio
         ]
 
         graph.remove_edges_from(edges_to_remove)
@@ -902,8 +900,7 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         if set(bn) != self._components:
             raise ValueError(
-                "invalid argument value for 'bn': "
-                "missing or additional components"
+                "invalid argument value for 'bn': " "missing or additional components"
             )
 
     def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:

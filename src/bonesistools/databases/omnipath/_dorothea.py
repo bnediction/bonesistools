@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
 from pathlib import Path
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, List, Optional, Union
+
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal  # type: ignore
 
 import networkx as nx
 import pandas as pd

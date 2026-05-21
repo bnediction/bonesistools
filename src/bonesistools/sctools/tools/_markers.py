@@ -82,31 +82,36 @@ def calculate_logfoldchanges(
         __df.insert(0, "group", cluster)
         return __df
 
-    logfoldchanges_df = pd.DataFrame(columns=["group", "names", column_name])
+    logfoldchanges = []
     counts_df = anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log)
 
     if cluster_rebalancing:
         mean_counts_df = counts_df.groupby(by=groupby, sort=True).mean()
+
         for cluster in sorted(adata.obs[groupby].unique().dropna()):
             _mean_in = mean_counts_df.loc[cluster]
             _mean_out = mean_counts_df.drop(index=cluster, inplace=False).mean()
-            _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfoldchanges_df = pd.concat(
-                [logfoldchanges_df, _logfoldchanges_df.copy()]
-            )
+
+            logfoldchanges.append(compute_logfc(_mean_in, _mean_out, cluster))
+
     else:
         for cluster in sorted(adata.obs[groupby].unique().dropna()):
             _mean_in = counts_df.loc[
-                counts_df[groupby] == cluster, counts_df.columns != groupby
+                counts_df[groupby] == cluster,
+                counts_df.columns != groupby,
             ].mean()
+
             _mean_out = counts_df.loc[
-                counts_df[groupby] != cluster, counts_df.columns != groupby
+                counts_df[groupby] != cluster,
+                counts_df.columns != groupby,
             ].mean()
-            _logfoldchanges_df = compute_logfc(_mean_in, _mean_out, cluster)
-            logfoldchanges_df = pd.concat(
-                [logfoldchanges_df, _logfoldchanges_df.copy()]
-            )
-            del _logfoldchanges_df
+
+            logfoldchanges.append(compute_logfc(_mean_in, _mean_out, cluster))
+
+    if len(logfoldchanges) == 0:
+        return pd.DataFrame(columns=["group", "names", column_name])
+
+    logfoldchanges_df = pd.concat(logfoldchanges, ignore_index=True)
 
     if filter_logfoldchanges is not None:
         if not callable(filter_logfoldchanges):
@@ -281,6 +286,15 @@ def smirnov_tests(
     if issparse(X):
         X.eliminate_zeros()
 
+    def get_gene_values(obs_mask, gene_name):
+        obs_indices = np.where(np.asarray(obs_mask))[0]
+        var_indices = np.where(np.asarray(adata.var.index == gene_name))[0]
+        if issparse(X):
+            values = X[obs_indices][:, var_indices].toarray()
+        else:
+            values = X[np.ix_(obs_indices, var_indices)]
+        return np.asarray(values).reshape(-1)
+
     df = pd.DataFrame(
         columns=["group", "names", "statistics", "locations", "signs", "pvals"]
     )
@@ -288,17 +302,11 @@ def smirnov_tests(
 
     for name in adata.var_names:
         if reference != "rest":
-            ref_sample = np.asarray(
-                X[adata.obs[groupby] == reference, adata.var.index == name].to_numpy()
-            ).reshape(-1)
+            ref_sample = get_gene_values(adata.obs[groupby] == reference, name)
         for group in groups:
             if reference == "rest":
-                ref_sample = np.asarray(
-                    X[adata.obs[groupby] != group, adata.var.index == name]
-                ).reshape(-1)
-            sample = np.asarray(
-                X[adata.obs[groupby] == group, adata.var.index == name]
-            ).reshape(-1)
+                ref_sample = get_gene_values(adata.obs[groupby] != group, name)
+            sample = get_gene_values(adata.obs[groupby] == group, name)
             ks = kstest(sample, ref_sample, alternative=alternative)
             df.loc[index] = [
                 group,
@@ -313,11 +321,17 @@ def smirnov_tests(
     df.sort_values(by=["statistics"], ascending=False, inplace=True, ignore_index=True)
 
     if corr_method == "benjamini-hochberg":
-        from statsmodels.stats.multitest import multipletests
-
-        _, df["pvals_adj"], _, _ = multipletests(
-            df["pvals"], alpha=0.05, method="fdr_bh"
-        )
+        pvals = df["pvals"].to_numpy(dtype=float)
+        if pvals.size:
+            order = np.argsort(pvals)
+            ranks = np.arange(1, pvals.size + 1)
+            adjusted = pvals[order] * pvals.size / ranks
+            adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+            pvals_adj = np.empty_like(adjusted)
+            pvals_adj[order] = np.minimum(adjusted, 1.0)
+            df["pvals_adj"] = pvals_adj
+        else:
+            df["pvals_adj"] = []
     elif corr_method == "bonferroni":
         n_genes = adata.var.shape[0]
         df["pvals_adj"] = np.minimum(df["pvals"] * n_genes, 1.0)

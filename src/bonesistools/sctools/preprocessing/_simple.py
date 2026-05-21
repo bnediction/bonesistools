@@ -270,7 +270,7 @@ def regress_out(
 
     if issparse(counts):
         counts = counts.toarray()
-    regressors = adata.obs[keys]
+    regressors = adata.obs[[keys]] if isinstance(keys, str) else adata.obs[keys]
     regressors.insert(0, "ones", 1.0)
     regressors = regressors.to_numpy()
 

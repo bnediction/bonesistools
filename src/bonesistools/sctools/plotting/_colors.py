@@ -244,7 +244,9 @@ def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
                 f"expected 'rgb' or 'hex' but received {color_type!r}"
             )
     else:
-        raise ValueError(f"invalid argument value for 'color': color not found: {color!r}")
+        raise ValueError(
+            f"invalid argument value for 'color': color not found: {color!r}"
+        )
 
 
 def generate_colormap(

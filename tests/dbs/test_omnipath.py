@@ -135,7 +135,9 @@ def test_load_collectri_grn_uses_op_wrapper_when_legacy_wrapper_is_missing(
 
 
 def test_load_collectri_grn_rejects_invalid_boolean_arguments():
-    with pytest.raises(TypeError, match="unsupported argument type for 'split_complexes'"):
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'split_complexes'"
+    ):
         _collectri.load_collectri_grn(split_complexes="yes")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'remove_pmid'"):

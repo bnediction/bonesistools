@@ -29,7 +29,9 @@ class UnionType(object):
         self.types = args
 
     def __str__(self):
-        return " or ".join(getattr(dtype, "__name__", str(dtype)) for dtype in self.types)
+        return " or ".join(
+            getattr(dtype, "__name__", str(dtype)) for dtype in self.types
+        )
 
     __repr__ = __str__
 

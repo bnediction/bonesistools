@@ -7,6 +7,7 @@ Parsers for Boolean algebra objects.
 import json
 from pathlib import Path
 from typing import Union, Dict
+
 try:
     from typing import Literal
 except ImportError:
@@ -15,6 +16,7 @@ except ImportError:
 from ._hypercube import Hypercube
 
 Axis = Literal["columns", "rows"]
+
 
 def read_hypercube(file: Union[str, Path]) -> Hypercube:
     """
@@ -54,6 +56,7 @@ def read_hypercube(file: Union[str, Path]) -> Hypercube:
         mapping = json.load(fp)
 
     return Hypercube(mapping)
+
 
 def read_hypercubes(
     file: Union[str, Path],
@@ -131,7 +134,4 @@ def read_hypercubes(
     if axis == "rows":
         data = data.T
 
-    return {
-        name: Hypercube(data[name].to_dict())
-        for name in data.columns
-    }
+    return {name: Hypercube(data[name].to_dict()) for name in data.columns}

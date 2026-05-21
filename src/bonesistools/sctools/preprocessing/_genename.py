@@ -42,7 +42,7 @@ def convert_gene_identifiers(
         Gene identifier output format.
     copy: bool (default: False)
         Return a copy instead of updating `scdata`.
-    
+
     Returns
     -------
     Depending on 'copy', update 'scdata' or return ScData object.
