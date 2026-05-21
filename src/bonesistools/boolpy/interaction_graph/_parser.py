@@ -49,6 +49,16 @@ def read_interaction_graph(
         Directed interaction graph.
         Edges store all columns from the input file as attributes.
 
+    Raises
+    ------
+    FileNotFoundError
+        If `infile` does not exist.
+    ValueError
+        If the input file is missing required columns or contains unsupported
+        sign values.
+    TypeError
+        If `genesyn` is neither None nor a GeneSynonyms object.
+
     Notes
     -----
     The 'sign' column must contain:
@@ -100,5 +110,6 @@ def read_interaction_graph(
         return grn
 
     raise TypeError(
-        f"unsupported argument type for 'genesyn': expected {GeneSynonyms} but received {type(genesyn)}"
+        f"unsupported argument type for 'genesyn': "
+        f"expected {GeneSynonyms} but received {type(genesyn)}"
     )

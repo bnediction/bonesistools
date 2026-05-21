@@ -16,25 +16,43 @@ from matplotlib.colors import Colormap, ListedColormap
 
 
 def rgb(color):
-    return list(map(lambda x: x / 255, color))
-
-
-def rgb2hex(rgb: RGB):
     """
-    Convert color from rgb format to hexadecimal format.
+    Convert 0-255 RGB channels to 0-1 RGB channels.
 
     Parameters
     ----------
-    color: RGB
+    color: sequence of numbers
+        RGB channels in the 0-255 range.
+
+    Returns
+    -------
+    list
+        RGB channels scaled to the 0-1 range.
+    """
+
+    return list(map(lambda x: x / 255, color))
+
+
+def rgb2hex(rgb):
+    """
+    Convert color from RGB format to hexadecimal format.
+
+    Parameters
+    ----------
+    rgb: RGB
         Color in RGB format.
 
     Returns
     -------
-    Return the color in hexadecimal format.
+    str
+        Color in hexadecimal format.
+
+    Raises
+    ------
+    TypeError
+        If one of the RGB channels is not numeric.
     """
 
-
-def rgb2hex(rgb):
     r, g, b = rgb
 
     if all(isinstance(x, (int, float)) for x in (r, g, b)):
@@ -43,7 +61,10 @@ def rgb2hex(rgb):
         else:
             r, g, b = [int(x) for x in (r, g, b)]
     else:
-        raise ValueError("invalid argument values for 'rgb': expected numeric values")
+        raise TypeError(
+            f"unsupported argument type for 'rgb': "
+            f"expected numeric values but received {[type(x) for x in (r, g, b)]}"
+        )
 
     return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
@@ -155,6 +176,26 @@ bonesis_cm = ListedColormap(colors=COLORS, name="bonesis")
 
 
 def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
+    """
+    Return a named color in RGB or hexadecimal format.
+
+    Parameters
+    ----------
+    color: str
+        Name of a color defined in this module.
+    color_type: {"rgb", "hex"} (default: "rgb")
+        Output color format.
+
+    Returns
+    -------
+    list or str
+        Color value in the requested format.
+
+    Raises
+    ------
+    ValueError
+        If `color` is unknown or `color_type` is not `"rgb"` or `"hex"`.
+    """
 
     if color in [
         "black",
@@ -199,10 +240,11 @@ def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
             return rgb2hex(eval(color))
         else:
             raise ValueError(
-                f"invalid argument value for 'color_type': expected 'rgb' or 'hex' but received {color_type}"
+                f"invalid argument value for 'color_type': "
+                f"expected 'rgb' or 'hex' but received {color_type!r}"
             )
     else:
-        raise ValueError(f"color not found: {color}")
+        raise ValueError(f"invalid argument value for 'color': color not found: {color!r}")
 
 
 def generate_colormap(
@@ -225,25 +267,35 @@ def generate_colormap(
     Returns
     -------
     Return a ListedColormap.
-    """
 
-    if color_number <= 0:
-        raise ValueError(
-            f"invalid argument value for 'color_number': expected non-null positive value but received '{color_number}'"
-        )
-    elif color_number <= cm.N:
-        return ListedColormap(cm.colors[0:color_number])
+    Raises
+    ------
+    TypeError
+        If `cm` is not a matplotlib Colormap.
+    ValueError
+        If `color_number` or `shade_number` is not strictly positive.
+    """
 
     if not isinstance(cm, Colormap):
         raise TypeError(
-            f"unsupported argument type for 'cm': expected {Colormap} but received {type(cm)}"
+            f"unsupported argument type for 'cm': "
+            f"expected {Colormap} but received {type(cm)}"
         )
+
+    if color_number <= 0:
+        raise ValueError(
+            f"invalid argument value for 'color_number': "
+            f"expected non-null positive value but received {color_number!r}"
+        )
+    elif color_number <= cm.N:
+        return ListedColormap(cm.colors[0:color_number])
 
     if shade_number is None:
         shade_number = cm.N
     elif shade_number <= 0:
         raise ValueError(
-            f"invalid argument value for 'shade_number': expected non-null positive value but received '{shade_number}'"
+            f"invalid argument value for 'shade_number': "
+            f"expected non-null positive value but received {shade_number!r}"
         )
 
     color_number_with_multiply_of_shades = int(

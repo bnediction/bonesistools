@@ -63,6 +63,14 @@ class BooleanNetwork(dict):
     A <- B & !C
     B <- 1
     C <- 0
+
+    Raises
+    ------
+    TypeError
+        If a component is not a string or a Boolean rule has an unsupported
+        type.
+    ValueError
+        If `check=True` and rules reference undefined components.
     """
 
     def __init__(
@@ -105,7 +113,8 @@ class BooleanNetwork(dict):
 
         if not isinstance(component, str):
             raise TypeError(
-                "Boolean network components must be strings, " f"got {type(component)}"
+                f"unsupported argument type for 'component': "
+                f"expected {str} but received {type(component)}"
             )
 
         super().__setitem__(component, self._coerce_rule(rule))
@@ -405,8 +414,8 @@ class BooleanNetwork(dict):
             return self.ba.parse(expr)
 
         raise TypeError(
-            f"unsupported Boolean rule type: expected str, bool, int or "
-            f"Expression, but received {type(rule)}"
+            f"unsupported argument type for 'rule': "
+            f"expected str, bool, int or Expression but received {type(rule)}"
         )
 
 
@@ -431,6 +440,15 @@ class BooleanNetworkEnsemble(MutableSequence):
     This class behaves like a mutable sequence: networks can be accessed by
     index, appended, inserted, replaced and deleted. Inserted or replaced
     networks are validated before being stored.
+
+    Raises
+    ------
+    TypeError
+        If initialisation arguments are inconsistent or if provided networks
+        are not Boolean network-like objects.
+    ValueError
+        If `bns` is empty or if a network has missing or additional
+        components.
     """
 
     def __init__(
@@ -469,7 +487,7 @@ class BooleanNetworkEnsemble(MutableSequence):
         if not all(is_boolean_network_like(bn) for bn in bns):
             raise TypeError(
                 "unsupported argument type for 'bns': "
-                "all elements must be Boolean network-like objects"
+                "expected iterable of Boolean network-like objects"
             )
 
         self._components = set(bns[0])
@@ -735,18 +753,19 @@ class BooleanNetworkEnsemble(MutableSequence):
     def to_pydot(
         self,
         remove_isolated_nodes: bool = False,
-        show_edge_labels: bool = True,
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
         node_style: Union[
             Literal["count", "stability"],
             Callable[[Mapping[str, Any]], Mapping[str, Any]],
             bool,
             None,
         ] = None,
+        min_ratio: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
         program: str = "dot",
         **kwargs,
     ) -> "Dot":
@@ -763,14 +782,6 @@ class BooleanNetworkEnsemble(MutableSequence):
         ----------
         remove_isolated_nodes: bool (default: False)
             If True, remove components with no incoming or outgoing influence.
-        show_edge_labels: bool (default: True)
-            If True, display edge occurrence counts as edge labels.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to their occurrence ratio in
-            the ensemble. The callable receives a ratio between 0 and 1 and must
-            return a mapping of pydot edge attributes.
-            If assigned to True, use `ratio_edge_style`.
-            If assigned to False or None, no additional edge styling is applied.
         node_style: Literal["count", "stability"] or Callable[[Mapping[str, Any]], Mapping[str, Any]] or bool or None
             Node styling strategy.
             If assigned to `"count"`, nodes are styled according to the number of
@@ -780,6 +791,18 @@ class BooleanNetworkEnsemble(MutableSequence):
             If assigned to a callable, the callable receives the node attributes
             and must return a mapping of pydot node attributes.
             If assigned to False or None, no additional node styling is applied.
+        show_edge_labels: bool (default: True)
+            If True, display edge occurrence counts as edge labels.
+        min_ratio: float (default: 0.0)
+            Minimum edge occurrence ratio required for an influence to be displayed.
+            Edges with occurrence ratios strictly smaller than `min_ratio` are removed
+            from the aggregated graph before rendering.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to their occurrence ratio in
+            the ensemble. The callable receives a ratio between 0 and 1 and must
+            return a mapping of pydot edge attributes.
+            If assigned to True, use `ratio_edge_style`.
+            If assigned to False or None, no additional edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
         **kwargs: Mapping[str, Any]
@@ -792,7 +815,26 @@ class BooleanNetworkEnsemble(MutableSequence):
             Aggregated signed influence graph as a pydot object.
         """
 
-        graph = self.to_networkx(remove_isolated_nodes=remove_isolated_nodes)
+        graph = self.to_networkx(remove_isolated_nodes=False)
+
+        if not 0 <= min_ratio <= 1:
+            raise ValueError(
+                f"invalid argument value for 'min_ratio': "
+                f"expected value between 0 and 1 but received {min_ratio!r}"
+            )
+
+        edges_to_remove = [
+            (u, v)
+            for u, v, data in graph.edges(data=True)
+            if data["ratio"] < min_ratio
+        ]
+
+        graph.remove_edges_from(edges_to_remove)
+
+        if remove_isolated_nodes:
+
+            isolated = list(nx.isolates(graph))
+            graph.remove_nodes_from(isolated)
 
         if edge_style is True:
             edge_style = ratio_edge_style
@@ -853,12 +895,16 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         if not is_boolean_network_like(bn):
             raise TypeError(
-                "unsupported argument type: expected Boolean network-like object, "
+                "unsupported argument type for 'bn': "
+                "expected Boolean network-like object "
                 f"but received {type(bn)}"
             )
 
         if set(bn) != self._components:
-            raise ValueError("invalid value: missing or additional components")
+            raise ValueError(
+                "invalid argument value for 'bn': "
+                "missing or additional components"
+            )
 
     def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:
         self._check_network(bn)

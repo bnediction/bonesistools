@@ -15,26 +15,35 @@ def choose_mtx_representation(
     copy: Optional[bool] = True,
 ) -> ndarray:
     """
-    Get a matrix representation of data.
+    Select the expression matrix from an AnnData object.
 
     Parameters
     ----------
-    scdata: ad.AnnData
+    adata: AnnData
         Unimodal or multimodal annotated data matrix.
-    use_raw: bool (optional, default: False)
-        Use adata.raw.X for expression values instead of adata.X.
-    layer: str (optional)
-        Use adata.layers[`layer`] for expression values instead of adata.X.
-    copy: bool (optional, default: True)
-        Return a copy to preserve AnnData object.
+    use_raw: bool, optional
+        Use `adata.raw.X` instead of `adata.X`.
+    layer: str, optional
+        Use `adata.layers[layer]` instead of `adata.X`.
+    copy: bool, optional
+        Return a copy to preserve `adata`.
 
     Returns
     -------
-    Return ndarray object.
+    ndarray
+        Selected matrix.
+
+    Raises
+    ------
+    ValueError
+        If `use_raw` and `layer` are both specified.
     """
 
     if use_raw and layer is not None:
-        raise ValueError("arguments 'use_raw' and 'layer' cannot be both specified")
+        raise ValueError(
+            "invalid argument combination: "
+            "'use_raw' and 'layer' cannot be both specified"
+        )
     elif layer is not None:
         X = adata.layers[layer]
     elif use_raw:
@@ -55,21 +64,26 @@ def choose_representation(
     n_components: Optional[int] = None,
 ) -> ndarray:
     """
-    Get a truncated matrix representation of data.
+    Select and optionally truncate an embedding representation.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    use_rep: str (default: 'X_pca')
-        Use the indicated representation in scdata.obsm.
-    n_components: int (optional, default: None)
-        Number of principal components or dimensions in the embedding space
-        taken into account for each observation.
+    use_rep: str (default: "X_pca")
+        Representation key in `scdata.obsm`.
+    n_components: int, optional
+        Number of dimensions to keep. If None, keep all dimensions.
 
     Returns
     -------
-    Return ndarray object.
+    ndarray
+        Selected representation.
+
+    Raises
+    ------
+    KeyError
+        If `use_rep` is not found in `scdata.obsm`.
     """
 
     if use_rep is None:
@@ -96,25 +110,35 @@ def _get_distances(
     neighbors_key: Optional[str] = None,
 ) -> ndarray:
     """
-    Get distance matrix already computed.
+    Retrieve a precomputed distance matrix.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    obsp: str (optional, default: None)
-        If specified, return scdata.obsp['obsp'].
-    neighbors_key: str (optional, default: None)
-        If specified, retrieve distance matrix using information in scdata.uns['neighbors_key'].
+    obsp: str, optional
+        Key in `scdata.obsp`.
+    neighbors_key: str, optional
+        Key in `scdata.uns` storing neighborhood metadata.
 
     Returns
     -------
-    Return ndarray object.
+    ndarray
+        Distance matrix.
+
+    Raises
+    ------
+    ValueError
+        If `obsp` and `neighbors_key` are both specified.
+    KeyError
+        If no distances matrix can be found from the provided arguments or
+        from `scdata.uns["neighbors"]`.
     """
 
     if obsp is not None and neighbors_key is not None:
         raise ValueError(
-            "arguments 'obsp' and 'neighbors_key' cannot be both specified"
+            "invalid argument combination: "
+            "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
         return scdata.obsp[obsp]
@@ -127,7 +151,8 @@ def _get_distances(
             return scdata.obsp[distances_key]
         else:
             raise KeyError(
-                "distances not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
+                "distances not found in 'scdata': "
+                "please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
             )
 
 
@@ -138,25 +163,35 @@ def _get_connectivities(
     neighbors_key: Optional[str] = None,
 ) -> ndarray:
     """
-    Get connectivity matrix already computed.
+    Retrieve a precomputed connectivity matrix.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    obsp: str (optional, default: None)
-        If specified, return scdata.obsp['obsp'].
-    neighbors_key: str (optional, default: None)
-        If specified, retrieve distance matrix using information in scdata.uns['neighbors_key'].
+    obsp: str, optional
+        Key in `scdata.obsp`.
+    neighbors_key: str, optional
+        Key in `scdata.uns` storing neighborhood metadata.
 
     Returns
     -------
-    Return ndarray object.
+    ndarray
+        Connectivity matrix.
+
+    Raises
+    ------
+    ValueError
+        If `obsp` and `neighbors_key` are both specified.
+    KeyError
+        If no connectivities matrix can be found from the provided arguments or
+        from `scdata.uns["neighbors"]`.
     """
 
     if obsp is not None and neighbors_key is not None:
         raise ValueError(
-            "arguments 'obsp' and 'neighbors_key' cannot be both specified"
+            "invalid argument combination: "
+            "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
         return scdata.obsp[obsp]
@@ -169,5 +204,6 @@ def _get_connectivities(
             return scdata.obsp[connectivities_key]
         else:
             raise KeyError(
-                "connectivities not found in 'scdata': please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
+                "connectivities not found in 'scdata': "
+                "please run scanpy.pp.neighbors or specify 'obsp' or 'neighbors_key'"
             )

@@ -25,26 +25,32 @@ def convert_gene_identifiers(
     output_identifier_type: OutputIdentifierType = "official_name",
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
-    f"""
-    Replace gene identifiers into the desired identifier format.
+    """
+    Convert gene identifiers stored in `scdata.obs` or `scdata.var`.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
         The stored gene identifiers are converted into the desired identifier format.
-    axis: Axis (default: 'var')
-        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
+    axis: {0, 1, "obs", "var"} (default: "var")
+        If 0 or `"obs"`, convert `scdata.obs.index`. If 1 or `"var"`,
+        convert `scdata.var.index`.
     input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
         Gene identifier input format.
     output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
         Gene identifier output format.
     copy: bool (default: False)
-        Return a copy instead of updating ScData object.
+        Return a copy instead of updating `scdata`.
     
     Returns
     -------
     Depending on 'copy', update 'scdata' or return ScData object.
+
+    Raises
+    ------
+    ValueError
+        If `axis` is not 0, 1, `"obs"` or `"var"`.
     """
 
     scdata = scdata.copy() if copy else scdata
@@ -66,7 +72,10 @@ def convert_gene_identifiers(
             copy=False,
         )
     else:
-        raise TypeError(f"unsupported argument type for 'axis': {axis}")
+        raise ValueError(
+            f"invalid argument value for 'axis': "
+            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
+        )
 
     return scdata if copy else None
 
@@ -77,17 +86,18 @@ def standardize_gene_identifiers(
     scdata: ScData, axis: Axis = "var", copy: bool = False  # type: ignore
 ) -> Union[ScData, None]:  # type: ignore
     """
-    Standardize gene names by converting them into their corresponding official names.
+    Standardize gene names by converting them to official names.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
         The stored gene names are standardized.
-    axis: Axis (default: 'var')
-        whether to rename labels from scdata.var (0 or 'obs') or scdata.obs (1 or 'var').
+    axis: {0, 1, "obs", "var"} (default: "var")
+        If 0 or `"obs"`, standardize `scdata.obs.index`. If 1 or `"var"`,
+        standardize `scdata.var.index`.
     copy: bool (default: False)
-        Return a copy instead of updating ScData object.
+        Return a copy instead of updating `scdata`.
 
     Returns
     -------
@@ -108,16 +118,15 @@ def var_names_merge_duplicates(
     adata: AnnData, var_names_column: Optional[str] = None
 ) -> Union[AnnData, None]:
     """
-    Merge the duplicated index names in adata.var by summing the counts between each duplicated index elements.
+    Merge duplicated variable names by summing counts across duplicate genes.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix where duplicated variable names are merged.
-    var_names_column: str (optional, default: None)
-        If specify, give a priority order for which row in adata.var is saved when rows are merged.
-        For instance, if multiple rows have same index but different cell values,
-        the row with cell value at 'var_names_column' column is considered as the main information over others.
+    var_names_column: str, optional
+        Column used to prioritize which `adata.var` row is kept when duplicate
+        variable names are merged.
 
     Returns
     -------

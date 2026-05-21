@@ -23,6 +23,21 @@ class BooleanNetworkLike(Protocol):
 
 
 def is_boolean_network_like(obj: Any) -> bool:
+    """
+    Test whether an object behaves as a Boolean network mapping.
+
+    Parameters
+    ----------
+    obj: Any
+        Object to test.
+
+    Returns
+    -------
+    bool
+        True if `obj` exposes valid string components and Boolean-rule-like
+        values.
+    """
+
     if not isinstance(obj, BooleanNetworkLike):
         return False
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Mapping, Any
+from typing import Any, Optional, Union
 
 import networkx as nx
 
@@ -13,32 +13,37 @@ def load_collectri_grn(
     remove_pmid: bool = False,
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> nx.MultiDiGraph:
     """
-    Provide a Graph Regulatory Network (GRN) derived from Collectri database [1].
+    Load a signed regulatory network derived from the CollecTRI database [1].
 
     Parameters
     ----------
-    organism: str | int (default: 'mouse')
-        Common name or identifier of the organism of interest.
-        Identifier can be NCBI ID, EnsemblID or latin name.
+    organism: str or int (default: "mouse")
+        Organism of interest. Accepted values depend on the decoupler wrapper.
     split_complexes: bool (default: False)
-        Specify whether to split complexes into subunits.
+        Whether to split regulatory complexes into subunits.
     remove_pmid: bool (default: False)
-        Specify whether to remove PMIDs in node labels.
-    gene_synonyms: GeneSynonyms (optional, default: None)
-        If GeneSynonyms object is passed, then gene identifiers are converted into the desired identifier format.
-    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-        Gene identifier input format.
-    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-        Gene identifier output format.
-    **kwargs: Mapping[str, Any]
-        Keyword-arguments passed to function 'omnipath.interactions.CollecTRI.get'.
+        Whether to remove the PMID edge attribute returned by decoupler.
+    genesyn: GeneSynonyms, optional
+        GeneSynonyms object used to convert graph node identifiers.
+    gene_identifier_type: OutputIdentifierType (default: "official_name")
+        Output gene identifier type used when `genesyn` is provided.
+    **kwargs: Any
+        Keyword arguments passed to the selected decoupler CollecTRI wrapper.
 
     Returns
     -------
-    Return graph from Collectri database.
+    nx.MultiDiGraph
+        Signed regulatory network. Edges contain the attributes returned by
+        decoupler, with `weight` renamed to `sign` and converted to -1 or 1.
+
+    Raises
+    ------
+    TypeError
+        If `organism`, `split_complexes`, `remove_pmid` or `genesyn` has an
+        unsupported type.
 
     References
     ----------
@@ -49,11 +54,18 @@ def load_collectri_grn(
 
     if not isinstance(organism, (str, int)):
         raise TypeError(
-            f"unsupported argument type for 'organism': expected {str} or {int} but received {type(organism)}"
+            f"unsupported argument type for 'organism': "
+            f"expected {str} or {int} but received {type(organism)}"
         )
     if not isinstance(split_complexes, bool):
         raise TypeError(
-            f"unsupported argument type for 'split_complexes': expected {bool} but received {type(split_complexes)}"
+            f"unsupported argument type for 'split_complexes': "
+            f"expected {bool} but received {type(split_complexes)}"
+        )
+    if not isinstance(remove_pmid, bool):
+        raise TypeError(
+            f"unsupported argument type for 'remove_pmid': "
+            f"expected {bool} but received {type(remove_pmid)}"
         )
 
     import decoupler as dc  # type: ignore
@@ -67,15 +79,13 @@ def load_collectri_grn(
             organism=organism, remove_complexes=split_complexes, **kwargs
         )
     collectri_db = collectri_db.rename(columns={"weight": "sign"})
-    if isinstance(remove_pmid, bool):
-        if remove_pmid:
-            collectri_db = collectri_db.drop("PMID", axis=1)
-        else:
-            pass
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'remove_pmid': expected {bool} but received {type(remove_pmid)}"
-        )
+    if remove_pmid:
+        reference_columns = [
+            column
+            for column in ("PMID", "references")
+            if column in collectri_db.columns
+        ]
+        collectri_db = collectri_db.drop(reference_columns, axis=1)
     collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
     grn = nx.from_pandas_edgelist(
@@ -97,5 +107,6 @@ def load_collectri_grn(
         return grn
     else:
         raise TypeError(
-            f"unsupported argument type for 'gene_synonyms': expected {GeneSynonyms} but received {type(genesyn)}"
+            f"unsupported argument type for 'genesyn': "
+            f"expected {GeneSynonyms} but received {type(genesyn)}"
         )

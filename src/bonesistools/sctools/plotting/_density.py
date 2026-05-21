@@ -42,7 +42,7 @@ def kde_plot(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     gene: str
         Gene of interest for which display the density.
@@ -74,11 +74,19 @@ def kde_plot(
     Returns
     -------
     Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
+
+    Raises
+    ------
+    ValueError
+        If `not_all=True` while `obs` is None.
+    KeyError
+        If `obs` is specified but not found in `adata.obs`.
     """
 
     if obs is None and not_all is True:
         raise ValueError(
-            f"invalid argument value for 'obs' and 'not_all': expected 'not_all' assigned to False when 'obs' is not specified"
+            "invalid argument values for 'obs' and 'not_all': "
+            "expected not_all=False when obs is None"
         )
 
     import seaborn as sns
@@ -95,7 +103,7 @@ def kde_plot(
 
     if obs:
         if obs not in adata.obs:
-            raise KeyError(f"{obs!r} is not a valid observation key in `adata.obs`.")
+            raise KeyError(f"key {obs!r} not found in adata.obs")
         counts[obs] = adata.obs[obs]
         if not colors:
             cluster_number = len(adata.obs[obs].astype("category").cat.categories)
@@ -200,7 +208,7 @@ def ecdf_plot(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     gene: str
         Gene of interest for which display the density.

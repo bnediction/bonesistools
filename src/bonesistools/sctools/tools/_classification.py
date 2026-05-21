@@ -21,25 +21,31 @@ def mitochondrial_genes(
     axis: Axis = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:  # type: ignore
-    f"""
-    Create a column storing whether gene encodes a mitochondrial protein using current index.
+    """
+    Annotate genes encoding mitochondrial proteins.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     index_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-        Input identifier type of indices.
+        Input identifier type of the selected index.
     key: str (default: 'mt')
-        Column name storing whether gene encodes a mitochondrial protein.
-    axis: Axis (default: 1)
-        Whether to classify from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+        Column name storing whether each gene encodes a mitochondrial protein.
+    axis: {0, 1, "obs", "var"} (default: 1)
+        If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
+        `adata.var`.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
     
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
+
+    Raises
+    ------
+    ValueError
+        If `axis` is not 0, 1, `"obs"` or `"var"`.
     """
 
     adata = adata.copy() if copy else adata
@@ -52,7 +58,10 @@ def mitochondrial_genes(
         axis = "var"
         adata.var[key] = False
     else:
-        raise TypeError(f"unsupported argument type for 'axis': {axis}")
+        raise ValueError(
+            f"invalid argument value for 'axis': "
+            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
+        )
 
     mt_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():
@@ -75,25 +84,31 @@ def ribosomal_genes(
     axis: Axis = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:  # type: ignore
-    f"""
-    Create a column storing whether gene encodes a ribosomal protein using current index.
+    """
+    Annotate genes encoding ribosomal proteins.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
-    index_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'genename')
-        Input identifier type of indices.
+    index_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+        Input identifier type of the selected index.
     key: str (default: 'rps')
-        Column name storing whether gene encodes a ribosomal protein.
-    axis: Axis (default: 1)
-        Whether to classify from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+        Column name storing whether each gene encodes a ribosomal protein.
+    axis: {0, 1, "obs", "var"} (default: 1)
+        If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
+        `adata.var`.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
     
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
+
+    Raises
+    ------
+    ValueError
+        If `axis` is not 0, 1, `"obs"` or `"var"`.
     """
 
     adata = adata.copy() if copy else adata
@@ -106,7 +121,10 @@ def ribosomal_genes(
         axis = "var"
         adata.var[key] = False
     else:
-        raise TypeError(f"unsupported argument type for 'axis': {axis}")
+        raise ValueError(
+            f"invalid argument value for 'axis': "
+            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
+        )
 
     rps_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():

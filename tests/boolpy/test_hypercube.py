@@ -2,9 +2,9 @@
 
 import json
 
-import pytest
-
 import bonesistools as bt
+
+import pytest
 
 
 def test_hypercube_mapping_interface():

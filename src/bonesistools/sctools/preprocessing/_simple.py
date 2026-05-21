@@ -43,22 +43,31 @@ def set_index(
     adata: AnnData, keys: Keys, axis: Axis = 0, copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Create a MultiIndex for 'adata.obs' or 'adata.var' using current index and existing columns.
+    Create a MultiIndex for `adata.obs` or `adata.var` using the current index
+    and existing columns.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
-    keys: List[str]
-        Either a single column key or a list containing an arbitrary combination of column keys.
-    axis: Axis (default: 0)
-        Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    keys: str or list of str
+        Column key or column keys used to build the MultiIndex.
+    axis: {0, 1, "obs", "var"} (default: 0)
+        If 0 or `"obs"`, update `adata.obs`. If 1 or `"var"`, update
+        `adata.var`.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
 
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
+
+    Raises
+    ------
+    TypeError
+        If `keys` is neither a string nor a list.
+    ValueError
+        If `axis` is not 0, 1, `"obs"` or `"var"`.
     """
 
     adata = adata.copy() if copy else adata
@@ -67,7 +76,8 @@ def set_index(
         keys = [keys]
     elif not isinstance(keys, List):
         raise TypeError(
-            f"unsupported argument type for 'keys': expected {str} or {List} but received {type(keys)}"
+            f"unsupported argument type for 'keys': "
+            f"expected {str} or {list} but received {type(keys)}"
         )
 
     if axis in [0, "obs"]:
@@ -75,7 +85,10 @@ def set_index(
     elif axis in [1, "var"]:
         df = adata.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for 'axis': {axis}")
+        raise ValueError(
+            f"invalid argument value for 'axis': "
+            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
+        )
 
     index_name = __generate_unique_index_name(df)
     df[index_name] = df.index
@@ -98,7 +111,7 @@ def filter_obs(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     obs: str
         Column name in 'adata.obs' used for filtering.
@@ -110,6 +123,13 @@ def filter_obs(
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
+
+    Raises
+    ------
+    KeyError
+        If `obs` is not found in `adata.obs`.
+    TypeError
+        If `obs` is not a string or `function` is not callable.
     """
 
     adata = adata.copy() if copy else adata
@@ -119,12 +139,14 @@ def filter_obs(
             raise KeyError(f"key '{obs}' not found in adata.obs")
     else:
         raise TypeError(
-            f"unsupported argument type for 'obs': expected {str} but received {type(obs)}"
+            f"unsupported argument type for 'obs': "
+            f"expected {str} but received {type(obs)}"
         )
 
     if not callable(function):
         raise TypeError(
-            f"unsupported argument type for 'function': expected callable object"
+            f"unsupported argument type for 'function': "
+            f"expected callable object but received {type(function)}"
         )
 
     obs_subset = function(adata.obs[obs].values)
@@ -142,18 +164,25 @@ def filter_var(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     var: str
         Column name in 'adata.var' used for filtering.
     function: Callable
         Function to apply to the variable used for filtering.
-    copy
+    copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
 
     Returns
     -------
     Depending on 'copy', update 'adata' or return AnnData object.
+
+    Raises
+    ------
+    KeyError
+        If `var` is not found in `adata.var`.
+    TypeError
+        If `var` is not a string or `function` is not callable.
     """
 
     adata = adata.copy() if copy else adata
@@ -163,12 +192,14 @@ def filter_var(
             raise KeyError(f"key '{var}' not found in adata.var")
     else:
         raise TypeError(
-            f"unsupported argument type for 'var': expected {str} but received {type(var)}"
+            f"unsupported argument type for 'var': "
+            f"expected {str} but received {type(var)}"
         )
 
     if not callable(function):
         raise TypeError(
-            f"unsupported argument type for 'function': expected callable object"
+            f"unsupported argument type for 'function': "
+            f"expected callable object but received {type(function)}"
         )
 
     var_subset = function(adata.var[var].values)
@@ -211,12 +242,13 @@ def regress_out(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     keys: Keys
-        Keys in 'adata.obs' on which to regress on.
-    layer: str (optional, default: None)
-        If specify, regress out on adata.layer['layers'] instead of adata.X.
+        Keys in `adata.obs` used as regressors.
+    layer: str, optional
+        If specified, regress values from `adata.layers[layer]` instead of
+        `adata.X`.
     intercept: bool (default: False)
         If true, add intercept as regressor on which to regress on.
     copy: bool (default: False)
@@ -269,14 +301,14 @@ def merge(
 
     Parameters
     ----------
-    left_ad: ad.AnnData
+    left_ad: AnnData
         Unimodal annotated data matrix.
         It corresponds to the object receiving new information.
-    right_ad: ad.AnnData
+    right_ad: AnnData
         Unimodal annotated data matrix.
         It corresponds to the object sending information.
-    axis: Axis (default: 0)
-        Whether to update index from adata.var (0 or 'obs') or adata.obs (1 or 'var').
+    axis: {0, 1, "obs", "var"} (default: 0)
+        If 0 or `"obs"`, merge `.obs`. If 1 or `"var"`, merge `.var`.
     suffixes: Tuple[str, str] (default: ('_x','_y'))
         Length-2 sequence where each element is a string indicating the suffix
         to add to overlapping column names in 'left_ad' and 'right_ad' respectively.
@@ -286,6 +318,11 @@ def merge(
     Returns
     -------
     Depending on 'copy', update 'left_ad' or return AnnData object.
+
+    Raises
+    ------
+    ValueError
+        If `axis` is not 0, 1, `"obs"` or `"var"`.
     """
 
     left_ad = left_ad.copy() if copy else left_ad
@@ -297,7 +334,10 @@ def merge(
         left_df = left_ad.var.copy()
         right_df = right_ad.var.copy()
     else:
-        raise TypeError(f"unsupported argument type for 'axis': {axis}")
+        raise ValueError(
+            f"invalid argument value for 'axis': "
+            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
+        )
 
     df = left_df.merge(
         right=right_df, how="left", left_index=True, right_index=True, suffixes=suffixes
@@ -321,10 +361,10 @@ def transfer_layer(
 
     Parameters
     ----------
-    left_ad: ad.AnnData
+    left_ad: AnnData
         Unimodal annotated data matrix.
         It corresponds to the object receiving layer-based information.
-    right_ad: ad.AnnData
+    right_ad: AnnData
         Unimodal annotated data matrix.
         It corresponds to the object sending layer-based information.
     layers: Keys
@@ -335,6 +375,11 @@ def transfer_layer(
     Returns
     -------
     Depending on 'copy', update 'left_ad' or return AnnData object.
+
+    Raises
+    ------
+    TypeError
+        If `layers` is neither a string nor a list.
     """
 
     left_ad = left_ad.copy() if copy else left_ad
@@ -343,7 +388,8 @@ def transfer_layer(
         layers = [layers]
     elif not isinstance(layers, List):
         raise TypeError(
-            f"unsupported argument type for 'layers': expected {str} or {List} but received {type(layers)}"
+            f"unsupported argument type for 'layers': "
+            f"expected {str} or {list} but received {type(layers)}"
         )
 
     for layer in layers:
@@ -388,7 +434,7 @@ def transfer_obs_sti(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
         It corresponds to the integrated dataset receiving information.
     adatas: AnnDataList
@@ -454,7 +500,7 @@ def transfer_obs_its(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
         It corresponds to the integrated dataset sending information.
     adatas: AnnDataList

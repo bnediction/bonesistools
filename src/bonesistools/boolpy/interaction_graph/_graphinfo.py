@@ -26,6 +26,11 @@ def get_edge_sign(grn: Graph, source: Any, target: Any):
     Returns
     -------
     Return sign of a source node upon a target node.
+
+    Raises
+    ------
+    ValueError
+        If an edge sign is not -1 or 1.
     """
 
     edge_data = grn.get_edge_data(source, target)
@@ -33,7 +38,8 @@ def get_edge_sign(grn: Graph, source: Any, target: Any):
     for sign in signs:
         if sign not in [-1, 1]:
             raise ValueError(
-                f"invalid value for edge attribute 'sign': expected 0 or 1 but received {sign}"
+                f"invalid edge attribute value for 'sign': "
+                f"expected -1 or 1 but received {sign!r}"
             )
     if len(signs) == 1:
         return list(signs)[0]
@@ -55,6 +61,11 @@ def get_path_sign(grn: Graph, *nodes) -> int:
     Returns
     -------
     Return 1 if effect is positive and -1 if effect is negative.
+
+    Raises
+    ------
+    ValueError
+        If one of the edge signs in the path is not -1, 0 or 1.
     """
 
     path_sign = 1
@@ -69,7 +80,8 @@ def get_path_sign(grn: Graph, *nodes) -> int:
             pass
         else:
             raise ValueError(
-                f"invalid value for edge sign between nodes {u} and {v}: expected -1, 0 or 1 but got {_sign}"
+                f"invalid edge sign between nodes {u!r} and {v!r}: "
+                f"expected -1, 0 or 1 but received {_sign!r}"
             )
         u = v
     return path_sign

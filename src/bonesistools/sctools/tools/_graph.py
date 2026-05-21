@@ -23,7 +23,7 @@ def get_paga_graph(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     obs: str
         The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
@@ -37,6 +37,16 @@ def get_paga_graph(
     Returns
     -------
     Return DiGraph corresponding to the paga.
+
+    Raises
+    ------
+    KeyError
+        If `edges` is not found in `adata.uns` and no fallback
+        connectivities matrix is available.
+    TypeError
+        If `threshold` is not a float.
+    ValueError
+        If `threshold` is negative.
 
     References
     ----------
@@ -59,11 +69,13 @@ def get_paga_graph(
 
     if not isinstance(threshold, float):
         raise TypeError(
-            f"unsupported argument type for 'threshold': expected {float} but received {type(threshold)}"
+            f"unsupported argument type for 'threshold': "
+            f"expected {float} but received {type(threshold)}"
         )
     elif threshold < 0:
         raise ValueError(
-            f"invalid argument value for 'threshold': expected positive value but received '{threshold}'"
+            f"invalid argument value for 'threshold': "
+            f"expected non-negative value but received {threshold!r}"
         )
     elif threshold > 0:
         adjacency.data[adjacency.data < threshold] = 0

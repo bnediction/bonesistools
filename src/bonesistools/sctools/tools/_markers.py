@@ -36,46 +36,43 @@ def calculate_logfoldchanges(
     filter_logfoldchanges: Optional[Callable] = None,
 ) -> pd.DataFrame:
     """
-    Log2 fold-change is a metric translating how much the transcript's expression
-    has changed between cells in and out of a cluster. The reported values are based
-    on a logarithmic scale to base 2 with respect to the fold change ratios.
-    According to <https://www.biostars.org/p/453129/>, computed log2 fold changes
-    are different between FindAllMarkers (package Seurat) and rank_gene_groups
-    (module Scanpy) functions. As mentionned, results derived from Scanpy are inconsistent.
-    This function computes it in the right way, with identical results to Seurat by keeping default options.
+    Compute log2 fold changes between each group and the remaining observations.
+
+    The computation follows the fold-change convention used by Seurat's
+    FindAllMarkers rather than Scanpy's `rank_gene_groups` output.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     groupby: str
-        Any key in 'adata.obs' corresponding to defined clusters or groups.
-    layer: str (optional, default: None)
-        Any key in 'adata.layers'.
-        If not specify, log2 fold changes are derived from 'adata.X'.
-    column_name: str (default: 'logfoldchanges')
+        Observation key in `adata.obs` defining groups.
+    layer: str, optional
+        Layer to use instead of `adata.X`.
+    column_name: str (default: "logfoldchanges")
         Column name in output dataframe storing log2 fold-change values.
     is_log: bool (default: False)
-        Specify whether count matrix is logarithmized or not.
+        Whether values are already log1p-transformed.
     cluster_rebalancing: bool (default: False)
-        If no cluster rebalancing, cells are equally-weighted.
-        Otherwise, cells are weighted with cluster size such as clusters are equally-weighted.
-        It means that cells in small cluster have a greater weight than other cells in order
-        to correct cluster size effects.
-    filter_logfoldchanges: Function (optional, default: None)
-        Function filtering results with respect log2 fold-change values.
+        Whether to average groups before computing fold changes, so groups
+        contribute equally regardless of size.
+    filter_logfoldchanges: Callable, optional
+        Callable used to filter rows from the resulting log-fold-change table.
 
     Returns
     -------
-    Return DataFrame storing following values:
-    - **group**: group names.
-    - **names**: gene names or gene ids.
-    - **<column_name>**: log2 fold-change values.
+    DataFrame
+        Table with `group`, `names` and `<column_name>` columns.
 
     See also
     --------
     Get more information about the difference between log2 fold-changes derived with Seurat and Scanpy here:
     <https://www.biostars.org/p/453129/>
+
+    Raises
+    ------
+    TypeError
+        If `filter_logfoldchanges` is specified but is not callable.
     """
 
     def compute_logfc(mean_in, mean_out, cluster):
@@ -114,7 +111,8 @@ def calculate_logfoldchanges(
     if filter_logfoldchanges is not None:
         if not callable(filter_logfoldchanges):
             raise TypeError(
-                f"unsupported argument type for 'filter_logfoldchanges': expected callable object"
+                f"unsupported argument type for 'filter_logfoldchanges': "
+                f"expected callable object but received {type(filter_logfoldchanges)}"
             )
         else:
             logfoldchanges_df = logfoldchanges_df.loc[
@@ -130,38 +128,34 @@ def hypergeometric_test(
     markers: Sequence[str],
 ) -> float:
     """
-    Estimates the p-value (or survival function) of an hypergeometric distribution in order
-    to test whether marker genes significantly match signature genes.
-    Given a population size N and a number of sccess states K, it describes the probability
-    of having at least k successes in n draws, without replacement, where:
-    - N is the number of genes in anndata,
-    - K is the number of signature genes,
-    - n is the number of markers,
-    - k is the number of gene matching both signature genes and markers.
-    Smaller the p-value, higher the probability that genes of the given
-    cluster comes from the cell-type associated to the given signature.
+    Test marker/signature overlap with a hypergeometric survival function.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     signature: Sequence[str]
-        Set of signature genes in a given cell-type.
-        A signature is a set of over-expressed genes in a cell-type.
+        Signature genes for a cell type.
     markers: Sequence[str]
-        Set of markers (genes) in a given cluster.
-        A marker set is a set of over-expressed genes in a cluster.
+        Marker genes for a cluster.
 
     Returns
     -------
-    Return the p-value.
+    float
+        Hypergeometric survival-function p-value.
+
+    Raises
+    ------
+    TypeError
+        If `adata` is not an AnnData object.
     """
 
     from scipy.stats import hypergeom
 
     if not isinstance(adata, AnnData):
         raise TypeError(
-            f"unsupported argument type for 'adata': expected {AnnData} but received {type(adata)}"
+            f"unsupported argument type for 'adata': "
+            f"expected {AnnData} but received {type(adata)}"
         )
 
     background = set(adata.var.index)
@@ -199,33 +193,34 @@ def smirnov_tests(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     groupby: str
-        Any key in 'adata.obs' corresponding to defined groups to consider.
-    groups: 'all' | Sequence (default: 'all')
+        Observation key in `adata.obs` defining groups.
+    groups: 'all' or sequence of str (default: "all")
         Subset of groups, e.g. ['g1', 'g2', 'g3'], to which comparisons
         shall be restricted, or 'all' for performing comparisons for all groups.
     reference: 'rest' | str
         Name of the group used as reference.
         If 'rest', compare each group to all observations not in the group.
-    layer: str (optional, default: None)
-        Any key in 'adata.layers' whose value will be used to perform tests on.
-        If not specify, tests are derived from 'adata.X'.
+    layer: str, optional
+        Layer to use instead of `adata.X`.
     alternative: 'two-sided' | 'less' | 'greater' (default: two-sided)
         Defines the null and alternative hypotheses.
     corr_method: 'benjamini-hochberg' | 'bonferroni'
         Correction method for computing adjusted p-values.
     pval_cutoff: float (optional, default: None)
         Return only adjusted p-values below the cutoff.
-    key_added
-        Key in 'adata.uns' where information is saved to.
+    key_added: str, optional
+        Key in `adata.uns` where information is saved.
     copy: bool (default: False)
         Return a copy instead of updating 'adata' object.
 
     Returns
     -------
-    Return DataFrame ordered by ks statistic storing following values:
+    AnnData or None
+        Depending on `copy`, update `adata` in place or return a copy. Results
+        are stored in `adata.uns[key_added]` with the following values:
     - **group**: group names.
     - **names**: gene names or gene ids.
     - **statistics**: Kolmogorov-Smirnov test statistic.
@@ -236,6 +231,14 @@ def smirnov_tests(
         at 'location', otherwise -1.
     - **pvals**: two-tailed p-value.
     - **pvals_adj**: two-tailed p-value corrected by benjamini-hochberg or bonferroni.
+
+    Raises
+    ------
+    TypeError
+        If `groups` is neither `"all"` nor a non-string sequence.
+    ValueError
+        If `reference` is neither `"rest"` nor one of the categories in
+        `adata.obs[groupby]`.
     """
 
     from scipy.sparse import issparse
@@ -249,13 +252,15 @@ def smirnov_tests(
         groups = list(groups)
     else:
         raise TypeError(
-            f"unsupported argument type for 'groups': expected sequence but received {type(groups)}"
+            f"unsupported argument type for 'groups': "
+            f"expected sequence but received {type(groups)}"
         )
 
     if reference != "rest" and reference not in adata.obs[groupby].cat.categories:
         cats = sorted(list(adata.obs[groupby].cat.categories))
         raise ValueError(
-            f"reference '{reference}' not found in adata.obs['groupby'] (avalaible values: {cats})."
+            f"invalid argument value for 'reference': "
+            f"expected 'rest' or one of {cats} but received {reference!r}"
         )
 
     if key_added is None:

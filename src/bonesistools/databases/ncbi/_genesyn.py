@@ -87,6 +87,14 @@ _GENE_SYNONYMS_DEPRECATED_ARGS = {
 
 
 def support_legacy_gene_synonyms_args(func):
+    """
+    Decorate GeneSynonyms methods to accept deprecated argument names.
+
+    Raises
+    ------
+    TypeError
+        If both a deprecated argument name and its replacement are provided.
+    """
 
     valid_parameters = inspect.signature(func).parameters
 
@@ -108,7 +116,10 @@ def support_legacy_gene_synonyms_args(func):
             )
 
             if new_name in kwargs:
-                raise TypeError(f"Use either '{old_name}' or '{new_name}', not both.")
+                raise TypeError(
+                    f"invalid argument combination: use either '{old_name}' "
+                    f"or '{new_name}', not both"
+                )
 
             kwargs[new_name] = kwargs.pop(old_name)
 
@@ -129,6 +140,19 @@ class GeneSynonyms:
         Request to the ncbi ftp protocol for downloading gene_info data.
     show_warnings: bool (default: False)
         Print warning messages.
+
+    Raises
+    ------
+    TypeError
+        If `force_download`, `show_warnings` or converted data has an
+        unsupported type.
+    ValueError
+        If `organism`, identifier types, database names or axis values are
+        unsupported.
+    AttributeError
+        If an output identifier type has no corresponding conversion method.
+    RuntimeError
+        If downloading or parsing NCBI gene_info data fails.
     """
 
     def __init__(
@@ -141,7 +165,10 @@ class GeneSynonyms:
         organism = organism.lower().replace("-", " ")
 
         if organism not in get_args(ORGANISMS):
-            raise ValueError(f"invalid argument value for 'organism': {organism}")
+            raise ValueError(
+                f"invalid argument value for 'organism': "
+                f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
+            )
 
         if not isinstance(force_download, bool):
             raise TypeError(
@@ -175,7 +202,10 @@ class GeneSynonyms:
             organism = organism.lower().replace("-", " ")
 
         if organism not in get_args(ORGANISMS):
-            raise ValueError(f"invalid argument value for 'organism': {organism}")
+            raise ValueError(
+                f"invalid argument value for 'organism': "
+                f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
+            )
 
         if not isinstance(force_download, bool):
             raise TypeError(
@@ -419,7 +449,11 @@ class GeneSynonyms:
         elif is_boolean_network_like(data):
             return self.convert_bn(data, *args, **kwargs)
         else:
-            raise TypeError(f"unsupported argument type for 'data': {data}")
+            raise TypeError(
+                f"unsupported argument type for 'data': "
+                f"expected sequence, {DataFrame}, {Graph} or Boolean network-like "
+                f"object but received {type(data)}"
+            )
 
     @support_legacy_gene_synonyms_args
     def get_gene_id(
@@ -477,7 +511,9 @@ class GeneSynonyms:
                 return None
         else:
             raise ValueError(
-                f"invalid argument value for 'input_identifier_type': {input_identifier_type}"
+                f"invalid argument value for 'input_identifier_type': "
+                f"expected 'name', 'ensembl_id' or one of {self.databases} "
+                f"but received {input_identifier_type!r}"
             )
 
     @support_legacy_gene_synonyms_args
@@ -614,7 +650,8 @@ class GeneSynonyms:
 
         if database not in self.databases:
             raise ValueError(
-                f"invalid argument value for 'database': got '{database}' but expected a value in {self.databases})"
+                f"invalid argument value for 'database': "
+                f"expected one of {self.databases} but received {database!r}"
             )
 
         gene_id = (
@@ -865,7 +902,10 @@ class GeneSynonyms:
         elif axis == 1 or axis == "columns":
             iterator = iter(df.columns)
         else:
-            raise TypeError(f"unsupported argument type for 'axis': {axis}")
+            raise ValueError(
+                f"invalid argument value for 'axis': "
+                f"expected 0, 1, 'index' or 'columns' but received {axis!r}"
+            )
 
         for gene in iterator:
             output_alias = alias_conversion(

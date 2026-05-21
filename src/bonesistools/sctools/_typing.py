@@ -21,12 +21,15 @@ except:
 
 
 class UnionType(object):
+    """
+    Container used by `type_checker` to accept several possible types.
+    """
 
     def __init__(self, *args):
         self.types = args
 
     def __str__(self):
-        return ",".join(self.types)
+        return " or ".join(getattr(dtype, "__name__", str(dtype)) for dtype in self.types)
 
     __repr__ = __str__
 
@@ -95,6 +98,13 @@ def type_checker(function: Optional[Callable] = None, **options):
     Returns
     -------
     Raise an error if at least one argument type is not correct.
+
+    Raises
+    ------
+    Exception
+        If no verification options are provided.
+    TypeError
+        If one of the checked arguments has an unsupported type.
     """
 
     if function is not None:
@@ -119,11 +129,13 @@ def type_checker(function: Optional[Callable] = None, **options):
                             types_match = True
                     if types_match == False:
                         raise TypeError(
-                            f"unsupported argument type for key '{key}': expected '{value}' but received {type(key)}"
+                            f"unsupported argument type for '{key}': "
+                            f"expected {value} but received {type(arg)}"
                         )
                 elif not isinstance(arg, value):
                     raise TypeError(
-                        f"unsupported argument type for key '{key}': expected {value.__name__} but received {type(key)}"
+                        f"unsupported argument type for '{key}': "
+                        f"expected {value.__name__} but received {type(arg)}"
                     )
             output = function(*args, **kwargs)
             return output
@@ -153,6 +165,11 @@ def anndata_checker(function: Optional[Callable] = None, n: int = 1):
     Returns
     -------
     Raise an error if at least one of the first 'n' arguments is not a AnnData instance.
+
+    Raises
+    ------
+    TypeError
+        If one of the first `n` arguments is not an AnnData object.
     """
 
     if function is not None:

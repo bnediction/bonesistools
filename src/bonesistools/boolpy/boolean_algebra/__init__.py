@@ -13,7 +13,7 @@ from ._boolean import PartialBoolean
 from ._hypercube import Hypercube, HypercubeCollection
 from ._structure import expressions_equivalent, dnf_to_structure
 from ._representation import rule_to_string
-from ._parser import read_hypercube
+from ._parser import read_hypercube, read_hypercubes
 from ._typing import (
     BooleanRule,
     PartialBooleanLike,
@@ -34,6 +34,7 @@ __all__ = [
     "dnf_to_structure",
     "rule_to_string",
     "read_hypercube",
+    "read_hypercubes",
     "BooleanRule",
     "PartialBooleanLike",
     "HypercubeLike",

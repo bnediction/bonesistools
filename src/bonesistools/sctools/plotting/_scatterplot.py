@@ -494,7 +494,7 @@ def embedding_plot(
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
     obs: str
         Column name in scdata.obs for annotation of observations.
@@ -540,6 +540,13 @@ def embedding_plot(
     -------
     Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
 
+    Raises
+    ------
+    ValueError
+        If `n_components` is not 2 or 3.
+    TypeError
+        If `title` is neither a string nor a dictionary.
+
     References
     ----------
     [1] Chen et al. (2019). Single-cell trajectories reconstruction, exploration and mapping of omics data
@@ -548,7 +555,8 @@ def embedding_plot(
 
     if n_components not in [2, 3]:
         raise ValueError(
-            f"invalid argument value for 'n_components': expected 2 or 3 but received '{n_components}'"
+            f"invalid argument value for 'n_components': "
+            f"expected 2 or 3 but received {n_components!r}"
         )
 
     if pd.api.types.is_float_dtype(scdata.obs[obs]):
@@ -597,7 +605,8 @@ def embedding_plot(
             ax.set_title(**title)
         else:
             raise TypeError(
-                f"unsupported argument type for 'title': expected {str} or {dict}, but received {type(title)}"
+                f"unsupported argument type for 'title': "
+                f"expected {str} or {dict} but received {type(title)}"
             )
 
     if outfile:

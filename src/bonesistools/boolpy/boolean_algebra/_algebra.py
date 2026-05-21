@@ -8,6 +8,21 @@ import math
 
 
 class BooleanDifferentialCalculus(object):
+    """
+    Utilities for comparing partial Boolean values.
+
+    Raises
+    ------
+    TypeError
+        If a value cannot be converted to a PartialBoolean because its type is
+        unsupported.
+    ValueError
+        If a numeric value is not a valid PartialBoolean value, or if `sign`
+        is not -1 or 1.
+    AssertionError
+        If pairwise predecessor inference reaches an inconsistent internal
+        state.
+    """
 
     def __init__(self) -> None:
         pass
@@ -19,11 +34,17 @@ class BooleanDifferentialCalculus(object):
             if value in [0, 1] or math.isnan(value):
                 return PartialBoolean(value)
             else:
-                raise TypeError(f"unsupported type conversion for '{value}'")
+                raise ValueError(
+                    f"invalid argument value for 'value': "
+                    f"expected 0, 1, False, True or NaN but received {value!r}"
+                )
         elif isinstance(value, PartialBoolean):
             return value
         else:
-            raise TypeError(f"unsupported type conversion for '{value}'")
+            raise TypeError(
+                f"unsupported argument type for 'value': "
+                f"expected bool, number or {PartialBoolean} but received {type(value)}"
+            )
 
     def differential(self, v1, v2):
         _v1 = self.__conversion__(v1)
@@ -65,7 +86,10 @@ class BooleanDifferentialCalculus(object):
         source_differential = self.differential(source_v1, source_v2)
         target_differential = self.differential(target_v1, target_v2)
         if sign not in [-1, 1]:
-            raise ValueError(f"invalid argument value for 'sign': {sign}")
+            raise ValueError(
+                f"invalid argument value for 'sign': "
+                f"expected -1 or 1 but received {sign!r}"
+            )
         if source_differential != 0 or target_differential == 0:
             return None
         elif source_differential == 0:

@@ -13,6 +13,18 @@ PathLike = Union[str, Path]
 
 
 def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+    """
+    Write an AnnData matrix to a CSV file.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Annotated data matrix to export.
+    filename: str or Path
+        Output path. The `.csv` suffix is added if missing.
+    layer: str, optional
+        Layer to export instead of `adata.X`.
+    """
 
     filename = str(filename)
     if not filename.endswith(".csv"):
@@ -27,6 +39,18 @@ def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
 
 
 def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+    """
+    Write an AnnData matrix to a Matrix Market file.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Annotated data matrix to export.
+    filename: str or Path
+        Output path. The `.mtx` suffix is added if missing.
+    layer: str, optional
+        Layer to export instead of `adata.X`.
+    """
 
     filename = str(filename)
     if not filename.endswith(".mtx"):
@@ -41,6 +65,18 @@ def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
 
 
 def to_npz(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+    """
+    Write an AnnData sparse matrix to a NumPy `.npz` file.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Annotated data matrix to export.
+    filename: str or Path
+        Output path. The `.npz` suffix is added if missing.
+    layer: str, optional
+        Layer to export instead of `adata.X`.
+    """
 
     filename = str(filename)
     if not filename.endswith(".npz"):
@@ -59,6 +95,18 @@ def to_csv_or_mtx(
     filename: PathLike,
     layer: Optional[str] = None,
 ) -> None:
+    """
+    Write an AnnData matrix as CSV if dense, or Matrix Market if sparse.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Annotated data matrix to export.
+    filename: str or Path
+        Output path. The suffix is added by the selected writer if missing.
+    layer: str, optional
+        Layer to export instead of `adata.X`.
+    """
 
     if layer is None:
         if not sparse.issparse(adata.X):
@@ -77,6 +125,18 @@ def to_csv_or_npz(
     filename: PathLike,
     layer: Optional[str] = None,
 ) -> None:
+    """
+    Write an AnnData matrix as CSV if dense, or NumPy `.npz` if sparse.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Annotated data matrix to export.
+    filename: str or Path
+        Output path. The suffix is added by the selected writer if missing.
+    layer: str, optional
+        Layer to export instead of `adata.X`.
+    """
 
     if layer is None:
         if not sparse.issparse(adata.X):

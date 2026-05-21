@@ -27,22 +27,21 @@ def pairwise_distances(
     **metric_kwds: Mapping[str, Any],
 ) -> Union[np.ndarray, None]:
     """
-    Calculate the distance matrix between observations with respect to a choosen representation.
+    Calculate pairwise distances between observations in a selected representation.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
-    n_components: int (optional, default: None)
-        Number of principal components or dimensions in the embedding space taken into account for each observation.
-        If not specified, consider all principal components.
-    use_rep: str (optional, default: None)
-        Use the indicated representation in adata.obsm.
+    n_components: int, optional
+        Number of dimensions to use. If None, use all dimensions.
+    use_rep: str, optional
+        Representation key in `adata.obsm`.
     metric: Metric | Metric_Function (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
-    key_added: str (optional, default: None)
-        If not specified, return distance matrix.
-        If specified, distance matrix is added to .obsp['key_added'].
+    key_added: str, optional
+        If specified, store the distance matrix in `adata.obsp[key_added]`.
+        Otherwise, return the distance matrix.
     n_jobs: int (default: 1)
         Number of allocated processors.
     **metric_kwds
@@ -50,7 +49,8 @@ def pairwise_distances(
 
     Returns
     -------
-    Depending on 'key_added', update 'adata' or return ndarray object.
+    ndarray or None
+        Pairwise distance matrix if `key_added` is None; otherwise None.
     """
 
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
@@ -80,29 +80,35 @@ def barycenters(
     n_components: Optional[int] = None,
 ) -> Mapping[str, np.ndarray]:
     """
-    Calculate the barycenter with respect to an embedding space.
+    Calculate cluster barycenters in an embedding space.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
     obs: str
-        The classification is retrieved by .obs['obs'], which must be categorical/qualitative values.
-    use_rep: str (optional, default: None)
-        Use the indicated representation in scdata.obsm.
-    n_components: int (optional, default: None)
+        Categorical observation key in `scdata.obs`.
+    use_rep: str, optional
+        Representation key in `scdata.obsm`.
+    n_components: int, optional
         Number of principal components or dimensions in the embedding space
         taken into account for each observation.
 
     Returns
     -------
-    Return dict-like mapping where keys are clusters and values are barycenter values.
+    Mapping[str, ndarray]
+        Mapping from cluster names to barycenter coordinates.
+
+    Raises
+    ------
+    AttributeError
+        If `scdata.obs[obs]` does not expose categorical `.cat` access.
     """
 
     X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
 
     if not hasattr(scdata.obs[obs], "cat"):
-        raise AttributeError(f"scdata.obs[{obs}] object has not attribute '.cat'")
+        raise AttributeError(f"scdata.obs[{obs!r}] object has no attribute 'cat'")
     else:
         clusters = scdata.obs[obs].cat.categories
 

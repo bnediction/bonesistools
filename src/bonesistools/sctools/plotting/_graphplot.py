@@ -37,7 +37,7 @@ def draw_paga(
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
     obs: str
         The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.

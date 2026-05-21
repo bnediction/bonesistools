@@ -18,27 +18,23 @@ def anndata_to_dataframe(
     is_log: bool = False,
 ) -> DataFrame:
     """
-    Convert Anndata instance into Dataframe instance.
+    Convert an AnnData expression matrix to a DataFrame.
 
     Parameters
     ----------
-    adata: ad.AnnData
+    adata: AnnData
         Unimodal annotated data matrix.
-    obs: Keys (optional, default: None)
-        Any key or key set in anndata.obs.
-        If specified, add adata.obs.loc[obs] to dataframe.
-    layer: str (optional, default: None)
-        Any key in adata.layers.
-        If provided, use adata.layers[layer] for expression values instead of adata.X.
+    obs: str or sequence of str, optional
+        Observation columns from `adata.obs` to append to the output DataFrame.
+    layer: str, optional
+        Layer to use for expression values instead of `adata.X`.
     is_log: bool (default: False)
-        Boolean value specifying if the counts are logarithmized.
-        If value parameter is 'True', perform an exponential transformation.
-        If counts are still logarithmized but user want to keep logarithmized counts,
-        please specify 'False' to the value parameter.
+        If True, back-transform log1p values with `expm1`.
 
     Returns
     -------
-    Return DataFrame providing information about counts and optionnaly other additionnal chosen information.
+    DataFrame
+        Expression values with optional observation annotations.
     """
 
     if layer:

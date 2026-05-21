@@ -37,29 +37,34 @@ def __get_box_positions(
 
     if groups is None and hues is not None:
         raise ValueError(
-            f"invalid argument value for 'groups' and 'hues': expected either both specified or only 'groupbs' specified"
+            "invalid argument values for 'groups' and 'hues': "
+            "expected either both specified or only 'groups' specified"
         )
 
     if not groups is None:
         if isinstance(groups, Tuple):
             if not len(groups) == 2:
                 raise ValueError(
-                    f"invalid argument value for 'groups': expected 2-length tuple but received {len(groups)}-length tuple"
+                    f"invalid argument value for 'groups': "
+                    f"expected 2-length tuple but received {len(groups)}-length tuple"
                 )
         else:
             raise ValueError(
-                f"invalid argument value for 'groups': expected {None} or 2-length tuple but received {groups}"
+                f"invalid argument value for 'groups': "
+                f"expected None or 2-length tuple but received {groups!r}"
             )
 
     if not hues is None:
         if isinstance(hues, Tuple):
             if not len(hues) == 2:
                 raise ValueError(
-                    f"invalid argument value for 'hues': expected 2-length tuple but received {len(hues)}-length tuple"
+                    f"invalid argument value for 'hues': "
+                    f"expected 2-length tuple but received {len(hues)}-length tuple"
                 )
         else:
             raise ValueError(
-                f"invalid argument value for 'hues': expected {None} or 2-length tuple but received {hues}"
+                f"invalid argument value for 'hues': "
+                f"expected None or 2-length tuple but received {hues!r}"
             )
 
     if groups is None and hues is None:
@@ -110,7 +115,8 @@ def __add_points(
             ax.scatter(x, y, **kwargs)
     elif groups is None and hues is not None:
         raise ValueError(
-            f"invalid argument value for 'groups' and 'hues': expected either both specified or only 'groups' specified"
+            "invalid argument values for 'groups' and 'hues': "
+            "expected either both specified or only 'groups' specified"
         )
     else:
         for i, hue in enumerate(hues):
@@ -150,6 +156,39 @@ def boxplot(
     outfile: Optional[Path] = None,
     **kwargs: Mapping[str, Any],
 ) -> Tuple[Figure, Axes, BoxPlots]:
+    """
+    Draw a boxplot for an observation-level variable.
+
+    Parameters
+    ----------
+    scdata: AnnData or MuData
+        Unimodal or multimodal annotated data matrix.
+    obs: str
+        Observation key to plot.
+    groupby: str, optional
+        Observation key used to group values.
+    hue: str, optional
+        Observation key used to split each group by hue.
+    title: str or dict, optional
+        Figure title, or keyword arguments passed to `Axes.set_title`.
+    sort: {"ascending", "descending"}, optional
+        Sort groups by median value.
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
+
+    Returns
+    -------
+    tuple
+        Matplotlib figure, axes and boxplot artists.
+
+    Raises
+    ------
+    TypeError
+        If `title` is neither a string nor a dictionary.
+    ValueError
+        If `groupby` and `hue` are inconsistently specified, or if `sort` is
+        not `"ascending"` or `"descending"`.
+    """
 
     fig = plt.figure()
     ax = fig.subplots()
@@ -167,7 +206,8 @@ def boxplot(
             ax.set_title(**title)
         else:
             raise TypeError(
-                f"unsupported argument type for 'title': expected {str} or {dict}, but received {type(title)}"
+                f"unsupported argument type for 'title': "
+                f"expected {str} or {dict} but received {type(title)}"
             )
 
     if not "boxplot" in kwargs:
@@ -185,7 +225,8 @@ def boxplot(
             series = scdata.obs[obs]
         else:
             raise ValueError(
-                f"invalid argument value for 'groupby' and 'hue': expected either both specified or only 'groupby' specified"
+                "invalid argument values for 'groupby' and 'hue': "
+                "expected either both specified or only 'groupby' specified"
             )
     else:
         if sort is None:
@@ -196,7 +237,8 @@ def boxplot(
             groups = series.median().sort_values(ascending=(sort == "ascending")).index
         else:
             raise ValueError(
-                f"invalid argument value for 'sort': expected 'ascending' or 'descending' but received {sort}"
+                f"invalid argument value for 'sort': "
+                f"expected 'ascending' or 'descending' but received {sort!r}"
             )
         if hue is None:
             hues = None

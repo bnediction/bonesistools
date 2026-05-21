@@ -171,7 +171,6 @@ class PartialBoolean:
             return value
 
         raise ValueError(
-            "unsupported PartialBoolean value: "
-            f"expected 0, 1, False, True or '*', "
-            f"but received {value!r}"
+            "invalid argument value for 'value': "
+            f"expected 0, 1, False, True or '*' but received {value!r}"
         )

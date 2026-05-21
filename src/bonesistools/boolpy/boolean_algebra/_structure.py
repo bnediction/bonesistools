@@ -77,6 +77,13 @@ def expressions_equivalent(
     bool
         Whether the two expressions are considered equivalent according to
         the selected method.
+
+    Raises
+    ------
+    ValueError
+        If `method` is not one of `"simplify"` or `"truth_table"`, or if an
+        expression cannot be evaluated to a Boolean constant during
+        truth-table comparison.
     """
 
     if method == "simplify":
@@ -100,8 +107,8 @@ def expressions_equivalent(
         return True
 
     raise ValueError(
-        f"unsupported equivalence method: {method}. "
-        "Expected 'simplify' or 'truth_table'."
+        f"invalid argument value for 'method': "
+        f"expected 'simplify' or 'truth_table' but received {method!r}"
     )
 
 

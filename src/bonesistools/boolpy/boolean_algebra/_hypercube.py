@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, MutableMapping, MutableSet
-from functools import total_ordering
-from typing import Dict, Optional, Set, Union
+from typing import Dict, Optional, Set
 
 from ._boolean import PartialBoolean
 from ._typing import PartialBooleanLike, HypercubeLike, is_hypercube_like
@@ -324,7 +323,8 @@ class Hypercube(MutableMapping):
             return Hypercube(other)
 
         raise TypeError(
-            "unsupported argument type: expected hypercube-like object, "
+            "unsupported argument type for 'other': "
+            "expected hypercube-like object "
             f"but received {type(other)}"
         )
 
@@ -602,6 +602,7 @@ class HypercubeCollection(MutableSet):
             return Hypercube(hypercube)
 
         raise TypeError(
-            "unsupported argument type: expected hypercube-like object, "
+            "unsupported argument type for 'hypercube': "
+            "expected hypercube-like object "
             f"but received {type(hypercube)}"
         )

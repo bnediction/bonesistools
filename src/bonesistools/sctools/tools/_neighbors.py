@@ -47,27 +47,26 @@ def kneighbors_graph(
     **metric_kwds: Mapping[str, Any],
 ) -> Graph:
     """
-    Compute the k-nearest neighbors-based graph using an embedding space.
+    Compute a k-nearest-neighbor graph from an embedding space.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
     n_neighbors: int
-        number of closest neighbors.
-    use_rep: str (optional, default: None)
-        Use the indicated representation in scdata.obsm.
-    n_components: int (optional, default: None)
-        Number of principal components or dimensions in the embedding space
-        taken into account for each observation.
+        Number of nearest neighbors.
+    use_rep: str, optional
+        Representation key in `scdata.obsm`.
+    n_components: int, optional
+        Number of dimensions to use. If None, use all dimensions.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     create_using: Type (default: nx.DiGraph)
-        Graph type to return. If graph instance, then cleared it before computing k-nearest neighbors.
+        Graph type to return.
     edge_attr: str (default: 'distance')
         Attribute to which the distance values are assigned on each edge.
     index_or_name: 'index' | 'name' (default: 'index')
-        node names are referring either to index number ('index') or index name ('name').
+        Whether graph nodes use integer positions or observation names.
     n_jobs: int (default: 1)
         Number of allocated processors.
     **metric_kwds
@@ -75,8 +74,13 @@ def kneighbors_graph(
 
     Returns
     -------
-    Return Graph object.
-    The graph stores weighted edges that connects two nodes.
+    Graph
+        Weighted graph storing nearest-neighbor distances.
+
+    Raises
+    ------
+    ValueError
+        If `index_or_name` is not `"index"` or `"name"`.
     """
 
     from sklearn import neighbors
@@ -112,31 +116,39 @@ def kneighbors_graph(
         )
     else:
         raise ValueError(
-            f"invalid argument value for 'index_or_name': expected 'index' or 'name' but received '{index_or_name}'"
+            f"invalid argument value for 'index_or_name': "
+            f"expected 'index' or 'name' but received {index_or_name!r}"
         )
 
 
 class Knnbs(object):
     """
-    Class for using k-nearest neighbors-based subclusters (knnbs) algorithm.
-    A k-nearest neighbors graph is constructed in order to compute distance
-    between cells and clusters' barycenters. Two methods are used for finding subclusters:
-    (1) searching for cell manifolds maximizing distances to other clusters' barycenters
-    (2) searching for cell manifolds minimizing distances to self barycenter
+    K-nearest-neighbor-based subcluster detection.
+
+    A k-nearest-neighbor graph is constructed to compute distances between
+    cells and cluster barycenters. Subclusters can be selected by maximizing
+    distances to other clusters' barycenters or by minimizing distances to
+    their own cluster barycenter.
 
     Parameters
     ----------
     n_neighbors: int
         Number of closest neighbors.
-    use_rep: str (default: 'X_pca')
-        Use the indicated representation in adata.obsm.
-    n_components: int (optional, default: None)
-        Number of principal components or dimensions in the embedding space
-        taken into account for each observation.
+    use_rep: str (default: "X_pca")
+        Representation key in `.obsm`.
+    n_components: int, optional
+        Number of dimensions to use. If None, use all dimensions.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     **metric_kwds
         Any further parameters passed to the distance function.
+
+    Raises
+    ------
+    TypeError
+        If `n_neighbors`, `n_components` or `use_rep` has an unsupported type.
+    ValueError
+        If `n_neighbors`, `n_components` or `metric` has an unsupported value.
     """
 
     def __init__(
@@ -153,18 +165,21 @@ class Knnbs(object):
                 self.n_neighbors = n_neighbors
             else:
                 raise ValueError(
-                    f"invalid argument value for 'n_neighbors': expected non-null positive value but received '{n_neighbors}'"
+                    f"invalid argument value for 'n_neighbors': "
+                    f"expected non-null positive value but received {n_neighbors!r}"
                 )
         elif isinstance(n_neighbors, float):
             if n_neighbors.is_integer():
                 self.n_neighbors = n_neighbors
             else:
                 raise ValueError(
-                    f"invalid argument value for 'n_neighbors': expected integer but received '{n_neighbors}'"
+                    f"invalid argument value for 'n_neighbors': "
+                    f"expected integer but received {n_neighbors!r}"
                 )
         else:
             raise TypeError(
-                f"unsupported argument type for 'n_neighbors': expected {int} but received {type(n_neighbors)}"
+                f"unsupported argument type for 'n_neighbors': "
+                f"expected {int} but received {type(n_neighbors)}"
             )
 
         if n_components is None:
@@ -174,31 +189,38 @@ class Knnbs(object):
                 self.n_components = n_components
             else:
                 raise ValueError(
-                    f"invalid argument value for 'n_components': expected non-null positive value but received '{n_components}'"
+                    f"invalid argument value for 'n_components': "
+                    f"expected non-null positive value but received {n_components!r}"
                 )
         elif isinstance(n_components, float):
             if n_components.is_integer():
                 self.n_components = n_components
             else:
                 raise ValueError(
-                    f"invalid argument value for 'n_components': expected integer but received '{n_components}'"
+                    f"invalid argument value for 'n_components': "
+                    f"expected integer but received {n_components!r}"
                 )
         else:
             raise TypeError(
-                f"unsupported argument type for 'n_components': expected {int} but received {type(n_components)}"
+                f"unsupported argument type for 'n_components': "
+                f"expected {int} but received {type(n_components)}"
             )
 
         if isinstance(use_rep, str):
             self.use_rep = use_rep
         else:
             raise TypeError(
-                f"unsupported argument type for 'use_rep': expected {str} but received {type(use_rep)}"
+                f"unsupported argument type for 'use_rep': "
+                f"expected {str} but received {type(use_rep)}"
             )
 
         if metric in get_args(Metric):
             self.metric = metric
         else:
-            raise ValueError(f"invalid argument value for 'metric': {metric}")
+            raise ValueError(
+                f"invalid argument value for 'metric': "
+                f"expected one of {get_args(Metric)} but received {metric!r}"
+            )
 
         self.metric_kwds = metric_kwds
 
@@ -223,7 +245,7 @@ class Knnbs(object):
 
         Parameters
         ----------
-        adata: ad.AnnData
+        adata: AnnData
             Unimodal annotated data matrix.
         obs: str
             Column name in 'adata.obs' used as reference for clusters.
@@ -380,7 +402,7 @@ class Knnbs(object):
             Number of cells in each macrostate.
             If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
         key: str (default: 'knnbs')
-            Pandas serie name.
+            Pandas Series name.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -443,7 +465,7 @@ class Knnbs(object):
             Number of cells in each macrostate.
             If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
         key: str (default: 'knnbs')
-            Pandas serie name.
+            Pandas Series name.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -498,7 +520,7 @@ class Knnbs(object):
             Number of cells in each macrostate.
             If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
         key: str (default: 'knnbs')
-            Pandas serie name.
+            Pandas Series name.
         subclusters_maximizing_distances: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
             by maximizing distances to other clusters' barycenters.
@@ -510,6 +532,11 @@ class Knnbs(object):
         -------
         Return Series object.
         Series stores subclusters derived from k-nearest neighbors-based subclusters algorithm.
+
+        Raises
+        ------
+        RuntimeError
+            If the maximizing and minimizing cluster sets overlap.
         """
 
         if (
@@ -564,13 +591,16 @@ def _shared_nearest_neighbors_graph(
     n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
     if prune_snn < 0:
         raise ValueError(
-            f"invalid argument value for 'prune_snn': expected positive value but received '{prune_snn}'"
+            f"invalid argument value for 'prune_snn': "
+            f"expected non-negative value but received {prune_snn!r}"
         )
     elif prune_snn < 1:
         prune_snn = math.ceil(n_neighbors * prune_snn)
     elif prune_snn >= n_neighbors:
         raise ValueError(
-            f"invalid argument values for 'prune_snn' and 'n_neighbors: 'prune_snn' is higher than 'n_neighbors'"
+            f"invalid argument values for 'prune_snn' and 'n_neighbors': "
+            f"expected prune_snn < n_neighbors but received "
+            f"prune_snn={prune_snn!r} and n_neighbors={n_neighbors!r}"
         )
 
     n_cells = scdata.n_obs
@@ -609,56 +639,56 @@ def shared_neighbors(
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
     """
-    Compute a shared neighborhood (SNN) graph of observations.
-    The neighbor search relies on a previously computed neighborhood graph (such as kNN algorithm).
-    Be careful: connectivity are not well computed. This issue has to be fixed.
+    Compute a shared-nearest-neighbor graph of observations.
+
+    The neighbor search relies on a previously computed neighborhood graph,
+    such as one produced by `scanpy.pp.neighbors`.
 
     Parameters
     ----------
-    scdata: ad.AnnData | md.MuData
+    scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
     knn_key: str (default: 'neighbors')
-        If not specified, the used neighbors data are retrieved from scdata.uns['neighbors'],
-        otherwise the used neighbors data are retrieved from scdata.uns['key_added'].
+        Key in `scdata.uns` containing the source neighborhood graph metadata.
     snn_key: str (default: 'shared_neighbors')
-        If not specified, the shared neighbors data are stored in scdata.uns['shared_neighbors']
-        If specified, the shared neighbors data are added to scdata.uns['key_added'].
+        Key used to store shared-neighbor graph metadata in `scdata.uns`.
     prune_snn: float | int (default: 1/15)
-        If zero value, no prunning is performed. If strictly positive, removes edge between two neighbors
-        in the shared neighborhood graph who have a number of neighbors less than the specified value.
+        If zero, no pruning is performed. If strictly positive, remove edges
+        whose number of shared neighbors is less than or equal to the threshold.
         Value can be relative (float between 0 and 1) or absolute (integer between 1 and k).
     metric: Metric (default: 'euclidean')
-        Metric used for computing distances between two neighbors by using scdata.obsm.
+        Metric used to compute distances in `scdata.obsm`.
     normalize_connectivities: bool (default: True)
-        If false, connectivities provide the absolute number of shared neighbors (integer between 0 and k),
-        otherwise provide the relative number of shared neighbors (float between 0 and k).
+        If False, connectivities store the absolute number of shared neighbors.
+        Otherwise, connectivities are normalized.
     distances_key: str (optional, default: None)
-        If specified, distances are stored in scdata.obsp[distances_key],
-        otherwise in scdata.obsp[snn_key+'_distances'].
+        Key used to store distances in `scdata.obsp`.
     connectivities_key: str (optional, default: None)
-        If specified, distances are stored in scdata.obsp[connectivities_key],
-        otherwise in scdata.obsp[snn_key+'_connectivities'].
+        Key used to store connectivities in `scdata.obsp`.
     copy: bool (default: False)
         Return a copy instead of writing to scdata.
 
     Returns
     -------
-    Depending on 'copy', update 'scdata' or return ScData object.
+    ScData or None
+        Depending on `copy`, update `scdata` in place or return a copy.
 
-    See 'snn_key' parameter description for the storage path of
-    connectivities and distances.
+    The resulting object stores metadata in `scdata.uns[snn_key]` and matrices
+    in `scdata.obsp[distances_key]` and `scdata.obsp[connectivities_key]`.
 
-    ScData contains two keys in scdata.uns['snn_key']:
-        - connectivities: sparse matrix.
-            Weighted adjacency matrix of the shared neighborhood graph.
-            Weights should be interpreted as number of shared neighbors.
-        - distances: sparse matrix of dtype 'float64'.
-            Instead of decaying weights, this stores distances for each pair of neighbors.
+    Raises
+    ------
+    KeyError
+        If `knn_key` is not found in `scdata.uns`.
+    ValueError
+        If `prune_snn` is negative or greater than or equal to the number of
+        neighbors.
     """
 
     if knn_key not in scdata.uns:
         raise KeyError(
-            "neighborhood graph not found in 'scdata': please run 'scanpy.pp.neighbors' or specify 'knn_key"
+            "neighborhood graph not found in 'scdata': "
+            "please run 'scanpy.pp.neighbors' or specify 'knn_key'"
         )
     if prune_snn is None:
         prune_snn = 0
