@@ -14,6 +14,7 @@ from ._neighbors import Knnbs, kneighbors_graph, shared_neighbors
 from ._conversion import anndata_to_dataframe
 from ._graph import get_paga_graph
 from ._maths import pairwise_distances, barycenters
+from ._regress import regress_out
 
 from ._write import to_csv, to_mtx, to_npz, to_csv_or_mtx, to_csv_or_npz
 
@@ -31,6 +32,7 @@ __all__ = [
     "get_paga_graph",
     "pairwise_distances",
     "barycenters",
+    "regress_out",
     "to_csv",
     "to_mtx",
     "to_npz",

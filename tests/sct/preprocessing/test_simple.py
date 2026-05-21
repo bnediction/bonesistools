@@ -26,7 +26,7 @@ def test_filter_obs_and_filter_var_validate_inputs(mini_adata):
 def test_regress_out_updates_layer_or_returns_copy(mini_adata):
     original_layer = mini_adata.layers["counts"].copy()
 
-    copied = bt.sct.pp.regress_out(
+    copied = bt.sct.tl.regress_out(
         mini_adata,
         keys="score",
         layer="counts",
@@ -36,6 +36,11 @@ def test_regress_out_updates_layer_or_returns_copy(mini_adata):
     assert np.array_equal(mini_adata.layers["counts"], original_layer)
     assert copied.layers["counts"].shape == original_layer.shape
     assert not np.allclose(copied.layers["counts"], original_layer)
+
+
+def test_preprocessing_regress_out_is_deprecated(mini_adata):
+    with pytest.warns(DeprecationWarning, match="bt.sct.pp.regress_out"):
+        bt.sct.pp.regress_out(mini_adata, keys="score")
 
 
 def test_merge_obs_and_var(mini_adata):
