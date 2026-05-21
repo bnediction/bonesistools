@@ -40,3 +40,7 @@ def bn_to_pydot(bn, **kwargs):
     )
 
     return BooleanNetwork(bn).to_pydot(**kwargs)
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

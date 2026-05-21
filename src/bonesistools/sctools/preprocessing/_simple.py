@@ -39,70 +39,6 @@ def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
 
 
 @anndata_checker
-def set_index(
-    adata: AnnData, keys: Keys, axis: Axis = 0, copy: bool = False
-) -> Union[AnnData, None]:
-    """
-    Create a MultiIndex for `adata.obs` or `adata.var` using the current index
-    and existing columns.
-
-    Parameters
-    ----------
-    adata: AnnData
-        Unimodal annotated data matrix.
-    keys: str or list of str
-        Column key or column keys used to build the MultiIndex.
-    axis: {0, 1, "obs", "var"} (default: 0)
-        If 0 or `"obs"`, update `adata.obs`. If 1 or `"var"`, update
-        `adata.var`.
-    copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
-
-    Returns
-    -------
-    Depending on 'copy', update 'adata' or return AnnData object.
-
-    Raises
-    ------
-    TypeError
-        If `keys` is neither a string nor a list.
-    ValueError
-        If `axis` is not 0, 1, `"obs"` or `"var"`.
-    """
-
-    adata = adata.copy() if copy else adata
-
-    if isinstance(keys, str):
-        keys = [keys]
-    elif not isinstance(keys, List):
-        raise TypeError(
-            f"unsupported argument type for 'keys': "
-            f"expected {str} or {list} but received {type(keys)}"
-        )
-
-    if axis in [0, "obs"]:
-        df = adata.obs.copy()
-    elif axis in [1, "var"]:
-        df = adata.var.copy()
-    else:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
-        )
-
-    index_name = __generate_unique_index_name(df)
-    df[index_name] = df.index
-    df = df.set_index([index_name, *keys])
-
-    if axis in [0, "obs"]:
-        adata.obs = df
-    elif axis in [1, "var"]:
-        adata.var = df
-
-    return adata if copy else None
-
-
-@anndata_checker
 def filter_obs(
     adata: AnnData, obs: str, function: Callable, copy: bool = False
 ) -> Union[AnnData, None]:
@@ -455,6 +391,7 @@ def transfer_obs_sti(
     """
 
     adata = adata.copy() if copy else adata
+    obs = [obs] if isinstance(obs, str) else obs
 
     all_samples_df = []
     for _condition, _adata in zip(conditions, adatas):
@@ -521,8 +458,7 @@ def transfer_obs_its(
     """
 
     if copy:
-        for _adata in adatas:
-            _adata = _adata.copy()
+        adatas = [_adata.copy() for _adata in adatas]
         adatas_cp = []
 
     for _condition, _adata in zip(conditions, adatas):

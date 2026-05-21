@@ -10,3 +10,12 @@ from OmniPath-related resources such as CollecTRI and DoRothEA.
 
 from ._collectri import load_collectri_grn
 from ._dorothea import load_dorothea_grn
+
+__all__ = [
+    "load_collectri_grn",
+    "load_dorothea_grn",
+]
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

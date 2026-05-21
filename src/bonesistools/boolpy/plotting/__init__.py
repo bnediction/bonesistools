@@ -19,3 +19,7 @@ __all__ = [
     "count_node_style",
     "stability_node_style",
 ]
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

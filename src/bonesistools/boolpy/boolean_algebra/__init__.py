@@ -44,3 +44,7 @@ __all__ = [
     "is_partial_boolean_like",
     "is_hypercube_like",
 ]
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

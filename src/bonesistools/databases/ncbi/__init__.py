@@ -14,3 +14,14 @@ from ._genesyn import (
     GeneSynonyms,
     support_legacy_gene_synonyms_args,
 )
+
+__all__ = [
+    "InputIdentifierType",
+    "OutputIdentifierType",
+    "GeneSynonyms",
+    "support_legacy_gene_synonyms_args",
+]
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

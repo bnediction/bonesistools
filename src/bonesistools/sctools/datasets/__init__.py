@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+"""
+Bundled example datasets for single-cell workflows.
+
+The `datasets` namespace exposes lightweight AnnData objects used in examples,
+tests and tutorials.
+"""
+
 try:
     from importlib.resources import files
 except ImportError:
@@ -30,3 +37,12 @@ def nestorowa():
     path = files(__package__) / "nestorowa_hvg.h5ad"
 
     return ad.read_h5ad(path)
+
+
+__all__ = [
+    "nestorowa",
+]
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

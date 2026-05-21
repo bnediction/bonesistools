@@ -1,39 +1,10 @@
 #!/usr/bin/env python
 
-import warnings
-
 import numpy as np
 import pandas as pd
 import pytest
 
 import bonesistools as bt
-
-
-def test_set_index_updates_obs_and_copy_keeps_original(mini_adata):
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-
-        copied = bt.sct.pp.set_index(
-            mini_adata,
-            keys="batch",
-            axis="obs",
-            copy=True,
-        )
-
-    assert mini_adata.obs.index.tolist() == ["c1", "c2", "c3", "c4"]
-
-    assert copied.obs.index.tolist() == [
-        ("c1", "b1"),
-        ("c2", "b2"),
-        ("c3", "b1"),
-        ("c4", "b2"),
-    ]
-
-
-def test_set_index_rejects_invalid_axis(mini_adata):
-    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.pp.set_index(mini_adata, keys="batch", axis="bad")
 
 
 def test_filter_obs_and_filter_var_subset_in_place(mini_adata):
