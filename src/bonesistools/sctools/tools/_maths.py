@@ -9,13 +9,14 @@ from .._typing import (
     anndata_checker,
     anndata_or_mudata_checker,
 )
+from .._dependencies import require_sklearn
 
 from ._utils import choose_representation
 
 import numpy as np
-from sklearn import metrics
 
 
+@require_sklearn
 @anndata_checker
 def pairwise_distances(
     adata,
@@ -53,11 +54,11 @@ def pairwise_distances(
         Pairwise distance matrix if `key_added` is None; otherwise None.
     """
 
+    from sklearn.metrics import pairwise_distances
+
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
 
-    distances = metrics.pairwise_distances(
-        X, metric=metric, n_jobs=n_jobs, **metric_kwds
-    )
+    distances = pairwise_distances(X, metric=metric, n_jobs=n_jobs, **metric_kwds)
 
     if key_added is not None:
         adata.obsp[key_added] = distances

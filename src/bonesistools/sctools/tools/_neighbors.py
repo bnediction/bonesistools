@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Optional, Union, Sequence, Mapping, Any, Type
+import importlib
 
 try:
     from typing import Literal, get_args
@@ -13,9 +14,9 @@ from .._typing import (
     Shortest_Path_Method,
     anndata_or_mudata_checker,
 )
+from .._dependencies import require_sklearn
 
 import warnings
-import importlib
 
 import math
 from itertools import combinations
@@ -27,12 +28,12 @@ import networkx as nx
 from networkx import Graph, DiGraph
 
 from scipy.sparse import csr_matrix, issparse, diags
-from sklearn.metrics import pairwise_distances
 
 from ._maths import barycenters
 from ._utils import choose_representation
 
 
+@require_sklearn
 @anndata_or_mudata_checker
 def kneighbors_graph(
     scdata: ScData,  # type: ignore
@@ -237,6 +238,7 @@ class Knnbs(object):
                 f"'{self.__class__.__name__}' object has no attribute '{attribute}'"
             )
 
+    @require_sklearn
     def fit(self, adata: AnnData, obs: str, n_jobs: int = 1) -> None:
         """
         Compute the k-nearest neighbors-based graph using an embedding space.
@@ -257,6 +259,8 @@ class Knnbs(object):
         Update Knnbs object.
         Add attribute 'shortest_path_lengths_df' to Knnbs instance.
         """
+
+        from sklearn.metrics import pairwise_distances
 
         X = choose_representation(
             adata, use_rep=self.use_rep, n_components=self.n_components
@@ -626,6 +630,7 @@ def _shared_nearest_neighbors_graph(
     return neighborhood_graph
 
 
+@require_sklearn
 @anndata_or_mudata_checker
 def shared_neighbors(
     scdata: ScData,  # type: ignore
@@ -684,6 +689,8 @@ def shared_neighbors(
         If `prune_snn` is negative or greater than or equal to the number of
         neighbors.
     """
+
+    from sklearn.metrics import pairwise_distances
 
     if knn_key not in scdata.uns:
         raise KeyError(

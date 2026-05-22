@@ -40,6 +40,11 @@ Install the latest release:
 pip install bonesistools
 ```
 
+Install the single-cell tools dependencies:
+```sh
+pip install "bonesistools[sctools]"
+```
+
 Install with all extra dependencies:
 ```sh
 pip install "bonesistools[all]"

@@ -24,10 +24,10 @@ def test_load_dorothea_grn_uses_op_wrapper_and_builds_signed_graph(
         calls.append(kwargs)
         return pd.DataFrame(
             {
-                "source": ["Tf1", "Tf2"],
-                "target": ["Gene1", "Gene2"],
-                "weight": [-0.2, 0.7],
-                "confidence": ["A", "B"],
+                "source": ["Tf1", "Tf2", "Tf3"],
+                "target": ["Gene1", "Gene2", "Gene3"],
+                "weight": [-0.2, 0.7, 1.0],
+                "confidence": ["A", "B", "D"],
             }
         )
 
@@ -45,7 +45,7 @@ def test_load_dorothea_grn_uses_op_wrapper_and_builds_signed_graph(
     assert calls == [
         {
             "organism": "mouse",
-            "levels": ["A", "B"],
+            "levels": ["A", "B", "C", "D"],
             "license": "academic",
         }
     ]
@@ -60,13 +60,13 @@ def test_load_dorothea_grn_reads_cache_without_importing_decoupler(
 ):
     cache_dir = tmp_path / ".cache"
     cache_dir.mkdir()
-    cache_file = cache_dir / "dorothea_op_mouse_A.csv"
+    cache_file = cache_dir / "dorothea_op_mouse_complete.csv"
     pd.DataFrame(
         {
-            "source": ["Tf"],
-            "target": ["Gene"],
-            "weight": [1.0],
-            "confidence": ["A"],
+            "source": ["TfA", "TfB"],
+            "target": ["GeneA", "GeneB"],
+            "weight": [1.0, -1.0],
+            "confidence": ["A", "B"],
         }
     ).to_csv(cache_file, index=False)
 
@@ -80,8 +80,74 @@ def test_load_dorothea_grn_reads_cache_without_importing_decoupler(
     )
 
     assert list(grn.edges(data=True)) == [
-        ("Tf", "Gene", {"confidence": "A", "sign": 1})
+        ("TfA", "GeneA", {"confidence": "A", "sign": 1})
     ]
+
+
+def test_load_dorothea_grn_get_wrapper_warns_and_filters_locally(monkeypatch, tmp_path):
+    calls = []
+
+    def get_dorothea(**kwargs):
+        calls.append(kwargs)
+        return pd.DataFrame(
+            {
+                "source": ["TfA", "TfB"],
+                "target": ["GeneA", "GeneB"],
+                "weight": [1.0, -1.0],
+                "confidence": ["A", "B"],
+            }
+        )
+
+    _install_fake_decoupler(monkeypatch, get_dorothea=get_dorothea)
+    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
+
+    with pytest.warns(UserWarning, match="legacy `decoupler.get_dorothea`"):
+        grn = _dorothea.load_dorothea_grn(
+            organism="mouse",
+            levels=["B"],
+            wrapper="get",
+            reload=True,
+        )
+
+    assert calls == [{"organism": "mouse"}]
+    assert list(grn.edges(data=True)) == [
+        ("TfB", "GeneB", {"confidence": "B", "sign": -1})
+    ]
+
+
+def test_load_dorothea_grn_get_wrapper_explains_missing_legacy_api(
+    monkeypatch, tmp_path
+):
+    _install_fake_decoupler(monkeypatch, __version__="2.1.6", op=SimpleNamespace())
+    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
+
+    with pytest.warns(UserWarning, match="legacy `decoupler.get_dorothea`"):
+        with pytest.raises(
+            AttributeError,
+            match=r"2\.1\.6.*requires decoupler<2\.0\.0",
+        ):
+            _dorothea.load_dorothea_grn(
+                organism="mouse",
+                wrapper="get",
+                reload=True,
+            )
+
+
+def test_load_dorothea_grn_op_wrapper_explains_missing_current_api(
+    monkeypatch, tmp_path
+):
+    _install_fake_decoupler(monkeypatch, __version__="1.9.2")
+    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
+
+    with pytest.raises(
+        AttributeError,
+        match=r"1\.9\.2.*requires decoupler>=2\.0\.0",
+    ):
+        _dorothea.load_dorothea_grn(
+            organism="mouse",
+            wrapper="op",
+            reload=True,
+        )
 
 
 def test_load_dorothea_grn_rejects_invalid_wrapper():

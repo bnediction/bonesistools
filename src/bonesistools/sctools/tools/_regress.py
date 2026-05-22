@@ -5,18 +5,19 @@ from typing import Optional, Union
 import numpy as np
 from anndata import AnnData
 from scipy.sparse import issparse
-from sklearn.linear_model import LinearRegression
 
+from .._dependencies import require_sklearn
 from .._typing import Keys, anndata_checker
 
 
 def __linear_regress_out_feature(
     interest: np.ndarray,
     regressors: np.ndarray,
+    linear_regression,
     intercept: bool = False,
     n_jobs: int = 1,
 ):
-    regression_model = LinearRegression(fit_intercept=False, n_jobs=n_jobs)
+    regression_model = linear_regression(fit_intercept=False, n_jobs=n_jobs)
     regression_model.fit(regressors, interest)
     prediction = regression_model.predict(regressors)
 
@@ -29,6 +30,7 @@ def __linear_regress_out_feature(
     return predicted[:, 0]
 
 
+@require_sklearn
 @anndata_checker
 def regress_out(
     adata: AnnData,
@@ -62,6 +64,8 @@ def regress_out(
     Depending on 'copy', update 'adata' or return AnnData object.
     """
 
+    from sklearn.linear_model import LinearRegression
+
     adata = adata.copy() if copy else adata
 
     if layer is None:
@@ -78,7 +82,11 @@ def regress_out(
     for i in range(adata.n_vars):
         interest = counts[:, i].reshape(-1, 1)
         counts[:, i] = __linear_regress_out_feature(
-            interest, regressors, intercept=intercept, n_jobs=n_jobs
+            interest,
+            regressors,
+            LinearRegression,
+            intercept=intercept,
+            n_jobs=n_jobs,
         )
 
     if layer is None:

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Any, List, Optional, Union
+import warnings
 
 try:
     from typing import Literal
@@ -14,6 +15,35 @@ import pandas as pd
 from ..ncbi import OutputIdentifierType, GeneSynonyms
 
 DorotheaWrapper = Literal["op", "get"]
+
+GET_DOROTHEA_DECOUPLER_REQUIREMENT = "decoupler<2.0.0"
+OP_DOROTHEA_DECOUPLER_REQUIREMENT = "decoupler>=2.0.0"
+
+
+def _get_decoupler_version(decoupler_module: Any) -> str:
+    return getattr(decoupler_module, "__version__", "unknown")
+
+
+def _raise_missing_dorothea_wrapper(
+    wrapper: DorotheaWrapper,
+    decoupler_module: Any,
+) -> None:
+    decoupler_version = _get_decoupler_version(decoupler_module)
+
+    if wrapper == "get":
+        raise AttributeError(
+            "`decoupler.get_dorothea` is not available in the installed "
+            f"decoupler version ({decoupler_version}). `wrapper='get'` "
+            f"requires {GET_DOROTHEA_DECOUPLER_REQUIREMENT}, or an existing "
+            "local cache file generated with a compatible decoupler version."
+        )
+
+    raise AttributeError(
+        "`decoupler.op.dorothea` is not available in the installed decoupler "
+        f"version ({decoupler_version}). `wrapper='op'` requires "
+        f"{OP_DOROTHEA_DECOUPLER_REQUIREMENT}, or an existing local cache "
+        "file generated with a compatible decoupler version."
+    )
 
 
 def load_dorothea_grn(
@@ -39,9 +69,8 @@ def load_dorothea_grn(
     compatibility with historical analyses or environments.
 
     Retrieved resources are cached locally in an `.cache` directory next to
-    this module. The cache is separated by wrapper, organism and confidence
-    levels, so that results obtained through different decoupler wrappers are
-    never mixed.
+    this module. The complete selected decoupler resource is cached per wrapper
+    and organism, then filtered locally according to `levels`.
 
     Parameters
     ----------
@@ -52,7 +81,11 @@ def load_dorothea_grn(
         DoRothEA confidence levels to retrieve. Valid levels are typically
         `"A"`, `"B"`, `"C"` and `"D"` for `decoupler.op.dorothea`; accepted
         values may differ for `decoupler.get_dorothea` and older decoupler
-        versions. If None, use `["A", "B", "C"]`.
+        versions. If None, use `["A", "B", "C"]`. The cache itself stores the
+        complete selected decoupler resource; `levels` only filters the returned
+        graph. With `wrapper="get"`, confidence levels are not passed to
+        decoupler because the legacy wrapper is not level-parameterized; in
+        practice this resource may contain only confidence level `"A"`.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
     gene_identifier_type: OutputIdentifierType (default: "official_name")
@@ -87,7 +120,14 @@ def load_dorothea_grn(
         If `wrapper` is not `"op"` or `"get"`.
     AttributeError
         If the selected decoupler wrapper is not available in the installed
-        decoupler version.
+        decoupler version. `wrapper="op"` requires decoupler>=2.0.0 when no
+        cache is available, while `wrapper="get"` requires decoupler<2.0.0
+        when no cache is available.
+    Warns
+    -----
+    UserWarning
+        If `wrapper="get"` is used with requested confidence levels other than
+        `"A"`.
     """
 
     if levels is None:
@@ -105,11 +145,19 @@ def load_dorothea_grn(
             f"expected 'op' or 'get' but received {wrapper!r}"
         )
 
+    if wrapper == "get" and any(level != "A" for level in levels):
+        warnings.warn(
+            "`wrapper='get'` uses the legacy `decoupler.get_dorothea` resource, "
+            "which is not downloaded by confidence level and may only contain "
+            "level 'A'; requested levels are applied only as a local filter.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     cache_dir = Path(__file__).resolve().parent / ".cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    levels_key = "".join(levels)
-    cache_file = cache_dir / f"dorothea_{wrapper}_{organism}_{levels_key}.csv"
+    cache_file = cache_dir / f"dorothea_{wrapper}_{organism}_complete.csv"
 
     if cache_file.exists() and not reload:
         dorothea_db = pd.read_csv(cache_file)
@@ -118,21 +166,27 @@ def load_dorothea_grn(
         import decoupler as dc  # type: ignore
 
         if wrapper == "op":
+            if not hasattr(dc, "op") or not hasattr(dc.op, "dorothea"):
+                _raise_missing_dorothea_wrapper(wrapper, dc)
+
             dorothea_db = dc.op.dorothea(
                 organism=organism,
-                levels=levels,
+                levels=["A", "B", "C", "D"],
                 **kwargs,
             )
 
         else:
+            if not hasattr(dc, "get_dorothea"):
+                _raise_missing_dorothea_wrapper(wrapper, dc)
+
             dorothea_db = dc.get_dorothea(
                 organism=organism,
-                levels=levels,
                 **kwargs,
             )
 
         dorothea_db.to_csv(cache_file, index=False)
 
+    dorothea_db = dorothea_db[dorothea_db["confidence"].isin(levels)]
     dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
     dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 

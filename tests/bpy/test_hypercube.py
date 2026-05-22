@@ -132,3 +132,56 @@ def test_read_hypercube_rejects_nested_json(tmp_path):
 
     with pytest.raises(ValueError):
         bt.bpy.ba.read_hypercube(file)
+
+
+def test_read_hypercubes_from_json_converts_null_to_free_value(tmp_path):
+    file = tmp_path / "hypercubes.json"
+
+    with open(file, "w") as fp:
+        json.dump(
+            {
+                "hc1": {"A": 0, "B": None},
+                "hc2": {"A": 1, "B": "*"},
+            },
+            fp,
+        )
+
+    hypercubes = bt.bpy.ba.read_hypercubes(file)
+
+    assert set(hypercubes) == {"hc1", "hc2"}
+    assert hypercubes["hc1"] == {"A": 0, "B": "*"}
+    assert hypercubes["hc2"] == {"A": 1, "B": "*"}
+
+
+def test_read_hypercubes_from_csv_columns_and_rows(tmp_path):
+    file = tmp_path / "hypercubes.csv"
+    file.write_text(
+        ",hc1,hc2\n" "A,0,1\n" "B,,0\n",
+    )
+
+    by_columns = bt.bpy.ba.read_hypercubes(file, axis="columns")
+    by_rows = bt.bpy.ba.read_hypercubes(file, axis="rows")
+
+    assert by_columns["hc1"] == {"A": 0, "B": "*"}
+    assert by_columns["hc2"] == {"A": 1, "B": 0}
+    assert by_rows["A"] == {"hc1": 0, "hc2": 1}
+    assert by_rows["B"] == {"hc1": "*", "hc2": 0}
+
+
+def test_read_hypercubes_from_tsv_and_rejects_invalid_inputs(tmp_path):
+    tsv_file = tmp_path / "hypercubes.tsv"
+    tsv_file.write_text(
+        "\thc1\n" "A\t1\n",
+    )
+
+    hypercubes = bt.bpy.ba.read_hypercubes(tsv_file)
+    assert hypercubes["hc1"] == {"A": 1}
+
+    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
+        bt.bpy.ba.read_hypercubes(tsv_file, axis="diagonal")
+
+    unsupported_file = tmp_path / "hypercubes.txt"
+    unsupported_file.write_text("A=1")
+
+    with pytest.raises(ValueError, match="unsupported input format"):
+        bt.bpy.ba.read_hypercubes(unsupported_file)
