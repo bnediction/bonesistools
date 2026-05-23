@@ -2,8 +2,9 @@
 
 from typing import Any, Union
 
-PartialBooleanValue = Union[bool, int, str]
+import math
 
+PartialBooleanValue = Union[bool, int, str]
 
 class PartialBoolean:
     """
@@ -14,13 +15,23 @@ class PartialBoolean:
         - 1 denotes an active Boolean state,
         - "*" denotes a free, unspecified or unresolved Boolean state.
 
-    No ordering is defined between PartialBoolean values. In particular,
-    expressions such as `PartialBoolean(0) < PartialBoolean(1)` are not
-    supported, because ordering depends on the intended semantics.
+    Two complementary semantics are supported:
 
-    The method `contains` provides the combinatorial interpretation used for
-    hypercubes: "*" contains both Boolean values 0 and 1, while fixed values
-    only contain themselves.
+        - an ensemble/set-theoretic interpretation through `contains`,
+          where "*" represents the Boolean ensemble:
+
+                * = {0, 1}
+
+          while fixed values only contain themselves;
+
+        - a biological ordering interpretation through comparison operators and
+          differential calculus, following the convention:
+
+                0 < * < 1
+
+    These semantics are intentionally distinct. In particular, although "*"
+    contains both 0 and 1 from an ensemble perspective, it is neither equal to
+    0 nor to 1.
 
     Parameters
     ----------
@@ -42,10 +53,220 @@ class PartialBoolean:
 
         self._value = self._coerce_value(value)
 
+    def __repr__(self) -> str:
+
+        return f"PartialBoolean({self._value!r})"
+
+    def __str__(self) -> str:
+        """
+        Return the canonical string representation of the partial Boolean value.
+
+        Returns
+        -------
+        str
+            String representation of 0, 1 or "*".
+        """
+
+        return str(self._value)
+
+    def __bool__(self) -> bool:
+
+        if self.is_free:
+            raise ValueError("cannot convert free PartialBoolean to bool")
+
+        return bool(self._value)
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Test equality with another partial Boolean-like value.
+
+        Parameters
+        ----------
+        other: object
+            PartialBoolean-like value to compare against.
+
+        Returns
+        -------
+        bool or NotImplemented
+            True if both values are equal. Returns NotImplemented when `other`
+            cannot be interpreted as a PartialBoolean value.
+        """
+
+        if not isinstance(other, PartialBoolean):
+
+            try:
+                other = PartialBoolean(other)
+
+            except (TypeError, ValueError):
+                return NotImplemented
+
+        return self._value == other._value
+
+    def __ne__(self, other: object) -> bool:
+
+        result = self.__eq__(other)
+
+        if result is NotImplemented:
+            return NotImplemented
+
+        return not result
+
+    def __hash__(self) -> int:
+
+        return hash(self._value)
+    
+    def __lt__(self, other: "PartialBoolean") -> bool:
+        """
+        Return whether the current partial Boolean value is biologically lower
+        than another one.
+
+        Partial Boolean values follow the biological ordering convention:
+
+            0 < * < 1
+
+        Examples
+        --------
+        >>> PartialBoolean(0) < PartialBoolean("*")
+        True
+
+        >>> PartialBoolean("*") < PartialBoolean(1)
+        True
+
+        >>> PartialBoolean(1) < PartialBoolean(0)
+        False
+
+        Parameters
+        ----------
+        other: PartialBoolean
+            Partial Boolean value used for comparison.
+
+        Returns
+        -------
+        bool
+            Whether the current value is biologically lower than `other`.
+        """
+
+        order = {
+            PartialBoolean(0): 0,
+            PartialBoolean(float("nan")): 1,
+            PartialBoolean(1): 2,
+        }
+
+        return order[self] < order[other]
+
+
+    def __gt__(self, other: "PartialBoolean") -> bool:
+        """
+        Return whether the current partial Boolean value is biologically greater
+        than another one.
+
+        Partial Boolean values follow the biological ordering convention:
+
+            0 < * < 1
+
+        Examples
+        --------
+        >>> PartialBoolean(1) > PartialBoolean("*")
+        True
+
+        >>> PartialBoolean("*") > PartialBoolean(0)
+        True
+
+        >>> PartialBoolean(0) > PartialBoolean(1)
+        False
+
+        Parameters
+        ----------
+        other: PartialBoolean
+            Partial Boolean value used for comparison.
+
+        Returns
+        -------
+        bool
+            Whether the current value is biologically greater than `other`.
+        """
+
+        return other < self
+
+
+    def __le__(self, other: "PartialBoolean") -> bool:
+        """
+        Return whether the current partial Boolean value is biologically lower
+        than or equal to another one.
+
+        Partial Boolean values follow the biological ordering convention:
+
+            0 < * < 1
+
+        Examples
+        --------
+        >>> PartialBoolean(0) <= PartialBoolean("*")
+        True
+
+        >>> PartialBoolean("*") <= PartialBoolean("*")
+        True
+
+        >>> PartialBoolean(1) <= PartialBoolean(0)
+        False
+
+        Parameters
+        ----------
+        other: PartialBoolean
+            Partial Boolean value used for comparison.
+
+        Returns
+        -------
+        bool
+            Whether the current value is biologically lower than or equal to
+            `other`.
+        """
+
+        return self == other or self < other
+
+
+    def __ge__(self, other: "PartialBoolean") -> bool:
+        """
+        Return whether the current partial Boolean value is biologically greater
+        than or equal to another one.
+
+        Partial Boolean values follow the biological ordering convention:
+
+            0 < * < 1
+
+        Examples
+        --------
+        >>> PartialBoolean(1) >= PartialBoolean("*")
+        True
+
+        >>> PartialBoolean("*") >= PartialBoolean("*")
+        True
+
+        >>> PartialBoolean(0) >= PartialBoolean(1)
+        False
+
+        Parameters
+        ----------
+        other: PartialBoolean
+            Partial Boolean value used for comparison.
+
+        Returns
+        -------
+        bool
+            Whether the current value is biologically greater than or equal to
+            `other`.
+        """
+
+        return self == other or self > other
+
     @property
     def value(self) -> Union[int, str]:
         """
         Underlying PartialBoolean value.
+
+        Returns
+        -------
+        int or str
+            Canonical value, either 0, 1 or "*".
         """
 
         return self._value
@@ -103,46 +324,6 @@ class PartialBoolean:
 
         return self.is_free or self == other
 
-    def __repr__(self) -> str:
-
-        return f"PartialBoolean({self._value!r})"
-
-    def __str__(self) -> str:
-
-        return str(self._value)
-
-    def __bool__(self) -> bool:
-
-        if self.is_free:
-            raise ValueError("cannot convert free PartialBoolean to bool")
-
-        return bool(self._value)
-
-    def __eq__(self, other: object) -> bool:
-
-        if not isinstance(other, PartialBoolean):
-
-            try:
-                other = PartialBoolean(other)
-
-            except (TypeError, ValueError):
-                return NotImplemented
-
-        return self._value == other._value
-
-    def __ne__(self, other: object) -> bool:
-
-        result = self.__eq__(other)
-
-        if result is NotImplemented:
-            return NotImplemented
-
-        return not result
-
-    def __hash__(self) -> int:
-
-        return hash(self._value)
-
     @staticmethod
     def _coerce_value(value: Any) -> Union[int, str]:
         """
@@ -166,11 +347,14 @@ class PartialBoolean:
 
         if isinstance(value, bool):
             return int(value)
+        
+        if isinstance(value, float) and math.isnan(value):
+            return "*"
 
         if value in [0, 1, "*"]:
             return value
 
         raise ValueError(
             "invalid argument value for 'value': "
-            f"expected 0, 1, False, True or '*' but received {value!r}"
+            f"expected 0, 1, NaN, False, True or '*' but received {value!r}"
         )

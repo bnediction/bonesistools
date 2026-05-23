@@ -28,24 +28,32 @@ def convert_gene_identifiers(
     """
     Convert gene identifiers stored in `scdata.obs` or `scdata.var`.
 
+    Gene identifiers are converted through the bundled NCBI GeneSynonyms
+    resource. By default, variable names are interpreted as gene names and
+    converted to official gene symbols.
+
     Parameters
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-        The stored gene identifiers are converted into the desired identifier format.
+        The stored gene identifiers are converted into the requested identifier
+        type.
     axis: {0, 1, "obs", "var"} (default: "var")
         If 0 or `"obs"`, convert `scdata.obs.index`. If 1 or `"var"`,
         convert `scdata.var.index`.
     input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-        Gene identifier input format.
+        Input gene identifier type. Valid database-specific values are listed
+        in `databases`.
     output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-        Gene identifier output format.
+        Output gene identifier type. Valid database-specific values are listed
+        in `databases`.
     copy: bool (default: False)
-        Return a copy instead of updating `scdata`.
+        Return a copy instead of modifying `scdata`.
 
     Returns
     -------
-    Depending on 'copy', update 'scdata' or return ScData object.
+    AnnData, MuData or None
+        Converted object if `copy=True`; otherwise None.
 
     Raises
     ------
@@ -88,6 +96,10 @@ def standardize_gene_identifiers(
     """
     Standardize gene names by converting them to official names.
 
+    This is a convenience wrapper around `convert_gene_identifiers` with
+    `input_identifier_type="name"` and
+    `output_identifier_type="official_name"`.
+
     Parameters
     ----------
     scdata: AnnData or MuData
@@ -97,11 +109,12 @@ def standardize_gene_identifiers(
         If 0 or `"obs"`, standardize `scdata.obs.index`. If 1 or `"var"`,
         standardize `scdata.var.index`.
     copy: bool (default: False)
-        Return a copy instead of updating `scdata`.
+        Return a copy instead of modifying `scdata`.
 
     Returns
     -------
-    Depending on 'copy', update 'scdata' or return ScData object.
+    AnnData, MuData or None
+        Standardized object if `copy=True`; otherwise None.
     """
 
     return convert_gene_identifiers(
@@ -120,17 +133,23 @@ def var_names_merge_duplicates(
     """
     Merge duplicated variable names by summing counts across duplicate genes.
 
+    The returned AnnData object contains one variable per variable name. Counts
+    from duplicated variables are summed across columns. If `var_names_column`
+    is provided, that column is used to choose which metadata row is kept for
+    each duplicated variable.
+
     Parameters
     ----------
     adata: AnnData
-        Unimodal annotated data matrix where duplicated variable names are merged.
+        Unimodal annotated data matrix containing duplicated variable names.
     var_names_column: str, optional
         Column used to prioritize which `adata.var` row is kept when duplicate
         variable names are merged.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData
+        AnnData object with duplicated variable names merged.
     """
 
     if var_names_column is None:

@@ -87,19 +87,19 @@ Shortest_Path_Method = Literal["dijkstra", "bellman-ford"]
 
 def type_checker(function: Optional[Callable] = None, **options):
     """
-    Check if the argument types passed to 'function' are correct.
+    Decorate a function with runtime argument type checks.
 
     Parameters
     ----------
-    function: Callable
-        function for which argument types are checked.
-    **options
-        key-value data-structure where 'key' is the argument name
-        and 'value' is the expected argument type.
+    function: Callable, optional
+        Function to decorate. If None, return a decorator.
+    **options: type
+        Mapping from argument names to expected runtime types.
 
     Returns
     -------
-    Raise an error if at least one argument type is not correct.
+    Callable
+        Decorated function, or decorator if `function` is None.
 
     Raises
     ------
@@ -155,18 +155,19 @@ def type_checker(function: Optional[Callable] = None, **options):
 
 def anndata_checker(function: Optional[Callable] = None, n: int = 1):
     """
-    Check if the first arguments are AnnData instances.
+    Decorate a function by checking that the first arguments are AnnData objects.
 
     Parameters
     ----------
-    function: Callable
-        Function for which the first argument types are expected being AnnData instances.
+    function: Callable, optional
+        Function to decorate. If None, return a decorator.
     n: int (default: 1)
         Number of arguments to test.
 
     Returns
     -------
-    Raise an error if at least one of the first 'n' arguments is not a AnnData instance.
+    Callable
+        Decorated function, or decorator if `function` is None.
 
     Raises
     ------
@@ -202,18 +203,24 @@ if _mudata_is_available:
 
     def mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
-        Check if the first arguments are MuData instances.
+        Decorate a function by checking that the first arguments are MuData objects.
 
         Parameters
         ----------
-        function: Callable
-            Function for which the first argument types are expected being MuData instances.
+        function: Callable, optional
+            Function to decorate. If None, return a decorator.
         n: int (default: 1)
             Number of arguments to test.
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not a MuData instance.
+        Callable
+            Decorated function, or decorator if `function` is None.
+
+        Raises
+        ------
+        TypeError
+            If one of the first `n` arguments is not a MuData object.
         """
 
         if function is not None:
@@ -241,18 +248,25 @@ if _mudata_is_available:
 
     def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
-        Check if the first arguments are AnnData or MuData instances.
+        Decorate a function by checking that the first arguments are AnnData or MuData objects.
 
         Parameters
         ----------
-        function: Callable
-            Function for which the first argument types are expected being AnnData or MuData instances.
+        function: Callable, optional
+            Function to decorate. If None, return a decorator.
         n: int (default: 1)
             Number of arguments to test.
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
+        Callable
+            Decorated function, or decorator if `function` is None.
+
+        Raises
+        ------
+        TypeError
+            If one of the first `n` arguments is neither an AnnData nor a
+            MuData object.
         """
 
         if function is not None:
@@ -282,18 +296,24 @@ else:
 
     def mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
-        Check if the first arguments are MuData instances.
+        Decorate a function by checking that the first arguments are MuData objects.
 
         Parameters
         ----------
-        function: Callable
-            Function for which the first argument types are expected being MuData instances.
+        function: Callable, optional
+            Function to decorate. If None, return a decorator.
         n: int (default: 1)
             Number of arguments to test.
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not a MuData instance.
+        Callable
+            Decorated function, or decorator if `function` is None.
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If the decorated function is called while mudata is not installed.
         """
 
         if function is not None:
@@ -314,18 +334,24 @@ else:
 
     def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
         """
-        Check if the first arguments are AnnData or MuData instances.
+        Decorate a function by checking that the first arguments are AnnData or MuData objects.
 
         Parameters
         ----------
-        function: Callable
-            Function for which the first argument types are expected being AnnData or MuData instances.
+        function: Callable, optional
+            Function to decorate. If None, return a decorator.
         n: int (default: 1)
             Number of arguments to test.
 
         Returns
         -------
-        Raise an error if at least one of the first 'n' arguments is not a AnnData or MuData instance.
+        Callable
+            Decorated function, or decorator if `function` is None.
+
+        Raises
+        ------
+        TypeError
+            If one of the first `n` arguments is not an AnnData object.
         """
 
         if function is not None:

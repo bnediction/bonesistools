@@ -70,8 +70,8 @@ def kneighbors_graph(
         Whether graph nodes use integer positions or observation names.
     n_jobs: int (default: 1)
         Number of allocated processors.
-    **metric_kwds
-        Any further parameters passed to the distance function.
+    **metric_kwds: Any
+        Additional keyword arguments passed to the distance function.
 
     Returns
     -------
@@ -134,15 +134,15 @@ class Knnbs(object):
     Parameters
     ----------
     n_neighbors: int
-        Number of closest neighbors.
+        Number of nearest neighbors.
     use_rep: str (default: "X_pca")
-        Representation key in `.obsm`.
+        Representation key in `scdata.obsm`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
-    **metric_kwds
-        Any further parameters passed to the distance function.
+    **metric_kwds: Any
+        Additional keyword arguments passed to the distance function.
 
     Raises
     ------
@@ -226,10 +226,36 @@ class Knnbs(object):
         self.metric_kwds = metric_kwds
 
     def __repr__(self) -> str:
+        """
+        Return a compact representation of the estimator parameters.
+
+        Returns
+        -------
+        str
+            String representation of the Knnbs configuration.
+        """
 
         return f"{self.__class__.__name__}(n_neighbors={self.n_neighbors},use_rep={self.use_rep},n_components={self.n_components},metric={self.metric},metric_kwds={self.metric_kwds})"
 
     def get(self, attribute: str) -> Any:
+        """
+        Return an attribute by name.
+
+        Parameters
+        ----------
+        attribute: str
+            Attribute name.
+
+        Returns
+        -------
+        Any
+            Attribute value.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist.
+        """
 
         if hasattr(self, attribute):
             return getattr(self, attribute)
@@ -250,14 +276,14 @@ class Knnbs(object):
         adata: AnnData
             Unimodal annotated data matrix.
         obs: str
-            Column name in 'adata.obs' used as reference for clusters.
+            Observation column in `adata.obs` defining clusters.
         n_jobs: int (default: 1)
             Number of allocated processors.
 
-        Returns
-        -------
-        Update Knnbs object.
-        Add attribute 'shortest_path_lengths_df' to Knnbs instance.
+        Notes
+        -----
+        The method updates the Knnbs object in place and adds the
+        `shortest_path_lengths_df` attribute.
         """
 
         from sklearn.metrics import pairwise_distances
@@ -327,10 +353,10 @@ class Knnbs(object):
         n_jobs: int (default: 1)
             Number of allocated processors.
 
-        Returns
-        -------
-        Update Knnbs object.
-        Add attribute 'shortest_path_lengths_df' to Knnbs instance.
+        Notes
+        -----
+        The method updates the Knnbs object in place and adds the
+        `shortest_path_lengths_df` attribute.
         """
 
         def shortest_path_lengths_from(
@@ -398,13 +424,14 @@ class Knnbs(object):
         clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
         """
-        Find cluster related-cell manifolds maximizing distances to other clusters' barycenters.
+        Find cells farthest from other clusters' barycenters.
 
         Parameters
         ----------
         size: int (default: 30)
             Number of cells in each macrostate.
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+            If `size` is greater than the cluster size, the corresponding
+            subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
         clusters: Sequence[str] (optional, default: None)
@@ -412,8 +439,8 @@ class Knnbs(object):
 
         Returns
         -------
-        Return Series object.
-        Series stores furthest cells to other barycenters.
+        pd.Series
+            Subcluster labels for cells farthest from other barycenters.
         """
 
         if clusters is None:
@@ -461,13 +488,14 @@ class Knnbs(object):
         clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
         """
-        Find cluster related-cell manifolds minimizing distances to self barycenter.
+        Find cells closest to their own cluster barycenter.
 
         Parameters
         ----------
         size: int (default: 30)
             Number of cells in each macrostate.
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+            If `size` is greater than the cluster size, the corresponding
+            subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
         clusters: Sequence[str] (optional, default: None)
@@ -475,8 +503,8 @@ class Knnbs(object):
 
         Returns
         -------
-        Return Series object.
-        Series stores closest cells to self barycenter.
+        pd.Series
+            Subcluster labels for cells closest to their own barycenter.
         """
 
         if clusters is None:
@@ -520,9 +548,10 @@ class Knnbs(object):
 
         Parameters
         ----------
-        size
+        size: int (default: 30)
             Number of cells in each macrostate.
-            If 'size' is superior to cluster size, cluster related-cell manifolds are equal to its cluster.
+            If `size` is greater than the cluster size, the corresponding
+            subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
         subclusters_maximizing_distances: Sequence[str] (optional, default: None)
@@ -530,12 +559,13 @@ class Knnbs(object):
             by maximizing distances to other clusters' barycenters.
         subclusters_minimizing_distances: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
-            by minimizing distances to self barycenter .
+            by minimizing distances to their own barycenter.
 
         Returns
         -------
-        Return Series object.
-        Series stores subclusters derived from k-nearest neighbors-based subclusters algorithm.
+        pd.Series
+            Subcluster labels derived from the k-nearest-neighbor-based
+            subcluster algorithm.
 
         Raises
         ------
@@ -662,7 +692,7 @@ def shared_neighbors(
         whose number of shared neighbors is less than or equal to the threshold.
         Value can be relative (float between 0 and 1) or absolute (integer between 1 and k).
     metric: Metric (default: 'euclidean')
-        Metric used to compute distances in `scdata.obsm`.
+        Metric used when calculating pairwise distances between observations.
     normalize_connectivities: bool (default: True)
         If False, connectivities store the absolute number of shared neighbors.
         Otherwise, connectivities are normalized.
@@ -671,12 +701,13 @@ def shared_neighbors(
     connectivities_key: str (optional, default: None)
         Key used to store connectivities in `scdata.obsp`.
     copy: bool (default: False)
-        Return a copy instead of writing to scdata.
+        Return a copy instead of modifying `scdata`.
 
     Returns
     -------
     ScData or None
-        Depending on `copy`, update `scdata` in place or return a copy.
+        Copy of `scdata` with shared-neighbor results if `copy=True`;
+        otherwise None after updating `scdata` in place.
 
     The resulting object stores metadata in `scdata.uns[snn_key]` and matrices
     in `scdata.obsp[distances_key]` and `scdata.obsp[connectivities_key]`.

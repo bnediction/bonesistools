@@ -16,22 +16,27 @@ def filter_obs(
     adata: AnnData, obs: str, function: Callable, copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Filter observations based on a column in 'adata.obs'.
+    Filter observations based on a column in `adata.obs`.
+
+    Observations are kept when `function(adata.obs[obs].values)` evaluates to
+    True for the corresponding row.
 
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
     obs: str
-        Column name in 'adata.obs' used for filtering.
+        Column name in `adata.obs` used for filtering.
     function: Callable
-        Function to apply to the observation used for filtering.
+        Function applied to `adata.obs[obs].values`. It must return a Boolean
+        mask compatible with observations.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Filtered AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------
@@ -69,22 +74,27 @@ def filter_var(
     adata: AnnData, var: str, function: Callable, copy: bool = False
 ) -> Union[AnnData, None]:
     """
-    Filter variables based on a column in 'adata.var'.
+    Filter variables based on a column in `adata.var`.
+
+    Variables are kept when `function(adata.var[var].values)` evaluates to
+    True for the corresponding column.
 
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
     var: str
-        Column name in 'adata.var' used for filtering.
+        Column name in `adata.var` used for filtering.
     function: Callable
-        Function to apply to the variable used for filtering.
+        Function applied to `adata.var[var].values`. It must return a Boolean
+        mask compatible with variables.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Filtered AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------
@@ -126,7 +136,11 @@ def merge(
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
-    Merge dataframes from 'adata.obs' or 'adata.var' with an index-based join.
+    Merge annotation tables from two AnnData objects with an index-based join.
+
+    The left AnnData object receives columns from the right AnnData object.
+    Observation annotations are merged when `axis=0` or `"obs"`; variable
+    annotations are merged when `axis=1` or `"var"`.
 
     Parameters
     ----------
@@ -140,13 +154,15 @@ def merge(
         If 0 or `"obs"`, merge `.obs`. If 1 or `"var"`, merge `.var`.
     suffixes: Tuple[str, str] (default: ('_x','_y'))
         Length-2 sequence where each element is a string indicating the suffix
-        to add to overlapping column names in 'left_ad' and 'right_ad' respectively.
+        to add to overlapping column names in `left_ad` and `right_ad`,
+        respectively.
     copy: bool (default: False)
-        Return a copy instead of updating 'left_ad' object.
+        Return a copy instead of modifying `left_ad`.
 
     Returns
     -------
-    Depending on 'copy', update 'left_ad' or return AnnData object.
+    AnnData or None
+        Merged AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------

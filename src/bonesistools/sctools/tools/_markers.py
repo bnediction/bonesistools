@@ -64,7 +64,7 @@ def calculate_logfoldchanges(
     DataFrame
         Table with `group`, `names` and `<column_name>` columns.
 
-    See also
+    See Also
     --------
     Get more information about the difference between log2 fold-changes derived with Seurat and Scanpy here:
     <https://www.biostars.org/p/453129/>
@@ -219,23 +219,19 @@ def smirnov_tests(
     key_added: str, optional
         Key in `adata.uns` where information is saved.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
     AnnData or None
-        Depending on `copy`, update `adata` in place or return a copy. Results
-        are stored in `adata.uns[key_added]` with the following values:
-    - **group**: group names.
-    - **names**: gene names or gene ids.
-    - **statistics**: Kolmogorov-Smirnov test statistic.
-    - **locations**: value from empirical cumulative distribution functions corresponding
-        with the KS test statistic.
-    - **signs**: +1 if the empirical distribution function of the subsample
-        exceeds the empirical distribution function of the reference sample
-        at 'location', otherwise -1.
-    - **pvals**: two-tailed p-value.
-    - **pvals_adj**: two-tailed p-value corrected by benjamini-hochberg or bonferroni.
+        Copy of `adata` with results if `copy=True`; otherwise None after
+        modifying `adata`.
+
+    Notes
+    -----
+    Results are stored in `adata.uns[key_added]` with the following values:
+    `group`, `names`, `statistics`, `locations`, `signs`, `pvals` and
+    `pvals_adj`.
 
     Raises
     ------

@@ -373,7 +373,7 @@ def test_boolean_network_influences():
     }
 
 
-def test_boolean_network_to_networkx():
+def test_boolean_network_to_influence_graph():
 
     bn = bt.bpy.bn.BooleanNetwork(
         {
@@ -383,8 +383,9 @@ def test_boolean_network_to_networkx():
         }
     )
 
-    graph = bn.to_networkx()
+    graph = bn.to_influence_graph()
 
+    assert isinstance(graph, bt.bpy.ig.InfluenceGraph)
     assert set(graph.nodes) == {"A", "B", "C"}
     assert graph.has_edge("B", "A")
     assert graph.has_edge("C", "A")

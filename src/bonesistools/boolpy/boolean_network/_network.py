@@ -49,7 +49,10 @@ class BooleanNetwork(dict):
     Dictionary-like representation of a Boolean network.
 
     A Boolean network maps each component to a Boolean rule represented
-    as a `boolean.py` expression.
+    as a `boolean.py` expression. Input rules may be provided as strings,
+    Boolean constants, integer constants, or existing `boolean.py`
+    expressions. They are coerced to internal Boolean algebra expressions on
+    assignment.
 
     Examples
     --------
@@ -61,9 +64,26 @@ class BooleanNetwork(dict):
     ...     }
     ... )
     >>> print(bn)
-    A <- B & !C
+    A <- B & ~C
     B <- 1
     C <- 0
+
+    Rules are stored internally as Boolean algebra expressions, while the
+    `rules` property exposes readable strings:
+
+    >>> bn.rules
+    {'A': 'B & ~C', 'B': '1', 'C': '0'}
+
+    Parameters
+    ----------
+    rules: Mapping[str, Any] (optional, default: None)
+        Mapping associating component names to Boolean rules.
+    ba: BooleanAlgebra (optional, default: None)
+        Boolean algebra used to parse and store Boolean expressions. If None,
+        a new BooleanAlgebra instance is created.
+    check: bool (default: True)
+        If True, validate that all symbols referenced by rules are defined as
+        network components.
 
     Raises
     ------
@@ -83,15 +103,35 @@ class BooleanNetwork(dict):
         """
         Initialize a Boolean network.
 
+        Examples
+        --------
+        >>> BooleanNetwork({"A": "B", "B": 1}).rules
+        {'A': 'B', 'B': '1'}
+
+        Set `check=False` to allow external or temporarily undefined
+        regulators:
+
+        >>> bn = BooleanNetwork({"A": "B"}, check=False)
+        >>> sorted(bn.undefined_symbols)
+        ['B']
+
         Parameters
         ----------
-        rules:
-            Mapping associating components to Boolean rules.
-        ba:
-            Boolean algebra used to parse Boolean expressions.
-        check:
-            Whether to validate that all symbols referenced by Boolean
-            rules are defined as network components.
+        rules: Mapping[str, Any] (optional, default: None)
+            Mapping associating component names to Boolean rules.
+        ba: BooleanAlgebra (optional, default: None)
+            Boolean algebra used to parse and store Boolean expressions. If
+            None, a new BooleanAlgebra instance is created.
+        check: bool (default: True)
+            If True, validate that all symbols referenced by rules are defined
+            as network components.
+
+        Raises
+        ------
+        TypeError
+            If a component is not a string or a rule has an unsupported type.
+        ValueError
+            If `check=True` and a rule references an undefined component.
         """
 
         self.ba = BooleanAlgebra() if ba is None else ba
@@ -110,6 +150,25 @@ class BooleanNetwork(dict):
 
         Components must be strings. Rules are coerced into `boolean.py`
         expressions using `_coerce_rule`.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": 1})
+        >>> bn["B"] = "A"
+        >>> bn.rules
+        {'A': '1', 'B': 'A'}
+
+        Parameters
+        ----------
+        component: str
+            Component name.
+        rule: Any
+            Boolean rule to associate with `component`.
+
+        Raises
+        ------
+        TypeError
+            If `component` is not a string or `rule` has an unsupported type.
         """
 
         if not isinstance(component, str):
@@ -123,6 +182,19 @@ class BooleanNetwork(dict):
     def __str__(self) -> str:
         """
         Return a readable rule-based representation of the Boolean network.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> print(bn)
+        A <- B & ~C
+        B <- 0
+        C <- 1
+
+        Returns
+        -------
+        str
+            Multiline string representation of network rules.
         """
 
         return "\n".join(
@@ -138,6 +210,20 @@ class BooleanNetwork(dict):
         The copied network keeps the same Boolean algebra instance and preserves
         the current rule expressions without re-validating closure. This mirrors
         dictionary copy semantics while preserving the BooleanNetwork type.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B"}, check=False)
+        >>> copied = bn.copy()
+        >>> copied.rules
+        {'A': 'B'}
+        >>> copied is bn
+        False
+
+        Returns
+        -------
+        BooleanNetwork
+            Shallow copy of the Boolean network.
         """
 
         return type(self)(self, ba=self.ba, check=False)
@@ -153,6 +239,24 @@ class BooleanNetwork(dict):
         This does not test logical equivalence. For example, `x` and
         `x | (y & ~y)` may be logically equivalent but not structurally equal.
         Use `equivalent()` for simplified logical comparison.
+
+        Examples
+        --------
+        >>> bn1 = BooleanNetwork({"A": "B | C", "B": 0, "C": 1})
+        >>> bn2 = BooleanNetwork({"A": "C | B", "B": 0, "C": 1})
+        >>> bn1 == bn2
+        True
+
+        Parameters
+        ----------
+        other: object
+            Boolean-network-like object to compare against.
+
+        Returns
+        -------
+        bool or NotImplemented
+            True if both networks have the same components and structurally
+            equal rules. Returns NotImplemented for unsupported objects.
         """
 
         if not is_boolean_network_like(other):
@@ -175,6 +279,16 @@ class BooleanNetwork(dict):
     def components(self) -> Set[str]:
         """
         Return the set of components defined by the Boolean network.
+
+        Examples
+        --------
+        >>> sorted(BooleanNetwork({"A": "B", "B": 1}).components)
+        ['A', 'B']
+
+        Returns
+        -------
+        Set[str]
+            Component names defined by the network.
         """
 
         return set(self.keys())
@@ -183,6 +297,16 @@ class BooleanNetwork(dict):
     def symbols(self) -> Set[str]:
         """
         Return the set of symbols referenced by Boolean rules.
+
+        Examples
+        --------
+        >>> sorted(BooleanNetwork({"A": "B & ~C"}, check=False).symbols)
+        ['B', 'C']
+
+        Returns
+        -------
+        Set[str]
+            Symbols referenced by all Boolean rules.
         """
 
         return {str(symbol) for rule in self.values() for symbol in rule.symbols}
@@ -191,6 +315,16 @@ class BooleanNetwork(dict):
     def undefined_symbols(self) -> Set[str]:
         """
         Return symbols referenced by rules but not defined as components.
+
+        Examples
+        --------
+        >>> sorted(BooleanNetwork({"A": "B"}, check=False).undefined_symbols)
+        ['B']
+
+        Returns
+        -------
+        Set[str]
+            Referenced symbols that are not network components.
         """
 
         return self.symbols - self.components
@@ -198,7 +332,19 @@ class BooleanNetwork(dict):
     @property
     def is_closed(self) -> bool:
         """
-        Whether all symbols referenced by rules are defined as components.
+        Test whether all symbols referenced by rules are defined as components.
+
+        Examples
+        --------
+        >>> BooleanNetwork({"A": "B", "B": 1}).is_closed
+        True
+        >>> BooleanNetwork({"A": "B"}, check=False).is_closed
+        False
+
+        Returns
+        -------
+        bool
+            True if the network has no undefined symbols.
         """
 
         return self.symbols <= self.components
@@ -207,6 +353,16 @@ class BooleanNetwork(dict):
     def rules(self) -> Dict[str, str]:
         """
         Return readable string representations of Boolean rules.
+
+        Examples
+        --------
+        >>> BooleanNetwork({"A": "B & !C", "B": 0, "C": 1}).rules
+        {'A': 'B & ~C', 'B': '0', 'C': '1'}
+
+        Returns
+        -------
+        Dict[str, str]
+            Mapping from components to readable Boolean rule strings.
         """
 
         return {component: rule_to_string(rule) for component, rule in self.items()}
@@ -218,6 +374,30 @@ class BooleanNetwork(dict):
         ba: Optional[BooleanAlgebra] = None,
         check: bool = True,
     ) -> "BooleanNetwork":
+        """
+        Read a Boolean network from a `.bnet` file.
+
+        Examples
+        --------
+        >>> # bn = BooleanNetwork.from_bnet("network.bnet")
+
+        Parameters
+        ----------
+        file: str or Path
+            Path to the `.bnet` file.
+        ba: BooleanAlgebra (optional, default: None)
+            Boolean algebra used to parse and store Boolean expressions. If
+            None, a new BooleanAlgebra instance is created.
+        check: bool (default: True)
+            If True, validate that all symbols referenced by rules are defined
+            as network components.
+
+        Returns
+        -------
+        BooleanNetwork
+            Parsed Boolean network.
+        """
+
         from ._parser import read_bnet
 
         return read_bnet(file, ba=ba, check=check)
@@ -225,6 +405,17 @@ class BooleanNetwork(dict):
     def validate(self) -> None:
         """
         Validate the Boolean network structure.
+
+        A valid closed Boolean network only references symbols that are also
+        defined as components.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B"}, check=False)
+        >>> bn.validate()
+        Traceback (most recent call last):
+        ...
+        ValueError: Boolean network rules reference undefined components: ['B']
 
         Raises
         ------
@@ -241,6 +432,26 @@ class BooleanNetwork(dict):
     def rule(self, component: str) -> str:
         """
         Return a readable string representation of a Boolean rule.
+
+        Examples
+        --------
+        >>> BooleanNetwork({"A": "B & !C", "B": 0, "C": 1}).rule("A")
+        'B & ~C'
+
+        Parameters
+        ----------
+        component: str
+            Component whose rule should be returned.
+
+        Returns
+        -------
+        str
+            Readable Boolean rule associated with `component`.
+
+        Raises
+        ------
+        KeyError
+            If `component` is not defined in the network.
         """
 
         return rule_to_string(self[component])
@@ -336,11 +547,20 @@ class BooleanNetwork(dict):
         Two Boolean networks are equivalent when they have the same components
         and each component has an equivalent Boolean rule.
 
+        Examples
+        --------
+        >>> bn1 = BooleanNetwork({"A": "(B & C) | (~B & D) | (C & D)", "B": 0, "C": 1, "D": 0})
+        >>> bn2 = BooleanNetwork({"A": "(B & C) | (~B & D)", "B": 0, "C": 1, "D": 0})
+        >>> bn1.equivalent(bn2, method="simplify")
+        False
+        >>> bn1.equivalent(bn2, method="truth_table")
+        True
+
         Parameters
         ----------
-        other:
+        other: object
             Boolean-network-like object to compare with.
-        method:
+        method: {"simplify", "truth_table"} (default: "simplify")
             Equivalence strategy used to compare component rules.
 
             - `"simplify"` compares rules after `boolean.py` simplification.
@@ -352,9 +572,14 @@ class BooleanNetwork(dict):
 
         Returns
         -------
-        bool
+        bool or NotImplemented
             Whether both Boolean networks are equivalent according to the
-            selected method.
+            selected method. Returns NotImplemented for unsupported objects.
+
+        Raises
+        ------
+        ValueError
+            If `method` is not `"simplify"` or `"truth_table"`.
         """
 
         if not is_boolean_network_like(other):
@@ -383,6 +608,17 @@ class BooleanNetwork(dict):
 
         Each influence is represented as `(source, target, sign)`, where
         `sign` is `1` for positive literals and `-1` for negative literals.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> sorted(bn.influences())
+        [('B', 'A', 1), ('C', 'A', -1)]
+
+        Returns
+        -------
+        Set[Tuple[str, str, int]]
+            Signed regulator-target influences induced by network rules.
         """
 
         influences = set()
@@ -400,15 +636,29 @@ class BooleanNetwork(dict):
 
         return influences
 
-    def to_networkx(self) -> nx.MultiDiGraph:
+    def to_influence_graph(self) -> InfluenceGraph:
         """
-        Convert the Boolean network into a signed NetworkX influence graph.
+        Convert the Boolean network into a signed influence graph.
 
         Nodes correspond to Boolean network components. Edges correspond to
         signed regulatory influences extracted from Boolean rules.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> graph = bn.to_influence_graph()
+        >>> sorted(graph.nodes)
+        ['A', 'B', 'C']
+        >>> graph["B"]["A"][0]["sign"]
+        1
+
+        Returns
+        -------
+        InfluenceGraph
+            Signed influence graph induced by the Boolean network.
         """
 
-        graph = nx.MultiDiGraph()
+        graph = InfluenceGraph()
 
         for component in self.components:
             graph.add_node(component)
@@ -433,8 +683,10 @@ class BooleanNetwork(dict):
 
         Examples
         --------
-        >>> dot = ig.to_pydot(rankdir="LR")
-        >>> dot.write_pdf("graph.pdf")
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> dot = bn.to_pydot(rankdir="LR")
+        >>> dot.get_rankdir()
+        'LR'
 
         Parameters
         ----------
@@ -454,13 +706,34 @@ class BooleanNetwork(dict):
             Styled pydot influence graph.
         """
 
-        return InfluenceGraph(self.to_networkx()).to_pydot(
+        return self.to_influence_graph().to_pydot(
             program=program, edge_style=edge_style, **kwargs
         )
 
     def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
         """
         Export the Boolean network in .bnet format.
+
+        The `.bnet` format stores one rule per line as `component, rule`.
+        Negations are exported with `!`, while Boolean constants are exported as
+        `0` and `1`.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> bn.to_bnet()
+        'A, B&!C\\nB, 0\\nC, 1\\n'
+
+        Parameters
+        ----------
+        file: str or Path (optional, default: None)
+            Output file path. If None, return the `.bnet` content as a string.
+
+        Returns
+        -------
+        str or None
+            `.bnet` content if `file` is None. Otherwise, write the file and
+            return None.
         """
 
         lines = []
@@ -498,6 +771,27 @@ class BooleanNetwork(dict):
         All rules are converted to `boolean.py` expressions. In particular,
         Boolean constants are mapped to `BooleanAlgebra.TRUE` and
         `BooleanAlgebra.FALSE` rather than Python booleans.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": 1})
+        >>> bn._coerce_rule("A")
+        Symbol('A')
+
+        Parameters
+        ----------
+        rule: Any
+            Boolean rule to coerce.
+
+        Returns
+        -------
+        Expression
+            Boolean algebra expression representing `rule`.
+
+        Raises
+        ------
+        TypeError
+            If `rule` has an unsupported type.
         """
         if isinstance(rule, Expression):
             return self.ba.parse(rule_to_string(rule))
@@ -531,6 +825,19 @@ class BooleanNetworkEnsemble(MutableSequence):
 
     A Boolean network ensemble stores Boolean-network-like objects while
     enforcing that all networks are defined over the same component set.
+
+    Examples
+    --------
+    >>> ensemble = BooleanNetworkEnsemble(
+    ...     bns=[
+    ...         {"A": "B", "B": 1},
+    ...         {"A": 0, "B": "A"},
+    ...     ]
+    ... )
+    >>> len(ensemble)
+    2
+    >>> sorted(ensemble.components)
+    ['A', 'B']
 
     Parameters
     ----------
@@ -604,6 +911,16 @@ class BooleanNetworkEnsemble(MutableSequence):
     def __len__(self) -> int:
         """
         Return the number of Boolean networks in the ensemble.
+
+        Examples
+        --------
+        >>> len(BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}]))
+        2
+
+        Returns
+        -------
+        int
+            Number of Boolean networks stored in the ensemble.
         """
 
         return len(self._networks)
@@ -611,6 +928,12 @@ class BooleanNetworkEnsemble(MutableSequence):
     def __getitem__(self, index):
         """
         Return one or more Boolean networks from the ensemble.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> ensemble[0].rules
+        {'A': '1'}
 
         Parameters
         ----------
@@ -628,6 +951,13 @@ class BooleanNetworkEnsemble(MutableSequence):
     def __setitem__(self, index, value) -> None:
         """
         Replace one or more Boolean networks in the ensemble.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> ensemble[0] = {"A": "0"}
+        >>> ensemble[0].rules
+        {'A': '0'}
 
         Parameters
         ----------
@@ -656,6 +986,13 @@ class BooleanNetworkEnsemble(MutableSequence):
         """
         Delete one or more Boolean networks from the ensemble.
 
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> del ensemble[0]
+        >>> len(ensemble)
+        1
+
         Parameters
         ----------
         index: int or slice
@@ -667,6 +1004,13 @@ class BooleanNetworkEnsemble(MutableSequence):
     def insert(self, index: int, value: BooleanNetworkLike) -> None:
         """
         Insert a Boolean network into the ensemble.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(components=["A"])
+        >>> ensemble.insert(0, {"A": 1})
+        >>> ensemble[0].rules
+        {'A': '1'}
 
         Parameters
         ----------
@@ -690,6 +1034,17 @@ class BooleanNetworkEnsemble(MutableSequence):
     def components(self) -> FrozenSet[str]:
         """
         Return the set of components shared by all Boolean networks.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1, "B": 0}])
+        >>> sorted(ensemble.components)
+        ['A', 'B']
+
+        Returns
+        -------
+        FrozenSet[str]
+            Components expected in every Boolean network of the ensemble.
         """
 
         return frozenset(self._components)
@@ -698,6 +1053,11 @@ class BooleanNetworkEnsemble(MutableSequence):
     def ba(self) -> BooleanAlgebra:
         """
         Boolean algebra shared by all Boolean networks in the ensemble.
+
+        Returns
+        -------
+        BooleanAlgebra
+            Boolean algebra used to parse and store network rules.
         """
 
         return self.__ba
@@ -705,6 +1065,17 @@ class BooleanNetworkEnsemble(MutableSequence):
     def rule_structures(self) -> Dict[str, List]:
         """
         Return Boolean rules encoded as DNF-like structures.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[
+        ...         {"A": "B", "B": 1, "C": 0},
+        ...         {"A": "B & C", "B": 1, "C": 0},
+        ...     ]
+        ... )
+        >>> sorted(ensemble.rule_structures())
+        ['A', 'B', 'C']
 
         Returns
         -------
@@ -735,6 +1106,26 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         Each signed regulator is counted at most once per Boolean network,
         regardless of how many times it appears in the rule structure.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[
+        ...         {"A": "B", "B": 1, "C": 0},
+        ...         {"A": "B & ~C", "B": 1, "C": 0},
+        ...     ]
+        ... )
+        >>> ensemble.regulator_counts()["A"]["B"][True]
+        2
+        >>> ensemble.regulator_counts()["A"]["C"][False]
+        1
+
+        Returns
+        -------
+        Dict
+            Nested dictionary of the form target -> regulator -> sign -> count,
+            where sign is True for positive regulation and False for negative
+            regulation.
         """
 
         counts = {component: {} for component in self._components}
@@ -768,6 +1159,17 @@ class BooleanNetworkEnsemble(MutableSequence):
         """
         Count signed regulator-target influences across the ensemble.
 
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[
+        ...         {"A": "B", "B": 1, "C": 0},
+        ...         {"A": "B & ~C", "B": 1, "C": 0},
+        ...     ]
+        ... )
+        >>> ensemble.influence_counts()["B"]["A"][True]
+        2
+
         Returns
         -------
         Dict
@@ -797,6 +1199,17 @@ class BooleanNetworkEnsemble(MutableSequence):
         and the stability of the most frequent rule structure. Edges correspond to
         signed influences aggregated across the ensemble and store their occurrence
         count.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
+        ... )
+        >>> graph = ensemble.to_networkx()
+        >>> graph["B"]["A"][0]["count"]
+        2
+        >>> graph["B"]["A"][0]["ratio"]
+        1.0
 
         Parameters
         ----------
@@ -884,11 +1297,20 @@ class BooleanNetworkEnsemble(MutableSequence):
         both the number of distinct rule structures and the stability of the most
         frequent rule structure.
 
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
+        ... )
+        >>> dot = ensemble.to_pydot(rankdir="LR")
+        >>> dot.get_rankdir()
+        'LR'
+
         Parameters
         ----------
         remove_isolated_nodes: bool (default: False)
             If True, remove components with no incoming or outgoing influence.
-        node_style: Literal["count", "stability"] or Callable[[Mapping[str, Any]], Mapping[str, Any]] or bool or None
+        node_style: Literal["count", "stability"] or Callable or bool or None
             Node styling strategy.
             If assigned to `"count"`, nodes are styled according to the number of
             distinct rule structures observed for the component.
@@ -1010,5 +1432,26 @@ class BooleanNetworkEnsemble(MutableSequence):
             )
 
     def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:
+        """
+        Convert a Boolean-network-like object to a BooleanNetwork.
+
+        Parameters
+        ----------
+        bn: BooleanNetworkLike
+            Boolean-network-like object to coerce.
+
+        Returns
+        -------
+        BooleanNetwork
+            Coerced Boolean network using the ensemble Boolean algebra.
+
+        Raises
+        ------
+        TypeError
+            If `bn` is not Boolean-network-like.
+        ValueError
+            If `bn` does not contain exactly the expected components.
+        """
+
         self._check_network(bn)
         return BooleanNetwork(bn, ba=self.__ba, check=False)

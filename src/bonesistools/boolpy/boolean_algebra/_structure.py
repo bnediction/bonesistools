@@ -56,13 +56,47 @@ def expressions_equivalent(
     """
     Test whether two Boolean expressions are logically equivalent.
 
+    The `"simplify"` method is a fast structural comparison after
+    `boolean.py` simplification. It can miss logical equivalences that require
+    a full semantic check. The `"truth_table"` method evaluates both
+    expressions on every assignment of their symbols and is therefore exact,
+    but exponential in the number of symbols.
+
+    Examples
+    --------
+    >>> from boolean import BooleanAlgebra
+    >>> ba = BooleanAlgebra()
+    >>> expr1 = ba.parse("(B & C) | (~B & D) | (C & D)")
+    >>> expr2 = ba.parse("(B & C) | (~B & D)")
+
+    The simplification method compares simplified expression structure and may
+    miss this equivalence:
+
+    >>> expressions_equivalent(expr1, expr2, method="simplify", ba=ba)
+    False
+
+    Exhaustive truth-table comparison detects the logical equivalence:
+
+    >>> expressions_equivalent(expr1, expr2, method="truth_table", ba=ba)
+    True
+
+    Non-equivalent expressions return False with truth-table comparison:
+
+    >>> expressions_equivalent(
+    ...     ba.parse("B & C"),
+    ...     ba.parse("B | C"),
+    ...     method="truth_table",
+    ...     ba=ba,
+    ... )
+    False
+
     Parameters
     ----------
-    expr1:
+    expr1: boolean.Expression
         First Boolean expression.
-    expr2:
+    expr2: boolean.Expression
         Second Boolean expression.
-    method:
+    method: {"simplify", "truth_table"} (default: "simplify")
         Equivalence strategy.
 
         - `"simplify"` compares both expressions after `boolean.py`
@@ -71,6 +105,9 @@ def expressions_equivalent(
         - `"truth_table"` exhaustively evaluates both expressions on all
           assignments of their symbols. This is an exact logical equivalence
           check, but has exponential complexity in the number of symbols.
+    ba: boolean.BooleanAlgebra (default: module-level BooleanAlgebra)
+        Boolean algebra used to evaluate truth-table assignments. It should be
+        compatible with the algebra used to build `expr1` and `expr2`.
 
     Returns
     -------
@@ -159,6 +196,14 @@ def dnf_to_structure(
     a pair `(symbol, sign)`, where `sign` is True for a positive literal and
     False for a negated literal.
 
+    Examples
+    --------
+    >>> from boolean import BooleanAlgebra
+    >>> ba = BooleanAlgebra()
+    >>> expr = ba.parse("(A & ~B) | C")
+    >>> dnf_to_structure(ba, expr, container=list, sort=True)
+    [[('A', True), ('B', False)], [('C', True)]]
+
     Parameters
     ----------
     ba: BooleanAlgebra
@@ -175,11 +220,6 @@ def dnf_to_structure(
     DNFValue
         Return True or False for constant expressions. Otherwise, return a
         nested structure representing the DNF.
-
-    Examples
-    --------
-    The expression `(A & ~B) | C` is converted into:
-    `{{('A', True), ('B', False)}, {('C', True)}}`
     """
 
     if isinstance(expr, _TRUE):

@@ -50,18 +50,18 @@ def regress_out(
     keys: Keys
         Keys in `adata.obs` used as regressors.
     layer: str, optional
-        If specified, regress values from `adata.layers[layer]` instead of
-        `adata.X`.
+        Layer to use instead of `adata.X`.
     intercept: bool (default: False)
-        If true, add intercept as regressor on which to regress on.
+        If True, preserve the fitted intercept after regressing out covariates.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
     n_jobs: int (default: 1)
-        Number of jobs for parallel computation.
+        Number of allocated processors.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Corrected AnnData object if `copy=True`; otherwise None.
     """
 
     from sklearn.linear_model import LinearRegression

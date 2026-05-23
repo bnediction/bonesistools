@@ -45,25 +45,24 @@ def kde_plot(
     adata: AnnData
         Unimodal annotated data matrix.
     gene: str
-        Gene of interest for which display the density.
-    layer: str (optional, default: None)
-        If specified, the counting are retrieved from adata.layers['layer'], otherwise from adata.X.
-    obs: str (optional, default: None)
-        If specified, draw gene-related density w.r.t. categories.
-        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+        Gene of interest to plot.
+    layer: str, optional
+        Layer to use instead of `adata.X`.
+    obs: str, optional
+        Observation column in `adata.obs` defining groups.
     not_all: bool (default: False)
         If True, do not draw density function using all barcodes (raise Error if True and 'obs' is not specified).
     clip: bool (default: False)
         If True, clip density between the minimum value and the quantile at 99%.
     colors: Colors (optional, default: None)
-        Density function are colored with respect to a list of color values.
-    title: Union[str, dict] (optional, default: None)
-        Add title to current axe.
+        Colors used for density curves.
+    title: str or dict, optional
+        Figure title, or keyword arguments passed to `Axes.set_title`.
     default_parameters: Callable (optional, default: None)
         Function specifying default figure parameters.
-    outfile: Path (optional, default: None)
-        If specified, save the figure.
-    **kwargs
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
+    **kwargs: Mapping[str, Any]
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
@@ -73,7 +72,9 @@ def kde_plot(
 
     Returns
     -------
-    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
+    tuple[Figure, Axes] or None
+        Figure and axes if `outfile` is None; otherwise None after saving the
+        figure.
 
     Raises
     ------
@@ -211,19 +212,18 @@ def ecdf_plot(
     adata: AnnData
         Unimodal annotated data matrix.
     gene: str
-        Gene of interest for which display the density.
-    layer: str (optional, default: None)
-        If specified, the counting are retrieved from adata.layers['layer'], otherwise from adata.X.
-    obs: str (optional, default: None)
-        If specified, draw gene-related density w.r.t. categories.
-        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+        Gene of interest to plot.
+    layer: str, optional
+        Layer to use instead of `adata.X`.
+    obs: str, optional
+        Observation column in `adata.obs` defining groups.
     colors: Colors (optional, default: None)
-        Density function are colored with respect to a list of color values.
+        Colors used for cumulative density curves.
     default_parameters: Callable (optional, default: None)
         Function specifying default figure parameters.
-    outfile: Path (optional, default: None)
-        If specified, save the figure.
-    **kwargs
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
+    **kwargs: Mapping[str, Any]
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
@@ -233,7 +233,9 @@ def ecdf_plot(
 
     Returns
     -------
-    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
+    tuple[Figure, Axes] or None
+        Figure and axes if `outfile` is None; otherwise None after saving the
+        figure.
     """
 
     def _ecdf(values):

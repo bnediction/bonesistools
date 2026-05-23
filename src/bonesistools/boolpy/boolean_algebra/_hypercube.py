@@ -23,17 +23,28 @@ class Hypercube(MutableMapping):
     every configuration it represents is also represented by the other
     hypercube.
 
+    Hypercube behaves as a mutable mapping from component names to
+    PartialBoolean values. Accepted values are converted to PartialBoolean
+    instances when assigned.
+
     Examples
     --------
-    The following hypercubes are considered equivalent:
+    Missing components are interpreted as free dimensions:
 
-    >>> Hypercube({"A": 0})
-    >>> Hypercube({"A": 0, "B": "*"})
+    >>> Hypercube({"A": 0}) == Hypercube({"A": 0, "B": "*"})
+    True
+
+    More specific hypercubes are smaller than more general hypercubes:
+
+    >>> Hypercube({"A": 0, "B": 1}) < Hypercube({"A": 0})
+    True
 
     Parameters
     ----------
     mapping: Mapping[str, PartialBooleanLike] (optional, default: None)
-        Hypercube component mapping.
+        Hypercube component mapping. Values may be fixed Boolean values
+        (`0`, `1`, `False`, `True`) or free values (`"*"` or compatible
+        PartialBoolean-like values).
 
     Raises
     ------
@@ -58,6 +69,19 @@ class Hypercube(MutableMapping):
     def components(self) -> frozenset:
         """
         Return explicitly specified hypercube components.
+
+        Missing components are not returned, even though they are interpreted
+        as free values during comparisons.
+
+        Examples
+        --------
+        >>> sorted(Hypercube({"A": 0, "B": "*"}).components)
+        ['A', 'B']
+
+        Returns
+        -------
+        frozenset
+            Explicitly specified component names.
         """
 
         return frozenset(self._values)
@@ -65,7 +89,17 @@ class Hypercube(MutableMapping):
     @property
     def is_fully_specified(self) -> bool:
         """
-        Whether explicitly specified components are all fixed.
+        Test whether explicitly specified components are all fixed.
+
+        This property only considers components present in the hypercube.
+        Missing components are ignored.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0, "B": 1}).is_fully_specified
+        True
+        >>> Hypercube({"A": 0, "B": "*"}).is_fully_specified
+        False
 
         Returns
         -------
@@ -78,6 +112,18 @@ class Hypercube(MutableMapping):
     def copy(self) -> "Hypercube":
         """
         Return a shallow copy of the hypercube.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"A": 0})
+        >>> copied = hc.copy()
+        >>> copied
+        Hypercube({'A': PartialBoolean(0)})
+
+        Returns
+        -------
+        Hypercube
+            New Hypercube containing the same component values.
         """
 
         return Hypercube(self._values)
@@ -89,6 +135,19 @@ class Hypercube(MutableMapping):
     ) -> Optional["Hypercube"]:
         """
         Remove components from the hypercube.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"A": 0, "B": 1})
+        >>> hc.drop(["B"])
+        Hypercube({'A': PartialBoolean(0)})
+        >>> hc
+        Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})
+
+        >>> hc.drop(["B"], inplace=True) is None
+        True
+        >>> hc
+        Hypercube({'A': PartialBoolean(0)})
 
         Parameters
         ----------
@@ -117,6 +176,18 @@ class Hypercube(MutableMapping):
         """
         Test whether the hypercube contains another hypercube.
 
+        A hypercube contains another one when every configuration represented
+        by `other` is also represented by the current hypercube. Equivalently,
+        the current hypercube is greater than or equal to `other` in the
+        inclusion order.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0}).contains({"A": 0, "B": 1})
+        True
+        >>> Hypercube({"A": 0, "B": 1}).contains({"A": 0})
+        False
+
         Parameters
         ----------
         other: object
@@ -127,6 +198,13 @@ class Hypercube(MutableMapping):
         bool
             Whether every configuration represented by `other` is also
             represented by the current hypercube.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         other = self._coerce_hypercube(other)
@@ -139,6 +217,13 @@ class Hypercube(MutableMapping):
 
         Missing components are interpreted as free values.
 
+        Examples
+        --------
+        >>> hc1 = Hypercube({"A": 0, "B": "*"})
+        >>> hc2 = Hypercube({"A": 0, "C": "*"})
+        >>> sorted(hc1.identical(hc2))
+        ['A', 'B', 'C']
+
         Parameters
         ----------
         other: object
@@ -148,6 +233,13 @@ class Hypercube(MutableMapping):
         -------
         Set[str]
             Components with identical values.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         other = self._coerce_hypercube(other)
@@ -166,6 +258,13 @@ class Hypercube(MutableMapping):
 
         Missing components are interpreted as free values.
 
+        Examples
+        --------
+        >>> hc1 = Hypercube({"A": 0, "B": 1})
+        >>> hc2 = Hypercube({"A": 0, "B": "*", "C": 1})
+        >>> sorted(hc1.different(hc2))
+        ['B', 'C']
+
         Parameters
         ----------
         other: object
@@ -175,6 +274,13 @@ class Hypercube(MutableMapping):
         -------
         Set[str]
             Components with different values.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         other = self._coerce_hypercube(other)
@@ -190,6 +296,39 @@ class Hypercube(MutableMapping):
     def is_smaller_than(self, other: object) -> bool:
         """
         Test whether the hypercube is included in another hypercube.
+
+        This is an explicit alias for the `<=` operator.
+
+        Examples
+        --------
+        A fixed value for `B` is more specific than a free or missing `B`, so
+        it is smaller:
+
+        >>> Hypercube({"A": 0, "B": 1}).is_smaller_than({"A": 0})
+        True
+
+        The reverse direction is false because the more general hypercube is
+        not included in the more specific one:
+
+        >>> Hypercube({"A": 0}).is_smaller_than({"A": 0, "B": 1})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube is included in `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         return self <= other
@@ -197,6 +336,38 @@ class Hypercube(MutableMapping):
     def is_larger_than(self, other: object) -> bool:
         """
         Test whether the hypercube contains another hypercube.
+
+        This is an explicit alias for the `>=` operator.
+
+        Examples
+        --------
+        A missing component is interpreted as free, so this hypercube contains
+        the more specific one:
+
+        >>> Hypercube({"A": 0}).is_larger_than({"A": 0, "B": 1})
+        True
+
+        The reverse direction is false:
+
+        >>> Hypercube({"A": 0, "B": 1}).is_larger_than({"A": 0})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube contains `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         return self >= other
@@ -204,6 +375,35 @@ class Hypercube(MutableMapping):
     def is_strictly_smaller_than(self, other: object) -> bool:
         """
         Test whether the hypercube is strictly included in another hypercube.
+
+        This is an explicit alias for the `<` operator.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0, "B": 1}).is_strictly_smaller_than({"A": 0})
+        True
+
+        Equal hypercubes are not strictly smaller:
+
+        >>> Hypercube({"A": 0}).is_strictly_smaller_than({"A": 0, "B": "*"})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube is strictly included in `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         return self < other
@@ -211,11 +411,58 @@ class Hypercube(MutableMapping):
     def is_strictly_larger_than(self, other: object) -> bool:
         """
         Test whether the hypercube strictly contains another hypercube.
+
+        This is an explicit alias for the `>` operator.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0}).is_strictly_larger_than({"A": 0, "B": 1})
+        True
+
+        Equal hypercubes are not strictly larger:
+
+        >>> Hypercube({"A": 0, "B": "*"}).is_strictly_larger_than({"A": 0})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube strictly contains `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         return self > other
 
     def __getitem__(self, component: str) -> PartialBoolean:
+        """
+        Return the value explicitly associated with a component.
+
+        Parameters
+        ----------
+        component: str
+            Component name.
+
+        Returns
+        -------
+        PartialBoolean
+            Stored PartialBoolean value.
+
+        Raises
+        ------
+        KeyError
+            If `component` is not explicitly specified.
+        """
 
         return self._values[component]
 
@@ -224,28 +471,104 @@ class Hypercube(MutableMapping):
         component: str,
         value: PartialBooleanLike,
     ) -> None:
+        """
+        Set a component value.
+
+        Parameters
+        ----------
+        component: str
+            Component name.
+        value: PartialBooleanLike
+            Value to assign. Supported values are converted to PartialBoolean.
+
+        Raises
+        ------
+        ValueError
+            If `value` cannot be converted to a PartialBoolean.
+        """
 
         self._values[component] = (
             value if isinstance(value, PartialBoolean) else PartialBoolean(value)
         )
 
     def __delitem__(self, component: str) -> None:
+        """
+        Remove an explicitly specified component.
+
+        Parameters
+        ----------
+        component: str
+            Component name.
+
+        Raises
+        ------
+        KeyError
+            If `component` is not explicitly specified.
+        """
 
         del self._values[component]
 
     def __iter__(self) -> Iterator[str]:
+        """
+        Iterate over explicitly specified component names.
+
+        Returns
+        -------
+        Iterator[str]
+            Iterator over component names.
+        """
 
         return iter(self._values)
 
     def __len__(self) -> int:
+        """
+        Return the number of explicitly specified components.
+
+        Returns
+        -------
+        int
+            Number of explicitly specified components.
+        """
 
         return len(self._values)
 
     def __repr__(self) -> str:
+        """
+        Return a representation of the hypercube.
+
+        Returns
+        -------
+        str
+            Representation containing explicitly specified component values.
+        """
 
         return f"Hypercube({dict(self)!r})"
 
     def __eq__(self, other: object) -> bool:
+        """
+        Test hypercube equality.
+
+        Missing components are interpreted as free values. Therefore,
+        `Hypercube({"A": 0})` and `Hypercube({"A": 0, "B": "*"})` are
+        considered equal.
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if both hypercubes represent the same configurations.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
 
         other = self._coerce_hypercube(other)
 
@@ -256,6 +579,27 @@ class Hypercube(MutableMapping):
         return True
 
     def __le__(self, other: object) -> bool:
+        """
+        Test whether the hypercube is included in another hypercube.
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if every configuration represented by the current hypercube is
+            also represented by `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
 
         other = self._coerce_hypercube(other)
 
@@ -269,24 +613,98 @@ class Hypercube(MutableMapping):
         return True
 
     def __lt__(self, other: object) -> bool:
+        """
+        Test whether the hypercube is strictly included in another hypercube.
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube is included in `other` and both
+            hypercubes are not equal.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
 
         other = self._coerce_hypercube(other)
 
         return self <= other and self != other
 
     def __ge__(self, other: object) -> bool:
+        """
+        Test whether the hypercube contains another hypercube.
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if every configuration represented by `other` is also
+            represented by the current hypercube.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
 
         other = self._coerce_hypercube(other)
 
         return other <= self
 
     def __gt__(self, other: object) -> bool:
+        """
+        Test whether the hypercube strictly contains another hypercube.
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube contains `other` and both hypercubes
+            are not equal.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
 
         other = self._coerce_hypercube(other)
 
         return other < self
 
     def __hash__(self) -> int:
+        """
+        Return a hash consistent with hypercube equality.
+
+        Explicit free values are ignored because they are equivalent to missing
+        components.
+
+        Returns
+        -------
+        int
+            Hash value based on fixed component assignments.
+        """
 
         normalized = tuple(
             sorted(
@@ -303,6 +721,17 @@ class Hypercube(MutableMapping):
         Return component value.
 
         Missing components are interpreted as free values.
+
+        Parameters
+        ----------
+        component: str
+            Component name.
+
+        Returns
+        -------
+        PartialBoolean
+            Explicitly stored value if present, otherwise a free
+            PartialBoolean value.
         """
 
         return self._values.get(component, PartialBoolean("*"))
@@ -311,6 +740,23 @@ class Hypercube(MutableMapping):
     def _coerce_hypercube(other: object) -> "Hypercube":
         """
         Convert supported objects into Hypercube instances.
+
+        Parameters
+        ----------
+        other: object
+            Object to coerce.
+
+        Returns
+        -------
+        Hypercube
+            Coerced hypercube. Existing Hypercube instances are returned as-is.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
         """
 
         if isinstance(other, Hypercube):
@@ -342,6 +788,20 @@ class HypercubeCollection(MutableSet):
     iteration order is not part of the public semantics, and membership is based
     on hypercube equality.
 
+    Examples
+    --------
+    Duplicate and equivalent hypercubes are stored once:
+
+    >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": "*"}])
+    >>> len(hcs)
+    1
+
+    Collection filtering follows the same inclusion order as Hypercube:
+
+    >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
+    >>> list(hcs.smaller_than({"A": 0, "B": 1}))
+    [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+
     Parameters
     ----------
     hypercubes: Iterable[HypercubeLike] (optional, default: None)
@@ -371,6 +831,27 @@ class HypercubeCollection(MutableSet):
     def __contains__(self, hypercube: object) -> bool:
         """
         Test whether a hypercube belongs to the collection.
+
+        Invalid or unsupported objects are treated as absent rather than
+        raising an exception.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}])
+        >>> {"A": 0, "B": "*"} in hcs
+        True
+        >>> {"A": 1} in hcs
+        False
+
+        Parameters
+        ----------
+        hypercube: object
+            Hypercube-like object to test.
+
+        Returns
+        -------
+        bool
+            True if `hypercube` belongs to the collection.
         """
 
         try:
@@ -384,6 +865,17 @@ class HypercubeCollection(MutableSet):
     def __iter__(self) -> Iterator[Hypercube]:
         """
         Iterate over stored hypercubes.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}])
+        >>> list(hcs)
+        [Hypercube({'A': PartialBoolean(0)})]
+
+        Returns
+        -------
+        Iterator[Hypercube]
+            Iterator over stored hypercubes.
         """
 
         return iter(self._hypercubes)
@@ -391,6 +883,16 @@ class HypercubeCollection(MutableSet):
     def __len__(self) -> int:
         """
         Return the number of hypercubes in the collection.
+
+        Examples
+        --------
+        >>> len(HypercubeCollection([{"A": 0}, {"A": 0, "B": "*"}]))
+        1
+
+        Returns
+        -------
+        int
+            Number of unique hypercubes in the collection.
         """
 
         return len(self._hypercubes)
@@ -398,6 +900,27 @@ class HypercubeCollection(MutableSet):
     def __eq__(self, other: object) -> bool:
         """
         Test whether two hypercube collections contain identical hypercubes.
+
+        `other` may be another HypercubeCollection or an iterable of
+        hypercube-like objects.
+
+        Examples
+        --------
+        >>> HypercubeCollection([{"A": 0}]) == HypercubeCollection(
+        ...     [{"A": 0, "B": "*"}]
+        ... )
+        True
+
+        Parameters
+        ----------
+        other: object
+            Collection-like object to compare against.
+
+        Returns
+        -------
+        bool or NotImplemented
+            True if both collections contain identical hypercubes. Returns
+            NotImplemented when `other` cannot be interpreted as a collection.
         """
         if not isinstance(other, HypercubeCollection):
             try:
@@ -411,6 +934,16 @@ class HypercubeCollection(MutableSet):
     def components(self) -> frozenset:
         """
         Return components appearing in at least one hypercube.
+
+        Examples
+        --------
+        >>> sorted(HypercubeCollection([{"A": 0}, {"B": 1}]).components)
+        ['A', 'B']
+
+        Returns
+        -------
+        frozenset
+            Components appearing in at least one stored hypercube.
         """
 
         components = set()
@@ -423,6 +956,13 @@ class HypercubeCollection(MutableSet):
     def add(self, hypercube: HypercubeLike) -> None:
         """
         Add a hypercube to the collection.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection()
+        >>> hcs.add({"A": 0})
+        >>> {"A": 0} in hcs
+        True
 
         Parameters
         ----------
@@ -443,6 +983,15 @@ class HypercubeCollection(MutableSet):
         """
         Remove a hypercube from the collection if present.
 
+        Invalid or unsupported objects are ignored.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}])
+        >>> hcs.discard({"A": 0, "B": "*"})
+        >>> len(hcs)
+        0
+
         Parameters
         ----------
         hypercube: HypercubeLike
@@ -460,6 +1009,18 @@ class HypercubeCollection(MutableSet):
     def copy(self) -> "HypercubeCollection":
         """
         Return a shallow copy of the collection.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}])
+        >>> copied = hcs.copy()
+        >>> list(copied)
+        [Hypercube({'A': PartialBoolean(0)})]
+
+        Returns
+        -------
+        HypercubeCollection
+            New collection containing the same hypercubes.
         """
 
         return HypercubeCollection(self._hypercubes)
@@ -467,6 +1028,12 @@ class HypercubeCollection(MutableSet):
     def smaller_than(self, other: HypercubeLike) -> "HypercubeCollection":
         """
         Return hypercubes included in another hypercube.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}, {"A": 1}])
+        >>> list(hcs.smaller_than({"A": 0, "B": 1}))
+        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
 
         Parameters
         ----------
@@ -488,6 +1055,12 @@ class HypercubeCollection(MutableSet):
     def larger_than(self, other: HypercubeLike) -> "HypercubeCollection":
         """
         Return hypercubes containing another hypercube.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}, {"A": 1}])
+        >>> list(hcs.larger_than({"A": 0, "B": 1}))
+        [Hypercube({'A': PartialBoolean(0)})]
 
         Parameters
         ----------
@@ -514,6 +1087,12 @@ class HypercubeCollection(MutableSet):
         hypercube from the collection. Maximal hypercubes correspond to the most
         general elements of the collection.
 
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
+        >>> list(hcs.maximal())
+        [Hypercube({'A': PartialBoolean(0)})]
+
         Returns
         -------
         HypercubeCollection
@@ -534,6 +1113,12 @@ class HypercubeCollection(MutableSet):
         hypercube from the collection. Minimal hypercubes correspond to the most
         specific elements of the collection.
 
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
+        >>> list(hcs.minimal())
+        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+
         Returns
         -------
         HypercubeCollection
@@ -553,6 +1138,12 @@ class HypercubeCollection(MutableSet):
         Missing components are interpreted as free values. A hypercube is therefore
         considered fully specified only if every component appearing in the
         collection is fixed in that hypercube.
+
+        Examples
+        --------
+        >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
+        >>> list(hcs.fully_specified())
+        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
 
         Returns
         -------

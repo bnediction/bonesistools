@@ -156,16 +156,54 @@ def support_legacy_gene_synonyms_args(func):
 
 class GeneSynonyms:
     """
-    Mapping between gene aliases.
+    Converter between gene identifiers using NCBI gene_info resources.
+
+    GeneSynonyms loads organism-specific NCBI gene information and builds
+    mappings between gene IDs, official symbols, NCBI names, Ensembl IDs and
+    database-specific aliases when available.
+
+    The instance is callable and dispatches conversion according to the input
+    object type:
+
+    - sequences of gene identifiers are converted with `convert_sequence`,
+    - interaction lists are converted with `convert_interaction_list`,
+    - pandas DataFrames are converted with `convert_df`,
+    - NetworkX graphs are converted with `convert_graph`,
+    - BooleanNetwork-like objects are converted with `convert_bn`.
+
+    Examples
+    --------
+    Convert a list of gene identifiers through the callable interface:
+
+    >>> genesyn = GeneSynonyms(organism="mouse")
+    >>> genesyn(["Trp53", "Myc"])
+    ['Trp53', 'Myc']
+
+    Convert an interaction list while preserving edge attributes:
+
+    >>> interactions = [("Trp53", "Myc", {"sign": 1})]
+    >>> genesyn(interactions)
+    [('Trp53', 'Myc', {'sign': 1})]
 
     Parameters
     ----------
-    organism: str (default: mouse)
-        Common name of the organism of interest.
+    organism: str (default: "mouse")
+        Common name of the organism of interest. Supported organisms are
+        `"mouse"`, `"human"` and `"escherichia coli"`.
     force_download: bool (default: False)
-        Request to the ncbi ftp protocol for downloading gene_info data.
+        If True, download the NCBI gene_info resource before building mappings.
     show_warnings: bool (default: False)
-        Print warning messages.
+        If True, warn when a requested gene identifier has no correspondence.
+
+    Attributes
+    ----------
+    databases: set
+        Database names available for the selected organism, such as `MGI` when
+        present in the NCBI gene_info resource.
+    valid_input_identifier_types: tuple
+        Identifier types accepted as input.
+    valid_output_identifier_types: tuple
+        Identifier types accepted as output.
 
     Raises
     ------
@@ -221,6 +259,30 @@ class GeneSynonyms:
         force_download: bool = False,
         show_warnings: bool = False,
     ) -> None:
+        """
+        Reinitialize the converter with a potentially different organism.
+
+        Parameters
+        ----------
+        organism: str, optional
+            Common name of the organism to load. If None, reload the current
+            organism.
+        force_download: bool (default: False)
+            If True, download the NCBI gene_info resource before rebuilding
+            mappings.
+        show_warnings: bool (default: False)
+            If True, warn when a requested gene identifier has no
+            correspondence.
+
+        Raises
+        ------
+        TypeError
+            If `force_download` or `show_warnings` is not Boolean.
+        ValueError
+            If `organism` is unsupported.
+        RuntimeError
+            If downloading or parsing NCBI gene_info data fails.
+        """
 
         if organism is None:
             organism = self.organism
@@ -453,6 +515,15 @@ class GeneSynonyms:
         )
 
     def get_mapping(self):
+        """
+        Return a deep copy of the internal gene alias mapping.
+
+        Returns
+        -------
+        Dict
+            Copy of the mapping structure used for identifier conversion.
+        """
+
         return copy.deepcopy(self.gene_aliases_mapping)
 
     def __call__(
@@ -461,6 +532,33 @@ class GeneSynonyms:
         *args: Sequence[Any],
         **kwargs: Mapping[str, Any],
     ):
+        """
+        Convert gene identifiers in a supported object.
+
+        This method dispatches to the appropriate conversion method according
+        to `data` type. Additional positional and keyword arguments are passed
+        to the selected conversion method.
+
+        Parameters
+        ----------
+        data: sequence, InteractionList, DataFrame, Graph or BooleanNetwork-like
+            Object containing gene identifiers to convert.
+        *args: Any
+            Positional arguments forwarded to the selected conversion method.
+        **kwargs: Any
+            Keyword arguments forwarded to the selected conversion method.
+
+        Returns
+        -------
+        object
+            Converted object. The exact type depends on `data` and the selected
+            conversion method.
+
+        Raises
+        ------
+        TypeError
+            If `data` has an unsupported type.
+        """
 
         from ...boolpy.boolean_network._typing import is_boolean_network_like
 
@@ -490,19 +588,21 @@ class GeneSynonyms:
         input_identifier_type: Union[Literal["name", "ensembl_id"], str] = "name",
     ) -> Optional[str]:
         """
-        Provide the gene_id with respect to a gene identifier.
+        Return the NCBI gene ID for a gene identifier.
 
         Parameters
         ----------
         gene: str
             Identifier of the gene of interest.
         input_identifier_type: 'name' | 'ensembl_id' | <database> (default: 'name')
-            Identifier type of the given gene.
-            See self.databases for enumerating valid database names.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Given a gene identifier, return its gene_id.
+        str or None
+            NCBI gene ID corresponding to `gene`, or None if no match is
+            found.
         """
 
         if input_identifier_type == "name":
@@ -549,19 +649,21 @@ class GeneSynonyms:
         self, gene: str, input_identifier_type: Union[InputIdentifierType, str] = "name"
     ) -> Optional[str]:
         """
-        Provide the NCBI reference name with respect to a gene identifier.
+        Return the NCBI reference name for a gene identifier.
 
         Parameters
         ----------
         gene: str
             Identifier of the gene of interest.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Identifier type of the given gene.
-            See self.databases for enumerating valid database names.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Given a gene identifier, return its NCBI reference name.
+        str or None
+            NCBI reference name corresponding to `gene`, or None if no match is
+            found.
         """
 
         gene_id = (
@@ -584,19 +686,21 @@ class GeneSynonyms:
         self, gene: str, input_identifier_type: Union[InputIdentifierType, str] = "name"
     ) -> Optional[str]:
         """
-        Provide the official name from nomenclature authority with respect to a gene identifier.
+        Return the official nomenclature name for a gene identifier.
 
         Parameters
         ----------
         gene: str
             Identifier of the gene of interest.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Identifier type of the given gene.
-            See self.databases for enumerating valid database names.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Given a gene identifier, return its official name from nomenclature authority.
+        str or None
+            Official gene name corresponding to `gene`, or None if no match is
+            found.
         """
 
         gene_id = (
@@ -621,19 +725,20 @@ class GeneSynonyms:
         input_identifier_type: Union[Literal["name", "gene_id"], str] = "name",
     ) -> Optional[str]:
         """
-        Provide the ensembl_id with respect to a gene identifier.
+        Return the Ensembl ID for a gene identifier.
 
         Parameters
         ----------
         gene: str
             Identifier of the gene of interest.
         input_identifier_type: 'name' | 'gene_id' | <database> (default: 'name')
-            Identifier type of the given gene.
-            See self.databases for enumerating valid database names.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Given a gene identifier, return its ensembl_id.
+        str or None
+            Ensembl ID corresponding to `gene`, or None if no match is found.
         """
 
         gene_id = (
@@ -659,7 +764,7 @@ class GeneSynonyms:
         input_identifier_type: InputIdentifierType = "name",
     ) -> Optional[str]:
         """
-        Provide the database-defined gene name with respect to a gene identifier.
+        Return a database-defined gene alias for a gene identifier.
 
         Parameters
         ----------
@@ -667,13 +772,15 @@ class GeneSynonyms:
             Identifier of the gene of interest.
         database: <database>
             Organism-related database name providing gene identifiers.
-            See self.databases for enumerating valid database names.
+            See `databases` for valid database names.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' (default: 'name')
-            Identifier type of the given gene.
+            Input gene identifier type.
 
         Returns
         -------
-        Given a gene identifier, return its alias derived from a database.
+        str or None
+            Database-specific alias corresponding to `gene`, or None if no
+            match is found.
         """
 
         if database not in self.databases:
@@ -720,17 +827,21 @@ class GeneSynonyms:
         gene: str
             Identifier of the gene of interest.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Input identifier type of the given gene.
-        output_identifier_type: 'gene_id' | 'official_name' | 'ncbi_name' | 'ensembl_id' | <database> (default: 'official_name')
-            Output identifier type for the given gene.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
+        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Given a gene identifier, return its alias.
+        str or None
+            Converted gene identifier, or None if no match is found.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         if output_identifier_type in [
@@ -764,15 +875,19 @@ class GeneSynonyms:
         Parameters
         ----------
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
 
         Returns
         -------
-        Return Function object converting gene identifiers.
+        Callable
+            Function converting one gene identifier to the requested output
+            identifier type.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid output identifier types are available from
+        `valid_output_identifier_types`.
         """
 
         if output_identifier_type in [
@@ -800,27 +915,35 @@ class GeneSynonyms:
         keep_if_missing: bool = True,
     ) -> Sequence[str]:
         """
-        Create a copy of the Sequence object, with corresponding aliases.
-        Each gene identifier is converted into the user-defined alias type.
+        Convert a sequence of gene identifiers.
+
+        Each gene identifier is converted into the requested output identifier
+        type.
 
         Parameters
         ----------
         genes: Sequence[str]
-            List of gene identifiers.
+            Gene identifiers to convert.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Gene identifier input format.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
         keep_if_missing: bool (default: True)
-            If true, keep origin gene identifier instead of None value if origin gene identifier is missing from NCBI database.
+            If True, keep the original gene identifier when no correspondence
+            is found.
 
         Returns
         -------
-        Return Sequence object.
+        Sequence[str]
+            Converted sequence, preserving the input sequence type when
+            possible.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         aliases = list()
@@ -847,27 +970,34 @@ class GeneSynonyms:
         keep_if_missing: bool = True,
     ) -> InteractionList:
         """
-        Create a copy of the pairwise InteractionList object, with corresponding aliases.
-        Each gene identifier is converted into the user-defined alias type.
+        Convert source and target identifiers in an interaction list.
+
+        Edge attributes are preserved.
 
         Parameters
         ----------
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
-            List of tuples containing string (source) + string (target) + dict (sign = -1 or 1).
+            Sequence of `(source, target, attributes)` interactions.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Gene identifier input format.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
         keep_if_missing: bool (default: True)
-            If true, keep origin gene alias instead of None value if origin gene alias is missing from NCBI database.
+            If True, keep the original gene identifier when no correspondence
+            is found.
 
         Returns
         -------
-        Return InteractionList object.
+        InteractionList
+            Converted interaction list with source and target identifiers
+            replaced and edge attributes preserved.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         converted_interactions_list = list()
@@ -895,29 +1025,33 @@ class GeneSynonyms:
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene identifiers in DataFrame object with corresponding aliases.
-        Each gene identifier is converted into the user-defined alias type.
+        Convert gene identifiers in a DataFrame index or columns.
 
         Parameters
         ----------
         df: pd.DataFrame
-            DataFrame object where gene aliases are converted into the desired identifiers.
-        axis
-            whether to rename labels from the index (0 or 'index') or columns (1 or 'columns').
+            DataFrame whose gene identifiers are converted.
+        axis: {0, 1, "index", "columns"} (default: 0)
+            If 0 or `"index"`, convert `df.index`. If 1 or `"columns"`,
+            convert `df.columns`.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Gene identifier input format.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
         copy: bool (default: True)
-            Return a copy instead of updating DataFrame object.
+            Return a copy instead of modifying `df`.
 
         Returns
         -------
-        Depending on 'copy', update 'df' or return DataFrame object.
+        DataFrame or None
+            Converted DataFrame if `copy=True`; otherwise None.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         df = df.copy() if copy is True else df
@@ -959,27 +1093,30 @@ class GeneSynonyms:
         copy: bool = True,
     ) -> Union[Graph, None]:
         """
-        Replace gene identifiers in Graph object with corresponding aliases.
-        Each gene identifier is converted into the user-defined alias type.
+        Convert gene identifiers in graph node labels.
 
         Parameters
         ----------
         graph: nx.Graph
-            Graph object where gene nodes are converted into the desired identifiers.
+            Graph whose node identifiers are converted.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Gene identifier input format.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
         copy: bool (default: True)
-            Return a copy instead of updating Graph object.
+            Return a copy instead of modifying `graph`.
 
         Returns
         -------
-        Depending on 'copy', update 'graph' or return Graph object.
+        Graph or None
+            Converted graph if `copy=True`; otherwise None.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         aliases_mapping = dict()
@@ -1005,27 +1142,30 @@ class GeneSynonyms:
         copy: bool = False,
     ) -> "BooleanNetwork":
         """
-        Replace gene identifiers in BooleanNetwork object with corresponding aliases.
-        Each gene identifier is converted into the user-defined alias type.
+        Convert gene identifiers in Boolean network components and rules.
 
         Parameters
         ----------
         bn: BooleanNetwork
-            BooleanNetwork object where gene variables are converted into the desired identifiers.
+            Boolean network whose component identifiers are converted.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
-            Gene identifier input format.
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
-            Gene identifier output format.
-        copy: bool (default: True)
-            Return a copy instead of updating BooleanNetwork object.
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
+        copy: bool (default: False)
+            Return a copy instead of modifying `bn`.
 
         Returns
         -------
-        Depending on 'copy', update 'bn' or return BooleanNetwork object.
+        BooleanNetwork or None
+            Converted BooleanNetwork if `copy=True`; otherwise None.
 
-        See Also
-        --------
-        self.get_database() for enumerating valid database names.
+        Notes
+        -----
+        Valid identifier types are available from
+        `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
         bn = bn.copy() if copy else bn
@@ -1045,18 +1185,21 @@ class GeneSynonyms:
         self, genes: Sequence[str], keep_if_missing: bool = True
     ) -> Sequence[str]:
         """
-        Create a copy of the Sequence object, with each gene converted into its official name.
+        Standardize a sequence of gene names to official gene names.
 
         Parameters
         ----------
         genes: Sequence[str]
-            List of gene names.
+            Gene names to standardize.
         keep_if_missing: bool (default: True)
-            If true, keep origin gene name instead of None value if origin gene name is missing from NCBI database.
+            If True, keep the original gene identifier when no correspondence
+            is found.
 
         Returns
         -------
-        Return Sequence object.
+        Sequence[str]
+            Sequence of official gene names, preserving the input sequence type
+            when possible.
         """
 
         return self.convert_sequence(
@@ -1070,18 +1213,21 @@ class GeneSynonyms:
         self, interaction_list: InteractionList, keep_if_missing: bool = True
     ) -> InteractionList:
         """
-        Create a copy of the pairwise InteractionList object, with each gene converted into its official name.
+        Standardize source and target identifiers in an interaction list.
 
         Parameters
         ----------
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
-            List of tuples containing string (source) + string (target) + dict (sign = -1 or 1).
+            Sequence of `(source, target, attributes)` interactions.
         keep_if_missing: bool (default: True)
-            If true, keep origin gene alias instead of None value if origin gene alias is missing from NCBI database.
+            If True, keep the original gene identifier when no correspondence
+            is found.
 
         Returns
         -------
-        Return InteractionList object.
+        InteractionList
+            Interaction list with source and target identifiers standardized to
+            official gene names.
         """
 
         return self.convert_interaction_list(
@@ -1098,20 +1244,22 @@ class GeneSynonyms:
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
-        Replace gene names in DataFrame object with corresponding official names.
+        Standardize gene names in a DataFrame index or columns.
 
         Parameters
         ----------
         df: pd.DataFrame
-            DataFrame object where gene identifiers are expected being standardized.
-        axis
-            whether to rename labels from the index (0 or 'index') or columns (1 or 'columns').
+            DataFrame whose gene identifiers are standardized.
+        axis: {0, 1, "index", "columns"} (default: 0)
+            If 0 or `"index"`, standardize `df.index`. If 1 or `"columns"`,
+            standardize `df.columns`.
         copy: bool (default: True)
-            Return a copy instead of updating DataFrame object.
+            Return a copy instead of modifying `df`.
 
         Returns
         -------
-        Depending on 'copy', update 'df' or return DataFrame object.
+        DataFrame or None
+            Standardized DataFrame if `copy=True`; otherwise None.
         """
 
         return self.convert_df(
@@ -1124,18 +1272,19 @@ class GeneSynonyms:
 
     def standardize_graph(self, graph: Graph, copy: bool = True) -> Union[Graph, None]:
         """
-        Replace gene names in Graph object with corresponding official names.
+        Standardize gene names in graph node labels.
 
         Parameters
         ----------
         graph: nx.Graph
-            Graph object where gene nodes are expected being standardized.
+            Graph whose node identifiers are standardized.
         copy: bool (default: True)
-            Return a copy instead of updating Graph object.
+            Return a copy instead of modifying `graph`.
 
         Returns
         -------
-        Depending on 'copy', update 'graph' or return Graph object.
+        Graph or None
+            Standardized graph if `copy=True`; otherwise None.
         """
 
         return self.convert_graph(
@@ -1149,18 +1298,19 @@ class GeneSynonyms:
         self, bn: "BooleanNetwork", copy: bool = False
     ) -> "BooleanNetwork":
         """
-        Replace gene names in BooleanNetwork object with corresponding official names.
+        Standardize gene names in Boolean network components and rules.
 
         Parameters
         ----------
         bn: BooleanNetwork
-            BooleanNetwork object where gene variables are expected being standardized.
-        copy: bool (default: True)
-            Return a copy instead of updating BooleanNetwork object.
+            Boolean network whose component identifiers are standardized.
+        copy: bool (default: False)
+            Return a copy instead of modifying `bn`.
 
         Returns
         -------
-        Depending on 'copy', update 'bn' or return BooleanNetwork object.
+        BooleanNetwork or None
+            Standardized BooleanNetwork if `copy=True`; otherwise None.
         """
 
         return self.convert_bn(

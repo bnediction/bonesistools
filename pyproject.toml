@@ -72,7 +72,7 @@ all = [
     "pydot>=3.0.2",
     "scikit-learn>=1.0",
     "seaborn>=0.11",
-    "mpbn>=3.8",
+    "mpbn>=4.1",
 ]
 decoupler = [ "decoupler>=2.0.0" ]
 mudata = [ "mudata>=0.3.1" ]

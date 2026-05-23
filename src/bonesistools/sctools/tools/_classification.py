@@ -24,6 +24,9 @@ def mitochondrial_genes(
     """
     Annotate genes encoding mitochondrial proteins.
 
+    The annotation is stored as a Boolean column in `adata.var` by default.
+    Set `axis="obs"` to annotate observation names instead.
+
     Parameters
     ----------
     adata: AnnData
@@ -36,11 +39,12 @@ def mitochondrial_genes(
         If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
         `adata.var`.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Annotated AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------
@@ -87,6 +91,9 @@ def ribosomal_genes(
     """
     Annotate genes encoding ribosomal proteins.
 
+    The annotation is stored as a Boolean column in `adata.var` by default.
+    Set `axis="obs"` to annotate observation names instead.
+
     Parameters
     ----------
     adata: AnnData
@@ -99,11 +106,12 @@ def ribosomal_genes(
         If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
         `adata.var`.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Annotated AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------

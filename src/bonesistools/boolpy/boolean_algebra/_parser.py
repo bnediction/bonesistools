@@ -22,6 +22,16 @@ def read_hypercube(file: Union[str, Path]) -> Hypercube:
     """
     Read a hypercube from a JSON file.
 
+    Examples
+    --------
+    A valid JSON file has the following form:
+
+    {
+        "Gata1": 1,
+        "Spi1": 0,
+        "Tal1": "*"
+    }
+
     Parameters
     ----------
     file: str or Path
@@ -38,16 +48,6 @@ def read_hypercube(file: Union[str, Path]) -> Hypercube:
     ValueError
         If one of the stored values cannot be interpreted as a
         PartialBoolean value.
-
-    Examples
-    --------
-    A valid JSON file has the following form:
-
-    {
-        "Gata1": 1,
-        "Spi1": 0,
-        "Tal1": "*"
-    }
     """
 
     file = Path(file)

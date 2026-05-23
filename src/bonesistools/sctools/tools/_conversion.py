@@ -20,6 +20,9 @@ def anndata_to_dataframe(
     """
     Convert an AnnData expression matrix to a DataFrame.
 
+    The returned DataFrame is indexed by observations and uses variable names
+    as expression columns. Observation annotations can optionally be appended.
+
     Parameters
     ----------
     adata: AnnData
@@ -27,7 +30,7 @@ def anndata_to_dataframe(
     obs: str or sequence of str, optional
         Observation columns from `adata.obs` to append to the output DataFrame.
     layer: str, optional
-        Layer to use for expression values instead of `adata.X`.
+        Layer to use instead of `adata.X`.
     is_log: bool (default: False)
         If True, back-transform log1p values with `expm1`.
 

@@ -17,26 +17,29 @@ def get_paga_graph(
     threshold: float = 0.01,
 ) -> nx.DiGraph:
     """
-    Get the partition-based graph abstraction (paga) graph stored in 'adata' with a graph-based data structure.
-    To compute the paga matrix, please run 'scanpy.tl.paga'. Paga can also be computed using scvelo [1].
-    In this case, please use adata.uns['edges'] = adata.uns["paga"]['edges'] before.
+    Get the partition-based graph abstraction (PAGA) graph stored in `adata`.
+
+    To compute the PAGA matrix, run `scanpy.tl.paga`. PAGA can also be
+    computed using scVelo [1]. In this case, use
+    `adata.uns[edges] = adata.uns["paga"][edges]` before calling this function.
 
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
     obs: str
-        The classification is retrieved by adata.obs['obs'], which must be categorical/qualitative values.
+        Observation column in `adata.obs` defining groups.
     use_rep: str
-        The data points are retrieved by the first columns in .obsm['use_rep'].
-    edges: str (default: transitions_confidence)
-        The adjacency matrix-based data structure is retrieved by adata.uns['edges'].
+        Representation key in `adata.obsm`.
+    edges: str (default: "transitions_confidence")
+        Key in `adata.uns` containing the adjacency matrix.
     threshold: float (default: 0.01)
-        Confidence threshold.
+        Confidence threshold used to prune adjacency values.
 
     Returns
     -------
-    Return DiGraph corresponding to the paga.
+    nx.DiGraph
+        PAGA graph with cluster barycenters stored as node positions.
 
     Raises
     ------

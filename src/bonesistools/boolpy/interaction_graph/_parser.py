@@ -31,15 +31,16 @@ def read_interaction_graph(
     ----------
     infile: str | Path
         Path to the tabular file containing the interaction graph.
-    genesyn: GeneSynonyms (optional, default: None)
-        If specified, convert node identifiers using a GeneSynonyms object.
-    input_identifier_type: str (default: 'name')
-        Gene identifier input format.
-    output_identifier_type: str (default: 'official_name')
-        Gene identifier output format.
-    sep: str (optional, default: None)
+    genesyn: GeneSynonyms, optional
+        GeneSynonyms object used to convert graph node identifiers.
+    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+        Input gene identifier type. Valid database-specific values are listed
+        in `databases`.
+    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
+        Output gene identifier type. Valid database-specific values are listed
+        in `databases`.
+    sep: str (default: ",")
         Field delimiter passed to pandas.read_csv.
-        If None, pandas infers the delimiter.
     **kwargs: Mapping[str, Any]
         Additional keyword arguments passed to pandas.read_csv.
 

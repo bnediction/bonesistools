@@ -43,6 +43,11 @@ def transfer_layer(
     Transfer layers from 'right_ad.layers' to 'left_ad.layers' by preserving
     the order of observations and variables.
 
+    Missing observations or variables in `right_ad` are filled with NaN in the
+    transferred layer. Extra observations or variables from `right_ad` are
+    discarded so that the resulting layer follows `left_ad.obs_names` and
+    `left_ad.var_names`.
+
     Parameters
     ----------
     left_ad: AnnData
@@ -52,13 +57,14 @@ def transfer_layer(
         Unimodal annotated data matrix.
         It corresponds to the object sending layer-based information.
     layers: Keys
-        Sequence where each element is a string indicating the layer to add in 'left_ad'.
+        Layer name or sequence of layer names to transfer into `left_ad.layers`.
     copy: bool (default: False)
-        Return a copy instead of updating 'left_ad' object.
+        Return a copy instead of modifying `left_ad`.
 
     Returns
     -------
-    Depending on 'copy', update 'left_ad' or return AnnData object.
+    AnnData or None
+        Updated AnnData object if `copy=True`; otherwise None.
 
     Raises
     ------
@@ -116,26 +122,31 @@ def transfer_obs_sti(
     from multiple AnnData 'adatas' towards a unique AnnData 'adata'.
     This function handles issues whenever there are identical indices between AnnData objects.
 
+    The merge is performed on observation index and condition, allowing
+    condition-specific AnnData objects to contain overlapping observation names.
+
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
         It corresponds to the integrated dataset receiving information.
     adatas: AnnDataList
-        List of unimodal annotated data matrix.
+        List of unimodal annotated data matrices.
         It corresponds to the specific datasets sending information.
     obs: Keys
-        Column names in specific 'adata.obs' to transfer.
+        Observation column name or names from specific `adatas.obs` to
+        transfer.
     conditions: Keys
-        Conditions related to AnnData objects (ordered w.r.t 'adatas').
+        Conditions associated with AnnData objects, ordered like `adatas`.
     condition_colname: str (default: 'condition')
-        Column name in integrated 'adata.obs' related to conditions.
+        Column name in integrated `adata.obs` storing conditions.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adata`.
 
     Returns
     -------
-    Depending on 'copy', update 'adata' or return AnnData object.
+    AnnData or None
+        Updated integrated AnnData object if `copy=True`; otherwise None.
     """
 
     adata = adata.copy() if copy else adata
@@ -183,26 +194,31 @@ def transfer_obs_its(
     Transfer observations from integrated to specific datasets,
     i.e. transfer columns from a unique AnnData 'adata' towards multiple AnnData 'adatas'.
 
+    Rows are matched by observation index after splitting the integrated
+    AnnData object by `condition_colname`.
+
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
         It corresponds to the integrated dataset sending information.
     adatas: AnnDataList
-        List of unimodal annotated data matrix.
+        List of unimodal annotated data matrices.
         It corresponds to the specific datasets receiving information.
     obs: Keys
-        Column names in integrated 'adata.obs' to transfer.
+        Observation column name or names from integrated `adata.obs` to
+        transfer.
     conditions: Keys
-        Conditions related to AnnData objects (ordered w.r.t 'adatas').
+        Conditions associated with AnnData objects, ordered like `adatas`.
     condition_colname: str (default: 'condition')
-        Column name in integrated 'adata.obs' related to conditions.
+        Column name in integrated `adata.obs` storing conditions.
     copy: bool (default: False)
-        Return a copy instead of updating 'adata' object.
+        Return a copy instead of modifying `adatas`.
 
     Returns
     -------
-    Depending on 'copy', update 'adatas' object or return a list of AnnData objects.
+    list of AnnData or None
+        Updated AnnData objects if `copy=True`; otherwise None.
     """
 
     if copy:

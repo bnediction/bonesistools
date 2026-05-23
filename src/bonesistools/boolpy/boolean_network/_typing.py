@@ -19,7 +19,17 @@ class BooleanNetworkLike(Protocol):
     component names to Boolean rules.
     """
 
-    def items(self) -> ItemsView[str, BooleanRule]: ...
+    def items(self) -> ItemsView[str, BooleanRule]:
+        """
+        Return Boolean network items.
+
+        Returns
+        -------
+        ItemsView[str, BooleanRule]
+            View over `(component, rule)` pairs.
+        """
+
+        ...
 
 
 def is_boolean_network_like(obj: Any) -> bool:

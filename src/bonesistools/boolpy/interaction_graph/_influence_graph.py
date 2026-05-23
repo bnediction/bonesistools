@@ -1350,7 +1350,7 @@ class InfluenceGraph(nx.MultiDiGraph):
         InfluenceGraph
             Compressed influence graph.
 
-        See also
+        See Also
         --------
         feedback_induced_graph
         family_compressed_graph

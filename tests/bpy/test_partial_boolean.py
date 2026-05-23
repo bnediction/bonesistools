@@ -73,10 +73,14 @@ def test_partial_boolean_rejects_invalid_values():
         bt.bpy.ba.PartialBoolean("*").contains(object())
 
 
-def test_partial_boolean_is_unordered():
+def test_partial_boolean_order():
 
-    with pytest.raises(TypeError):
-        bt.bpy.ba.PartialBoolean(0) < bt.bpy.ba.PartialBoolean("*")
+    pb0 = bt.bpy.ba.PartialBoolean(0)
+    pbstar = bt.bpy.ba.PartialBoolean("*")
+    pb1 = bt.bpy.ba.PartialBoolean(1)
 
-    with pytest.raises(TypeError):
-        bt.bpy.ba.PartialBoolean(0) <= bt.bpy.ba.PartialBoolean(1)
+    assert pb0 < pbstar < pb1
+    assert pb0 <= pbstar <= pb1
+    assert pb1 > pbstar > pb0
+    assert pb1 >= pbstar >= pb0
+    assert sorted([pb1, pb0, pbstar]) == [pb0, pbstar, pb1]

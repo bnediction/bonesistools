@@ -17,6 +17,9 @@ def choose_mtx_representation(
     """
     Select the expression matrix from an AnnData object.
 
+    The matrix is selected from `adata.X`, `adata.raw.X`, or a named layer.
+    `use_raw` and `layer` are mutually exclusive.
+
     Parameters
     ----------
     adata: AnnData
@@ -24,9 +27,9 @@ def choose_mtx_representation(
     use_raw: bool, optional
         Use `adata.raw.X` instead of `adata.X`.
     layer: str, optional
-        Use `adata.layers[layer]` instead of `adata.X`.
-    copy: bool, optional
-        Return a copy to preserve `adata`.
+        Layer to use instead of `adata.X`.
+    copy: bool (default: True)
+        Return a copy of the selected matrix.
 
     Returns
     -------
@@ -73,7 +76,7 @@ def choose_representation(
     use_rep: str (default: "X_pca")
         Representation key in `scdata.obsm`.
     n_components: int, optional
-        Number of dimensions to keep. If None, keep all dimensions.
+        Number of dimensions to use. If None, use all dimensions.
 
     Returns
     -------

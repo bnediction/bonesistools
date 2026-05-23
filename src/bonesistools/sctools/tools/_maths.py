@@ -45,8 +45,8 @@ def pairwise_distances(
         Otherwise, return the distance matrix.
     n_jobs: int (default: 1)
         Number of allocated processors.
-    **metric_kwds
-        Any further parameters passed to the distance function.
+    **metric_kwds: Any
+        Additional keyword arguments passed to the distance function.
 
     Returns
     -------
@@ -92,8 +92,7 @@ def barycenters(
     use_rep: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
-        Number of principal components or dimensions in the embedding space
-        taken into account for each observation.
+        Number of dimensions to use. If None, use all dimensions.
 
     Returns
     -------

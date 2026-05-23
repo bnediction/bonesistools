@@ -489,36 +489,35 @@ def embedding_plot(
     **kwargs: Mapping[str, Any],
 ) -> Tuple[Figure, Axes]:
     """
-    Draw a scatterplot between the 'n_components' first columns of .obsm['use_rep']
-    by using a classification/clusterization with respect to .obs['obs'].
+    Draw a scatterplot from an embedding stored in `scdata.obsm`.
 
     Parameters
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
     obs: str
-        Column name in scdata.obs for annotation of observations.
+        Observation column in `scdata.obs` defining groups or values.
     use_rep: str
-        Key in scdata.obsm for observation coordinates.
-    colors: matplotlib.colors.Colormap (optional, default: None)
-        Visualization of the mapping from a list of color values.
+        Representation key in `scdata.obsm`.
+    colors: matplotlib.colors.Colormap, optional
+        Colormap or colors used to draw observations.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
-    title: Union[str, dict] (optional, default: None)
-        Add title to current axe.
+    title: str or dict, optional
+        Figure title, or keyword arguments passed to `Axes.set_title`.
     add_labels: bool (default: False)
-        Add labels retrieved by adata.obs['obs'] to the embedding space.
+        Add labels retrieved from `scdata.obs[obs]` to the embedding.
     add_graph: bool (default: False)
-        Draw elastic principal graph retrieved from scdata.uns['epg'].
-        This parameter is helpful when user has use STREAM framework [1].
+        Draw the elastic principal graph stored in `scdata.uns["epg"]`.
+        This is useful for STREAM outputs [1].
     add_labels_to_graph: bool (default: False)
-        Add node labels of elastic principal graph retrieved from scdata.uns['epg'].
+        Add node labels from the elastic principal graph.
     automatic_resize: bool (default: False)
-        Resize figure. Helpful when the legend is large and comes out of the framework.
-    default_parameters: Function (optional, default: None)
+        Resize figure to accommodate large legends.
+    default_parameters: Callable (optional, default: None)
         Function specifying default figure parameters.
-    outfile: Path (optional, default: None)
-        If specified, save the figure.
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
     **kwargs: Mapping[str, Any]
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -538,7 +537,9 @@ def embedding_plot(
 
     Returns
     -------
-    Depending on 'outfile', save figure or create matplotlib Figure and Axes object.
+    tuple[Figure, Axes] or None
+        Figure and axes if `outfile` is None; otherwise None after saving the
+        figure.
 
     Raises
     ------

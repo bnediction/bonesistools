@@ -21,7 +21,8 @@ def load_collectri_grn(
     Parameters
     ----------
     organism: str or int (default: "mouse")
-        Organism of interest. Accepted values depend on the decoupler wrapper.
+        Organism of interest. Accepted values depend on the selected decoupler
+        wrapper.
     split_complexes: bool (default: False)
         Whether to split regulatory complexes into subunits.
     remove_pmid: bool (default: False)

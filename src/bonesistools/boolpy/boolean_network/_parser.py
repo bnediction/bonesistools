@@ -18,13 +18,14 @@ def read_bnet(
 
     Parameters
     ----------
-    file:
+    file: str or Path
         Path to the `.bnet` file.
-    ba:
-        Boolean algebra used to parse Boolean expressions.
-    check:
-        Whether to validate that all symbols referenced by rules are defined
-        as network components.
+    ba: BooleanAlgebra (optional, default: None)
+        Boolean algebra used to parse and store Boolean expressions. If None,
+        a new BooleanAlgebra instance is created.
+    check: bool (default: True)
+        If True, validate that all symbols referenced by rules are defined as
+        network components.
 
     Returns
     -------
@@ -67,14 +68,16 @@ def read_bnet_directory(
 
     Parameters
     ----------
-    directory: Union[str, Path]
+    directory: str or Path
         Directory containing `.bnet` files.
     ba: BooleanAlgebra (optional, default: None)
-        Boolean algebra used to parse Boolean expressions.
+        Boolean algebra used to parse and store Boolean expressions. If None,
+        a new BooleanAlgebra instance is created.
     recursive: bool (default: False)
         If True, recursively search subdirectories for `.bnet` files.
     check: bool (default: True)
-        Whether to validate loaded Boolean networks.
+        If True, validate that all symbols referenced by rules are defined as
+        network components.
 
     Returns
     -------

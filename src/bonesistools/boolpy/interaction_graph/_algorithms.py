@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Any
-from ._typing import Graph
+from __future__ import annotations
 
-from collections import deque
+from ._typing import Graph
 
 
 def walks_from(
