@@ -12,6 +12,11 @@ def test_set_default_params_and_axis_update_matplotlib_state():
     assert mpl.rcParams["text.usetex"] is True
     assert mpl.rcParams["axes.spines.top"] is False
 
+    bt.sct.pl.set_default_params(tex=False)
+
+    assert mpl.rcParams["text.usetex"] is False
+    assert mpl.rcParams["axes.spines.top"] is False
+
     fig, ax = plt.subplots()
     ax.set_title("temporary")
 

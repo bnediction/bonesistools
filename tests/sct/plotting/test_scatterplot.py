@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import bonesistools as bt
 from bonesistools.sctools.plotting import _colors
 
-bt.sct.pl.set_default_params()
+bt.sct.pl.set_default_params(tex=False)
 
 ADATA = bt.sct.datasets.nestorowa()
 

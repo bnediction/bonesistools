@@ -10,9 +10,15 @@ from matplotlib.colors import ListedColormap
 from . import _colors
 
 
-def set_default_params():
+def set_default_params(tex: bool = True):
     """
     Set default parameters for matplotlib.
+
+    Parameters
+    ----------
+    tex: bool (default: True)
+        If True, enable LaTeX rendering for text. Set to False in
+        environments where LaTeX is not installed.
     """
 
     mpl.rcParams.update(mpl.rcParamsDefault)
@@ -20,7 +26,7 @@ def set_default_params():
     font = {"family": "normal", "weight": "normal", "size": 12}
     mpl.rc("font", **font)
 
-    mpl.rcParams["text.usetex"] = True
+    mpl.rcParams["text.usetex"] = tex
     mpl.rcParams["lines.linewidth"] = 1.5
 
     mpl.rc(

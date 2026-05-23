@@ -16,9 +16,9 @@ from typing import (
 )
 
 try:
-    from typing import Literal, Self
+    from typing import Literal
 except ImportError:
-    from typing_extensions import Literal, Self
+    from typing_extensions import Literal
 
 import networkx as nx
 
@@ -86,7 +86,7 @@ class InfluenceGraph(nx.MultiDiGraph):
 
     __repr__ = __str__
 
-    def copy(self, as_view: bool = False) -> Self:
+    def copy(self, as_view: bool = False) -> "InfluenceGraph":
         """
         Return a copy of the influence graph.
 
@@ -101,7 +101,7 @@ class InfluenceGraph(nx.MultiDiGraph):
 
         return type(self)(self._plain_graph(self))
 
-    def to_directed(self, as_view: bool = False) -> Self:
+    def to_directed(self, as_view: bool = False) -> "InfluenceGraph":
         """
         Return a directed copy of the influence graph.
 
@@ -679,7 +679,7 @@ class InfluenceGraph(nx.MultiDiGraph):
         exclude_feedback_nodes: bool = True,
         min_size: int = 2,
         sep: str = "|",
-    ) -> Self:
+    ) -> "InfluenceGraph":
         """
         Return a graph where structurally equivalent nodes are collapsed.
 
@@ -1324,7 +1324,7 @@ class InfluenceGraph(nx.MultiDiGraph):
     def feedback_induced_graph(
         self,
         include_singleton_selfloops: bool = True,
-    ) -> Self:
+    ) -> "InfluenceGraph":
         """
         Return the graph induced by feedback nodes.
 
@@ -1398,7 +1398,7 @@ class InfluenceGraph(nx.MultiDiGraph):
         exclude_feedback_nodes: bool = False,
         min_size: int = 2,
         sep: str = "|",
-    ) -> Self:
+    ) -> "InfluenceGraph":
         """
         Return a compressed influence graph.
 
