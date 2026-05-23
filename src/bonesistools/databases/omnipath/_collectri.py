@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-from typing import Any, Optional, Union
+from typing import (
+    Any,
+    Optional,
+    Union,
+)
 
 import networkx as nx
 

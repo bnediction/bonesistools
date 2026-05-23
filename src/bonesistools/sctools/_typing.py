@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 
 import importlib
-from typing import Optional, Union, Callable, Sequence, List, Tuple
+from typing import (
+    Callable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 try:
     from typing import Literal
@@ -184,7 +191,8 @@ def anndata_checker(function: Optional[Callable] = None, n: int = 1):
                 value = next(iterator)
                 if not isinstance(value, AnnData):
                     raise TypeError(
-                        f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}"
+                        f"unsupported argument type for '{i+1}'-th argument: "
+                        f"expected {AnnData} but received {type(value)}"
                     )
             return function(*args, **kwargs)
 
@@ -232,7 +240,8 @@ if _mudata_is_available:
                     value = next(iterator)
                     if not isinstance(value, MuData):
                         raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: expected {MuData} but received {type(value)}"
+                            f"unsupported argument type for '{i+1}'-th argument: "
+                            f"expected {MuData} but received {type(value)}"
                         )
                 return function(*args, **kwargs)
 
@@ -278,7 +287,9 @@ if _mudata_is_available:
                     value = next(iterator)
                     if not (isinstance(value, AnnData) or isinstance(value, MuData)):
                         raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} or {MuData} but received {type(value)}"
+                            f"unsupported argument type for '{i+1}'-th argument: "
+                            f"expected {AnnData} or {MuData} but received "
+                            f"{type(value)}"
                         )
                 return function(*args, **kwargs)
 
@@ -363,7 +374,8 @@ else:
                     value = next(iterator)
                     if not isinstance(value, AnnData):
                         raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: expected {AnnData} but received {type(value)}"
+                            f"unsupported argument type for '{i+1}'-th argument: "
+                            f"expected {AnnData} but received {type(value)}"
                         )
                 return function(*args, **kwargs)
 

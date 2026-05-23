@@ -5,10 +5,10 @@ Utilities for Boolean algebra and partial Boolean abstractions.
 
 The `ba` sub-package provides helper structures and operations for
 Boolean algebra, including partial Boolean values and Boolean
-differential calculus.
+differential and predecessor inference utilities.
 """
 
-from ._algebra import BooleanDifferentialCalculus
+from ._algebra import BooleanPredecessorInference, PartialBooleanDifferential
 from ._boolean import PartialBoolean
 from ._hypercube import Hypercube, HypercubeCollection
 from ._structure import expressions_equivalent, dnf_to_structure
@@ -26,7 +26,8 @@ from ._typing import (
 )
 
 __all__ = [
-    "BooleanDifferentialCalculus",
+    "BooleanPredecessorInference",
+    "PartialBooleanDifferential",
     "PartialBoolean",
     "Hypercube",
     "HypercubeCollection",

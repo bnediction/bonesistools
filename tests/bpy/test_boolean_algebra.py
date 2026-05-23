@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from collections import Counter
+
 import pytest
 
 from boolean import BooleanAlgebra
@@ -7,28 +9,28 @@ from boolean import BooleanAlgebra
 import bonesistools as bt
 
 
-def test_boolean_differential_calculus_differential_uses_partial_boolean_order():
-    calculus = bt.bpy.ba.BooleanDifferentialCalculus()
+def test_partial_boolean_differential_uses_partial_boolean_order():
+    differential = bt.bpy.ba.PartialBooleanDifferential
 
     pb0 = bt.bpy.ba.PartialBoolean(0)
     pbstar = bt.bpy.ba.PartialBoolean("*")
     pb1 = bt.bpy.ba.PartialBoolean(1)
 
-    assert calculus.differential(pb0, pb0) == 0
-    assert calculus.differential(pbstar, pbstar) == 0
-    assert calculus.differential(pb1, pb1) == 0
+    assert differential.differential(pb0, pb0) == 0
+    assert differential.differential(pbstar, pbstar) == 0
+    assert differential.differential(pb1, pb1) == 0
 
-    assert calculus.differential(pb0, pbstar) == 1
-    assert calculus.differential(pbstar, pb1) == 1
-    assert calculus.differential(pb0, pb1) == 1
+    assert differential.differential(pb0, pbstar) == 1
+    assert differential.differential(pbstar, pb1) == 1
+    assert differential.differential(pb0, pb1) == 1
 
-    assert calculus.differential(pbstar, pb0) == -1
-    assert calculus.differential(pb1, pbstar) == -1
-    assert calculus.differential(pb1, pb0) == -1
+    assert differential.differential(pbstar, pb0) == -1
+    assert differential.differential(pb1, pbstar) == -1
+    assert differential.differential(pb1, pb0) == -1
 
-    assert calculus.differential(False, 0) == 0
-    assert calculus.differential(True, 1) == 0
-    assert calculus.differential(float("nan"), pbstar) == 0
+    assert differential.differential(False, 0) == 0
+    assert differential.differential(True, 1) == 0
+    assert differential.differential(float("nan"), pbstar) == 0
 
 
 @pytest.mark.parametrize(
@@ -44,16 +46,16 @@ def test_boolean_differential_calculus_differential_uses_partial_boolean_order()
         (0, (0, 1), -1, True),
     ],
 )
-def test_boolean_differential_calculus_pairwise_predecessor_table(
+def test_boolean_predecessor_inference_pairwise_table(
     source_value,
     target_values,
     sign,
     expected,
 ):
-    calculus = bt.bpy.ba.BooleanDifferentialCalculus()
+    inference = bt.bpy.ba.BooleanPredecessorInference
 
     assert (
-        calculus.pairwise_predecessor_test(
+        inference.pairwise_predecessor_test(
             source_value,
             source_value,
             target_values[0],
@@ -74,15 +76,15 @@ def test_boolean_differential_calculus_pairwise_predecessor_table(
         ((0, 0), (1, 1), -1),
     ],
 )
-def test_boolean_differential_calculus_pairwise_predecessor_no_conclusion(
+def test_boolean_predecessor_inference_pairwise_no_conclusion(
     source_values,
     target_values,
     sign,
 ):
-    calculus = bt.bpy.ba.BooleanDifferentialCalculus()
+    inference = bt.bpy.ba.BooleanPredecessorInference
 
     assert (
-        calculus.pairwise_predecessor_test(
+        inference.pairwise_predecessor_test(
             source_values[0],
             source_values[1],
             target_values[0],
@@ -93,47 +95,147 @@ def test_boolean_differential_calculus_pairwise_predecessor_no_conclusion(
     )
 
 
-def test_boolean_differential_calculus_scores_cell_order_from_single_influence():
-    calculus = bt.bpy.ba.BooleanDifferentialCalculus()
-    interactions = [("A", "B", {"sign": 1})]
-
-    def predecessor_score(first_cell, second_cell):
-        score = 0
-
-        for source, target, data in interactions:
-            conclusion = calculus.pairwise_predecessor_test(
-                first_cell[source],
-                second_cell[source],
-                first_cell[target],
-                second_cell[target],
-                data["sign"],
-            )
-
-            if conclusion is True:
-                score += 1
-            elif conclusion is False:
-                score -= 1
-
-        return score
+def test_boolean_predecessor_inference_scores_cell_order_from_single_influence():
+    inference = bt.bpy.ba.BooleanPredecessorInference
 
     cell1 = {"A": 1, "B": 0}
     cell2 = {"A": 1, "B": 1}
+    interactions = [("A", "B", {"sign": 1})]
 
-    assert predecessor_score(cell1, cell2) == 1
-    assert predecessor_score(cell2, cell1) == -1
+    assert inference.predecessor_votes(cell1, cell2, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 1,
+            inference.SECOND_PRECEDES_FIRST: 0,
+            inference.INCONCLUSIVE: 0,
+        }
+    )
+    assert inference.predecessor(cell1, cell2, interactions) == (
+        inference.FIRST_PRECEDES_SECOND
+    )
+    assert inference.predecessor_score(cell1, cell2, interactions) == 1.0
+
+    assert inference.predecessor_votes(cell2, cell1, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 0,
+            inference.SECOND_PRECEDES_FIRST: 1,
+            inference.INCONCLUSIVE: 0,
+        }
+    )
+    assert inference.predecessor(cell2, cell1, interactions) == (
+        inference.SECOND_PRECEDES_FIRST
+    )
+    assert inference.predecessor_score(cell2, cell1, interactions) == -1.0
 
 
-def test_boolean_differential_calculus_rejects_invalid_inputs():
-    calculus = bt.bpy.ba.BooleanDifferentialCalculus()
+def test_boolean_predecessor_inference_high_level_scbooldiff_example():
+    inference = bt.bpy.ba.BooleanPredecessorInference
+
+    cell1 = {"A": 1, "B": 0, "C": 1, "D": 1}
+    cell2 = {"A": 1, "B": 1, "C": 1, "D": 0}
+    interactions = [
+        ("A", "B", {"sign": 1}),
+        ("C", "D", {"sign": -1}),
+    ]
+
+    assert inference.predecessor_votes(cell1, cell2, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 2,
+            inference.SECOND_PRECEDES_FIRST: 0,
+            inference.INCONCLUSIVE: 0,
+        }
+    )
+    assert inference.predecessor(cell1, cell2, interactions) == (
+        inference.FIRST_PRECEDES_SECOND
+    )
+    assert inference.predecessor_score(cell1, cell2, interactions) == 1.0
+
+
+def test_boolean_predecessor_inference_counts_inconclusive_interactions():
+    inference = bt.bpy.ba.BooleanPredecessorInference
+
+    cell1 = {"A": 1, "B": 0, "C": "*", "D": 0}
+    cell2 = {"A": 1, "B": 1, "C": "*", "D": 1}
+    interactions = [
+        ("A", "B", {"sign": 1}),
+        ("C", "D", {"sign": 1}),
+        ("A", "missing", {"sign": 1}),
+        ("missing", "B", {"sign": 1}),
+    ]
+
+    assert inference.predecessor_votes(cell1, cell2, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 1,
+            inference.SECOND_PRECEDES_FIRST: 0,
+            inference.INCONCLUSIVE: 3,
+        }
+    )
+    assert inference.predecessor(cell1, cell2, interactions) == (
+        inference.FIRST_PRECEDES_SECOND
+    )
+    assert inference.predecessor_score(cell1, cell2, interactions) == 1.0
+
+
+def test_boolean_predecessor_inference_returns_no_predecessor_for_tied_votes():
+    inference = bt.bpy.ba.BooleanPredecessorInference
+
+    cell1 = {"A": 1, "B": 0, "C": 1, "D": 1}
+    cell2 = {"A": 1, "B": 1, "C": 1, "D": 0}
+    interactions = [
+        ("A", "B", {"sign": 1}),
+        ("C", "D", {"sign": 1}),
+    ]
+
+    assert inference.predecessor_votes(cell1, cell2, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 1,
+            inference.SECOND_PRECEDES_FIRST: 1,
+            inference.INCONCLUSIVE: 0,
+        }
+    )
+    assert inference.predecessor(cell1, cell2, interactions) is None
+    assert inference.predecessor_score(cell1, cell2, interactions) == 0.0
+
+
+def test_boolean_predecessor_inference_scores_zero_without_conclusive_votes():
+    inference = bt.bpy.ba.BooleanPredecessorInference
+
+    cell1 = {"A": "*", "B": 0}
+    cell2 = {"A": "*", "B": 1}
+    interactions = [("A", "B", {"sign": 1})]
+
+    assert inference.predecessor_votes(cell1, cell2, interactions) == Counter(
+        {
+            inference.FIRST_PRECEDES_SECOND: 0,
+            inference.SECOND_PRECEDES_FIRST: 0,
+            inference.INCONCLUSIVE: 1,
+        }
+    )
+    assert inference.predecessor(cell1, cell2, interactions) is None
+    assert inference.predecessor_score(cell1, cell2, interactions) == 0.0
+
+
+def test_boolean_predecessor_inference_rejects_invalid_inputs():
+    differential = bt.bpy.ba.PartialBooleanDifferential
+    inference = bt.bpy.ba.BooleanPredecessorInference
 
     with pytest.raises(ValueError):
-        calculus.differential(2, 1)
+        differential.differential(2, 1)
+
+    with pytest.raises(ValueError):
+        differential.differential("0", 1)
 
     with pytest.raises(TypeError):
-        calculus.differential("0", 1)
+        differential.differential(object(), 1)
 
     with pytest.raises(ValueError):
-        calculus.pairwise_predecessor_test(1, 1, 0, 1, sign=0)
+        inference.pairwise_predecessor_test(1, 1, 0, 1, sign=0)
+
+    with pytest.raises(ValueError):
+        inference.predecessor_votes(
+            {"A": 1, "B": 0},
+            {"A": 1, "B": 1},
+            [("A", "B", {"sign": 0})],
+        )
 
 
 def test_dnf_to_structure_conjunction():

@@ -4,7 +4,11 @@ from typing import Optional
 from anndata import AnnData
 from numpy import ndarray
 
-from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
+from .._typing import (
+    ScData,
+    anndata_checker,
+    anndata_or_mudata_checker,
+)
 
 
 @anndata_checker

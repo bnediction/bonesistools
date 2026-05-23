@@ -247,6 +247,8 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
         add_graph=True,
         add_labels_to_graph=True,
         background_visible=False,
+        graph={"linewidth": 5},
+        graph_z_offset=0.2,
     )
 
     assert ax.name == "3d"
@@ -255,4 +257,6 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
         {"cat0", "cat1", "cat2", "cat3", "N1", "N2"}
     )
     assert len(ax.lines) >= 1
+    assert ax.lines[0].get_linewidth() == 5
+    assert np.allclose(ax.lines[0].get_data_3d()[2], np.array([0.2, 1.2]))
     plt.close(fig)

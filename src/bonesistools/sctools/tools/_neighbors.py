@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence, Mapping, Any, Type
+from typing import (
+    Any,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+)
 import importlib
 
 try:
@@ -27,7 +33,11 @@ import pandas as pd
 import networkx as nx
 from networkx import Graph, DiGraph
 
-from scipy.sparse import csr_matrix, issparse, diags
+from scipy.sparse import (
+    csr_matrix,
+    diags,
+    issparse,
+)
 
 from ._maths import barycenters
 from ._utils import choose_representation
@@ -45,7 +55,7 @@ def kneighbors_graph(
     edge_attr: str = "distance",
     index_or_name: Literal["index", "name"] = "index",
     n_jobs: int = 1,
-    **metric_kwds: Mapping[str, Any],
+    **metric_kwds: Any,
 ) -> Graph:
     """
     Compute a k-nearest-neighbor graph from an embedding space.
@@ -158,7 +168,7 @@ class Knnbs(object):
         use_rep: str = "X_pca",
         n_components: Optional[int] = None,
         metric: Metric = "euclidean",
-        **metric_kwds: Mapping[str, Any],
+        **metric_kwds: Any,
     ):
 
         if isinstance(n_neighbors, int):
@@ -235,34 +245,14 @@ class Knnbs(object):
             String representation of the Knnbs configuration.
         """
 
-        return f"{self.__class__.__name__}(n_neighbors={self.n_neighbors},use_rep={self.use_rep},n_components={self.n_components},metric={self.metric},metric_kwds={self.metric_kwds})"
-
-    def get(self, attribute: str) -> Any:
-        """
-        Return an attribute by name.
-
-        Parameters
-        ----------
-        attribute: str
-            Attribute name.
-
-        Returns
-        -------
-        Any
-            Attribute value.
-
-        Raises
-        ------
-        AttributeError
-            If the attribute does not exist.
-        """
-
-        if hasattr(self, attribute):
-            return getattr(self, attribute)
-        else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{attribute}'"
-            )
+        return (
+            f"{self.__class__.__name__}("
+            f"n_neighbors={self.n_neighbors},"
+            f"use_rep={self.use_rep},"
+            f"n_components={self.n_components},"
+            f"metric={self.metric},"
+            f"metric_kwds={self.metric_kwds})"
+        )
 
     @require_sklearn
     def fit(self, adata: AnnData, obs: str, n_jobs: int = 1) -> None:
@@ -323,7 +313,8 @@ class Knnbs(object):
 
         if nx.number_connected_components(_kneighbors_graph) > 1:
             warnings.warn(
-                f"'kneighbors_graph' not weakly connected: add edges for joining connected components"
+                "'kneighbors_graph' not weakly connected: add edges for "
+                "joining connected components"
             )
             scc = list(nx.connected_components(_kneighbors_graph))
             scc = [list(cc - set(_barycenters.keys())) for cc in scc]
@@ -416,6 +407,33 @@ class Knnbs(object):
             data=shortest_path_lengths_dict, orient="columns"
         )
         return None
+
+    def get(self, attribute: str) -> Any:
+        """
+        Return an attribute by name.
+
+        Parameters
+        ----------
+        attribute: str
+            Attribute name.
+
+        Returns
+        -------
+        Any
+            Attribute value.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist.
+        """
+
+        if hasattr(self, attribute):
+            return getattr(self, attribute)
+        else:
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{attribute}'"
+            )
 
     def find_furthest_cells_to_other_barycenters(
         self,
@@ -585,7 +603,8 @@ class Knnbs(object):
 
         if subclusters_maximizing_distances & subclusters_minimizing_distances:
             raise RuntimeError(
-                "'subclusters_maximizing_distances' and 'subclusters_minimizing_distances' are not disjoint"
+                "'subclusters_maximizing_distances' and "
+                "'subclusters_minimizing_distances' are not disjoint"
             )
 
         if subclusters_maximizing_distances:

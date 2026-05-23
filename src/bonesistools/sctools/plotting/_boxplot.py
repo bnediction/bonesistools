@@ -1,6 +1,16 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence, Tuple, List, Mapping, Any
+from itertools import cycle
+from pathlib import Path
+from typing import (
+    Any,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 try:
     from typing import Literal
@@ -11,8 +21,6 @@ from pandas.core.groupby.generic import SeriesGroupBy
 from ._typing import RGB
 from .._typing import ScData, anndata_or_mudata_checker
 
-from pathlib import Path
-
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -21,8 +29,13 @@ from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.colors import Colormap
-from itertools import cycle
-from ._colors import generate_colormap, QUALITATIVE_COLORS, gray, black, white
+from ._colors import (
+    QUALITATIVE_COLORS,
+    black,
+    generate_colormap,
+    gray,
+    white,
+)
 
 Colors = Union[Sequence[RGB], cycle, Colormap]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
@@ -99,7 +112,7 @@ def __add_points(
     scale: float,
     groups: Optional[Sequence] = None,
     hues: Optional[Sequence] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ):
     ax = plt.gca()
     if groups is None:
@@ -154,7 +167,7 @@ def boxplot(
     showpoints: Optional[bool] = None,
     showlegend: bool = True,
     outfile: Optional[Path] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> Tuple[Figure, Axes, BoxPlots]:
     """
     Draw a boxplot for an observation-level variable.

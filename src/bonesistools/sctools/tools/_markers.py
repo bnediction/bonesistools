@@ -10,7 +10,13 @@ try:
 except ImportError:
     from typing_extensions import Literal
 
-from typing import Union, Optional, Iterable, Sequence, Callable
+from typing import (
+    Callable,
+    Iterable,
+    Optional,
+    Sequence,
+    Union,
+)
 from .._typing import anndata_checker
 
 import pandas as pd
@@ -66,7 +72,8 @@ def calculate_logfoldchanges(
 
     See Also
     --------
-    Get more information about the difference between log2 fold-changes derived with Seurat and Scanpy here:
+    Get more information about the difference between log2 fold-changes derived
+    with Seurat and Scanpy here:
     <https://www.biostars.org/p/453129/>
 
     Raises

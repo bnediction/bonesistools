@@ -1,14 +1,23 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence, Mapping
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from itertools import cycle
+from numbers import Number
 from pathlib import Path
+from typing import (
+    Any,
+    Optional,
+    Union,
+)
+
 from anndata import AnnData
 from ._typing import RGB
 from .._typing import anndata_checker
 
 import matplotlib.pyplot as plt
 from matplotlib.axes._axes import Axes
-from itertools import cycle
 
 from . import _colors
 
@@ -26,9 +35,11 @@ def draw_paga(
     threshold: float = 0.01,
     ax: Optional[Axes] = None,
     with_labels: bool = False,
-    node_color: Optional[Union[Sequence[RGB], cycle, Mapping]] = _colors.black,
+    node_color: Optional[
+        Union[RGB, Sequence[RGB], cycle, Mapping[str, Any]]
+    ] = _colors.black,
     outfile: Optional[Path] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> Union[Axes, None]:
     """
     Draw the partition-based graph abstraction (PAGA) graph with Matplotlib.
@@ -57,7 +68,7 @@ def draw_paga(
         Color specification for graph nodes.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    **kwargs: Mapping[str, Any]
+    **kwargs: Any
         Keyword arguments passed to `networkx.draw_networkx`.
 
     Returns
@@ -68,8 +79,9 @@ def draw_paga(
 
     References
     ----------
-    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell states through dynamical modeling.
-    Nature biotechnology, 38(12), 1408-1414 (https://doi.org/10.1038/s41587-020-0591-3)
+    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell
+    states through dynamical modeling. Nature biotechnology, 38(12), 1408-1414
+    (https://doi.org/10.1038/s41587-020-0591-3)
     """
 
     if ax is None:
@@ -78,10 +90,20 @@ def draw_paga(
     paga = get_paga_graph(
         adata=adata, obs=obs, use_rep=use_rep, edges=edges, threshold=threshold
     )
-    barycenters = nx.get_node_attributes(paga, "pos")
+    barycenters = {
+        node: position[:2]
+        for node, position in nx.get_node_attributes(paga, "pos").items()
+    }
 
     if isinstance(node_color, Mapping):
         node_color = [node_color[node] for node in paga]
+    elif (
+        isinstance(node_color, Sequence)
+        and not isinstance(node_color, str)
+        and len(node_color) in [3, 4]
+        and all(isinstance(channel, Number) for channel in node_color)
+    ):
+        node_color = [node_color for _ in paga]
 
     nx.draw_networkx(
         paga,

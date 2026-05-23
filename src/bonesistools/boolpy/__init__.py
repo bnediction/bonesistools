@@ -28,7 +28,6 @@ _sys.modules.update(
 )
 
 _DEPRECATED = {
-    "BooleanDifferentialCalculus": ("ba", "BooleanDifferentialCalculus"),
     "PartialBoolean": ("ba", "PartialBoolean"),
     "BooleanNetworkEnsemble": ("bn", "BooleanNetworkEnsemble"),
     "Hypercube": ("bn", "Hypercube"),

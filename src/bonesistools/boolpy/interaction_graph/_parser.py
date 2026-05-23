@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
 from pathlib import Path
-from typing import Any, Mapping, Optional, Union
+from typing import (
+    Any,
+    Optional,
+    Union,
+)
 
 import networkx as nx
 import pandas as pd
@@ -19,7 +23,7 @@ def read_interaction_graph(
     input_identifier_type: InputIdentifierType = "name",
     output_identifier_type: OutputIdentifierType = "official_name",
     sep: str = ",",
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> nx.MultiDiGraph:
     """
     Read an interaction graph from a tabular file.
@@ -33,15 +37,17 @@ def read_interaction_graph(
         Path to the tabular file containing the interaction graph.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
-    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
         in `databases`.
-    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
+    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
+        'ensembl_id' | <database> (default: 'official_name')
         Output gene identifier type. Valid database-specific values are listed
         in `databases`.
     sep: str (default: ",")
         Field delimiter passed to pandas.read_csv.
-    **kwargs: Mapping[str, Any]
+    **kwargs: Any
         Additional keyword arguments passed to pandas.read_csv.
 
     Returns

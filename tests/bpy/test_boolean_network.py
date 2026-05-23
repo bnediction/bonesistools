@@ -177,7 +177,7 @@ def test_boolean_network_string_representation():
     assert str(bn) == "A <- B & ~C\nB <- 0\nC <- 1"
 
 
-def test_boolean_network_repr_is_string_representation():
+def test_boolean_network_repr_is_compact():
 
     bn = bt.bpy.bn.BooleanNetwork(
         {
@@ -187,7 +187,8 @@ def test_boolean_network_repr_is_string_representation():
         }
     )
 
-    assert repr(bn) == str(bn)
+    assert repr(bn) == "BooleanNetwork(components=3)"
+    assert "\n" not in repr(bn)
 
 
 def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
@@ -238,6 +239,16 @@ def test_boolean_network_rename_validates_inputs_and_collisions():
 
     with pytest.raises(TypeError, match="unsupported argument type for 'new_name'"):
         bn.rename("A", 1)
+
+
+def test_boolean_network_rename_validates_candidate_before_mutating():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "C"}, check=False)
+    rules = bn.rules.copy()
+
+    with pytest.raises(ValueError, match="undefined components"):
+        bn.rename("A", "X")
+
+    assert bn.rules == rules
 
 
 def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):
@@ -373,6 +384,58 @@ def test_boolean_network_influences():
     }
 
 
+def test_boolean_network_fixed_points_and_predicate():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    assert bn.fixed_points() == [
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 1},
+    ]
+    assert bn.fixed_points(limit=1) == [{"A": 0, "B": 0}]
+    assert bn.is_fixed_point({"A": True, "B": True}) is True
+    assert bn.is_fixed_point({"A": 1, "B": 0}) is False
+
+    no_fixed_point = bt.bpy.bn.BooleanNetwork({"A": "~A"})
+    assert no_fixed_point.fixed_points() == []
+
+
+def test_boolean_network_next_methods():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B & ~C", "B": "A", "C": 0})
+
+    assert bn.next_state("A", {"A": 0, "B": 1, "C": 0}) == 1
+    assert bn.next_state("A", {"A": 0, "B": 1, "C": 1}) == 0
+
+    assert bn.next_configuration({"A": 1, "B": 1, "C": 0}) == {
+        "A": 1,
+        "B": 1,
+        "C": 0,
+    }
+    assert bn.next_configuration({"A": 0, "B": 1, "C": 1}) == {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+    }
+
+    with pytest.raises(ValueError, match="expected components"):
+        bn.next_state("A", {"A": 0, "B": 1, "C": 0, "D": 1})
+
+
+def test_boolean_network_fixed_points_validate_inputs():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    with pytest.raises(ValueError, match="invalid argument value for 'limit'"):
+        bn.fixed_points(limit=-1)
+
+    with pytest.raises(ValueError, match="expected components"):
+        bn.is_fixed_point({"A": 1})
+
+    with pytest.raises(ValueError, match="expected components"):
+        bn.is_fixed_point({"A": 1, "B": 1, "C": 0})
+
+    with pytest.raises(ValueError, match="expected 0 or 1"):
+        bn.is_fixed_point({"A": 1, "B": "*"})
+
+
 def test_boolean_network_to_influence_graph():
 
     bn = bt.bpy.bn.BooleanNetwork(
@@ -392,6 +455,29 @@ def test_boolean_network_to_influence_graph():
 
     assert graph["B"]["A"][0]["sign"] == 1
     assert graph["C"]["A"][0]["sign"] == -1
+
+
+def test_boolean_network_to_graphviz(fake_graphviz):
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    graph = bn.to_graphviz(rankdir="LR")
+
+    edges = {(source, target): attrs for source, target, attrs in graph.edges}
+
+    assert isinstance(graph, fake_graphviz)
+    assert graph.graph_attr["rankdir"] == "LR"
+    assert ("B", "A") in edges
+    assert ("C", "A") in edges
+    assert edges[("B", "A")]["color"] == "green4"
+    assert edges[("B", "A")]["arrowhead"] == "normal"
+    assert edges[("C", "A")]["color"] == "red2"
+    assert edges[("C", "A")]["arrowhead"] == "tee"
 
 
 def test_boolean_network_to_pydot():

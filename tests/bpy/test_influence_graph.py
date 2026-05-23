@@ -250,6 +250,27 @@ def test_edge_sign_autoregulations_and_path_sign_from_docstrings():
         ig.path_sign(["A"])
 
 
+def test_signed_path_string_formats_signed_edges():
+    ig = bt.bpy.ig.InfluenceGraph()
+    ig.add_edge("A", "B", sign=1)
+    ig.add_edge("B", "C", sign=-1)
+    ig.add_edge("C", "D", sign=1)
+    ig.add_edge("E", "F", sign=1)
+    ig.add_edge("E", "F", sign=-1)
+
+    assert ig.signed_path_string("A", "B", "C", "D") == "A -> B -| C -> D"
+    assert ig.signed_path_string("B", "C", "D") == "B -| C -> D"
+    assert ig.signed_path_string(["B", "C", "D"]) == "B -| C -> D"
+    assert ig.signed_path_string(("C", "D")) == "C -> D"
+    assert ig.signed_path_string("E", "F") == "E -- F"
+
+    with pytest.raises(ValueError, match="at least two nodes"):
+        ig.signed_path_string("A")
+
+    with pytest.raises(KeyError, match="no edge found"):
+        ig.signed_path_string("A", "C")
+
+
 def test_marker_paths_from_docstring():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(
@@ -382,6 +403,40 @@ def test_feedback_induced_graph_and_compressed_graph_from_docstring():
 
     assert isinstance(compressed, bt.bpy.ig.InfluenceGraph)
     assert set(compressed.nodes()) <= set(feedback.nodes())
+
+
+def test_to_graphviz_applies_signed_edge_styles_and_custom_options(fake_graphviz):
+    ig = bt.bpy.ig.InfluenceGraph()
+    ig.add_edge("A", "B", sign=1)
+    ig.add_edge("B", "C", sign=-1)
+
+    graph = ig.to_graphviz(
+        program="neato",
+        edge_style=lambda data: {"label": data["sign"]},
+        rankdir="LR",
+    )
+
+    edge_styles = {
+        (source, target): attrs for source, target, attrs in graph.edges
+    }
+
+    assert isinstance(graph, fake_graphviz)
+    assert graph.engine == "neato"
+    assert graph.graph_attr["rankdir"] == "LR"
+    assert edge_styles[("A", "B")] == {
+        "sign": "1",
+        "color": "green4",
+        "arrowhead": "normal",
+        "penwidth": "2",
+        "label": "1",
+    }
+    assert edge_styles[("B", "C")] == {
+        "sign": "-1",
+        "color": "red2",
+        "arrowhead": "tee",
+        "penwidth": "2",
+        "label": "-1",
+    }
 
 
 def test_to_pydot_applies_signed_edge_styles_and_custom_options():

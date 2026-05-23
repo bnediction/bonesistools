@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, MutableMapping, MutableSet
-from typing import Dict, Optional, Set
+from collections.abc import (
+    Iterable,
+    Iterator,
+    MutableMapping,
+    MutableSet,
+)
+from typing import (
+    Dict,
+    Optional,
+    Set,
+)
 
 from ._boolean import PartialBoolean
-from ._typing import PartialBooleanLike, HypercubeLike, is_hypercube_like
+from ._typing import (
+    HypercubeLike,
+    PartialBooleanLike,
+    is_hypercube_like,
+)
 
 
 class Hypercube(MutableMapping):
@@ -64,385 +77,6 @@ class Hypercube(MutableMapping):
         if mapping is not None:
             for component, value in mapping.items():
                 self[component] = value
-
-    @property
-    def components(self) -> frozenset:
-        """
-        Return explicitly specified hypercube components.
-
-        Missing components are not returned, even though they are interpreted
-        as free values during comparisons.
-
-        Examples
-        --------
-        >>> sorted(Hypercube({"A": 0, "B": "*"}).components)
-        ['A', 'B']
-
-        Returns
-        -------
-        frozenset
-            Explicitly specified component names.
-        """
-
-        return frozenset(self._values)
-
-    @property
-    def is_fully_specified(self) -> bool:
-        """
-        Test whether explicitly specified components are all fixed.
-
-        This property only considers components present in the hypercube.
-        Missing components are ignored.
-
-        Examples
-        --------
-        >>> Hypercube({"A": 0, "B": 1}).is_fully_specified
-        True
-        >>> Hypercube({"A": 0, "B": "*"}).is_fully_specified
-        False
-
-        Returns
-        -------
-        bool
-            True if the hypercube contains no explicit free value.
-        """
-
-        return all(value.is_fixed for value in self._values.values())
-
-    def copy(self) -> "Hypercube":
-        """
-        Return a shallow copy of the hypercube.
-
-        Examples
-        --------
-        >>> hc = Hypercube({"A": 0})
-        >>> copied = hc.copy()
-        >>> copied
-        Hypercube({'A': PartialBoolean(0)})
-
-        Returns
-        -------
-        Hypercube
-            New Hypercube containing the same component values.
-        """
-
-        return Hypercube(self._values)
-
-    def drop(
-        self,
-        components: Iterable[str],
-        inplace: bool = False,
-    ) -> Optional["Hypercube"]:
-        """
-        Remove components from the hypercube.
-
-        Examples
-        --------
-        >>> hc = Hypercube({"A": 0, "B": 1})
-        >>> hc.drop(["B"])
-        Hypercube({'A': PartialBoolean(0)})
-        >>> hc
-        Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})
-
-        >>> hc.drop(["B"], inplace=True) is None
-        True
-        >>> hc
-        Hypercube({'A': PartialBoolean(0)})
-
-        Parameters
-        ----------
-        components: Iterable[str]
-            Components to remove.
-        inplace: bool (default: False)
-            Whether to modify the current hypercube.
-
-        Returns
-        -------
-        Hypercube or None
-            Modified hypercube if `inplace=False`, otherwise None.
-        """
-
-        hypercube = self if inplace else self.copy()
-
-        for component in components:
-            hypercube.pop(component, None)
-
-        if not inplace:
-            return hypercube
-
-        return None
-
-    def contains(self, other: object) -> bool:
-        """
-        Test whether the hypercube contains another hypercube.
-
-        A hypercube contains another one when every configuration represented
-        by `other` is also represented by the current hypercube. Equivalently,
-        the current hypercube is greater than or equal to `other` in the
-        inclusion order.
-
-        Examples
-        --------
-        >>> Hypercube({"A": 0}).contains({"A": 0, "B": 1})
-        True
-        >>> Hypercube({"A": 0, "B": 1}).contains({"A": 0})
-        False
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to test.
-
-        Returns
-        -------
-        bool
-            Whether every configuration represented by `other` is also
-            represented by the current hypercube.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        other = self._coerce_hypercube(other)
-
-        return other <= self
-
-    def identical(self, other: object) -> Set[str]:
-        """
-        Return components sharing identical values.
-
-        Missing components are interpreted as free values.
-
-        Examples
-        --------
-        >>> hc1 = Hypercube({"A": 0, "B": "*"})
-        >>> hc2 = Hypercube({"A": 0, "C": "*"})
-        >>> sorted(hc1.identical(hc2))
-        ['A', 'B', 'C']
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare.
-
-        Returns
-        -------
-        Set[str]
-            Components with identical values.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        other = self._coerce_hypercube(other)
-
-        identical = set()
-
-        for component in self.components | other.components:
-            if self._get_value(component) == other._get_value(component):
-                identical.add(component)
-
-        return identical
-
-    def different(self, other: object) -> Set[str]:
-        """
-        Return components with different values.
-
-        Missing components are interpreted as free values.
-
-        Examples
-        --------
-        >>> hc1 = Hypercube({"A": 0, "B": 1})
-        >>> hc2 = Hypercube({"A": 0, "B": "*", "C": 1})
-        >>> sorted(hc1.different(hc2))
-        ['B', 'C']
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare.
-
-        Returns
-        -------
-        Set[str]
-            Components with different values.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        other = self._coerce_hypercube(other)
-
-        different = set()
-
-        for component in self.components | other.components:
-            if self._get_value(component) != other._get_value(component):
-                different.add(component)
-
-        return different
-
-    def is_smaller_than(self, other: object) -> bool:
-        """
-        Test whether the hypercube is included in another hypercube.
-
-        This is an explicit alias for the `<=` operator.
-
-        Examples
-        --------
-        A fixed value for `B` is more specific than a free or missing `B`, so
-        it is smaller:
-
-        >>> Hypercube({"A": 0, "B": 1}).is_smaller_than({"A": 0})
-        True
-
-        The reverse direction is false because the more general hypercube is
-        not included in the more specific one:
-
-        >>> Hypercube({"A": 0}).is_smaller_than({"A": 0, "B": 1})
-        False
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare against.
-
-        Returns
-        -------
-        bool
-            True if the current hypercube is included in `other`.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        return self <= other
-
-    def is_larger_than(self, other: object) -> bool:
-        """
-        Test whether the hypercube contains another hypercube.
-
-        This is an explicit alias for the `>=` operator.
-
-        Examples
-        --------
-        A missing component is interpreted as free, so this hypercube contains
-        the more specific one:
-
-        >>> Hypercube({"A": 0}).is_larger_than({"A": 0, "B": 1})
-        True
-
-        The reverse direction is false:
-
-        >>> Hypercube({"A": 0, "B": 1}).is_larger_than({"A": 0})
-        False
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare against.
-
-        Returns
-        -------
-        bool
-            True if the current hypercube contains `other`.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        return self >= other
-
-    def is_strictly_smaller_than(self, other: object) -> bool:
-        """
-        Test whether the hypercube is strictly included in another hypercube.
-
-        This is an explicit alias for the `<` operator.
-
-        Examples
-        --------
-        >>> Hypercube({"A": 0, "B": 1}).is_strictly_smaller_than({"A": 0})
-        True
-
-        Equal hypercubes are not strictly smaller:
-
-        >>> Hypercube({"A": 0}).is_strictly_smaller_than({"A": 0, "B": "*"})
-        False
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare against.
-
-        Returns
-        -------
-        bool
-            True if the current hypercube is strictly included in `other`.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        return self < other
-
-    def is_strictly_larger_than(self, other: object) -> bool:
-        """
-        Test whether the hypercube strictly contains another hypercube.
-
-        This is an explicit alias for the `>` operator.
-
-        Examples
-        --------
-        >>> Hypercube({"A": 0}).is_strictly_larger_than({"A": 0, "B": 1})
-        True
-
-        Equal hypercubes are not strictly larger:
-
-        >>> Hypercube({"A": 0, "B": "*"}).is_strictly_larger_than({"A": 0})
-        False
-
-        Parameters
-        ----------
-        other: object
-            Hypercube-like object to compare against.
-
-        Returns
-        -------
-        bool
-            True if the current hypercube strictly contains `other`.
-
-        Raises
-        ------
-        TypeError
-            If `other` cannot be interpreted as a hypercube.
-        ValueError
-            If `other` contains unsupported PartialBoolean values.
-        """
-
-        return self > other
 
     def __getitem__(self, component: str) -> PartialBoolean:
         """
@@ -716,6 +350,385 @@ class Hypercube(MutableMapping):
 
         return hash(normalized)
 
+    def copy(self) -> "Hypercube":
+        """
+        Return a shallow copy of the hypercube.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"A": 0})
+        >>> copied = hc.copy()
+        >>> copied
+        Hypercube({'A': PartialBoolean(0)})
+
+        Returns
+        -------
+        Hypercube
+            New Hypercube containing the same component values.
+        """
+
+        return Hypercube(self._values)
+
+    def drop(
+        self,
+        components: Iterable[str],
+        inplace: bool = False,
+    ) -> Optional["Hypercube"]:
+        """
+        Remove components from the hypercube.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"A": 0, "B": 1})
+        >>> hc.drop(["B"])
+        Hypercube({'A': PartialBoolean(0)})
+        >>> hc
+        Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})
+
+        >>> hc.drop(["B"], inplace=True) is None
+        True
+        >>> hc
+        Hypercube({'A': PartialBoolean(0)})
+
+        Parameters
+        ----------
+        components: Iterable[str]
+            Components to remove.
+        inplace: bool (default: False)
+            Whether to modify the current hypercube.
+
+        Returns
+        -------
+        Hypercube or None
+            Modified hypercube if `inplace=False`, otherwise None.
+        """
+
+        hypercube = self if inplace else self.copy()
+
+        for component in components:
+            hypercube.pop(component, None)
+
+        if not inplace:
+            return hypercube
+
+        return None
+
+    @property
+    def components(self) -> frozenset:
+        """
+        Return explicitly specified hypercube components.
+
+        Missing components are not returned, even though they are interpreted
+        as free values during comparisons.
+
+        Examples
+        --------
+        >>> sorted(Hypercube({"A": 0, "B": "*"}).components)
+        ['A', 'B']
+
+        Returns
+        -------
+        frozenset
+            Explicitly specified component names.
+        """
+
+        return frozenset(self._values)
+
+    @property
+    def is_fully_specified(self) -> bool:
+        """
+        Test whether explicitly specified components are all fixed.
+
+        This property only considers components present in the hypercube.
+        Missing components are ignored.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0, "B": 1}).is_fully_specified
+        True
+        >>> Hypercube({"A": 0, "B": "*"}).is_fully_specified
+        False
+
+        Returns
+        -------
+        bool
+            True if the hypercube contains no explicit free value.
+        """
+
+        return all(value.is_fixed for value in self._values.values())
+
+    def contains(self, other: object) -> bool:
+        """
+        Test whether the hypercube contains another hypercube.
+
+        A hypercube contains another one when every configuration represented
+        by `other` is also represented by the current hypercube. Equivalently,
+        the current hypercube is greater than or equal to `other` in the
+        inclusion order.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0}).contains({"A": 0, "B": 1})
+        True
+        >>> Hypercube({"A": 0, "B": 1}).contains({"A": 0})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to test.
+
+        Returns
+        -------
+        bool
+            Whether every configuration represented by `other` is also
+            represented by the current hypercube.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        other = self._coerce_hypercube(other)
+
+        return other <= self
+
+    def identical(self, other: object) -> Set[str]:
+        """
+        Return components sharing identical values.
+
+        Missing components are interpreted as free values.
+
+        Examples
+        --------
+        >>> hc1 = Hypercube({"A": 0, "B": "*"})
+        >>> hc2 = Hypercube({"A": 0, "C": "*"})
+        >>> sorted(hc1.identical(hc2))
+        ['A', 'B', 'C']
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare.
+
+        Returns
+        -------
+        Set[str]
+            Components with identical values.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        other = self._coerce_hypercube(other)
+
+        identical = set()
+
+        for component in self.components | other.components:
+            if self._get_value(component) == other._get_value(component):
+                identical.add(component)
+
+        return identical
+
+    def different(self, other: object) -> Set[str]:
+        """
+        Return components with different values.
+
+        Missing components are interpreted as free values.
+
+        Examples
+        --------
+        >>> hc1 = Hypercube({"A": 0, "B": 1})
+        >>> hc2 = Hypercube({"A": 0, "B": "*", "C": 1})
+        >>> sorted(hc1.different(hc2))
+        ['B', 'C']
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare.
+
+        Returns
+        -------
+        Set[str]
+            Components with different values.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        other = self._coerce_hypercube(other)
+
+        different = set()
+
+        for component in self.components | other.components:
+            if self._get_value(component) != other._get_value(component):
+                different.add(component)
+
+        return different
+
+    def is_smaller_than(self, other: object) -> bool:
+        """
+        Test whether the hypercube is included in another hypercube.
+
+        This is an explicit alias for the `<=` operator.
+
+        Examples
+        --------
+        A fixed value for `B` is more specific than a free or missing `B`, so
+        it is smaller:
+
+        >>> Hypercube({"A": 0, "B": 1}).is_smaller_than({"A": 0})
+        True
+
+        The reverse direction is false because the more general hypercube is
+        not included in the more specific one:
+
+        >>> Hypercube({"A": 0}).is_smaller_than({"A": 0, "B": 1})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube is included in `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        return self <= other
+
+    def is_larger_than(self, other: object) -> bool:
+        """
+        Test whether the hypercube contains another hypercube.
+
+        This is an explicit alias for the `>=` operator.
+
+        Examples
+        --------
+        A missing component is interpreted as free, so this hypercube contains
+        the more specific one:
+
+        >>> Hypercube({"A": 0}).is_larger_than({"A": 0, "B": 1})
+        True
+
+        The reverse direction is false:
+
+        >>> Hypercube({"A": 0, "B": 1}).is_larger_than({"A": 0})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube contains `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        return self >= other
+
+    def is_strictly_smaller_than(self, other: object) -> bool:
+        """
+        Test whether the hypercube is strictly included in another hypercube.
+
+        This is an explicit alias for the `<` operator.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0, "B": 1}).is_strictly_smaller_than({"A": 0})
+        True
+
+        Equal hypercubes are not strictly smaller:
+
+        >>> Hypercube({"A": 0}).is_strictly_smaller_than({"A": 0, "B": "*"})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube is strictly included in `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        return self < other
+
+    def is_strictly_larger_than(self, other: object) -> bool:
+        """
+        Test whether the hypercube strictly contains another hypercube.
+
+        This is an explicit alias for the `>` operator.
+
+        Examples
+        --------
+        >>> Hypercube({"A": 0}).is_strictly_larger_than({"A": 0, "B": 1})
+        True
+
+        Equal hypercubes are not strictly larger:
+
+        >>> Hypercube({"A": 0, "B": "*"}).is_strictly_larger_than({"A": 0})
+        False
+
+        Parameters
+        ----------
+        other: object
+            Hypercube-like object to compare against.
+
+        Returns
+        -------
+        bool
+            True if the current hypercube strictly contains `other`.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        return self > other
+
     def _get_value(self, component: str) -> PartialBoolean:
         """
         Return component value.
@@ -930,28 +943,24 @@ class HypercubeCollection(MutableSet):
 
         return self._hypercubes == other._hypercubes
 
-    @property
-    def components(self) -> frozenset:
+    def copy(self) -> "HypercubeCollection":
         """
-        Return components appearing in at least one hypercube.
+        Return a shallow copy of the collection.
 
         Examples
         --------
-        >>> sorted(HypercubeCollection([{"A": 0}, {"B": 1}]).components)
-        ['A', 'B']
+        >>> hcs = HypercubeCollection([{"A": 0}])
+        >>> copied = hcs.copy()
+        >>> list(copied)
+        [Hypercube({'A': PartialBoolean(0)})]
 
         Returns
         -------
-        frozenset
-            Components appearing in at least one stored hypercube.
+        HypercubeCollection
+            New collection containing the same hypercubes.
         """
 
-        components = set()
-
-        for hypercube in self:
-            components.update(hypercube.components)
-
-        return frozenset(components)
+        return HypercubeCollection(self._hypercubes)
 
     def add(self, hypercube: HypercubeLike) -> None:
         """
@@ -1006,24 +1015,28 @@ class HypercubeCollection(MutableSet):
 
         self._hypercubes.discard(hypercube)
 
-    def copy(self) -> "HypercubeCollection":
+    @property
+    def components(self) -> frozenset:
         """
-        Return a shallow copy of the collection.
+        Return components appearing in at least one hypercube.
 
         Examples
         --------
-        >>> hcs = HypercubeCollection([{"A": 0}])
-        >>> copied = hcs.copy()
-        >>> list(copied)
-        [Hypercube({'A': PartialBoolean(0)})]
+        >>> sorted(HypercubeCollection([{"A": 0}, {"B": 1}]).components)
+        ['A', 'B']
 
         Returns
         -------
-        HypercubeCollection
-            New collection containing the same hypercubes.
+        frozenset
+            Components appearing in at least one stored hypercube.
         """
 
-        return HypercubeCollection(self._hypercubes)
+        components = set()
+
+        for hypercube in self:
+            components.update(hypercube.components)
+
+        return frozenset(components)
 
     def smaller_than(self, other: HypercubeLike) -> "HypercubeCollection":
         """

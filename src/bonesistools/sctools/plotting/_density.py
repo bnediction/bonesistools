@@ -1,7 +1,17 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Mapping, Sequence, Tuple, Callable, Any
+from itertools import cycle
 from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
 from anndata import AnnData
 from ._typing import RGB
 from .._typing import anndata_checker
@@ -15,7 +25,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.ticker import FormatStrFormatter
-from itertools import cycle
 from . import _colors
 
 Colors = Union[Sequence[RGB], cycle]
@@ -35,7 +44,7 @@ def kde_plot(
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
     Draw gene-related density function using kernel density estimation.
@@ -51,7 +60,8 @@ def kde_plot(
     obs: str, optional
         Observation column in `adata.obs` defining groups.
     not_all: bool (default: False)
-        If True, do not draw density function using all barcodes (raise Error if True and 'obs' is not specified).
+        If True, do not draw density function using all barcodes. Raises an
+        error if True and `obs` is not specified.
     clip: bool (default: False)
         If True, clip density between the minimum value and the quantile at 99%.
     colors: Colors (optional, default: None)
@@ -62,13 +72,14 @@ def kde_plot(
         Function specifying default figure parameters.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    **kwargs: Mapping[str, Any]
+    **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
         - xlabel[str]: set the label for the x-axis
         - ylabel[str]: set the label for the y-axis
-        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major formatter on x- and y-axis
+        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
+          formatter on x- and y-axis
 
     Returns
     -------
@@ -202,7 +213,7 @@ def ecdf_plot(
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
     Draw gene-related cumulative density function.
@@ -223,13 +234,14 @@ def ecdf_plot(
         Function specifying default figure parameters.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    **kwargs: Mapping[str, Any]
+    **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
         - xlabel[str]: set the label for the x-axis
         - ylabel[str]: set the label for the y-axis
-        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major formatter on x- and y-axis
+        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
+          formatter on x- and y-axis
 
     Returns
     -------

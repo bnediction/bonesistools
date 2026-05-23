@@ -1,10 +1,19 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence, Tuple, Mapping, Callable, Any
+from itertools import cycle
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
 from ._typing import RGB
 from .._typing import ScData, anndata_or_mudata_checker
-
-from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -17,7 +26,6 @@ from matplotlib.ticker import FormatStrFormatter
 from matplotlib.colors import Colormap
 from mpl_toolkits import mplot3d
 from mpl_toolkits.mplot3d import Axes3D
-from itertools import cycle
 
 Colors = Union[Sequence[RGB], cycle, Colormap]
 
@@ -38,7 +46,7 @@ def __default_plot(plot: Callable):
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
         ax: Optional[Axes] = None,
-        **kwargs: Mapping[str, Any],
+        **kwargs: Any,
     ):
 
         if obs not in scdata.obs:
@@ -105,7 +113,7 @@ def __scatterplot_discrete(
     colors: Optional[Colors] = None,
     n_components: Optional[int] = 2,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ):
 
     if "add_legend" in kwargs:
@@ -266,7 +274,7 @@ def __scatterplot_continuous(
     colors: Optional[Colormap] = None,
     n_components: Optional[int] = 2,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ):
 
     if colors:
@@ -375,7 +383,7 @@ def __add_labels(
     use_rep: str,
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ):
 
     barycenters = tl.barycenters(scdata=scdata, obs=obs, use_rep=use_rep)
@@ -406,7 +414,8 @@ def __graph_to_plot(
     scdata: ScData,  # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs: Mapping[str, Any],
+    z_offset: float = 0.0,
+    **kwargs: Any,
 ):
 
     if ax is None:
@@ -433,7 +442,7 @@ def __graph_to_plot(
             x, y = edge_curve[:, 0], edge_curve[:, 1]
             line = plt.Line2D(xdata=x, ydata=y, color=_colors.black, **kwargs)
         elif dim == 3:
-            x, y, z = edge_curve[:, 0], edge_curve[:, 1], edge_curve[:, 2]
+            x, y, z = edge_curve[:, 0], edge_curve[:, 1], edge_curve[:, 2] + z_offset
             line = mplot3d.art3d.Line3D(xs=x, ys=y, zs=z, color=_colors.black, **kwargs)
         ax.add_line(line)
 
@@ -442,7 +451,7 @@ def __add_labels_to_graph(
     scdata: ScData,  # type: ignore
     ax: Optional[Axes] = None,
     dim: Optional[int] = 2,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ):
 
     if ax is None:
@@ -486,7 +495,7 @@ def embedding_plot(
     default_parameters: Optional[Callable] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
-    **kwargs: Mapping[str, Any],
+    **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
     """
     Draw a scatterplot from an embedding stored in `scdata.obsm`.
@@ -518,22 +527,36 @@ def embedding_plot(
         Function specifying default figure parameters.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    **kwargs: Mapping[str, Any]
+    **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
         - xlabel[str]: set the label for the x-axis
         - ylabel[str]: set the label for the y-axis
         - zlabel[str]: set the label for the z-axis
-        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major formatter on x-, y- and z-axis
-        - add_legend[bool]: when .obs['obs'] are discrete values, specify whether to draw legend
-        - lgd_params[dict]: when add_legend is True, modify legend following the syntax of matplotlib.pyplot.legend
-        - tick_params[dict]: change the appearance of ticks, tick labels, and gridlines following the syntax of matplotlib.axes.Axes.tick_params
-        - xtick_params[dict]: change the appearance of ticks, tick labels, and gridlines on x-axis following the syntax of matplotlib.axes.Axes.tick_params
-        - ytick_params[dict]: change the appearance of ticks, tick labels, and gridlines on y-axis following the syntax of matplotlib.axes.Axes.tick_params
-        - ztick_params[dict]: change the appearance of ticks, tick labels, and gridlines on z-axis following the syntax of matplotlib.axes.Axes.tick_params
-        - text[dict]: change the appearance of text in figure following the syntax of matplotlib.text
-        - background_visible[bool]: specify if background color is visible or not in case of 3D plotting
+        - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
+          formatter on x-, y- and z-axis
+        - add_legend[bool]: when .obs['obs'] are discrete values, specify
+          whether to draw legend
+        - lgd_params[dict]: when add_legend is True, modify legend following
+          the syntax of matplotlib.pyplot.legend
+        - tick_params[dict]: change the appearance of ticks, tick labels, and
+          gridlines following the syntax of matplotlib.axes.Axes.tick_params
+        - xtick_params[dict]: change the appearance of ticks, tick labels, and
+          gridlines on x-axis following the syntax of
+          matplotlib.axes.Axes.tick_params
+        - ytick_params[dict]: change the appearance of ticks, tick labels, and
+          gridlines on y-axis following the syntax of
+          matplotlib.axes.Axes.tick_params
+        - ztick_params[dict]: change the appearance of ticks, tick labels, and
+          gridlines on z-axis following the syntax of
+          matplotlib.axes.Axes.tick_params
+        - text[dict]: change the appearance of text in figure following the
+          syntax of matplotlib.text
+        - graph[dict]: change the appearance of elastic principal graph lines
+        - graph_z_offset[float]: vertical offset applied to graph lines in 3D
+        - background_visible[bool]: specify if background color is visible or
+          not in case of 3D plotting
 
     Returns
     -------
@@ -550,8 +573,9 @@ def embedding_plot(
 
     References
     ----------
-    [1] Chen et al. (2019). Single-cell trajectories reconstruction, exploration and mapping of omics data
-    with STREAM. Nature communications, 10(1), 1903 (https://www.nature.com/articles/s41467-019-09670-4)
+    [1] Chen et al. (2019). Single-cell trajectories reconstruction,
+    exploration and mapping of omics data with STREAM. Nature communications,
+    10(1), 1903 (https://www.nature.com/articles/s41467-019-09670-4)
     """
 
     if n_components not in [2, 3]:
@@ -581,7 +605,15 @@ def embedding_plot(
         )
 
     if add_graph:
-        __graph_to_plot(scdata, ax=ax, dim=n_components)
+        _kwargs = {"linewidth": 2.5, "zorder": 10}
+        _kwargs.update({} if "graph" not in kwargs else kwargs["graph"])
+        __graph_to_plot(
+            scdata,
+            ax=ax,
+            dim=n_components,
+            z_offset=kwargs["graph_z_offset"] if "graph_z_offset" in kwargs else 0.0,
+            **_kwargs,
+        )
 
     if add_labels_to_graph:
         _kwargs = (

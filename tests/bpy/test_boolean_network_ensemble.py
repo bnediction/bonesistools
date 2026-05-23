@@ -145,6 +145,45 @@ def test_boolean_network_ensemble_to_networkx_remove_isolated_nodes(bnet_ensembl
     assert set(graph.nodes) == {"A", "B", "C"}
 
 
+def test_boolean_network_ensemble_to_graphviz(bnet_ensemble, fake_graphviz):
+    graph = bnet_ensemble.to_graphviz(
+        remove_isolated_nodes=True,
+        show_edge_labels=False,
+        node_style="stability",
+        rankdir="LR",
+    )
+
+    edges = {(source, target): attrs for source, target, attrs in graph.edges}
+    nodes = {node: attrs for node, attrs in graph.nodes}
+
+    assert isinstance(graph, fake_graphviz)
+    assert graph.graph_attr["rankdir"] == "LR"
+    assert ("B", "A") in edges
+    assert ("C", "A") in edges
+    assert all("label" not in attrs for attrs in edges.values())
+    assert all("fillcolor" in attrs for attrs in nodes.values())
+
+
+def test_boolean_network_ensemble_to_graphviz_styles_thresholds_and_options(
+    bnet_ensemble,
+    fake_graphviz,
+):
+    with pytest.raises(ValueError, match="invalid argument value for 'min_ratio'"):
+        bnet_ensemble.to_graphviz(min_ratio=2)
+
+    graph = bnet_ensemble.to_graphviz(
+        node_style="count",
+        edge_style=True,
+        min_ratio=0.4,
+        rankdir="LR",
+    )
+
+    assert isinstance(graph, fake_graphviz)
+    assert graph.graph_attr["rankdir"] == "LR"
+    assert all("style" in attrs for _, _, attrs in graph.edges)
+    assert all(attrs["shape"] == "oval" for _, attrs in graph.nodes)
+
+
 def test_boolean_network_ensemble_to_pydot(bnet_ensemble):
     pytest.importorskip("pydot")
 

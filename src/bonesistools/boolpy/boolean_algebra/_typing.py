@@ -4,7 +4,11 @@
 Typing aliases and runtime validators for Boolean algebra objects.
 """
 
-from typing import Any, Mapping, Union
+from typing import (
+    Any,
+    Mapping,
+    Union,
+)
 
 from boolean import Expression
 from ._boolean import PartialBoolean
@@ -12,6 +16,7 @@ from ._boolean import PartialBoolean
 BooleanRule = Union[Expression, bool, int, str]
 
 PartialBooleanLike = Union[PartialBoolean, bool, int, str]
+ConfigurationLike = Mapping[str, bool]
 HypercubeLike = Mapping[str, PartialBooleanLike]
 
 

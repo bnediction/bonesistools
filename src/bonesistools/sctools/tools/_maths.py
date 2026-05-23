@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Mapping, Any
+from typing import (
+    Any,
+    Mapping,
+    Optional,
+    Union,
+)
 from anndata import AnnData
 from .._typing import (
     ScData,
@@ -25,7 +30,7 @@ def pairwise_distances(
     metric: Union[Metric, Metric_Function] = "euclidean",
     key_added: Optional[str] = None,
     n_jobs: int = 1,
-    **metric_kwds: Mapping[str, Any],
+    **metric_kwds: Any,
 ) -> Union[np.ndarray, None]:
     """
     Calculate pairwise distances between observations in a selected representation.

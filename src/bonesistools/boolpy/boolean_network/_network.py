@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from collections.abc import MutableSequence
+from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -32,7 +33,13 @@ from boolean.boolean import (
     _TRUE,
     _FALSE,
 )
-from ..boolean_algebra import rule_to_string, expressions_equivalent, dnf_to_structure
+from ..boolean_algebra import (
+    PartialBoolean,
+    dnf_to_structure,
+    expressions_equivalent,
+    rule_to_string,
+)
+from .._graphviz import _networkx_to_graphviz
 from ..interaction_graph import InfluenceGraph
 
 if TYPE_CHECKING:
@@ -41,7 +48,11 @@ if TYPE_CHECKING:
 EquivalenceMethod = Literal["simplify", "truth_table"]
 NodeStyle = Literal["count", "stability"]
 
-from ..plotting import ratio_edge_style, count_node_style, stability_node_style
+from ..plotting import (
+    count_node_style,
+    ratio_edge_style,
+    stability_node_style,
+)
 
 
 class BooleanNetwork(dict):
@@ -201,32 +212,25 @@ class BooleanNetwork(dict):
             f"{component} <- {rule_to_string(rule)}" for component, rule in self.items()
         )
 
-    __repr__ = __str__
-
-    def copy(self) -> "BooleanNetwork":
+    def __repr__(self) -> str:
         """
-        Return a shallow BooleanNetwork copy.
+        Return a compact representation of the Boolean network.
 
-        The copied network keeps the same Boolean algebra instance and preserves
-        the current rule expressions without re-validating closure. This mirrors
-        dictionary copy semantics while preserving the BooleanNetwork type.
+        Unlike `__str__`, this representation does not dump all rules, which
+        keeps notebook displays readable for large networks.
 
         Examples
         --------
-        >>> bn = BooleanNetwork({"A": "B"}, check=False)
-        >>> copied = bn.copy()
-        >>> copied.rules
-        {'A': 'B'}
-        >>> copied is bn
-        False
+        >>> BooleanNetwork({"A": "B", "B": 1})
+        BooleanNetwork(components=2)
 
         Returns
         -------
-        BooleanNetwork
-            Shallow copy of the Boolean network.
+        str
+            Compact representation with the number of components.
         """
 
-        return type(self)(self, ba=self.ba, check=False)
+        return f"{type(self).__name__}(components={len(self.components)})"
 
     def __eq__(self, other: object) -> bool:
         """
@@ -268,12 +272,90 @@ class BooleanNetwork(dict):
         return all(self[component] == other[component] for component in self)
 
     def __ne__(self, other: object) -> bool:
+        """
+        Test structural inequality between Boolean networks.
+
+        This is the logical negation of `__eq__` when the other object can be
+        interpreted as a Boolean network-like object.
+
+        Parameters
+        ----------
+        other: object
+            Boolean-network-like object to compare against.
+
+        Returns
+        -------
+        bool or NotImplemented
+            True if the networks are structurally different. Returns
+            NotImplemented for unsupported objects.
+        """
+
         eq = self.__eq__(other)
 
         if eq is NotImplemented:
             return NotImplemented
 
         return not eq
+
+    @classmethod
+    def from_bnet(
+        cls,
+        file: Union[str, Path],
+        ba: Optional[BooleanAlgebra] = None,
+        check: bool = True,
+    ) -> "BooleanNetwork":
+        """
+        Read a Boolean network from a `.bnet` file.
+
+        Examples
+        --------
+        >>> # bn = BooleanNetwork.from_bnet("network.bnet")
+
+        Parameters
+        ----------
+        file: str or Path
+            Path to the `.bnet` file.
+        ba: BooleanAlgebra (optional, default: None)
+            Boolean algebra used to parse and store Boolean expressions. If
+            None, a new BooleanAlgebra instance is created.
+        check: bool (default: True)
+            If True, validate that all symbols referenced by rules are defined
+            as network components.
+
+        Returns
+        -------
+        BooleanNetwork
+            Parsed Boolean network.
+        """
+
+        from ._parser import read_bnet
+
+        return read_bnet(file, ba=ba, check=check)
+
+    def copy(self) -> "BooleanNetwork":
+        """
+        Return a shallow BooleanNetwork copy.
+
+        The copied network keeps the same Boolean algebra instance and preserves
+        the current rule expressions without re-validating closure. This mirrors
+        dictionary copy semantics while preserving the BooleanNetwork type.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B"}, check=False)
+        >>> copied = bn.copy()
+        >>> copied.rules
+        {'A': 'B'}
+        >>> copied is bn
+        False
+
+        Returns
+        -------
+        BooleanNetwork
+            Shallow copy of the Boolean network.
+        """
+
+        return type(self)(self, ba=self.ba, check=False)
 
     @property
     def components(self) -> Set[str]:
@@ -367,41 +449,6 @@ class BooleanNetwork(dict):
 
         return {component: rule_to_string(rule) for component, rule in self.items()}
 
-    @classmethod
-    def from_bnet(
-        cls,
-        file: Union[str, Path],
-        ba: Optional[BooleanAlgebra] = None,
-        check: bool = True,
-    ) -> "BooleanNetwork":
-        """
-        Read a Boolean network from a `.bnet` file.
-
-        Examples
-        --------
-        >>> # bn = BooleanNetwork.from_bnet("network.bnet")
-
-        Parameters
-        ----------
-        file: str or Path
-            Path to the `.bnet` file.
-        ba: BooleanAlgebra (optional, default: None)
-            Boolean algebra used to parse and store Boolean expressions. If
-            None, a new BooleanAlgebra instance is created.
-        check: bool (default: True)
-            If True, validate that all symbols referenced by rules are defined
-            as network components.
-
-        Returns
-        -------
-        BooleanNetwork
-            Parsed Boolean network.
-        """
-
-        from ._parser import read_bnet
-
-        return read_bnet(file, ba=ba, check=check)
-
     def validate(self) -> None:
         """
         Validate the Boolean network structure.
@@ -492,7 +539,8 @@ class BooleanNetwork(dict):
         KeyError
             If `old_name` is not defined in the Boolean network.
         ValueError
-            If `new_name` already exists.
+            If `new_name` already exists or if the renamed Boolean network
+            references undefined components.
         """
 
         if not isinstance(old_name, str):
@@ -525,16 +573,221 @@ class BooleanNetwork(dict):
         renamed_rules = {}
 
         for current_component, rule in self.items():
-            renamed_component = new_name if current_component == old_name else current_component
+            renamed_component = (
+                new_name if current_component == old_name else current_component
+            )
             renamed_rules[renamed_component] = rule.subs(
                 {old_symbol: new_symbol},
                 simplify=False,
             )
 
+        renamed_network = type(self)(renamed_rules, ba=self.ba, check=True)
+
         self.clear()
 
-        for renamed_component, rule in renamed_rules.items():
+        for renamed_component, rule in renamed_network.items():
             self[renamed_component] = rule
+
+        self.validate()
+
+    def next_state(self, component: str, configuration: Mapping[str, int]) -> int:
+        """
+        Return the next state of one component from a Boolean configuration.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 1, "C": 0})
+        >>> bn.next_state("A", {"A": 0, "B": 1, "C": 0})
+        1
+        >>> bn.next_state("A", {"A": 0, "B": 1, "C": 1})
+        0
+
+        Parameters
+        ----------
+        component: str
+            Component whose Boolean rule is evaluated.
+        configuration: Mapping[str, int]
+            Complete Boolean configuration used to evaluate the rule.
+
+        Returns
+        -------
+        int
+            Next Boolean state of `component`, either 0 or 1.
+
+        Raises
+        ------
+        ValueError
+            If `configuration` is incomplete, contains extra components,
+            contains non-Boolean values or if the rule cannot be fully
+            evaluated.
+        """
+
+        configuration = self._normalize_state(configuration)
+        substitutions = {
+            self.ba.Symbol(name): self.ba.TRUE if value else self.ba.FALSE
+            for name, value in configuration.items()
+        }
+        value = self[component].subs(substitutions).simplify()
+
+        if value is self.ba.TRUE:
+            return 1
+
+        if value is self.ba.FALSE:
+            return 0
+
+        raise ValueError(
+            "Boolean rule could not be fully evaluated: "
+            f"component {component!r} still depends on "
+            f"{sorted(map(str, value.symbols))}"
+        )
+
+    def next_configuration(
+        self,
+        configuration: Mapping[str, int],
+    ) -> Dict[str, int]:
+        """
+        Return the next Boolean configuration.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": "A", "C": 0})
+        >>> bn.next_configuration({"A": 1, "B": 1, "C": 0})
+        {'A': 1, 'B': 1, 'C': 0}
+        >>> bn.next_configuration({"A": 0, "B": 1, "C": 1})
+        {'A': 0, 'B': 0, 'C': 0}
+
+        Parameters
+        ----------
+        configuration: Mapping[str, int]
+            Complete Boolean state used to evaluate every rule.
+
+        Returns
+        -------
+        Dict[str, int]
+            Next Boolean state.
+
+        Raises
+        ------
+        ValueError
+            If `configuration` is incomplete, contains extra components,
+            contains non-Boolean values or if one rule cannot be fully
+            evaluated.
+        """
+
+        configuration = self._normalize_state(configuration)
+        substitutions = {
+            self.ba.Symbol(name): self.ba.TRUE if value else self.ba.FALSE
+            for name, value in configuration.items()
+        }
+        next_configuration = {}
+
+        for component, rule in self.items():
+            value = rule.subs(substitutions).simplify()
+
+            if value is self.ba.TRUE:
+                next_configuration[component] = 1
+
+            elif value is self.ba.FALSE:
+                next_configuration[component] = 0
+
+            else:
+                raise ValueError(
+                    "Boolean rule could not be fully evaluated: "
+                    f"component {component!r} still depends on "
+                    f"{sorted(map(str, value.symbols))}"
+                )
+
+        return next_configuration
+
+    def is_fixed_point(self, state: Mapping[str, int]) -> bool:
+        """
+        Test whether a fully specified state is a fixed point.
+
+        A fixed point is a Boolean state `x` such that `f_i(x) = x_i` for every
+        component `i`.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> bn.is_fixed_point({"A": 1, "B": 1})
+        True
+        >>> bn.is_fixed_point({"A": 1, "B": 0})
+        False
+
+        Parameters
+        ----------
+        state: Mapping[str, int]
+            Fully specified Boolean state.
+
+        Returns
+        -------
+        bool
+            Whether `state` is a fixed point.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed or `state` does not define exactly the
+            network components.
+        """
+
+        self.validate()
+        state = self._normalize_state(state)
+
+        return self.next_configuration(state) == state
+
+    def fixed_points(self, limit: int = 0) -> List[Dict[str, int]]:
+        """
+        Return fixed points of the Boolean network.
+
+        Fixed points are fully specified configurations `x` such that
+        `f_i(x) = x_i` for every component `i`. The computation is exhaustive
+        and therefore exponential in the number of components.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> bn.fixed_points()
+        [{'A': 0, 'B': 0}, {'A': 1, 'B': 1}]
+
+        Parameters
+        ----------
+        limit: int (default: 0)
+            Maximum number of fixed points to return. If 0, return all fixed
+            points.
+
+        Returns
+        -------
+        List[Dict[str, int]]
+            Fixed points as component-value mappings.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed or `limit` is negative.
+        """
+
+        self.validate()
+
+        if not isinstance(limit, int) or limit < 0:
+            raise ValueError(
+                "invalid argument value for 'limit': "
+                f"expected non-negative integer but received {limit!r}"
+            )
+
+        components = list(self.keys())
+        fixed_points = []
+
+        for values in product([0, 1], repeat=len(components)):
+            state = dict(zip(components, values))
+
+            if self.next_configuration(state) == state:
+                fixed_points.append(state)
+
+                if limit and len(fixed_points) >= limit:
+                    break
+
+        return fixed_points
 
     def equivalent(
         self,
@@ -604,10 +857,12 @@ class BooleanNetwork(dict):
 
     def influences(self) -> Set[Tuple[str, str, int]]:
         """
-        Return the signed influences induced by Boolean rules.
+        Return signed syntactic influences induced by literalized rules.
 
         Each influence is represented as `(source, target, sign)`, where
         `sign` is `1` for positive literals and `-1` for negative literals.
+        Influences are extracted after `boolean.py` simplification and
+        literalization with `rule.simplify().literalize().get_literals()`.
 
         Examples
         --------
@@ -619,6 +874,13 @@ class BooleanNetwork(dict):
         -------
         Set[Tuple[str, str, int]]
             Signed regulator-target influences induced by network rules.
+
+        Notes
+        -----
+        This method reports syntactic/literalized influences. It should not be
+        interpreted as a general causal influence analysis: logically
+        equivalent rule formulations can expose literals differently, and the
+        same regulator may appear with both signs in more complex rules.
         """
 
         influences = set()
@@ -672,7 +934,7 @@ class BooleanNetwork(dict):
         self,
         program: str = "dot",
         edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
-        **kwargs: Mapping[str, Any],
+        **kwargs: Any,
     ) -> "Dot":
         """
         Convert the influence graph to a styled pydot graph.
@@ -696,7 +958,7 @@ class BooleanNetwork(dict):
             Optional callable used to update edge attributes. The callable receives
             edge attribute dictionaries and must return a mapping of pydot edge
             attributes.
-        **kwargs: Mapping[str, Any]
+        **kwargs: Any
             Keyword arguments passed to the resulting pydot graph using
             `dot.set(key, value)`.
 
@@ -708,6 +970,46 @@ class BooleanNetwork(dict):
 
         return self.to_influence_graph().to_pydot(
             program=program, edge_style=edge_style, **kwargs
+        )
+
+    def to_graphviz(
+        self,
+        program: str = "dot",
+        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        **kwargs: Any,
+    ):
+        """
+        Convert the Boolean network to a native graphviz Digraph.
+
+        Positive influences are represented as green activating edges, while
+        negative influences are represented as red inhibitory edges. This method
+        delegates signed edge extraction to `to_influence_graph()` and uses the
+        `graphviz` Python package directly.
+
+        Parameters
+        ----------
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting graph.
+        edge_style: Callable, optional
+            Optional callable used to update edge attributes before conversion.
+        **kwargs: Any
+            Graph attributes assigned to the resulting graphviz object.
+
+        Returns
+        -------
+        graphviz.Digraph
+            Native graphviz influence graph.
+
+        Raises
+        ------
+        ImportError
+            If the `graphviz` Python package is not installed.
+        """
+
+        return self.to_influence_graph().to_graphviz(
+            program=program,
+            edge_style=edge_style,
+            **kwargs,
         )
 
     def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
@@ -757,6 +1059,23 @@ class BooleanNetwork(dict):
         file.write_text(content)
 
         return None
+
+    def _normalize_state(self, state: Mapping[str, Any]) -> Dict[str, int]:
+        if set(state) != self.components:
+            raise ValueError(
+                "invalid argument value for 'state': "
+                f"expected components {sorted(self.components)} but received "
+                f"{sorted(state)}"
+            )
+
+        return {
+            component: self._normalize_boolean_value(
+                state[component],
+                name="state",
+                component=component,
+            )
+            for component in self
+        }
 
     def _coerce_rule(self, rule: Any) -> Expression:
         """
@@ -817,6 +1136,25 @@ class BooleanNetwork(dict):
             f"unsupported argument type for 'rule': "
             f"expected str, bool, int or Expression but received {type(rule)}"
         )
+
+    @staticmethod
+    def _normalize_boolean_value(
+        value: Any,
+        name: str,
+        component: str,
+    ) -> int:
+
+        if isinstance(value, PartialBoolean):
+            value = value.value
+
+        if value not in [0, 1]:
+            raise ValueError(
+                f"invalid argument value for '{name}': "
+                f"expected 0 or 1 for component {component!r} "
+                f"but received {value!r}"
+            )
+
+        return int(value)
 
 
 class BooleanNetworkEnsemble(MutableSequence):
@@ -1000,6 +1338,85 @@ class BooleanNetworkEnsemble(MutableSequence):
         """
 
         del self._networks[index]
+
+    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph:
+        """
+        Convert the Boolean network ensemble into an aggregated signed influence graph.
+
+        Nodes correspond to Boolean network components. Each node stores the number
+        of distinct Boolean rule structures observed for the corresponding component
+        and the stability of the most frequent rule structure. Edges correspond to
+        signed influences aggregated across the ensemble and store their occurrence
+        count.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
+        ... )
+        >>> graph = ensemble.to_networkx()
+        >>> graph["B"]["A"][0]["count"]
+        2
+        >>> graph["B"]["A"][0]["ratio"]
+        1.0
+
+        Parameters
+        ----------
+        remove_isolated_nodes: bool (default: False)
+            If True, remove components with no incoming or outgoing influence.
+
+        Returns
+        -------
+        nx.MultiDiGraph
+            Aggregated signed influence graph.
+        """
+
+        graph = nx.MultiDiGraph()
+
+        rule_structures = self.rule_structures()
+
+        function_counts = {}
+        function_stabilities = {}
+
+        for component, structures in rule_structures.items():
+            structure_counts = {}
+
+            for structure in structures:
+                if structure not in structure_counts:
+                    structure_counts[structure] = 0
+
+                structure_counts[structure] += 1
+
+            function_counts[component] = len(structure_counts)
+            function_stabilities[component] = (
+                max(structure_counts.values()) / len(self) if structure_counts else 0
+            )
+
+        influence_counts = self.influence_counts()
+
+        for component in self.components:
+            graph.add_node(
+                component,
+                function_count=function_counts[component],
+                function_stability=function_stabilities[component],
+            )
+
+        for source, targets in influence_counts.items():
+            for target, signs in targets.items():
+                for sign, count in signs.items():
+                    graph.add_edge(
+                        source,
+                        target,
+                        sign=sign,
+                        count=count,
+                        ratio=count / len(self),
+                    )
+
+        if remove_isolated_nodes:
+            isolated = list(nx.isolates(graph))
+            graph.remove_nodes_from(isolated)
+
+        return graph
 
     def insert(self, index: int, value: BooleanNetworkLike) -> None:
         """
@@ -1190,84 +1607,113 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return influences
 
-    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph:
+    def to_graphviz(
+        self,
+        remove_isolated_nodes: bool = False,
+        node_style: Union[
+            Literal["count", "stability"],
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        min_ratio: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        program: str = "dot",
+        **kwargs: Any,
+    ):
         """
-        Convert the Boolean network ensemble into an aggregated signed influence graph.
+        Convert the Boolean network ensemble to a native graphviz Digraph.
 
-        Nodes correspond to Boolean network components. Each node stores the number
-        of distinct Boolean rule structures observed for the corresponding component
-        and the stability of the most frequent rule structure. Edges correspond to
-        signed influences aggregated across the ensemble and store their occurrence
-        count.
-
-        Examples
-        --------
-        >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
-        ... )
-        >>> graph = ensemble.to_networkx()
-        >>> graph["B"]["A"][0]["count"]
-        2
-        >>> graph["B"]["A"][0]["ratio"]
-        1.0
+        The resulting graph represents signed influences aggregated across the
+        ensemble. This method mirrors the styling options of `to_pydot()` while
+        using the `graphviz` Python package directly.
 
         Parameters
         ----------
         remove_isolated_nodes: bool (default: False)
             If True, remove components with no incoming or outgoing influence.
+        node_style: Literal["count", "stability"] or Callable or bool or None
+            Node styling strategy.
+        min_ratio: float (default: 0.0)
+            Minimum edge occurrence ratio required for an influence to be
+            displayed.
+        show_edge_labels: bool (default: True)
+            If True, display edge occurrence counts as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to their occurrence ratio.
+            If True, use `ratio_edge_style`.
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting graph.
+        **kwargs: Any
+            Graph attributes assigned to the resulting graphviz object.
 
         Returns
         -------
-        nx.MultiDiGraph
-            Aggregated signed influence graph.
+        graphviz.Digraph
+            Aggregated signed influence graph as a native graphviz object.
+
+        Raises
+        ------
+        ImportError
+            If the `graphviz` Python package is not installed.
+        ValueError
+            If `min_ratio` is outside [0, 1].
         """
 
-        graph = nx.MultiDiGraph()
+        graph = self.to_networkx(remove_isolated_nodes=False)
 
-        rule_structures = self.rule_structures()
-
-        function_counts = {}
-        function_stabilities = {}
-
-        for component, structures in rule_structures.items():
-            structure_counts = {}
-
-            for structure in structures:
-                if structure not in structure_counts:
-                    structure_counts[structure] = 0
-
-                structure_counts[structure] += 1
-
-            function_counts[component] = len(structure_counts)
-            function_stabilities[component] = (
-                max(structure_counts.values()) / len(self) if structure_counts else 0
+        if not 0 <= min_ratio <= 1:
+            raise ValueError(
+                f"invalid argument value for 'min_ratio': "
+                f"expected value between 0 and 1 but received {min_ratio!r}"
             )
 
-        influence_counts = self.influence_counts()
+        edges_to_remove = [
+            (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio
+        ]
 
-        for component in self.components:
-            graph.add_node(
-                component,
-                function_count=function_counts[component],
-                function_stability=function_stabilities[component],
-            )
-
-        for source, targets in influence_counts.items():
-            for target, signs in targets.items():
-                for sign, count in signs.items():
-                    graph.add_edge(
-                        source,
-                        target,
-                        sign=sign,
-                        count=count,
-                        ratio=count / len(self),
-                    )
+        graph.remove_edges_from(edges_to_remove)
 
         if remove_isolated_nodes:
             isolated = list(nx.isolates(graph))
             graph.remove_nodes_from(isolated)
 
-        return graph
+        if edge_style is True:
+            edge_style = ratio_edge_style
+
+        if node_style == "count":
+            node_style = count_node_style
+
+        elif node_style == "stability":
+            node_style = stability_node_style
+
+        for _, data in graph.nodes(data=True):
+            if node_style not in (None, False):
+                data.update(node_style(data))
+
+        for _, _, data in graph.edges(data=True):
+            sign = data["sign"]
+            count = data["count"]
+            ratio = data["ratio"]
+
+            data.update(
+                color="green4" if sign is True else "red2",
+                arrowhead="normal" if sign is True else "tee",
+                penwidth="2",
+            )
+
+            if show_edge_labels:
+                data["label"] = str(count)
+
+            if edge_style not in (None, False):
+                data.update(edge_style(ratio))
+
+        return _networkx_to_graphviz(graph, program=program, **kwargs)
 
     def to_pydot(
         self,
@@ -1286,7 +1732,7 @@ class BooleanNetworkEnsemble(MutableSequence):
             None,
         ] = ratio_edge_style,
         program: str = "dot",
-        **kwargs,
+        **kwargs: Any,
     ) -> "Dot":
         """
         Convert the Boolean network ensemble into an aggregated pydot graph.
@@ -1333,7 +1779,7 @@ class BooleanNetworkEnsemble(MutableSequence):
             If assigned to False or None, no additional edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
-        **kwargs: Mapping[str, Any]
+        **kwargs: Any
             Keyword arguments passed to the resulting pydot graph using
             `dot.set(key, value)`.
 

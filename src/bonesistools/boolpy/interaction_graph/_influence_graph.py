@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from itertools import product
-from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping, Optional, Callable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    FrozenSet,
+    Iterable,
+    Mapping,
+    Optional,
+    Tuple,
+    Sequence,
+)
 
 try:
-    from typing import Self
+    from typing import Literal, Self
 except ImportError:
-    from typing_extensions import Self
+    from typing_extensions import Literal, Self
 
 import networkx as nx
+
+from .._graphviz import _networkx_to_graphviz
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -18,9 +30,9 @@ if TYPE_CHECKING:
 CircuitSign = Literal[-1, 1]
 Direction = Literal["upstream", "downstream", "both"]
 
-StructuralSignature = tuple[
-    frozenset[tuple[str, int]],
-    frozenset[tuple[str, int]],
+StructuralSignature = Tuple[
+    FrozenSet[Tuple[str, int]],
+    FrozenSet[Tuple[str, int]],
 ]
 
 
@@ -953,6 +965,71 @@ class InfluenceGraph(nx.MultiDiGraph):
 
         return sign
 
+    def signed_path_string(
+        self,
+        *nodes: str,
+    ) -> str:
+        """
+        Return a human-readable signed representation of a directed path.
+
+        Positive influences are represented with `->`, negative influences with
+        `-|`, and bi-signed influences with `--`.
+
+        Examples
+        --------
+        Consider the following influence graph:
+
+            A → B
+            B ─| C
+            C → D
+
+        >>> ig.signed_path_string("A", "B", "C", "D")
+        'A -> B -| C -> D'
+
+        Parameters
+        ----------
+        path: Sequence[str]
+            Ordered sequence of nodes describing a directed path.
+
+        Returns
+        -------
+        str
+            Human-readable signed path representation.
+
+        Raises
+        ------
+        ValueError
+            If the path contains fewer than two nodes.
+        KeyError
+            If one traversed edge does not exist.
+        """
+
+        path = nodes
+        
+        if len(nodes) == 1 and isinstance(nodes[0], (list, tuple)):
+            path = tuple(nodes[0])
+        
+        if len(path) < 2:
+            raise ValueError(
+                "path must contain at least two nodes"
+            )
+        
+        string = str(path[0])
+        
+        for source, target in zip(path, path[1:]):
+            sign = self.edge_sign(source, target)
+        
+            if sign == 1:
+                string += f" -> {target}"
+        
+            elif sign == -1:
+                string += f" -| {target}"
+        
+            else:
+                string += f" -- {target}"
+        
+        return string
+
     def marker_paths(
         self,
         markers: Iterable[str],
@@ -1367,11 +1444,63 @@ class InfluenceGraph(nx.MultiDiGraph):
             sep=sep,
         )
 
+    def to_graphviz(
+        self,
+        program: str = "dot",
+        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        **kwargs: Any,
+    ):
+        """
+        Convert the influence graph to a native graphviz Digraph.
+
+        Positive influences are displayed as green activating edges, while
+        negative influences are displayed as red inhibitory edges. This method
+        uses the `graphviz` Python package directly and does not depend on
+        pydot.
+
+        Parameters
+        ----------
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting graph.
+        edge_style: Callable, optional
+            Optional callable used to update edge attributes. The callable
+            receives edge attribute dictionaries and must return a mapping of
+            graphviz edge attributes.
+        **kwargs: Any
+            Graph attributes assigned to the resulting graphviz object.
+
+        Returns
+        -------
+        graphviz.Digraph
+            Native graphviz influence graph.
+
+        Raises
+        ------
+        ImportError
+            If the `graphviz` Python package is not installed.
+        """
+
+        graph = self.copy()
+
+        for _, _, edge_data in graph.edges(data=True):
+            sign = self._normalize_sign(edge_data.get("sign", 1))
+
+            edge_data.update(
+                color="green4" if sign == 1 else "red2",
+                arrowhead="normal" if sign == 1 else "tee",
+                penwidth=2,
+            )
+
+            if edge_style is not None:
+                edge_data.update(edge_style(edge_data))
+
+        return _networkx_to_graphviz(graph, program=program, **kwargs)
+
     def to_pydot(
         self,
         program: str = "dot",
         edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
-        **kwargs: Mapping[str, Any],
+        **kwargs: Any,
     ) -> "Dot":
         """
         Convert the influence graph to a pydot graph.
@@ -1387,7 +1516,7 @@ class InfluenceGraph(nx.MultiDiGraph):
             Optional callable used to update edge attributes. The callable receives
             edge attribute dictionaries and must return a mapping of pydot edge
             attributes.
-        **kwargs: Mapping[str, Any]
+        **kwargs: Any
             Keyword arguments passed to the resulting pydot graph using
             `dot.set(key, value)`.
 
@@ -1427,7 +1556,7 @@ class InfluenceGraph(nx.MultiDiGraph):
         self,
         program: str = "dot",
         edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
-        **kwargs: Mapping[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Display the influence graph in a Jupyter/IPython environment.
@@ -1441,7 +1570,7 @@ class InfluenceGraph(nx.MultiDiGraph):
             Graphviz layout program used for rendering.
         edge_style: Callable, optional
             Optional callable used to update edge attributes before rendering.
-        **kwargs: Mapping[str, Any]
+        **kwargs: Any
             Keyword arguments passed to the underlying pydot graph through
             `dot.set(key, value)`.
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union, Sequence
+from typing import (
+    Optional,
+    Sequence,
+    Union,
+)
 from .._typing import anndata_checker, Keys
 
 from anndata import AnnData

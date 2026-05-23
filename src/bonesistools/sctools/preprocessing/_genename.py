@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
 from typing import Union, Optional
-from .._typing import ScData, anndata_checker, anndata_or_mudata_checker, Axis
+from .._typing import (
+    Axis,
+    ScData,
+    anndata_checker,
+    anndata_or_mudata_checker,
+)
 from pandas import DataFrame
 from anndata import AnnData
 from scipy.sparse import csr_matrix
@@ -41,10 +46,12 @@ def convert_gene_identifiers(
     axis: {0, 1, "obs", "var"} (default: "var")
         If 0 or `"obs"`, convert `scdata.obs.index`. If 1 or `"var"`,
         convert `scdata.var.index`.
-    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
         in `databases`.
-    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' | 'ensembl_id' | <database> (default: 'official_name')
+    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
+        'ensembl_id' | <database> (default: 'official_name')
         Output gene identifier type. Valid database-specific values are listed
         in `databases`.
     copy: bool (default: False)

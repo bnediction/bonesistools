@@ -53,8 +53,9 @@ def get_paga_graph(
 
     References
     ----------
-    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell states through dynamical modeling.
-    Nature biotechnology, 38(12), 1408-1414 (https://doi.org/10.1038/s41587-020-0591-3)
+    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell
+    states through dynamical modeling. Nature biotechnology, 38(12), 1408-1414
+    (https://doi.org/10.1038/s41587-020-0591-3)
     """
 
     clusters = adata.obs[obs].cat.categories

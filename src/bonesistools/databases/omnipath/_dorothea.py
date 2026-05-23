@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 
 from pathlib import Path
-from typing import Any, List, Optional, Union
 import warnings
+from typing import (
+    Any,
+    List,
+    Optional,
+    Union,
+)
 
 try:
     from typing import Literal
