@@ -3,7 +3,9 @@
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
+from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 
@@ -48,16 +50,22 @@ def test_ecdf_plot_returns_matplotlib_objects():
 
 def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_path):
     fig, ax = plt.subplots()
+    called = []
+    mini_adata.layers["sparse_counts"] = csr_matrix(mini_adata.layers["counts"])
 
     returned_fig, returned_ax = bt.sct.pl.kde_plot(
         mini_adata,
         gene="g1",
-        layer="counts",
+        layer="sparse_counts",
         obs="cluster",
-        colors={"A": [1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0]},
+        colors={
+            "A": np.array([1.0, 0.0, 0.0, 1.0]),
+            "B": np.array([0.0, 0.0, 1.0, 1.0]),
+        },
         not_all=True,
         clip=True,
-        title={"label": "kde"},
+        title="kde",
+        default_parameters=lambda: called.append(True),
         ax=ax,
     )
 
@@ -65,6 +73,7 @@ def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_p
     assert returned_ax is ax
     assert ax.get_title() == "kde"
     assert ax.get_legend() is not None
+    assert called == [True]
     plt.close(fig)
 
     outfile = tmp_path / "kde.png"
@@ -80,15 +89,17 @@ def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_p
 
 def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     fig, ax = plt.subplots()
+    called = []
+    mini_adata.layers["sparse_counts"] = csr_matrix(mini_adata.layers["counts"])
 
     returned_fig, returned_ax = bt.sct.pl.ecdf_plot(
         mini_adata,
         gene="g1",
-        layer="counts",
+        layer="sparse_counts",
         obs="cluster",
-        colors={"A": [1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0]},
         xlabel=None,
         ylabel="ecdf",
+        default_parameters=lambda: called.append(True),
         ax=ax,
     )
 
@@ -97,6 +108,7 @@ def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     assert ax.get_xlabel() == ""
     assert ax.get_ylabel() == "ecdf"
     assert ax.get_legend() is not None
+    assert called == [True]
     plt.close(fig)
 
     outfile = tmp_path / "ecdf.png"

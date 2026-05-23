@@ -160,6 +160,9 @@ def test_boolean_network_setitem_coerces_rules():
     assert bn.rule("B") == "A & ~C"
     assert bn["C"] is bn.ba.FALSE
 
+    with pytest.raises(TypeError, match="unsupported argument type for 'component'"):
+        bn[1] = 0
+
 
 def test_boolean_network_string_representation():
 
@@ -187,6 +190,18 @@ def test_boolean_network_repr_is_string_representation():
     assert repr(bn) == str(bn)
 
 
+def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    copied = bn.copy()
+
+    assert isinstance(copied, bt.bpy.bn.BooleanNetwork)
+    assert copied == bn
+    assert copied is not bn
+    assert copied.ba is bn.ba
+    assert copied.undefined_symbols == {"B"}
+
+
 def test_boolean_network_to_bnet_returns_string():
 
     bn = bt.bpy.bn.BooleanNetwork(
@@ -198,6 +213,43 @@ def test_boolean_network_to_bnet_returns_string():
     )
 
     assert bn.to_bnet() == "A, B&!C\nB, 0\nC, 1\n"
+
+
+def test_boolean_network_rename_validates_inputs_and_collisions():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B",
+            "B": "A & C",
+            "C": 1,
+        }
+    )
+
+    assert bn.rename("A", "A") is None
+    assert bn.rules["A"] == "B"
+
+    with pytest.raises(KeyError, match="component 'missing' not found"):
+        bn.rename("missing", "Y")
+
+    with pytest.raises(ValueError, match="already exists"):
+        bn.rename("A", "B")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'old_name'"):
+        bn.rename(1, "Y")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'new_name'"):
+        bn.rename("A", 1)
+
+
+def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):
+    infile = tmp_path / "network.bnet"
+    outfile = tmp_path / "roundtrip.bnet"
+    infile.write_text("# ignored\n\nA, B\nB, 1\n")
+
+    bn = bt.bpy.bn.BooleanNetwork.from_bnet(infile)
+
+    assert bn.rules == {"A": "B", "B": "1"}
+    assert bn.to_bnet(outfile) is None
+    assert outfile.read_text() == "A, B\nB, 1\n"
 
 
 def test_boolean_network_structural_equality():
@@ -239,6 +291,8 @@ def test_boolean_network_structural_inequality():
     )
 
     assert bn1 != bn2
+    assert bn1.__eq__(object()) is NotImplemented
+    assert bn1.__ne__(object()) is NotImplemented
 
 
 def test_boolean_network_equivalence_truth_table_only():
@@ -292,6 +346,7 @@ def test_boolean_network_equivalence_requires_same_components():
     bn2 = bt.bpy.bn.BooleanNetwork({"A": 1, "B": 0})
 
     assert not bn1.equivalent(bn2)
+    assert bn1.equivalent(object()) is NotImplemented
 
 
 def test_boolean_network_equivalence_rejects_unknown_method():

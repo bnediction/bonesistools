@@ -2,8 +2,8 @@
 
 try:
     from collections import Sequence as Seq
-except:
-    from _collections_abc import Sequence as Seq
+except ImportError:
+    from collections.abc import Sequence as Seq
 
 try:
     from typing import Literal

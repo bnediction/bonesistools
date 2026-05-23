@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-from types import SimpleNamespace
-
 import networkx as nx
 import numpy as np
 import pytest
@@ -96,24 +94,12 @@ def test_get_paga_graph_validates_threshold(mini_adata):
         )
 
 
-class _FakeGeneSynonyms:
-    gene_aliases_mapping = {
-        "name": {
-            "mt-Co1": SimpleNamespace(value=b"mt_gene"),
-            "Rps1": SimpleNamespace(value=b"rps_gene"),
-        }
-    }
-
-    def get_gene_id(self, gene, input_identifier_type):
-        return {
-            "mt-Co1": "mt_gene",
-            "Rps1": "rps_gene",
-            "Other": "other_gene",
-        }[gene]
-
-
-def test_mitochondrial_and_ribosomal_gene_classification(monkeypatch, mini_adata):
-    monkeypatch.setattr(_classification, "GeneSynonyms", _FakeGeneSynonyms)
+def test_mitochondrial_and_ribosomal_gene_classification(
+    monkeypatch,
+    mini_adata,
+    fake_gene_synonyms_cls,
+):
+    monkeypatch.setattr(_classification, "GeneSynonyms", fake_gene_synonyms_cls)
     mini_adata.var_names = ["mt-Co1", "Rps1", "Other"]
 
     bt.sct.tl.mitochondrial_genes(mini_adata, key="mt")

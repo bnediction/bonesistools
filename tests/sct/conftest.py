@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from types import SimpleNamespace
+
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -66,3 +68,61 @@ def mini_adata():
         ]
     )
     return adata
+
+
+@pytest.fixture
+def fake_gene_synonyms_cls():
+    class FakeGeneSynonyms:
+        gene_aliases_mapping = {
+            "name": {
+                "mt-Co1": SimpleNamespace(value=b"mt_gene"),
+                "Rps1": SimpleNamespace(value=b"rps_gene"),
+            }
+        }
+
+        _official_names = {
+            "Tp53": "Trp53",
+            "Myc": "Myc",
+            "NF-kappaB": "Nfkb1",
+            "unknown": "unknown",
+            "mt-Co1": "mt-Co1",
+            "Rps1": "Rps1",
+            "Other": "Other",
+        }
+        _gene_ids = {
+            "mt-Co1": "mt_gene",
+            "Rps1": "rps_gene",
+            "Other": "other_gene",
+        }
+
+        def __call__(
+            self,
+            data,
+            axis="index",
+            output_identifier_type="official_name",
+            copy=True,
+            **_,
+        ):
+            data = data.copy() if copy else data
+
+            if output_identifier_type == "official_name":
+                convert = self.get_official_name
+            elif output_identifier_type == "gene_id":
+                convert = self.get_gene_id
+            else:
+                convert = lambda gene, **__: gene
+
+            if axis in [0, "index"]:
+                data.index = [convert(gene) for gene in data.index]
+            elif axis in [1, "columns"]:
+                data.columns = [convert(gene) for gene in data.columns]
+
+            return data if copy else None
+
+        def get_official_name(self, gene, **_):
+            return self._official_names.get(gene, gene)
+
+        def get_gene_id(self, gene, input_identifier_type="name"):
+            return self._gene_ids.get(gene, gene)
+
+    return FakeGeneSynonyms

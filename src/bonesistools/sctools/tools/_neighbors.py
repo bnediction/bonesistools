@@ -352,7 +352,7 @@ class Knnbs(object):
             _multiprocess_is_available = (
                 importlib.util.find_spec("multiprocess") is not None
             )
-        except:
+        except AttributeError:
             _multiprocess_is_available = (
                 importlib.find_loader("multiprocess") is not None
             )

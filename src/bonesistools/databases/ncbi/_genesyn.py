@@ -20,8 +20,10 @@ try:
 except ImportError:
     from typing_extensions import Literal, get_args  # type: ignore
 try:
+    from collections import Mapping as MappingInstance
     from collections import Sequence as SequenceInstance
-except:
+except ImportError:
+    from collections.abc import Mapping as MappingInstance
     from collections.abc import Sequence as SequenceInstance
 
 import copy
@@ -84,6 +86,30 @@ _GENE_SYNONYMS_DEPRECATED_ARGS = {
     "gene_type": "input_identifier_type",
     "alias_gene": "output_identifier_type",
 }
+
+
+def _is_interaction(item: Any) -> bool:
+    return (
+        isinstance(item, SequenceInstance)
+        and not isinstance(item, str)
+        and len(item) == 3
+        and isinstance(item[0], str)
+        and isinstance(item[1], str)
+        and isinstance(item[2], MappingInstance)
+    )
+
+
+def _is_interaction_list(data: Any) -> bool:
+    if not (
+        (isinstance(data, SequenceInstance) and not isinstance(data, str))
+        or isinstance(data, set)
+    ):
+        return False
+
+    if len(data) == 0:
+        return False
+
+    return all(_is_interaction(item) for item in data)
 
 
 def support_legacy_gene_synonyms_args(func):
@@ -438,7 +464,9 @@ class GeneSynonyms:
 
         from ...boolpy.boolean_network._typing import is_boolean_network_like
 
-        if (
+        if _is_interaction_list(data):
+            return self.convert_interaction_list(data, *args, **kwargs)
+        elif (
             isinstance(data, SequenceInstance) and not isinstance(data, str)
         ) or isinstance(data, set):
             return self.convert_sequence(data, *args, **kwargs)

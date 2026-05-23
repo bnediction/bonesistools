@@ -33,6 +33,7 @@ from boolean.boolean import (
     _FALSE,
 )
 from ..boolean_algebra import rule_to_string, expressions_equivalent, dnf_to_structure
+from ..interaction_graph import InfluenceGraph
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -129,6 +130,17 @@ class BooleanNetwork(dict):
         )
 
     __repr__ = __str__
+
+    def copy(self) -> "BooleanNetwork":
+        """
+        Return a shallow BooleanNetwork copy.
+
+        The copied network keeps the same Boolean algebra instance and preserves
+        the current rule expressions without re-validating closure. This mirrors
+        dictionary copy semantics while preserving the BooleanNetwork type.
+        """
+
+        return type(self)(self, ba=self.ba, check=False)
 
     def __eq__(self, other: object) -> bool:
         """
@@ -233,6 +245,86 @@ class BooleanNetwork(dict):
 
         return rule_to_string(self[component])
 
+    def rename(self, old_name: str, new_name: str) -> None:
+        """
+        Rename a Boolean network component and update all rule references.
+
+        The component key is replaced by `new_name`, and every occurrence of
+        `old_name` in Boolean rules is rewritten to `new_name`. Rule
+        rewriting is performed without simplification so that renaming does not
+        otherwise alter rule structure.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork(
+        ...     {
+        ...         "A": "B",
+        ...         "B": "A & C",
+        ...         "C": 1,
+        ...     }
+        ... )
+        >>> bn.rename("A", "X")
+        >>> bn.rules
+        {'X': 'B', 'B': 'X & C', 'C': '1'}
+
+        Parameters
+        ----------
+        old_name: str
+            Component to rename.
+        new_name: str
+            New component name.
+
+        Raises
+        ------
+        TypeError
+            If `old_name` or `new_name` is not a string.
+        KeyError
+            If `old_name` is not defined in the Boolean network.
+        ValueError
+            If `new_name` already exists.
+        """
+
+        if not isinstance(old_name, str):
+            raise TypeError(
+                f"unsupported argument type for 'old_name': "
+                f"expected {str} but received {type(old_name)}"
+            )
+
+        if not isinstance(new_name, str):
+            raise TypeError(
+                f"unsupported argument type for 'new_name': "
+                f"expected {str} but received {type(new_name)}"
+            )
+
+        if new_name == old_name:
+            return None
+
+        if old_name not in self:
+            raise KeyError(f"component {old_name!r} not found")
+
+        if new_name in self:
+            raise ValueError(
+                f"invalid argument value for 'new_name': "
+                f"component {new_name!r} already exists"
+            )
+
+        old_symbol = self.ba.Symbol(old_name)
+        new_symbol = self.ba.Symbol(new_name)
+
+        renamed_rules = {}
+
+        for current_component, rule in self.items():
+            renamed_component = new_name if current_component == old_name else current_component
+            renamed_rules[renamed_component] = rule.subs(
+                {old_symbol: new_symbol},
+                simplify=False,
+            )
+
+        self.clear()
+
+        for renamed_component, rule in renamed_rules.items():
+            self[renamed_component] = rule
+
     def equivalent(
         self,
         other: object,
@@ -326,31 +418,45 @@ class BooleanNetwork(dict):
 
         return graph
 
-    def to_pydot(self, **kwargs) -> "Dot":
+    def to_pydot(
+        self,
+        program: str = "dot",
+        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        **kwargs: Mapping[str, Any],
+    ) -> "Dot":
         """
-        Convert the Boolean network into a pydot influence graph.
+        Convert the influence graph to a styled pydot graph.
 
-        Keyword arguments are passed to the resulting pydot graph using
-        `dot.set(key, value)`.
+        Positive influences are represented as green activating edges, while negative
+        influences are represented as red inhibitory edges. Edge signs are inferred
+        from the `sign` edge attribute and normalized to -1 or 1.
+
+        Examples
+        --------
+        >>> dot = ig.to_pydot(rankdir="LR")
+        >>> dot.write_pdf("graph.pdf")
+
+        Parameters
+        ----------
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting pydot graph.
+        edge_style: Callable, optional
+            Optional callable used to update edge attributes. The callable receives
+            edge attribute dictionaries and must return a mapping of pydot edge
+            attributes.
+        **kwargs: Mapping[str, Any]
+            Keyword arguments passed to the resulting pydot graph using
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        Dot
+            Styled pydot influence graph.
         """
 
-        graph = self.to_networkx()
-
-        for _, _, edge_data in graph.edges(data=True):
-            sign = edge_data["sign"]
-
-            edge_data.update(
-                color="green4" if sign == 1 else "red2",
-                arrowhead="normal" if sign == 1 else "tee",
-                penwidth=2,
-            )
-
-        dot = nx.drawing.nx_pydot.to_pydot(graph)
-
-        for key, value in kwargs.items():
-            dot.set(key, value)
-
-        return dot
+        return InfluenceGraph(self.to_networkx()).to_pydot(
+            program=program, edge_style=edge_style, **kwargs
+        )
 
     def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
         """
@@ -594,7 +700,7 @@ class BooleanNetworkEnsemble(MutableSequence):
         Boolean algebra shared by all Boolean networks in the ensemble.
         """
 
-        return self._ba
+        return self.__ba
 
     def rule_structures(self) -> Dict[str, List]:
         """

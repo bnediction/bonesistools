@@ -16,7 +16,7 @@ from functools import wraps
 
 try:
     _mudata_is_available = importlib.util.find_spec("mudata") is not None
-except:
+except AttributeError:
     _mudata_is_available = importlib.find_loader("mudata") is not None
 
 

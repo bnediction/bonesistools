@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 import bonesistools as bt
+from bonesistools.sctools.plotting import _boxplot
 
 ADATA = bt.sct.datasets.nestorowa()
 
@@ -134,3 +135,20 @@ def test_boxplot_with_hue_custom_colors_and_hidden_medians(mini_adata):
     for bp in bps.values():
         assert all(median.get_linewidth() == 0 for median in bp["medians"])
     plt.close(fig)
+
+
+def test_boxplot_position_and_point_helper_validation():
+    with pytest.raises(ValueError, match="groups' and 'hues'"):
+        _boxplot.__get_box_positions(widths=0.5, hues=(2, 0.1))
+
+    with pytest.raises(ValueError, match="2-length tuple"):
+        _boxplot.__get_box_positions(widths=0.5, groups=(1, 2, 3))
+
+    with pytest.raises(ValueError, match="expected None or 2-length tuple"):
+        _boxplot.__get_box_positions(widths=0.5, groups="bad")
+
+    with pytest.raises(ValueError, match="2-length tuple"):
+        _boxplot.__get_box_positions(widths=0.5, groups=(1, 0.2), hues=(1, 2, 3))
+
+    with pytest.raises(ValueError, match="expected None or 2-length tuple"):
+        _boxplot.__get_box_positions(widths=0.5, groups=(1, 0.2), hues="bad")

@@ -21,6 +21,11 @@ def test_hypercube_collection_initialization_and_set_behavior():
     assert {"A": 1} in hcs
     assert {"A": 2} not in hcs
     assert object() not in hcs
+    assert hcs.components == frozenset({"A"})
+
+    equivalent = bt.bpy.ba.HypercubeCollection([{"A": 0}, {"A": 1}])
+    assert hcs == equivalent
+    assert hcs.__eq__(object()) is NotImplemented
 
 
 def test_hypercube_collection_add_discard_and_copy():

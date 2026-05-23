@@ -8,16 +8,13 @@ utilities for interaction networks.
 """
 
 from ._parser import read_interaction_graph
-from ._algorithms import depth_first_extraction
-from ._graphinfo import get_edge_sign, get_path_sign, path_to_string, statistics
+from ._algorithms import walks_from
+from ._influence_graph import InfluenceGraph
 
 __all__ = [
     "read_interaction_graph",
-    "depth_first_extraction",
-    "get_edge_sign",
-    "get_path_sign",
-    "path_to_string",
-    "statistics",
+    "walks_from",
+    "InfluenceGraph",
 ]
 
 

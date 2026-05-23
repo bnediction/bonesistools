@@ -74,7 +74,7 @@ def load_collectri_grn(
         collectri_db = dc.get_collectri(
             organism=organism, split_complexes=split_complexes, **kwargs
         )
-    except:
+    except AttributeError:
         collectri_db = dc.op.collectri(
             organism=organism, remove_complexes=split_complexes, **kwargs
         )

@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
+import warnings
+
 import bonesistools as bt
+import networkx as nx
+import pandas as pd
+import pytest
 
 GENE_IDS = [
     "20375",
@@ -39,11 +44,14 @@ NCBI_NAMES = [
 ]
 
 
-def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_names():
+@pytest.fixture(scope="module")
+def mouse_genesyn():
+    return bt.dbs.ncbi.GeneSynonyms(organism="mouse")
 
-    genesyn = bt.dbs.ncbi.GeneSynonyms(organism="mouse")
 
-    converted = genesyn.convert_sequence(
+def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_names(mouse_genesyn):
+
+    converted = mouse_genesyn.convert_sequence(
         GENE_IDS,
         input_identifier_type="gene_id",
         output_identifier_type="ncbi_name",
@@ -52,14 +60,214 @@ def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_names():
     assert converted == NCBI_NAMES
 
 
-def test_mouse_gene_synonyms_convert_gene_names_to_ncbi_names():
+def test_mouse_gene_synonyms_convert_gene_names_to_ncbi_names(mouse_genesyn):
 
-    genesyn = bt.dbs.ncbi.GeneSynonyms(organism="mouse")
-
-    converted = genesyn.convert_sequence(
+    converted = mouse_genesyn.convert_sequence(
         GENE_NAMES,
         input_identifier_type="name",
         output_identifier_type="ncbi_name",
     )
 
     assert converted == NCBI_NAMES
+
+
+def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
+    assert mouse_genesyn.get_gene_id("NF-kappaB") == "18033"
+    assert mouse_genesyn.get_gene_id("ENSMUSG00000022346", "ensembl_id") == "17869"
+    assert mouse_genesyn.get_gene_id("MGI:97250", "MGI") == "17869"
+    assert mouse_genesyn.get_official_name("Tp53") == "Trp53"
+    assert mouse_genesyn.get_ncbi_name("22059", "gene_id") == "Trp53"
+    assert mouse_genesyn.get_ensembl_id("Myc") == "ENSMUSG00000022346"
+    assert mouse_genesyn.get_alias_from_database("Myc", database="MGI") == "MGI:97250"
+    assert (
+        mouse_genesyn.conversion(
+            "MGI:97250",
+            input_identifier_type="MGI",
+            output_identifier_type="ensembl_id",
+        )
+        == "ENSMUSG00000022346"
+    )
+    assert (
+        mouse_genesyn.conversion(
+            "Myc",
+            output_identifier_type="MGI",
+        )
+        == "MGI:97250"
+    )
+    assert mouse_genesyn.convert_sequence(
+        ["Myc"],
+        output_identifier_type="MGI",
+    ) == ["MGI:97250"]
+
+    assert mouse_genesyn.get_gene_id("not-a-gene") is None
+    assert mouse_genesyn.convert_sequence(
+        ["not-a-gene"],
+        output_identifier_type="official_name",
+        keep_if_missing=False,
+    ) == [None]
+
+
+def test_gene_synonyms_get_mapping_returns_deepcopy():
+    genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
+    genesyn.gene_aliases_mapping = {
+        "name": {
+            "Myc": "17869",
+        },
+    }
+
+    mapping = genesyn.get_mapping()
+    mapping["name"].clear()
+
+    assert genesyn.gene_aliases_mapping == {"name": {"Myc": "17869"}}
+
+
+def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
+    df = pd.DataFrame(
+        [[1, 2], [3, 4]],
+        index=["Tp53", "Myc"],
+        columns=["NF-kappaB", "unknown"],
+    )
+    converted_index = mouse_genesyn.convert_df(df, axis="index", copy=True)
+    converted_columns = mouse_genesyn.convert_df(df, axis="columns", copy=True)
+
+    assert converted_index.index.tolist() == ["Trp53", "Myc"]
+    assert converted_columns.columns.tolist() == ["Nfkb1", "unknown"]
+    assert df.index.tolist() == ["Tp53", "Myc"]
+    assert mouse_genesyn(df, axis="index").index.tolist() == ["Trp53", "Myc"]
+
+    in_place_df = df.copy()
+    assert mouse_genesyn.convert_df(in_place_df, axis=1, copy=False) is None
+    assert in_place_df.columns.tolist() == ["Nfkb1", "unknown"]
+
+    graph = nx.MultiDiGraph()
+    graph.add_edge("Tp53", "NF-kappaB", sign=-1)
+
+    converted_graph = mouse_genesyn.convert_graph(graph, copy=True)
+    assert set(converted_graph.nodes) == {"Trp53", "Nfkb1"}
+    assert set(graph.nodes) == {"Tp53", "NF-kappaB"}
+    assert set(mouse_genesyn(graph, copy=True).nodes) == {"Trp53", "Nfkb1"}
+
+    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+    assert set(graph.nodes) == {"Trp53", "Nfkb1"}
+
+    interactions = [("Tp53", "NF-kappaB", {"sign": -1})]
+    assert mouse_genesyn.convert_interaction_list(interactions) == [
+        ("Trp53", "Nfkb1", {"sign": -1})
+    ]
+
+    assert mouse_genesyn(interactions) == [("Trp53", "Nfkb1", {"sign": -1})]
+    assert list(mouse_genesyn(("Tp53", "unknown"))) == ["Trp53", "unknown"]
+
+
+def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
+    assert mouse_genesyn.standardize_sequence(["Tp53", "NF-kappaB"]) == [
+        "Trp53",
+        "Nfkb1",
+    ]
+
+    bn = bt.bpy.bn.BooleanNetwork({"Tp53": "Myc", "Myc": "Tp53"})
+    converted_bn = mouse_genesyn.standardize_bn(bn, copy=True)
+    assert isinstance(converted_bn, bt.bpy.bn.BooleanNetwork)
+    assert converted_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
+    assert bn.rules == {"Tp53": "Myc", "Myc": "Tp53"}
+
+    df = pd.DataFrame([[1]], index=["Tp53"], columns=["NF-kappaB"])
+    assert mouse_genesyn.standardize_df(df).index.tolist() == ["Trp53"]
+
+    graph = nx.Graph()
+    graph.add_edge("Tp53", "NF-kappaB")
+    assert set(mouse_genesyn.standardize_graph(graph).nodes) == {"Trp53", "Nfkb1"}
+
+    interactions = [("Tp53", "NF-kappaB", {"sign": 1})]
+    assert mouse_genesyn.standardize_interaction_list(interactions) == [
+        ("Trp53", "Nfkb1", {"sign": 1})
+    ]
+
+    with pytest.warns(FutureWarning, match="'gene_type' is deprecated"):
+        assert mouse_genesyn.get_gene_id("Tp53", gene_type="name") == "22059"
+
+    with pytest.warns(FutureWarning, match="'alias_gene' is deprecated"):
+        assert mouse_genesyn.convert_sequence(["Tp53"], alias_gene="gene_id") == [
+            "22059"
+        ]
+
+    with pytest.warns(FutureWarning, match="'gene_type' is deprecated"):
+        with pytest.raises(TypeError, match="use either 'gene_type'"):
+            mouse_genesyn.get_gene_id(
+                "Tp53",
+                gene_type="name",
+                input_identifier_type="name",
+            )
+
+
+def test_gene_synonyms_validation_errors_and_missing_warnings(mouse_genesyn, monkeypatch):
+    with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
+        bt.dbs.ncbi.GeneSynonyms(organism="rat")
+
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'force_download'"
+    ):
+        bt.dbs.ncbi.GeneSynonyms(force_download="no")
+
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'show_warnings'"
+    ):
+        bt.dbs.ncbi.GeneSynonyms(show_warnings="yes")
+
+    genesyn = mouse_genesyn
+    monkeypatch.setattr(genesyn, "show_warnings", True)
+
+    with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
+        genesyn.reset(organism="rat")
+
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'force_download'"
+    ):
+        genesyn.reset(force_download="no")
+
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'show_warnings'"
+    ):
+        genesyn.reset(show_warnings="yes")
+
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+
+        assert genesyn.get_gene_id("not-a-gene") is None
+        assert genesyn.get_gene_id("not-an-ensembl", "ensembl_id") is None
+        assert genesyn.get_ncbi_name("not-a-gene") is None
+        assert genesyn.get_official_name("not-a-gene") is None
+        assert genesyn.get_ensembl_id("not-a-gene") is None
+        assert genesyn.get_alias_from_database("not-a-gene", database="MGI") is None
+
+    warning_messages = [str(warning.message) for warning in recorded]
+    assert any("no correspondence" in message for message in warning_messages)
+    assert any("no gene_id correspondence" in message for message in warning_messages)
+    assert any(
+        "no NCBI reference name correspondence" in message
+        for message in warning_messages
+    )
+    assert any(
+        "no official name correspondence" in message for message in warning_messages
+    )
+    assert any(
+        "no Ensembl id correspondence" in message for message in warning_messages
+    )
+    assert any("no MGI correspondence" in message for message in warning_messages)
+
+    with pytest.raises(
+        ValueError, match="invalid argument value for 'input_identifier_type'"
+    ):
+        genesyn.get_gene_id("Tp53", input_identifier_type="bad")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'database'"):
+        genesyn.get_alias_from_database("Tp53", database="bad")
+
+    with pytest.raises(AttributeError, match="no attribute 'get_bad'"):
+        genesyn.conversion("Tp53", output_identifier_type="bad")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
+        genesyn.convert_df(pd.DataFrame([[1]]), axis="bad")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'data'"):
+        genesyn(1)

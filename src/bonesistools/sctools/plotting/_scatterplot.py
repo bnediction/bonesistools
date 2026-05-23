@@ -283,7 +283,7 @@ def __scatterplot_continuous(
     try:
         if not np.all(cmap.get_bad() != 0) and not "facecolor" in kwargs["nan"]:
             kwargs["nan"]["color"] = cmap.get_bad()
-    except:
+    except AttributeError:
         pass
 
     X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
