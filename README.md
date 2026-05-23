@@ -5,7 +5,16 @@
 
 # BoNesisTools
 
-`BoNesisTools` is a Python package providing bioinformatics utilities for upstream and downstream analyses of the [BoNesis](https://github.com/bnediction/bonesis) framework.
+`BoNesisTools` is a Python package providing utilities for Boolean modelling, regulatory interaction graphs and single-cell analyses around the [BoNesis](https://github.com/bnediction/bonesis) ecosystem.
+
+The package provides:
+
+- Boolean algebra and partial Boolean abstractions
+- Boolean network manipulation and analysis
+- signed interaction and influence graph utilities
+- GRN-informed Boolean predecessor inference
+- single-cell and multimodal analysis helpers
+- biological database interfaces
 
 ## Usage
 
@@ -16,54 +25,137 @@ import bonesistools as bt
 `BoNesisTools` exposes four main namespaces:
 
 - `bt.sct` — single-cell and multimodal annotated data tools
-- `bt.bpy` — Boolean modelling utilities
+- `bt.bpy` — Boolean modelling and graph utilities
 - `bt.dbs` — biological database interfaces
 - `bt.grn` — deprecated alias for `bt.bpy.ig`
 
-`bt.sct` follows a [Scanpy](https://github.com/scverse/scanpy)-like API while providing additional and complementary features for single-cell analyses:
+---
+
+## Single-cell tools
+
+`bt.sct` follows a [Scanpy](https://github.com/scverse/scanpy)-like API while providing additional and complementary features for single-cell analyses.
+
+Submodules:
 
 - preprocessing: `bt.sct.pp`
 - tools: `bt.sct.tl`
 - plotting: `bt.sct.pl`
 - datasets: `bt.sct.datasets`
 
-`bt.bpy` provides utilities for Boolean modelling:
+---
 
-- Boolean algebra and partial Boolean abstractions: `bt.bpy.ba`
-- Boolean network utilities: `bt.bpy.bn`
-- interaction and influence graph utilities: `bt.bpy.ig`
+## Boolean modelling utilities
+
+`bt.bpy` provides utilities for Boolean modelling, logical abstractions and signed regulatory graphs.
+
+Submodules:
+
+Submodules:
+
+- Boolean algebra: `bt.bpy.ba`
+  - partial Boolean abstractions and hypercube representations
+  - Boolean differential and predecessor inference utilities
+
+- Boolean network: `bt.bpy.bn`
+  - Boolean network manipulation and analysis
+  - fixed-point computation
+  - `.bnet` import/export
+
+- influence graph: `bt.bpy.ig`
+  - signed regulatory interaction graphs
+  - feedback circuit and SCC analysis
+  - signed interaction scoring from bounded walks
+  - graph compression and visualization utilities
+
+Example:
+
+```python
+bn = bt.bpy.bn.BooleanNetwork(
+    {
+        "A": "B & ~C",
+        "B": 1,
+        "C": 0,
+    }
+)
+
+graph = bn.to_influence_graph()
+
+graph.show()
+```
+
+---
+
+## Biological external resources
+
+`bt.dbs` provides lightweight interfaces and utilities for biological
+external resources.
+
+Submodules:
+
+- NCBI: `bt.dbs.ncbi`
+  - gene synonym harmonization
+  - gene annotation utilities
+
+- OmniPath: `bt.dbs.omnipath`
+  - DoRothEA transcription factor interactions
+  - CollecTRI regulatory interaction networks
+
+Example:
+
+```python
+genesyn = bt.dbs.ncbi.GeneSynonyms()
+
+grn = bt.dbs.omnipath.load_collectri_grn(
+    organism="mouse",
+    genesyn=genesyn,
+)
+```
+
+---
 
 ## Installation
 
 Install the latest release:
+
 ```sh
 pip install bonesistools
 ```
 
-Install the single-cell tools dependencies:
+Install the single-cell dependencies:
+
 ```sh
 pip install "bonesistools[sctools]"
 ```
 
-Install with all extra dependencies:
+Install all optional dependencies:
+
 ```sh
 pip install "bonesistools[all]"
 ```
 
 Install the development version:
+
 ```sh
 git clone https://github.com/bnediction/bonesistools.git
 cd bonesistools
 pip install -e ".[all]"
 ```
+
 or directly:
+
 ```sh
 pip install git+https://github.com/bnediction/bonesistools.git
 ```
 
+---
+
 ## Bugs
 
-Please report any bugs or ask questions [here](https://github.com/bnediction/bonesistools/issues).
+Please report bugs or ask questions here:
+
+https://github.com/bnediction/bonesistools/issues
+
+---
 
 ## License
 
