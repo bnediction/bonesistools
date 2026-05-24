@@ -1,21 +1,22 @@
 #!/usr/bin/env python
 
-from itertools import cycle
+from __future__ import annotations
+
 from pathlib import Path
+from collections.abc import Mapping as MappingABC
 from typing import (
     Any,
+    Iterator,
     List,
     Mapping,
     Optional,
     Sequence,
     Tuple,
     Union,
+    cast,
 )
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from ..._compat import Literal
 from pandas import Series
 from pandas.core.groupby.generic import SeriesGroupBy
 from ._typing import RGB
@@ -28,7 +29,7 @@ import matplotlib.patches as mpatches
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
 from matplotlib.lines import Line2D
-from matplotlib.colors import Colormap
+from matplotlib.colors import Colormap, ListedColormap
 from ._colors import (
     QUALITATIVE_COLORS,
     black,
@@ -37,9 +38,24 @@ from ._colors import (
     white,
 )
 
-Colors = Union[Sequence[RGB], cycle, Colormap]
+Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
-BoxPlots = Mapping[BoxItem, List[Line2D]]
+BoxPlots = Mapping[str, Any]
+BoxplotReturn = Union[BoxPlots, dict[object, BoxPlots]]
+
+
+def __set_window_title(fig: Figure, title: str) -> None:
+    manager = fig.canvas.manager
+
+    if manager is not None:
+        manager.set_window_title(title)
+
+
+def __colormap_colors(colors: Colors) -> Sequence[object]:
+    if isinstance(colors, ListedColormap):
+        return cast(Sequence[object], colors.colors)
+
+    return cast(Sequence[object], colors)
 
 
 def __get_box_positions(
@@ -55,7 +71,7 @@ def __get_box_positions(
         )
 
     if not groups is None:
-        if isinstance(groups, Tuple):
+        if isinstance(groups, tuple):
             if not len(groups) == 2:
                 raise ValueError(
                     f"invalid argument value for 'groups': "
@@ -68,7 +84,7 @@ def __get_box_positions(
             )
 
     if not hues is None:
-        if isinstance(hues, Tuple):
+        if isinstance(hues, tuple):
             if not len(hues) == 2:
                 raise ValueError(
                     f"invalid argument value for 'hues': "
@@ -85,20 +101,22 @@ def __get_box_positions(
     elif groups is not None and hues is None:
         return np.array(np.arange(0, groups[0]) * (widths + groups[1]))
     else:
+        assert groups is not None
+        assert hues is not None
         within_widths = widths + hues[1]
         within_positions = np.array(np.arange(0, hues[0]) * within_widths)
         between_positions = within_widths + widths + groups[1]
-        positions = np.tile(within_positions, (groups[0], 1))
+        positions = cast(np.ndarray, np.tile(within_positions, (groups[0], 1)))
         for i, row in enumerate(positions):
             row[...] = row + between_positions * i
         return positions.transpose()
 
 
 def __apply_box_colors(
-    bp,
-    color,
-    items: BoxItem,
-):
+    bp: BoxPlots,
+    color: object,
+    items: Sequence[BoxItem],
+) -> None:
     for k in bp.keys():
         if k in items:
             plt.setp(bp.get(k), color=color)
@@ -110,20 +128,23 @@ def __add_points(
     series: Union[Series, SeriesGroupBy, Mapping[str, SeriesGroupBy]],
     positions: np.ndarray,
     scale: float,
-    groups: Optional[Sequence] = None,
-    hues: Optional[Sequence] = None,
+    groups: Optional[Sequence[object]] = None,
+    hues: Optional[Sequence[object]] = None,
     **kwargs: Any,
-):
+) -> None:
     ax = plt.gca()
     if groups is None:
         pos = positions[0]
-        y = series.dropna()
+        series_values = cast(Series, series)
+        y = series_values.dropna()
         x = np.random.normal(pos, scale=scale, size=len(y))
         ax.scatter(x, y, **kwargs)
     elif groups is not None and hues is None:
+        grouped_series = cast(SeriesGroupBy, series)
+
         for i, group in enumerate(groups):
             pos = positions[i]
-            y = series.get_group(group).dropna()
+            y = grouped_series.get_group(group).dropna()
             x = np.random.normal(pos, scale=scale, size=len(y))
             ax.scatter(x, y, **kwargs)
     elif groups is None and hues is not None:
@@ -132,12 +153,16 @@ def __add_points(
             "expected either both specified or only 'groups' specified"
         )
     else:
-        for i, hue in enumerate(hues):
-            for j, group in enumerate(groups):
+        grouped_by_hue = cast(Mapping[object, SeriesGroupBy], series)
+        group_values = cast(Sequence[object], groups)
+        hue_values = cast(Sequence[object], hues)
+
+        for i, hue in enumerate(hue_values):
+            for j, group in enumerate(group_values):
                 pos = positions[i, j]
-                y = series[hue].get_group(group).dropna()
+                y = grouped_by_hue[hue].get_group(group).dropna()
                 x = np.random.normal(pos, scale=scale, size=len(y))
-                ax.scatter(x, y, **kwargs[hue])
+                ax.scatter(x, y, **cast(Any, kwargs)[hue])
     return None
 
 
@@ -151,14 +176,14 @@ def boxplot(
     sym: Optional[str] = None,
     patch_artist: Optional[bool] = None,
     vert: Optional[bool] = None,
-    title: Optional[Union[str, dict]] = None,
+    title: Optional[Union[str, dict[str, Any]]] = None,
     sort: Optional[Literal["ascending", "descending"]] = None,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
-    box_colors: Optional[Colormap] = None,
-    point_colors: Optional[Colormap] = None,
-    boxitems_to_color: Tuple[BoxItem, ...] = ["whiskers", "caps", "boxes"],
+    box_colors: Optional[Colors] = None,
+    point_colors: Optional[Colors] = None,
+    boxitems_to_color: Tuple[BoxItem, ...] = ("whiskers", "caps", "boxes"),
     showmedians: bool = True,
     showmeans: bool = False,
     showcaps: bool = True,
@@ -168,7 +193,7 @@ def boxplot(
     showlegend: bool = True,
     outfile: Optional[Path] = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes, BoxPlots]:
+) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]:
     """
     Draw a boxplot for an observation-level variable.
 
@@ -212,10 +237,10 @@ def boxplot(
 
     if title:
         if isinstance(title, str):
-            fig.canvas.manager.set_window_title(title)
+            __set_window_title(fig, title)
             ax.set_title(title)
         elif isinstance(title, dict):
-            fig.canvas.manager.set_window_title(title["label"])
+            __set_window_title(fig, title["label"])
             ax.set_title(**title)
         else:
             raise TypeError(
@@ -235,7 +260,7 @@ def boxplot(
         if hue is None:
             groups = None
             hues = None
-            series = scdata.obs[obs]
+            series = cast(Series, scdata.obs[obs])
         else:
             raise ValueError(
                 "invalid argument values for 'groupby' and 'hue': "
@@ -243,11 +268,11 @@ def boxplot(
             )
     else:
         if sort is None:
-            groups = scdata.obs[groupby].cat.categories
-            series = scdata.obs.groupby(by=groupby, observed=True)[obs]
+            groups = list(scdata.obs[groupby].cat.categories)
+            series = cast(SeriesGroupBy, scdata.obs.groupby(by=groupby, observed=True)[obs])
         elif sort in ["ascending", "descending"]:
-            series = scdata.obs.groupby(by=groupby, observed=True)[obs]
-            groups = series.median().sort_values(ascending=(sort == "ascending")).index
+            series = cast(SeriesGroupBy, scdata.obs.groupby(by=groupby, observed=True)[obs])
+            groups = list(series.median().sort_values(ascending=(sort == "ascending")).index)
         else:
             raise ValueError(
                 f"invalid argument value for 'sort': "
@@ -256,11 +281,15 @@ def boxplot(
         if hue is None:
             hues = None
         else:
-            hues = scdata.obs[hue].cat.categories
+            hues = list(scdata.obs[hue].cat.categories)
             series = {
-                h: scdata.obs[scdata.obs[hue] == h].groupby(by=groupby, observed=True)[
-                    obs
-                ]
+                h: cast(
+                    SeriesGroupBy,
+                    scdata.obs[scdata.obs[hue] == h].groupby(
+                        by=groupby,
+                        observed=True,
+                    )[obs],
+                )
                 for h in hues
             }
 
@@ -273,11 +302,14 @@ def boxplot(
     if hue is None:
         if point_colors is None:
             point_colors = gray
-        bps = plt.boxplot(
+        bps = cast(BoxPlots, plt.boxplot(
             x=(
-                series.dropna()
+                cast(Series, series).dropna()
                 if groupby is None
-                else [series.get_group(g).dropna() for g in groups]
+                else [
+                    cast(SeriesGroupBy, series).get_group(g).dropna()
+                    for g in cast(Sequence[object], groups)
+                ]
             ),
             positions=positions,
             notch=notch,
@@ -290,38 +322,45 @@ def boxplot(
             showbox=showbox,
             showfliers=showfliers,
             **kwargs["boxplot"],
-        )
+        ))
         if showmedians is False:
-            for median in bps["medians"]:
+            for median in cast(Sequence[Any], bps["medians"]):
                 median.set(linewidth=0)
     else:
-        bps = {}
+        grouped_bps: dict[object, BoxPlots] = {}
+        hue_values = cast(Sequence[object], hues)
 
         if box_colors is None:
             if showpoints is True:
-                box_colors = [black] * len(hues)
+                box_colors = [black] * len(hue_values)
             else:
-                if len(QUALITATIVE_COLORS) >= len(hues):
-                    box_colors = QUALITATIVE_COLORS[0 : len(hues)]
+                if len(QUALITATIVE_COLORS) >= len(hue_values):
+                    box_colors = QUALITATIVE_COLORS[0 : len(hue_values)]
                 else:
-                    box_colors = generate_colormap(color_number=len(hues))
-        if hasattr(box_colors, "colors"):
-            box_colors = box_colors.colors
-        if not isinstance(box_colors, dict):
-            box_colors = {h: box_colors[i] for i, h in enumerate(hues)}
+                    box_colors = generate_colormap(color_number=len(hue_values))
+        if isinstance(box_colors, ListedColormap):
+            box_colors = __colormap_colors(box_colors)
+        if not isinstance(box_colors, MappingABC):
+            box_colors = {
+                h: cast(Sequence[object], box_colors)[i]
+                for i, h in enumerate(hue_values)
+            }
 
         if point_colors is None:
             if showpoints is True:
-                if len(QUALITATIVE_COLORS) >= len(hues):
-                    point_colors = QUALITATIVE_COLORS[0 : len(hues)]
+                if len(QUALITATIVE_COLORS) >= len(hue_values):
+                    point_colors = QUALITATIVE_COLORS[0 : len(hue_values)]
                 else:
-                    point_colors = generate_colormap(color_number=len(hues))
+                    point_colors = generate_colormap(color_number=len(hue_values))
             else:
-                point_colors = [white] * len(hues)
-        if hasattr(point_colors, "colors"):
-            point_colors = point_colors.colors
-        if not isinstance(point_colors, dict):
-            point_colors = {h: point_colors[i] for i, h in enumerate(hues)}
+                point_colors = [white] * len(hue_values)
+        if isinstance(point_colors, ListedColormap):
+            point_colors = __colormap_colors(point_colors)
+        if not isinstance(point_colors, MappingABC):
+            point_colors = {
+                h: cast(Sequence[object], point_colors)[i]
+                for i, h in enumerate(hue_values)
+            }
 
         if not "medianprops" in kwargs["boxplot"]:
             kwargs["boxplot"]["medianprops"] = {}
@@ -332,9 +371,14 @@ def boxplot(
             kwargs["boxplot"]["medianprops"]["color"] = black
 
         positions_iterator = iter(positions)
-        for h, values in series.items():
-            bps[h] = plt.boxplot(
-                x=[values.get_group(g).dropna() for g in groups],
+        grouped_series_by_hue = cast(Mapping[object, SeriesGroupBy], series)
+
+        for h, values in grouped_series_by_hue.items():
+            grouped_bps[h] = cast(BoxPlots, plt.boxplot(
+                x=[
+                    values.get_group(g).dropna()
+                    for g in cast(Sequence[object], groups)
+                ],
                 positions=next(positions_iterator),
                 notch=notch,
                 sym=sym,
@@ -346,28 +390,40 @@ def boxplot(
                 showbox=showbox,
                 showfliers=showfliers,
                 **kwargs["boxplot"],
-            )
+            ))
 
         if showmedians is False:
-            for bp in bps.values():
-                for median in bp["medians"]:
+            for bp in grouped_bps.values():
+                for median in cast(Sequence[Any], bp["medians"]):
                     median.set(linewidth=0)
 
         if boxitems_to_color:
-            for h in hues:
+            for h in hue_values:
                 __apply_box_colors(
-                    bp=bps[h], color=box_colors[h], items=boxitems_to_color
+                    bp=grouped_bps[h],
+                    color=cast(Mapping[object, object], box_colors)[h],
+                    items=boxitems_to_color,
                 )
 
         if showlegend is True:
             handles = []
-            for h in hues:
+            for h in hue_values:
                 handles.append(
                     mpatches.Patch(
-                        edgecolor=box_colors[h], facecolor=point_colors[h], label=h
+                        edgecolor=cast(
+                            Any,
+                            cast(Mapping[object, object], box_colors)[h],
+                        ),
+                        facecolor=cast(
+                            Any,
+                            cast(Mapping[object, object], point_colors)[h],
+                        ),
+                        label=h,
                     )
                 )
             plt.legend(handles=handles)
+
+        bps = grouped_bps
 
     if showpoints:
         if not "scatter" in kwargs:
@@ -394,7 +450,7 @@ def boxplot(
                 }
             )
         else:
-            for h in hues:
+            for h in cast(Sequence[object], hues):
                 if h not in kwargs["scatter"]:
                     kwargs["scatter"][h] = {}
                 kwargs["scatter"][h].update(
@@ -409,7 +465,7 @@ def boxplot(
                             if not "alpha" in kwargs["scatter"][h]
                             else kwargs["scatter"][h]["alpha"]
                         ),
-                        "facecolors": point_colors[h],
+                        "facecolors": cast(Mapping[object, object], point_colors)[h],
                         "edgecolors": (
                             "none"
                             if not "edgecolors" in kwargs["scatter"][h]
@@ -432,7 +488,7 @@ def boxplot(
 
     if groupby is not None:
         xticks = positions.sum(axis=0) / 2 if positions.ndim == 2 else positions
-        plt.xticks(xticks, groups)
+        plt.xticks(xticks, [str(group) for group in cast(Sequence[object], groups)])
     else:
         plt.tick_params(
             axis="x", which="both", bottom=False, top=False, labelbottom=False

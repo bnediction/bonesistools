@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-from typing import Optional
+from __future__ import annotations
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from typing import Any, Optional, Sequence, cast
+
+from ..._compat import Literal
 from ._typing import RGB
 
 import math
@@ -290,7 +289,12 @@ def generate_colormap(
             f"expected non-null positive value but received {color_number!r}"
         )
     elif color_number <= cm.N:
-        return ListedColormap(cm.colors[0:color_number])
+        if isinstance(cm, ListedColormap):
+            return ListedColormap(
+                cast(Sequence[Any], cm.colors)[0:color_number]
+            )
+
+        return ListedColormap(cm(np.linspace(0, 1, color_number)))
 
     if shade_number is None:
         shade_number = cm.N

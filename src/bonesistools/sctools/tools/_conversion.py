@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from typing import (
+    Any,
     Optional,
-    Sequence,
-    Union,
+    cast,
 )
 from .._typing import anndata_checker, Keys
 
@@ -44,33 +46,27 @@ def anndata_to_dataframe(
         Expression values with optional observation annotations.
     """
 
-    if layer:
-        if issparse(adata.layers[layer]):
-            counts_df = DataFrame(
-                adata.layers[layer].toarray(),
-                index=adata.obs.index,
-                columns=adata.var.index,
-            )
-        else:
-            counts_df = DataFrame(
-                adata.layers[layer], index=adata.obs.index, columns=adata.var.index
-            )
-    elif issparse(adata.X):
-        counts_df = DataFrame(
-            adata.X.toarray(), index=adata.obs.index, columns=adata.var.index
-        )
-    else:
-        counts_df = DataFrame(adata.X, index=adata.obs.index, columns=adata.var.index)
+    matrix = adata.layers[layer] if layer else adata.X
+
+    if issparse(matrix):
+        matrix = cast(Any, matrix).toarray()
+
+    counts_df = DataFrame(matrix, index=adata.obs.index, columns=adata.var.index)
 
     if is_log:
         if "log1p" in adata.uns_keys() and adata.uns["log1p"].get("base") is not None:
-            counts_df = np.expm1(counts_df * np.log(adata.uns["log1p"]["base"]))
+            matrix = np.expm1(counts_df * np.log(adata.uns["log1p"]["base"]))
         else:
-            counts_df = np.expm1(counts_df)
+            matrix = np.expm1(counts_df)
+
+        counts_df = DataFrame(matrix, index=adata.obs.index, columns=adata.var.index)
 
     if obs is not None:
-        counts_df.loc[:, obs] = (
-            adata.obs.loc[:, [obs]] if isinstance(obs, str) else adata.obs.loc[:, obs]
-        )
+        if isinstance(obs, str):
+            obs_df = adata.obs.loc[:, [obs]]
+        else:
+            obs_df = adata.obs.loc[:, list(obs)]
+
+        counts_df = counts_df.join(obs_df)
 
     return counts_df

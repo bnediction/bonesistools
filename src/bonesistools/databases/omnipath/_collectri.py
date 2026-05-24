@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from typing import (
     Any,
     Optional,
@@ -20,7 +22,7 @@ def load_collectri_grn(
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
     **kwargs: Any,
-) -> nx.MultiDiGraph:
+) -> nx.MultiDiGraph[Any]:
     """
     Load a signed regulatory network derived from the CollecTRI database [1].
 
@@ -81,13 +83,13 @@ def load_collectri_grn(
 
     try:
         collectri_db = dc.get_collectri(
-            organism=cast(str, organism),
+            organism=organism,
             split_complexes=split_complexes,
             **kwargs,
         )
     except AttributeError:
         collectri_db = dc.op.collectri(
-            organism=cast(str, organism),
+            organism=organism,
             remove_complexes=split_complexes,
             **kwargs,
         )

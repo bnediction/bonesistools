@@ -4,11 +4,12 @@
 Typing aliases and runtime validators for Boolean algebra objects.
 """
 
-from collections.abc import Mapping
 from typing import (
     Any,
+    Mapping,
     Union,
 )
+from collections.abc import Mapping as MappingABC
 
 from typing_extensions import TypeGuard
 
@@ -161,7 +162,7 @@ def is_configuration_like(obj: Any) -> TypeGuard[ConfigurationLike]:
         values.
     """
 
-    if not isinstance(obj, Mapping):
+    if not isinstance(obj, MappingABC):
         return False
 
     try:
@@ -202,7 +203,7 @@ def is_hypercube_like(obj: Any) -> TypeGuard[HypercubeLike]:
         PartialBoolean-like values.
     """
 
-    if not isinstance(obj, Mapping):
+    if not isinstance(obj, MappingABC):
         return False
 
     try:

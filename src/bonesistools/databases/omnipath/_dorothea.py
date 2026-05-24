@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from pathlib import Path
 import warnings
 from typing import (
@@ -10,10 +12,7 @@ from typing import (
     cast,
 )
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from ..._compat import Literal
 
 import networkx as nx
 import pandas as pd
@@ -60,7 +59,7 @@ def load_dorothea_grn(
     wrapper: DorotheaWrapper = "op",
     reload: bool = False,
     **kwargs: Any,
-) -> nx.MultiDiGraph:
+) -> nx.MultiDiGraph[Any]:
     """
     Load a transcriptional regulatory network derived from DoRothEA.
 
@@ -178,7 +177,7 @@ def load_dorothea_grn(
                 _raise_missing_dorothea_wrapper(wrapper, dc)
 
             dorothea_db = dc.op.dorothea(
-                organism=cast(str, organism),
+                organism=organism,
                 levels=["A", "B", "C", "D"],
                 **kwargs,
             )
@@ -188,7 +187,7 @@ def load_dorothea_grn(
                 _raise_missing_dorothea_wrapper(wrapper, dc)
 
             dorothea_db = dc.get_dorothea(
-                organism=cast(str, organism),
+                organism=organism,
                 **kwargs,
             )
 

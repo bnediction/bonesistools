@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from typing import (
     Any,
     Mapping,
     Optional,
     Union,
+    cast,
 )
 from anndata import AnnData
 from .._typing import (
@@ -63,7 +66,12 @@ def pairwise_distances(
 
     X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
 
-    distances = pairwise_distances(X, metric=metric, n_jobs=n_jobs, **metric_kwds)
+    distances = pairwise_distances(
+        X,
+        metric=cast(Any, metric),
+        n_jobs=n_jobs,
+        **metric_kwds,
+    )
 
     if key_added is not None:
         adata.obsp[key_added] = distances

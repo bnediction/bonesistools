@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Optional, Union
+from __future__ import annotations
+
+from typing import Any, Optional, Union, cast
 
 import numpy as np
 from anndata import AnnData
@@ -69,12 +71,14 @@ def regress_out(
     adata = adata.copy() if copy else adata
 
     if layer is None:
-        counts = adata.X.copy()
+        counts = cast(Any, adata.X).copy()
     else:
-        counts = adata.layers[layer].copy()
+        counts = cast(Any, adata.layers[layer]).copy()
 
     if issparse(counts):
-        counts = counts.toarray()
+        counts = cast(Any, counts).toarray()
+
+    counts = np.asarray(counts)
     regressors = adata.obs[[keys]] if isinstance(keys, str) else adata.obs[keys]
     regressors.insert(0, "ones", 1.0)
     regressors = regressors.to_numpy()

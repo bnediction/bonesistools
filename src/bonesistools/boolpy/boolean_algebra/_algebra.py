@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections import Counter
 from numbers import Number
 from typing import Any, Iterable, Mapping, Optional
-from ._typing import PartialBooleanLike, HypercubeLike
 
 from ._boolean import PartialBoolean
+from ._typing import HypercubeLike, PartialBooleanLike
 
 
 class PartialBooleanDifferential:
@@ -55,6 +55,37 @@ class PartialBooleanDifferential:
         )
 
     @staticmethod
+    def differential(v1: PartialBooleanLike, v2: PartialBooleanLike) -> int:
+        """
+        Return the discrete differential between two partial Boolean values.
+
+        Values are compared according to the biological ordering convention:
+
+            0 < * < 1
+
+        Parameters
+        ----------
+        v1, v2: PartialBooleanLike
+            Values compared after conversion to PartialBoolean.
+
+        Returns
+        -------
+        int
+            Differential from `v1` to `v2`:
+                - 1 if `v1 < v2`,
+                - 0 if `v1 == v2`,
+                - -1 if `v1 > v2`.
+        """
+
+        v1 = PartialBooleanDifferential._coerce_value(v1)
+        v2 = PartialBooleanDifferential._coerce_value(v2)
+
+        if v1 == v2:
+            return 0
+
+        return 1 if v1 < v2 else -1
+
+    @staticmethod
     def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
         """
         Convert a value to a PartialBoolean.
@@ -96,37 +127,6 @@ class PartialBooleanDifferential:
                 f"expected bool, number, str or PartialBoolean but received "
                 f"{type(value)}"
             )
-
-    @staticmethod
-    def differential(v1: PartialBooleanLike, v2: PartialBooleanLike) -> int:
-        """
-        Return the discrete differential between two partial Boolean values.
-
-        Values are compared according to the biological ordering convention:
-
-            0 < * < 1
-
-        Parameters
-        ----------
-        v1, v2: PartialBooleanLike
-            Values compared after conversion to PartialBoolean.
-
-        Returns
-        -------
-        int
-            Differential from `v1` to `v2`:
-                - 1 if `v1 < v2`,
-                - 0 if `v1 == v2`,
-                - -1 if `v1 > v2`.
-        """
-
-        v1 = PartialBooleanDifferential._coerce_value(v1)
-        v2 = PartialBooleanDifferential._coerce_value(v2)
-
-        if v1 == v2:
-            return 0
-
-        return 1 if v1 < v2 else -1
 
 
 class BooleanPredecessorInference:
@@ -187,40 +187,6 @@ class BooleanPredecessorInference:
             "BooleanPredecessorInference is a static utility class "
             "and should not be instantiated."
         )
-
-    @staticmethod
-    def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
-        return PartialBooleanDifferential._coerce_value(value)
-
-    @staticmethod
-    def _edge_sign(data: Mapping[str, Any]) -> int:
-        """
-        Return and validate an interaction sign.
-
-        Parameters
-        ----------
-        data: Mapping[str, Any]
-            Edge attributes containing a `sign` value.
-
-        Returns
-        -------
-        int
-            Interaction sign, either -1 or 1.
-
-        Raises
-        ------
-        ValueError
-            If the sign is missing or is not -1 or 1.
-        """
-
-        sign = data.get("sign")
-
-        if sign not in {-1, 1}:
-            raise ValueError(
-                "invalid interaction sign: expected -1 or 1 " f"but received {sign!r}"
-            )
-
-        return sign
 
     @staticmethod
     def pairwise_predecessor_test(
@@ -438,3 +404,37 @@ class BooleanPredecessorInference:
             return 0.0
 
         return (forward - backward) / conclusive
+
+    @staticmethod
+    def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
+        return PartialBooleanDifferential._coerce_value(value)
+
+    @staticmethod
+    def _edge_sign(data: Mapping[str, Any]) -> int:
+        """
+        Return and validate an interaction sign.
+
+        Parameters
+        ----------
+        data: Mapping[str, Any]
+            Edge attributes containing a `sign` value.
+
+        Returns
+        -------
+        int
+            Interaction sign, either -1 or 1.
+
+        Raises
+        ------
+        ValueError
+            If the sign is missing or is not -1 or 1.
+        """
+
+        sign = data.get("sign")
+
+        if sign not in {-1, 1}:
+            raise ValueError(
+                "invalid interaction sign: expected -1 or 1 " f"but received {sign!r}"
+            )
+
+        return sign

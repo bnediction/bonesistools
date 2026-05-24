@@ -1,40 +1,42 @@
 #!/usr/bin/env python
 
-from collections.abc import Mapping as MappingABC, MutableSequence
+from __future__ import annotations
+
+from collections.abc import Mapping as MappingABC
 from itertools import product
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    cast,
-    Iterable,
-    Mapping,
-    Optional,
-    Union,
     Dict,
     FrozenSet,
+    Iterable,
     List,
+    Mapping,
+    MutableSequence,
+    Optional,
     Set,
     Tuple,
+    Union,
+    cast,
+    overload,
 )
-from ._typing import BooleanNetworkLike, is_boolean_network_like
-
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
-
-from pathlib import Path
 
 import networkx as nx
 
 from boolean.boolean import (
     BooleanAlgebra,
     Expression,
-    _TRUE,
     _FALSE,
+    _TRUE,
 )
+
+from ..._compat import Literal
+from ._typing import BooleanNetworkLike, is_boolean_network_like
+from .._graphviz import _networkx_to_graphviz
 from ..boolean_algebra import (
+    BooleanRule,
     ConfigurationLike,
     PartialBoolean,
     dnf_to_structure,
@@ -42,8 +44,12 @@ from ..boolean_algebra import (
     is_configuration_like,
     rule_to_string,
 )
-from .._graphviz import _networkx_to_graphviz
-from ..interaction_graph import InfluenceGraph
+from ..interaction_graph._influence_graph import InfluenceGraph
+from ..plotting import (
+    count_node_style,
+    ratio_edge_style,
+    stability_node_style,
+)
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -51,11 +57,6 @@ if TYPE_CHECKING:
 EquivalenceMethod = Literal["simplify", "truth_table"]
 NodeStyle = Literal["count", "stability"]
 
-from ..plotting import (
-    count_node_style,
-    ratio_edge_style,
-    stability_node_style,
-)
 
 class BooleanNetwork(Dict[str, Expression]):
     """
@@ -89,7 +90,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
     Parameters
     ----------
-    rules: Mapping[str, Any] (optional, default: None)
+    rules: Mapping[str, BooleanRule] (optional, default: None)
         Mapping associating component names to Boolean rules.
     ba: BooleanAlgebra (optional, default: None)
         Boolean algebra used to parse and store Boolean expressions. If None,
@@ -109,7 +110,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
     def __init__(
         self,
-        rules: Optional[Mapping[str, Any]] = None,
+        rules: Optional[Mapping[str, BooleanRule]] = None,
         ba: Optional[BooleanAlgebra] = None,
         check: bool = True,
     ) -> None:
@@ -130,7 +131,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        rules: Mapping[str, Any] (optional, default: None)
+        rules: Mapping[str, BooleanRule] (optional, default: None)
             Mapping associating component names to Boolean rules.
         ba: BooleanAlgebra (optional, default: None)
             Boolean algebra used to parse and store Boolean expressions. If
@@ -157,7 +158,7 @@ class BooleanNetwork(Dict[str, Expression]):
         if check:
             self.validate()
 
-    def __setitem__(self, component: str, rule: Any) -> None:
+    def __setitem__(self, component: str, rule: BooleanRule) -> None:
         """
         Set the Boolean rule associated with a component.
 
@@ -175,7 +176,7 @@ class BooleanNetwork(Dict[str, Expression]):
         ----------
         component: str
             Component name.
-        rule: Any
+        rule: BooleanRule
             Boolean rule to associate with `component`.
 
         Raises
@@ -330,9 +331,28 @@ class BooleanNetwork(Dict[str, Expression]):
             Parsed Boolean network.
         """
 
-        from ._parser import read_bnet
+        file = Path(file)
 
-        return read_bnet(file, ba=ba, check=check)
+        rules: Dict[str, str] = {}
+
+        for line in file.read_text().splitlines():
+            line = line.strip()
+
+            if not line or line.startswith("#"):
+                continue
+
+            component, rule = line.split(",", maxsplit=1)
+            component = component.strip()
+            rule = rule.strip().replace("!", "~")
+
+            rules[component] = rule
+
+        bn = cls(rules, ba=ba, check=False)
+
+        if check:
+            bn.validate()
+
+        return bn
 
     def copy(self) -> "BooleanNetwork":
         """
@@ -1106,7 +1126,7 @@ class BooleanNetwork(Dict[str, Expression]):
             for component in self
         }
 
-    def _coerce_rule(self, rule: Any) -> Expression:
+    def _coerce_rule(self, rule: BooleanRule) -> Expression:
         """
         Coerce a Boolean rule into an internal `boolean.py` expression.
 
@@ -1128,7 +1148,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        rule: Any
+        rule: BooleanRule
             Boolean rule to coerce.
 
         Returns
@@ -1186,7 +1206,7 @@ class BooleanNetwork(Dict[str, Expression]):
         return int(value)
 
 
-class BooleanNetworkEnsemble(MutableSequence):
+class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
     """
     Mutable sequence of Boolean networks sharing the same components.
 
@@ -1251,10 +1271,10 @@ class BooleanNetworkEnsemble(MutableSequence):
             )
 
         self.__ba = BooleanAlgebra() if ba is None else ba
-        self._networks = []
+        self._networks: List[BooleanNetwork] = []
 
         if components is not None:
-            self._components = set(components)
+            self._components: Set[str] = set(components)
             return
 
         assert bns is not None
@@ -1293,7 +1313,18 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return len(self._networks)
 
-    def __getitem__(self, index):
+    @overload
+    def __getitem__(self, index: int) -> BooleanNetwork:
+        ...
+
+    @overload
+    def __getitem__(self, index: slice) -> List[BooleanNetwork]:
+        ...
+
+    def __getitem__(
+        self,
+        index: Union[int, slice],
+    ) -> Union[BooleanNetwork, List[BooleanNetwork]]:
         """
         Return one or more Boolean networks from the ensemble.
 
@@ -1316,7 +1347,23 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return self._networks[index]
 
-    def __setitem__(self, index, value) -> None:
+    @overload
+    def __setitem__(self, index: int, value: BooleanNetworkLike) -> None:
+        ...
+
+    @overload
+    def __setitem__(
+        self,
+        index: slice,
+        value: Iterable[BooleanNetworkLike],
+    ) -> None:
+        ...
+
+    def __setitem__(
+        self,
+        index: Union[int, slice],
+        value: Union[BooleanNetworkLike, Iterable[BooleanNetworkLike]],
+    ) -> None:
         """
         Replace one or more Boolean networks in the ensemble.
 
@@ -1345,12 +1392,13 @@ class BooleanNetworkEnsemble(MutableSequence):
         """
 
         if isinstance(index, slice):
-            self._networks[index] = [self._coerce_network(bn) for bn in value]
+            networks = cast(Iterable[BooleanNetworkLike], value)
+            self._networks[index] = [self._coerce_network(bn) for bn in networks]
             return
 
-        self._networks[index] = self._coerce_network(value)
+        self._networks[index] = self._coerce_network(cast(BooleanNetworkLike, value))
 
-    def __delitem__(self, index) -> None:
+    def __delitem__(self, index: Union[int, slice]) -> None:
         """
         Delete one or more Boolean networks from the ensemble.
 
@@ -1369,7 +1417,7 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         del self._networks[index]
 
-    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph:
+    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph[Any]:
         """
         Convert the Boolean network ensemble into an aggregated signed influence graph.
 
@@ -1401,7 +1449,7 @@ class BooleanNetworkEnsemble(MutableSequence):
             Aggregated signed influence graph.
         """
 
-        graph = nx.MultiDiGraph()
+        graph: nx.MultiDiGraph[Any] = nx.MultiDiGraph()
 
         rule_structures = self.rule_structures()
 
@@ -1509,7 +1557,7 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return self.__ba
 
-    def rule_structures(self) -> Dict[str, List]:
+    def rule_structures(self) -> Dict[str, List[object]]:
         """
         Return Boolean rules encoded as DNF-like structures.
 
@@ -1532,7 +1580,9 @@ class BooleanNetworkEnsemble(MutableSequence):
             non-constant rules are converted into nested DNF structures.
         """
 
-        rule_structures = {component: [] for component in self._components}
+        rule_structures: Dict[str, List[object]] = {
+            component: [] for component in self._components
+        }
 
         for bn in self:
             for component, rule in bn.items():
@@ -1547,7 +1597,7 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return rule_structures
 
-    def regulator_counts(self) -> Dict:
+    def regulator_counts(self) -> Dict[str, Dict[str, Dict[bool, int]]]:
         """
         Count signed regulators associated with each target across the ensemble.
 
@@ -1575,18 +1625,26 @@ class BooleanNetworkEnsemble(MutableSequence):
             regulation.
         """
 
-        counts = {component: {} for component in self._components}
+        counts: Dict[str, Dict[str, Dict[bool, int]]] = {
+            component: {} for component in self._components
+        }
 
         for bn in self:
             for target, rule in bn.items():
-                influences = set()
+                influences: Set[Tuple[str, bool]] = set()
 
-                for literal in rule.simplify().literalize().get_literals():
+                literals = cast(
+                    Iterable[Any],
+                    rule.simplify().literalize().get_literals(),
+                )
+
+                for literal in literals:
                     if isinstance(literal, bn.ba.NOT):
-                        regulator = literal.args[0].obj
+                        operand = cast(Any, literal.args[0])
+                        regulator = cast(str, operand.obj)
                         sign = False
                     else:
-                        regulator = literal.obj
+                        regulator = cast(str, literal.obj)
                         sign = True
 
                     influences.add((regulator, sign))
@@ -1602,7 +1660,7 @@ class BooleanNetworkEnsemble(MutableSequence):
 
         return counts
 
-    def influence_counts(self) -> Dict:
+    def influence_counts(self) -> Dict[str, Dict[str, Dict[bool, int]]]:
         """
         Count signed regulator-target influences across the ensemble.
 
@@ -1625,7 +1683,9 @@ class BooleanNetworkEnsemble(MutableSequence):
             influences.
         """
 
-        influences = {component: {} for component in self._components}
+        influences: Dict[str, Dict[str, Dict[bool, int]]] = {
+            component: {} for component in self._components
+        }
         regulator_counts = self.regulator_counts()
 
         for target, regulators in regulator_counts.items():

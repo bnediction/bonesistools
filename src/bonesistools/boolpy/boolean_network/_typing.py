@@ -5,16 +5,13 @@ Typing aliases and runtime validators for BooleanNetworkLike objects.
 """
 
 from collections.abc import Mapping as MappingABC
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Any, Mapping
 
 from typing_extensions import TypeAlias, TypeGuard
 
 from ..boolean_algebra import BooleanRule, is_boolean_rule_like
 
-if TYPE_CHECKING:
-    BooleanNetworkLike: TypeAlias = Mapping[str, BooleanRule]
-else:
-    BooleanNetworkLike = MappingABC
+BooleanNetworkLike: TypeAlias = Mapping[str, BooleanRule]
 
 
 def is_boolean_network_like(obj: Any) -> TypeGuard[BooleanNetworkLike]:

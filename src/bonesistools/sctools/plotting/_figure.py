@@ -1,13 +1,31 @@
 #!/usr/bin/env python
 
-import cycler
-import matplotlib as mpl, matplotlib.pyplot as plt
-
 from typing import Optional
+
+import cycler
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
 from matplotlib.axes._axes import Axes
-from matplotlib.ticker import FormatStrFormatter
 from matplotlib.colors import ListedColormap
-from . import _colors
+from matplotlib.ticker import FormatStrFormatter
+
+from ._colors import (
+    COLORS,
+    black,
+    blue,
+    darkred,
+    green,
+    maroon,
+    navy,
+    orange,
+    pink,
+    purple,
+    red,
+    skyblue,
+    teal,
+    violet,
+)
 
 
 def set_default_params(tex: bool = True):
@@ -45,18 +63,18 @@ def set_default_params(tex: bool = True):
 
     mpl.rcParams["axes.prop_cycle"] = cycler.cycler(
         color=[
-            _colors.blue,
-            _colors.red,
-            _colors.green,
-            _colors.orange,
-            _colors.purple,
-            _colors.pink,
-            _colors.skyblue,
-            _colors.teal,
-            _colors.violet,
-            _colors.navy,
-            _colors.darkred,
-            _colors.maroon,
+            blue,
+            red,
+            green,
+            orange,
+            purple,
+            pink,
+            skyblue,
+            teal,
+            violet,
+            navy,
+            darkred,
+            maroon,
         ]
     )
 
@@ -71,16 +89,16 @@ def set_default_params(tex: bool = True):
             "showbox": True,
             "showfliers": True,
             "flierprops.markerfacecolor": None,
-            "flierprops.markerfacecolor": _colors.black,
+            "flierprops.markerfacecolor": black,
             "flierprops.linewidth": 2.0,
-            "whiskerprops.color": _colors.black,
+            "whiskerprops.color": black,
             "whiskerprops.linewidth": 2.0,
             "whiskerprops.linestyle": ":",
-            "capprops.color": _colors.black,
+            "capprops.color": black,
             "capprops.linewidth": 2.0,
-            "medianprops.color": _colors.blue,
+            "medianprops.color": blue,
             "medianprops.linewidth": 2.0,
-            "meanprops.color": _colors.blue,
+            "meanprops.color": blue,
             "meanprops.linewidth": 2.0,
             "meanprops.linestyle": "-",
         },
@@ -89,7 +107,7 @@ def set_default_params(tex: bool = True):
     return None
 
 
-cmap = ListedColormap(colors=_colors.COLORS, name="default", N=None)
+cmap = ListedColormap(colors=COLORS, name="default", N=None)
 
 mpl.colormaps.register(cmap)
 

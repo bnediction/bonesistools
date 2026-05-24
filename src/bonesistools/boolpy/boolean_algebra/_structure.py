@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Tuple, Union
+from typing import Any, Callable, Iterable, Mapping, Tuple, Union
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from ..._compat import Literal
 
 from itertools import product
 
@@ -30,13 +27,13 @@ BA = BooleanAlgebra()
 def _eval_as_bool(
     ba: BooleanAlgebra,
     expr: Expression,
-    assignment: dict,
+    assignment: Mapping[Any, bool],
 ) -> bool:
-    assignment = {
+    substitutions = {
         symbol: ba.TRUE if value else ba.FALSE for symbol, value in assignment.items()
     }
 
-    value = expr.subs(assignment).simplify()
+    value = expr.subs(substitutions).simplify()
 
     if isinstance(value, _TRUE):
         return True

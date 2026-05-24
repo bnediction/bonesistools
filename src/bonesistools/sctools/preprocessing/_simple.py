@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Callable, Union
+from __future__ import annotations
+
+from typing import Any, Callable, Union, cast
 
 from anndata import AnnData
 
@@ -13,7 +15,10 @@ from .._typing import (
 
 @anndata_checker
 def filter_obs(
-    adata: AnnData, obs: str, function: Callable, copy: bool = False
+    adata: AnnData,
+    obs: str,
+    function: Callable[[object], object],
+    copy: bool = False,
 ) -> Union[AnnData, None]:
     """
     Filter observations based on a column in `adata.obs`.
@@ -64,14 +69,17 @@ def filter_obs(
         )
 
     obs_subset = function(adata.obs[obs].values)
-    adata._inplace_subset_obs(obs_subset)
+    adata._inplace_subset_obs(cast(Any, obs_subset))
 
     return adata if copy else None
 
 
 @anndata_checker
 def filter_var(
-    adata: AnnData, var: str, function: Callable, copy: bool = False
+    adata: AnnData,
+    var: str,
+    function: Callable[[object], object],
+    copy: bool = False,
 ) -> Union[AnnData, None]:
     """
     Filter variables based on a column in `adata.var`.
@@ -122,7 +130,7 @@ def filter_var(
         )
 
     var_subset = function(adata.var[var].values)
-    adata._inplace_subset_var(var_subset)
+    adata._inplace_subset_var(cast(Any, var_subset))
 
     return adata if copy else None
 

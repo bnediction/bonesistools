@@ -23,18 +23,17 @@ from ._transfer import (
     transfer_obs_its,
 )
 
-from ..tools import regress_out as _regress_out
-
 from ._genename import (
     convert_gene_identifiers,
     standardize_gene_identifiers,
     var_names_merge_duplicates,
 )
 
+from ..tools import regress_out as _regress_out
+
 __all__ = [
     "filter_obs",
     "filter_var",
-    "regress_out",
     "merge",
     "transfer_layer",
     "transfer_obs_sti",
@@ -42,6 +41,7 @@ __all__ = [
     "convert_gene_identifiers",
     "standardize_gene_identifiers",
     "var_names_merge_duplicates",
+    "regress_out",
 ]
 
 

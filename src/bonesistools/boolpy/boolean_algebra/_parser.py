@@ -8,10 +8,7 @@ import json
 from pathlib import Path
 from typing import Union, Dict
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from ..._compat import Literal
 
 from ._hypercube import Hypercube
 

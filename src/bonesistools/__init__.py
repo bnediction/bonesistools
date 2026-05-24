@@ -18,14 +18,17 @@ grn
 Credits: BNeDiction; PEPR Santé Numérique 2030.
 """
 
+from __future__ import annotations
+
 import importlib as _importlib
 import sys as _sys
 import warnings as _warnings
-from typing import TYPE_CHECKING, Any, List
+from types import ModuleType
+from typing import TYPE_CHECKING
 
+from . import sctools as sct
 from . import boolpy as bpy
 from . import databases as dbs
-from . import sctools as sct
 
 if TYPE_CHECKING:
     from . import grntools as grn
@@ -55,11 +58,14 @@ _sys.modules.update(
 )
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> ModuleType:
     if name == "grn":
-        _warnings.warn(
+        message = (
             "`bt.grn` is deprecated and will be removed in a future release; "
-            "use `bt.bpy.ig` instead.",
+            "use `bt.bpy.ig` instead."
+        )
+        _warnings.warn(
+            message,
             FutureWarning,
             stacklevel=2,
         )
@@ -72,5 +78,5 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__() -> List[str]:
+def __dir__() -> list[str]:
     return sorted(set(globals()) | set(__all__))

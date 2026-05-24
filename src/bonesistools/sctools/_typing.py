@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import importlib as _importlib
+from functools import wraps
 from typing import (
     Any,
     Callable,
@@ -14,17 +15,12 @@ from typing import (
     overload,
 )
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal  # type: ignore
+from bonesistools._compat import Literal
 from typing_extensions import ParamSpec, TypeAlias
 
 from anndata import AnnData
-from pandas import DataFrame
 import numpy as np
-
-from functools import wraps
+from pandas import DataFrame
 
 P = ParamSpec("P")
 R = TypeVar("R")

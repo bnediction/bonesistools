@@ -16,11 +16,11 @@ omnipath
 
 from typing import List
 
-from . import omnipath, ncbi
+from . import ncbi, omnipath
 
 __all__ = [
-    "omnipath",
     "ncbi",
+    "omnipath",
 ]
 
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from boolean import BooleanAlgebra
 
-from ._network import BooleanNetwork, BooleanNetworkEnsemble
+if TYPE_CHECKING:
+    from ._network import BooleanNetwork, BooleanNetworkEnsemble
 
 
 def read_bnet(
@@ -32,6 +35,8 @@ def read_bnet(
     BooleanNetwork
         Parsed Boolean network.
     """
+
+    from ._network import BooleanNetwork
 
     file = Path(file)
 
@@ -93,6 +98,8 @@ def read_bnet_directory(
     ValueError
         If no `.bnet` file is found.
     """
+
+    from ._network import BooleanNetworkEnsemble
 
     directory = Path(directory)
 

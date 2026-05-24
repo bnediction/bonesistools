@@ -17,10 +17,7 @@ from typing import (
     Sequence,
 )
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from ..._compat import Literal
 
 import networkx as nx
 
@@ -37,8 +34,13 @@ StructuralSignature = Tuple[
     FrozenSet[Tuple[str, int]],
 ]
 
+if TYPE_CHECKING:
+    _MultiDiGraphBase = nx.MultiDiGraph[Any]
+else:
+    _MultiDiGraphBase = nx.MultiDiGraph
 
-class InfluenceGraph(nx.MultiDiGraph):
+
+class InfluenceGraph(_MultiDiGraphBase):
     """
     Signed influence graph.
 
@@ -57,7 +59,7 @@ class InfluenceGraph(nx.MultiDiGraph):
 
     def __init__(
         self,
-        graph: Optional[nx.DiGraph] = None,
+        graph: Optional[nx.DiGraph[Any]] = None,
         **attr: Any,
     ) -> None:
 
@@ -1608,7 +1610,7 @@ class InfluenceGraph(nx.MultiDiGraph):
         display(SVG(svg))
 
     @staticmethod
-    def _plain_graph(graph: Any) -> nx.MultiDiGraph:
+    def _plain_graph(graph: Any) -> nx.MultiDiGraph[Any]:
         """
         Return a plain NetworkX MultiDiGraph copy.
         """

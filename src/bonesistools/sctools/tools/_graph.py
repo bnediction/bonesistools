@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
+from typing import Any
+
 from anndata import AnnData
 from .._typing import anndata_checker
 
@@ -15,7 +19,7 @@ def get_paga_graph(
     use_rep: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
-) -> nx.DiGraph:
+) -> nx.DiGraph[Any]:
     """
     Get the partition-based graph abstraction (PAGA) graph stored in `adata`.
 

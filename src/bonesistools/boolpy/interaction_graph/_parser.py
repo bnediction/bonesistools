@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import (
     Any,
+    TYPE_CHECKING,
     Optional,
     Union,
 )
@@ -10,11 +13,15 @@ from typing import (
 import networkx as nx
 import pandas as pd
 
-from ...databases.ncbi._genesyn import GeneSynonyms
 from ...databases.ncbi._typing import (
     InputIdentifierType,
     OutputIdentifierType,
 )
+
+if TYPE_CHECKING:
+    from ...databases.ncbi._genesyn import GeneSynonyms
+else:
+    GeneSynonyms = None
 
 
 def read_interaction_graph(
@@ -24,7 +31,7 @@ def read_interaction_graph(
     output_identifier_type: OutputIdentifierType = "official_name",
     sep: str = ",",
     **kwargs: Any,
-) -> nx.MultiDiGraph:
+) -> nx.MultiDiGraph[Any]:
     """
     Read an interaction graph from a tabular file.
 
@@ -107,7 +114,12 @@ def read_interaction_graph(
     if genesyn is None:
         return grn
 
-    if isinstance(genesyn, GeneSynonyms):
+    gene_synonyms_class = GeneSynonyms
+
+    if gene_synonyms_class is None:
+        from ...databases.ncbi._genesyn import GeneSynonyms as gene_synonyms_class
+
+    if isinstance(genesyn, gene_synonyms_class):
         genesyn(
             grn,
             input_identifier_type=input_identifier_type,
@@ -118,5 +130,5 @@ def read_interaction_graph(
 
     raise TypeError(
         f"unsupported argument type for 'genesyn': "
-        f"expected {GeneSynonyms} but received {type(genesyn)}"
+        f"expected GeneSynonyms but received {type(genesyn)}"
     )

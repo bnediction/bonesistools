@@ -1,15 +1,19 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from itertools import cycle
 from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Iterator,
     Mapping,
     Optional,
     Sequence,
     Tuple,
     Union,
+    cast,
 )
 
 from anndata import AnnData
@@ -24,10 +28,44 @@ import scipy
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes._axes import Axes
+from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.ticker import FormatStrFormatter
-from . import _colors
+from ._colors import (
+    COLORS,
+    QUALITATIVE_COLORS,
+    blue,
+    generate_colormap,
+    gray,
+)
 
-Colors = Union[Sequence[RGB], cycle]
+Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
+
+
+def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarray:
+    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
+
+    if scipy.sparse.issparse(counts):
+        counts = cast(Any, counts).toarray()
+
+    return np.asarray(counts).squeeze()
+
+
+def _figure_from_axes(ax: Axes) -> Figure:
+    return cast(Figure, ax.figure)
+
+
+def _set_window_title(fig: Figure, title: str) -> None:
+    manager = fig.canvas.manager
+
+    if manager is not None:
+        manager.set_window_title(title)
+
+
+def _colormap_colors(colors: Colors) -> Sequence[object]:
+    if isinstance(colors, ListedColormap):
+        return cast(Sequence[object], colors.colors)
+
+    return cast(Sequence[object], colors)
 
 
 @anndata_checker
@@ -40,8 +78,8 @@ def kde_plot(
     clip: bool = False,
     colors: Optional[Colors] = None,
     show_legend: bool = True,
-    title: Optional[Union[str, dict]] = None,
-    default_parameters: Optional[Callable] = None,
+    title: Optional[Union[str, dict[str, Any]]] = None,
+    default_parameters: Optional[Callable[[], None]] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
@@ -103,13 +141,8 @@ def kde_plot(
 
     import seaborn as sns
 
-    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
-
-    if scipy.sparse.issparse(counts):
-        counts = counts.toarray()
-
     counts = pd.DataFrame(
-        {"counting": np.asarray(counts).squeeze()},
+        {"counting": _counts_vector(adata, gene, layer)},
         index=adata.obs.index,
     )
 
@@ -119,49 +152,57 @@ def kde_plot(
         counts[obs] = adata.obs[obs]
         if not colors:
             cluster_number = len(adata.obs[obs].astype("category").cat.categories)
-            if len(_colors.QUALITATIVE_COLORS) >= cluster_number:
-                colors = _colors.QUALITATIVE_COLORS[0:cluster_number]
+            if len(QUALITATIVE_COLORS) >= cluster_number:
+                colors = QUALITATIVE_COLORS[0:cluster_number]
             else:
-                colors = _colors.generate_colormap(color_number=cluster_number)
+                colors = generate_colormap(color_number=cluster_number)
         elif isinstance(colors, Mapping):
             colors = [
                 colors[cluster]
                 for cluster in adata.obs[obs].astype("category").cat.categories
             ]
-        if hasattr(colors, "colors"):
-            colors = colors.colors
+        if isinstance(colors, Colormap):
+            colors = _colormap_colors(colors)
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = ax.figure
+        fig = _figure_from_axes(ax)
 
     q = np.quantile(counts["counting"], 0.99)
+    clip_range = cast(
+        Optional[Tuple[float, float]],
+        (float(min(counts["counting"])), float(q)) if clip is True else None,
+    )
 
     if not_all is False:
         sns.kdeplot(
-            data=counts["counting"],
+            data=cast(Any, counts["counting"]),
             ax=ax,
-            color=_colors.gray,
+            color=cast(Any, gray),
             fill=True,
-            clip=(min(counts["counting"]), q) if clip is True else None,
+            clip=clip_range,
             label="all",
         )
 
     if obs is not None:
+        color_values = cast(Sequence[object], colors)
+
         for _cluster, _color in zip(
-            adata.obs[obs].astype("category").cat.categories, colors
+            adata.obs[obs].astype("category").cat.categories, color_values
         ):
+            _color = cast(Any, _color)
+
             if len(_color) == 4:
                 if isinstance(_color, np.ndarray):
                     _color = _color.tolist()
                 del _color[-1]
             sns.kdeplot(
-                data=counts.loc[counts[obs] == _cluster]["counting"],
+                data=cast(Any, counts.loc[counts[obs] == _cluster]["counting"]),
                 ax=ax,
                 color=_color,
                 fill=False,
-                clip=(min(counts["counting"]), q) if clip is True else None,
+                clip=clip_range,
                 label=_cluster,
             )
 
@@ -172,10 +213,10 @@ def kde_plot(
 
     if title:
         if isinstance(title, str):
-            fig.canvas.manager.set_window_title(title)
+            _set_window_title(fig, title)
             ax.set_title(title)
         elif isinstance(title, dict):
-            fig.canvas.manager.set_window_title(title["label"])
+            _set_window_title(fig, title["label"])
             ax.set_title(**title)
 
     if obs and show_legend:
@@ -210,7 +251,7 @@ def ecdf_plot(
     obs: Optional[str] = None,
     colors=None,
     show_legend: bool = True,
-    default_parameters: Optional[Callable] = None,
+    default_parameters: Optional[Callable[[], None]] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
@@ -255,13 +296,8 @@ def ecdf_plot(
         y = np.arange(1, len(values) + 1) / len(values)
         return values, y
 
-    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
-
-    if scipy.sparse.issparse(counts):
-        counts = counts.toarray()
-
     counts = pd.DataFrame(
-        {"counting": np.asarray(counts).squeeze()},
+        {"counting": _counts_vector(adata, gene, layer)},
         index=adata.obs.index,
     )
 
@@ -269,26 +305,26 @@ def ecdf_plot(
         counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
         if not colors:
             colors = [
-                _colors.gray,
-                *_colors.COLORS[
+                gray,
+                *COLORS[
                     1 : len(adata.obs[obs].astype("category").cat.categories) + 1
                 ],
             ]
         elif isinstance(colors, Mapping):
             colors = [
-                _colors.gray,
+                gray,
                 *[
                     colors[cluster]
                     for cluster in adata.obs[obs].astype("category").cat.categories
                 ],
             ]
     elif not colors:
-        colors = [_colors.blue]
+        colors = [blue]
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = ax.figure
+        fig = _figure_from_axes(ax)
 
     x, y = _ecdf(counts["counting"])
     ax.step(x, y, where="post", color=colors[0], label="all")

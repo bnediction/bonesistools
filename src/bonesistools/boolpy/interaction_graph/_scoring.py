@@ -71,7 +71,7 @@ def _path_weight(
 
 
 def _edge_signs(
-    graph: nx.Graph,
+    graph: nx.Graph[Any],
     source: str,
     target: str,
 ) -> list[int]:
@@ -102,7 +102,7 @@ def _edge_signs(
 
 
 def _walk_signs(
-    graph: nx.Graph,
+    graph: nx.Graph[Any],
     walk: Sequence[str],
 ) -> list[int]:
     edge_signs = [
@@ -126,7 +126,7 @@ def _walk_signs(
 
 
 def interaction_scores_from_walks(
-    graph: nx.Graph,
+    graph: nx.Graph[Any],
     genes: Iterable[str] | None = None,
     max_depth: int = 3,
     weights: Sequence[float] | None = None,
@@ -306,7 +306,7 @@ def infer_signed_interactions(
 
 
 def infer_signed_interactions_from_walks(
-    graph: nx.Graph,
+    graph: nx.Graph[Any],
     genes: Iterable[str] | None = None,
     max_depth: int = 3,
     weights: Sequence[float] | None = None,

@@ -16,9 +16,12 @@ ig
     Interaction and influence graph utilities.
 """
 
-import warnings as _warnings
+from __future__ import annotations
+
 import sys as _sys
-from typing import Any, List
+import warnings as _warnings
+from types import ModuleType
+from typing import cast
 
 from . import boolean_algebra as ba
 from . import boolean_network as bn
@@ -28,27 +31,19 @@ _sys.modules.update(
     {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig"]}
 )
 
-_DEPRECATED = {
-    "PartialBoolean": ("ba", "PartialBoolean"),
-    "BooleanNetworkEnsemble": ("bn", "BooleanNetworkEnsemble"),
-    "Hypercube": ("bn", "Hypercube"),
-    "HypercubeCollection": ("bn", "HypercubeCollection"),
-    "bn_to_pydot": ("bn", "bn_to_pydot"),
+_MODULES: dict[str, ModuleType] = {
+    "ba": ba,
+    "bn": bn,
+    "ig": ig,
 }
 
-
-def __getattr__(name: str) -> Any:
-    if name in _DEPRECATED:
-        module_alias, attr = _DEPRECATED[name]
-        _warnings.warn(
-            f"`bt.bpy.{name}` is deprecated; use `bt.bpy.{module_alias}.{attr}` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return getattr(globals()[module_alias], attr)
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
+_DEPRECATED: dict[str, tuple[str, str]] = {
+    "PartialBoolean": ("ba", "PartialBoolean"),
+    "BooleanNetworkEnsemble": ("bn", "BooleanNetworkEnsemble"),
+    "Hypercube": ("ba", "Hypercube"),
+    "HypercubeCollection": ("ba", "HypercubeCollection"),
+    "bn_to_pydot": ("bn", "bn_to_pydot"),
+}
 
 __all__ = [
     "ba",
@@ -57,5 +52,18 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __getattr__(name: str) -> object:
+    if name in _DEPRECATED:
+        module_alias, attr = _DEPRECATED[name]
+        _warnings.warn(
+            f"`bt.bpy.{name}` is deprecated; use `bt.bpy.{module_alias}.{attr}` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cast(object, getattr(_MODULES[module_alias], attr))
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
     return sorted(set(globals()) | set(__all__))

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from typing import (
     TYPE_CHECKING,
     Union,
@@ -15,10 +17,7 @@ from typing import (
 if TYPE_CHECKING:
     from ...boolpy.boolean_network._typing import BooleanNetworkLike
 
-try:
-    from typing import Literal, get_args
-except ImportError:
-    from typing_extensions import Literal, get_args  # type: ignore
+from ..._compat import Literal, get_args
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as SequenceInstance
 
@@ -254,7 +253,7 @@ class GeneSynonyms:
 
     def __call__(
         self,
-        data: Union[InteractionList, DataFrame, Graph, "BooleanNetworkLike"],
+        data: Union[InteractionList, DataFrame, Graph[Any], "BooleanNetworkLike"],
         *args: Any,
         **kwargs: Any,
     ):
@@ -554,11 +553,11 @@ class GeneSynonyms:
     @support_legacy_gene_synonyms_args
     def convert_graph(
         self,
-        graph: Graph,
+        graph: Graph[Any],
         input_identifier_type: Union[InputIdentifierType, str] = "name",
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
         copy: bool = True,
-    ) -> Union[Graph, None]:
+    ) -> Union[Graph[Any], None]:
         """
         Convert gene identifiers in graph node labels.
 
@@ -788,7 +787,11 @@ class GeneSynonyms:
             copy=copy,
         )
 
-    def standardize_graph(self, graph: Graph, copy: bool = True) -> Union[Graph, None]:
+    def standardize_graph(
+        self,
+        graph: Graph[Any],
+        copy: bool = True,
+    ) -> Union[Graph[Any], None]:
         """
         Standardize gene names in graph node labels.
 
@@ -1159,7 +1162,7 @@ class GeneSynonyms:
         except subprocess.CalledProcessError as e:
             raise RuntimeError("failed to download NCBI gene_info file") from e
 
-    def __parse_ncbi_gene_info(self, gi_file: Path) -> Dict:
+    def __parse_ncbi_gene_info(self, gi_file: Path) -> Dict[str, Any]:
         """
         Parse NCBI gene_info file and create mappings between multiple gene identifiers.
 

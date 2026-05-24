@@ -17,10 +17,7 @@ from typing import (
 from importlib import import_module
 from importlib import util as importlib_util
 
-try:
-    from typing import Literal, get_args
-except ImportError:
-    from typing_extensions import Literal, get_args  # type: ignore
+from ..._compat import Literal, get_args
 from .._typing import (
     AnnData,
     ScData,
@@ -172,13 +169,10 @@ class Knnbs:
     """
 
     if TYPE_CHECKING:
-        kneighbors_graph: Graph[Any] = cast(Graph[Any], cast(object, None))
-        cluster_key: str = cast(str, cast(object, None))
-        obs: pd.Series = cast(pd.Series, cast(object, None))
-        shortest_path_lengths_df: pd.DataFrame = cast(
-            pd.DataFrame,
-            cast(object, None),
-        )
+        kneighbors_graph: Graph[Any]
+        cluster_key: str
+        obs: pd.Series
+        shortest_path_lengths_df: pd.DataFrame
 
     def __init__(
         self,

@@ -22,15 +22,15 @@ datasets
 import sys as _sys
 from typing import List
 
-from . import _typing as typing
-from . import datasets
-from . import tools as tl
 from . import preprocessing as pp
+from . import tools as tl
 from . import plotting as pl
+from . import datasets
+from . import _typing as typing
 
 __all__ = [
-    "tl",
     "pp",
+    "tl",
     "pl",
     "datasets",
     "typing",
@@ -39,7 +39,7 @@ __all__ = [
 _sys.modules.update(
     {
         f"{__name__}.{alias}": globals()[alias]
-        for alias in ["tl", "pp", "pl", "datasets"]
+        for alias in ["pp", "tl", "pl", "datasets"]
     }
 )
 

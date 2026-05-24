@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Union, Optional
+from __future__ import annotations
+
+from typing import Any, Optional, Union, cast
 from .._typing import (
     Axis,
     ScData,
@@ -168,7 +170,7 @@ def var_names_merge_duplicates(
     obs = DataFrame(adata.obs.index).set_index(0)
     adatas = list()
     duplicated_var_names = {
-        adata.var_names[idx]
+        str(adata.var_names[idx])
         for idx, value in enumerate(adata.var_names.duplicated())
         if value
     }
@@ -177,7 +179,7 @@ def var_names_merge_duplicates(
         adata_spec = adata[:, adata.var.index == var_name]
         adata = adata[:, adata.var.index != var_name]
 
-        X = csr_matrix(adata_spec.X.sum(axis=1))
+        X = csr_matrix(cast(Any, adata_spec.X).sum(axis=1))
         if var_name in list(adata_spec.var[var_names]):
             filter = adata_spec.var[var_names] == var_name
             var = adata_spec.var[filter].iloc[:1]

@@ -7,14 +7,22 @@ The `datasets` namespace exposes lightweight AnnData objects used in examples,
 tests and tutorials.
 """
 
-try:
+from __future__ import annotations
+
+import sys
+from typing import List
+
+if sys.version_info >= (3, 9):
     from importlib.resources import files
-except ImportError:
+else:
     from importlib_resources import files
 
 import anndata as ad
 from anndata import AnnData
-from typing import List
+
+__all__ = [
+    "nestorowa",
+]
 
 
 def nestorowa() -> AnnData:
@@ -39,12 +47,7 @@ def nestorowa() -> AnnData:
 
     path = files(__package__) / "nestorowa_hvg.h5ad"
 
-    return ad.read_h5ad(path)
-
-
-__all__ = [
-    "nestorowa",
-]
+    return ad.read_h5ad(str(path))
 
 
 def __dir__() -> List[str]:

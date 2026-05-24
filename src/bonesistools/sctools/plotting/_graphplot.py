@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from itertools import cycle
 from numbers import Number
 from pathlib import Path
 from typing import (
     Any,
     Optional,
     Union,
+    cast,
 )
 
 from anndata import AnnData
@@ -19,7 +19,7 @@ from .._typing import anndata_checker
 import matplotlib.pyplot as plt
 from matplotlib.axes._axes import Axes
 
-from . import _colors
+from ._colors import black
 
 import networkx as nx
 
@@ -35,9 +35,7 @@ def draw_paga(
     threshold: float = 0.01,
     ax: Optional[Axes] = None,
     with_labels: bool = False,
-    node_color: Optional[
-        Union[RGB, Sequence[RGB], cycle, Mapping[str, Any]]
-    ] = _colors.black,
+    node_color: Any = black,
     outfile: Optional[Path] = None,
     **kwargs: Any,
 ) -> Union[Axes, None]:
@@ -103,14 +101,14 @@ def draw_paga(
         and len(node_color) in [3, 4]
         and all(isinstance(channel, Number) for channel in node_color)
     ):
-        node_color = [node_color for _ in paga]
+            node_color = [node_color for _ in paga]
 
     nx.draw_networkx(
         paga,
         pos=barycenters,
         ax=ax,
         with_labels=with_labels,
-        node_color=node_color,
+        node_color=cast(Any, node_color),
         **kwargs,
     )
 

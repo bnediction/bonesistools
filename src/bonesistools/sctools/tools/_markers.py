@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from collections.abc import Sequence as Seq
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from ..._compat import Literal
 
 from typing import (
+    Any,
     Callable,
     Iterable,
     Optional,
     Sequence,
     Union,
+    cast,
 )
 from .._typing import anndata_checker
 
@@ -36,7 +37,7 @@ def calculate_logfoldchanges(
     column_name: str = "logfoldchanges",
     is_log: bool = False,
     cluster_rebalancing: bool = False,
-    filter_logfoldchanges: Optional[Callable] = None,
+    filter_logfoldchanges: Optional[Callable[[np.ndarray], Any]] = None,
 ) -> pd.DataFrame:
     """
     Compute log2 fold changes between each group and the remaining observations.
@@ -81,7 +82,10 @@ def calculate_logfoldchanges(
 
     def compute_logfc(mean_in, mean_out, cluster):
 
-        __df = pd.DataFrame(log2(mean_in) - log2(mean_out), columns=[column_name])
+        __df = pd.DataFrame(
+            log2(mean_in) - log2(mean_out),
+            columns=cast(Any, [column_name]),
+        )
         __df.reset_index(names="names", inplace=True)
         __df.insert(0, "group", cluster)
         return __df
@@ -92,14 +96,14 @@ def calculate_logfoldchanges(
     if cluster_rebalancing:
         mean_counts_df = counts_df.groupby(by=groupby, sort=True).mean()
 
-        for cluster in sorted(adata.obs[groupby].unique().dropna()):
+        for cluster in sorted(adata.obs[groupby].dropna().unique()):
             _mean_in = mean_counts_df.loc[cluster]
             _mean_out = mean_counts_df.drop(index=cluster, inplace=False).mean()
 
             logfoldchanges.append(compute_logfc(_mean_in, _mean_out, cluster))
 
     else:
-        for cluster in sorted(adata.obs[groupby].unique().dropna()):
+        for cluster in sorted(adata.obs[groupby].dropna().unique()):
             _mean_in = counts_df.loc[
                 counts_df[groupby] == cluster,
                 counts_df.columns != groupby,
@@ -113,7 +117,7 @@ def calculate_logfoldchanges(
             logfoldchanges.append(compute_logfc(_mean_in, _mean_out, cluster))
 
     if len(logfoldchanges) == 0:
-        return pd.DataFrame(columns=["group", "names", column_name])
+        return pd.DataFrame(columns=cast(Any, ["group", "names", column_name]))
 
     logfoldchanges_df = pd.concat(logfoldchanges, ignore_index=True)
 
@@ -125,7 +129,9 @@ def calculate_logfoldchanges(
             )
         else:
             logfoldchanges_df = logfoldchanges_df.loc[
-                filter_logfoldchanges(logfoldchanges_df[column_name].values)
+                filter_logfoldchanges(
+                    cast(np.ndarray, logfoldchanges_df[column_name].values)
+                )
             ]
 
     return logfoldchanges_df.reset_index(drop=True)
@@ -168,18 +174,16 @@ def hypergeometric_test(
         )
 
     background = set(adata.var.index)
-    if not isinstance(signature, set):
-        signature = set(signature)
-    if not isinstance(markers, set):
-        markers = set(markers)
-    marked_genes = markers.intersection(signature)
+    signature_set = set(signature)
+    marker_set = set(markers)
+    marked_genes = marker_set.intersection(signature_set)
 
     N = len(background)  # population size
-    K = len(signature)  # number of success states
-    n = len(markers)  # number of draws
+    K = len(signature_set)  # number of success states
+    n = len(marker_set)  # number of draws
     k = len(marked_genes)  # number of observed successes (matching genes)
 
-    return hypergeom.sf(k=k, M=N, n=K, N=n, loc=1)
+    return float(hypergeom.sf(k=k, M=N, n=K, N=n, loc=1))
 
 
 def smirnov_tests(
@@ -193,7 +197,7 @@ def smirnov_tests(
     pval_cutoff: Optional[float] = None,
     key_added: Optional[str] = None,
     copy: bool = False,
-) -> Optional[AnnData]:
+) -> Optional[pd.DataFrame]:
     """
     Compare whether a subsample and a reference sample have the same distribution
     using a two-sample Kolmogorov-Smirnov test.
@@ -279,33 +283,43 @@ def smirnov_tests(
     }
 
     if layer is not None:
-        X = adata.layers[layer]
+        x_matrix = adata.layers[layer]
     else:
-        X = adata.X
+        x_matrix = adata.X
 
-    if issparse(X):
-        X.eliminate_zeros()
+    if issparse(x_matrix):
+        cast(Any, x_matrix).eliminate_zeros()
 
     def get_gene_values(obs_mask, gene_name):
         obs_indices = np.where(np.asarray(obs_mask))[0]
         var_indices = np.where(np.asarray(adata.var.index == gene_name))[0]
-        if issparse(X):
-            values = X[obs_indices][:, var_indices].toarray()
+        if issparse(x_matrix):
+            values = cast(Any, x_matrix)[obs_indices][:, var_indices].toarray()
         else:
-            values = X[np.ix_(obs_indices, var_indices)]
+            values = cast(np.ndarray, x_matrix)[np.ix_(obs_indices, var_indices)]
         return np.asarray(values).reshape(-1)
 
     df = pd.DataFrame(
-        columns=["group", "names", "statistics", "locations", "signs", "pvals"]
+        columns=cast(
+            Any,
+            ["group", "names", "statistics", "locations", "signs", "pvals"],
+        )
     )
     index = 0
 
     for name in adata.var_names:
-        if reference != "rest":
-            ref_sample = get_gene_values(adata.obs[groupby] == reference, name)
+        reference_sample = (
+            get_gene_values(adata.obs[groupby] == reference, name)
+            if reference != "rest"
+            else None
+        )
+
         for group in groups:
             if reference == "rest":
                 ref_sample = get_gene_values(adata.obs[groupby] != group, name)
+            else:
+                assert reference_sample is not None
+                ref_sample = reference_sample
             sample = get_gene_values(adata.obs[groupby] == group, name)
             ks = kstest(sample, ref_sample, alternative=alternative)
             df.loc[index] = [
@@ -337,7 +351,7 @@ def smirnov_tests(
         df["pvals_adj"] = np.minimum(df["pvals"] * n_genes, 1.0)
 
     if pval_cutoff is not None:
-        df = df[df["pvals_adj"] < pval_cutoff]
+        df = cast(pd.DataFrame, df[df["pvals_adj"] < pval_cutoff])
 
     if copy:
         return df

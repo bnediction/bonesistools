@@ -6,11 +6,12 @@ from collections.abc import (
     Iterable,
     Iterator,
     Mapping,
-    MutableMapping,
-    MutableSet,
 )
 from typing import (
+    cast,
     Dict,
+    MutableMapping,
+    MutableSet,
     Optional,
     Set,
 )
@@ -23,7 +24,7 @@ from ._typing import (
 )
 
 
-class Hypercube(MutableMapping):
+class Hypercube(MutableMapping[str, PartialBoolean]):
     """
     Partial Boolean hypercube.
 
@@ -415,7 +416,7 @@ class Hypercube(MutableMapping):
         return None
 
     @property
-    def components(self) -> frozenset:
+    def components(self) -> frozenset[str]:
         """
         Return explicitly specified hypercube components.
 
@@ -789,7 +790,7 @@ class Hypercube(MutableMapping):
         )
 
 
-class HypercubeCollection(MutableSet):
+class HypercubeCollection(MutableSet[Hypercube]):
     """
     Mutable set of hypercubes.
 
@@ -836,7 +837,7 @@ class HypercubeCollection(MutableSet):
         hypercubes: Optional[Iterable[HypercubeLike]] = None,
     ) -> None:
 
-        self._hypercubes = set()
+        self._hypercubes: Set[Hypercube] = set()
 
         if hypercubes is not None:
             for hypercube in hypercubes:
@@ -941,7 +942,7 @@ class HypercubeCollection(MutableSet):
                 return NotImplemented
 
             try:
-                other = HypercubeCollection(other)
+                other = HypercubeCollection(cast(Iterable[HypercubeLike], other))
             except (TypeError, ValueError):
                 return NotImplemented
 
@@ -1020,7 +1021,7 @@ class HypercubeCollection(MutableSet):
         self._hypercubes.discard(hypercube)
 
     @property
-    def components(self) -> frozenset:
+    def components(self) -> frozenset[str]:
         """
         Return components appearing in at least one hypercube.
 

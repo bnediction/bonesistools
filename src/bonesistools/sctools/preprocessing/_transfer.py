@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-from typing import List, Union
+from __future__ import annotations
+
+from typing import Any, List, Union, cast
 
 import pandas as pd
 from anndata import AnnData
@@ -94,15 +96,23 @@ def transfer_layer(
         if cols_to_add:
             df.loc[:, cols_to_add] = nan
         df = pd.concat(
-            [df, pd.DataFrame(data=nan, columns=df.columns, index=idx_to_add)]
+            [
+                df,
+                pd.DataFrame(
+                    data=nan,
+                    columns=df.columns,
+                    index=cast(Any, idx_to_add),
+                ),
+            ]
         )
 
         cols_to_remove = list(right_cols.difference(left_cols))
         index_to_remove = list(right_idx.difference(left_idx))
         df.drop(columns=cols_to_remove, index=index_to_remove, inplace=True)
 
-        left_ad.layers[layer] = df[left_ad.var.index.tolist()].reindex(
-            left_ad.obs.index.tolist()
+        left_ad.layers[layer] = cast(
+            Any,
+            df[left_ad.var.index.tolist()].reindex(left_ad.obs.index.tolist()),
         )
 
     return left_ad if copy else None
@@ -221,9 +231,10 @@ def transfer_obs_its(
         Updated AnnData objects if `copy=True`; otherwise None.
     """
 
+    adatas_cp: AnnDataList = []
+
     if copy:
         adatas = [_adata.copy() for _adata in adatas]
-        adatas_cp = []
 
     for _condition, _adata in zip(conditions, adatas):
         _cond = adata.obs[condition_colname] == _condition

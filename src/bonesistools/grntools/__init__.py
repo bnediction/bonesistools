@@ -9,10 +9,25 @@ compatibility. Prefer `bonesistools.bpy.ig` for new code.
 
 from typing import List
 
-from ..boolpy.interaction_graph import __all__ as _INTERACTION_GRAPH_ALL
-from ..boolpy.interaction_graph import *  # type: ignore  # noqa: F401,F403
+from ..boolpy.interaction_graph import (
+    InfluenceGraph,
+    InteractionScore,
+    infer_signed_interactions,
+    infer_signed_interactions_from_walks,
+    interaction_scores_from_walks,
+    read_interaction_graph,
+    walks_from,
+)
 
-__all__ = list(_INTERACTION_GRAPH_ALL)
+__all__ = [
+    "InfluenceGraph",
+    "InteractionScore",
+    "infer_signed_interactions",
+    "infer_signed_interactions_from_walks",
+    "interaction_scores_from_walks",
+    "read_interaction_graph",
+    "walks_from",
+]
 
 
 def __dir__() -> List[str]:

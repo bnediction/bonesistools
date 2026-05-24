@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import networkx as nx
 
 
 def walks_from(
-    graph: nx.Graph,
+    graph: nx.Graph[Any],
     source: str,
     max_depth: int = 3,
 ) -> list[list[str]]:
