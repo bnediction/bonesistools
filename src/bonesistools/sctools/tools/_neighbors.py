@@ -149,12 +149,12 @@ class Knnbs:
 
     Parameters
     ----------
-    n_neighbors: int
-        Number of nearest neighbors.
+    n_neighbors: int or float
+        Integer-valued number of nearest neighbors.
     use_rep: str (default: "X_pca")
         Representation key in `scdata.obsm`.
-    n_components: int, optional
-        Number of dimensions to use. If None, use all dimensions.
+    n_components: int or float, optional
+        Integer-valued number of dimensions to use. If None, use all dimensions.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     **metric_kwargs: Any
@@ -176,58 +176,49 @@ class Knnbs:
 
     def __init__(
         self,
-        n_neighbors: int,
+        n_neighbors: Union[int, float],
         use_rep: str = "X_pca",
-        n_components: Optional[int] = None,
+        n_components: Optional[Union[int, float]] = None,
         metric: Metric = "euclidean",
         **metric_kwargs: Any,
     ):
 
-        if isinstance(n_neighbors, int):
-            if n_neighbors > 0:
-                self.n_neighbors = n_neighbors
-            else:
-                raise ValueError(
-                    f"invalid argument value for 'n_neighbors': "
-                    f"expected non-null positive value but received {n_neighbors!r}"
-                )
-        elif isinstance(n_neighbors, float):
-            if n_neighbors.is_integer():
-                self.n_neighbors = n_neighbors
-            else:
-                raise ValueError(
-                    f"invalid argument value for 'n_neighbors': "
-                    f"expected integer but received {n_neighbors!r}"
-                )
-        else:
+        if not isinstance(n_neighbors, (int, float)):
             raise TypeError(
                 f"unsupported argument type for 'n_neighbors': "
                 f"expected {int} but received {type(n_neighbors)}"
             )
 
-        if n_components is None:
-            self.n_components = None
-        elif isinstance(n_components, int):
-            if n_components > 0:
-                self.n_components = n_components
-            else:
+        if n_neighbors <= 0:
+            raise ValueError(
+                f"invalid argument value for 'n_neighbors': "
+                f"expected non-null positive value but received {n_neighbors!r}"
+            )
+
+        if isinstance(n_neighbors, float) and not n_neighbors.is_integer():
+            raise ValueError(
+                f"invalid argument value for 'n_neighbors': "
+                f"expected integer but received {n_neighbors!r}"
+            )
+
+        if n_components is not None:
+            if not isinstance(n_components, (int, float)):
+                raise TypeError(
+                    f"unsupported argument type for 'n_components': "
+                    f"expected {int} but received {type(n_components)}"
+                )
+
+            if n_components <= 0:
                 raise ValueError(
                     f"invalid argument value for 'n_components': "
                     f"expected non-null positive value but received {n_components!r}"
                 )
-        elif isinstance(n_components, float):
-            if n_components.is_integer():
-                self.n_components = n_components
-            else:
+
+            if isinstance(n_components, float) and not n_components.is_integer():
                 raise ValueError(
                     f"invalid argument value for 'n_components': "
                     f"expected integer but received {n_components!r}"
                 )
-        else:
-            raise TypeError(
-                f"unsupported argument type for 'n_components': "
-                f"expected {int} but received {type(n_components)}"
-            )
 
         if isinstance(use_rep, str):
             self.use_rep = use_rep
@@ -245,6 +236,10 @@ class Knnbs:
                 f"expected one of {get_args(Metric)} but received {metric!r}"
             )
 
+        self.n_neighbors: int = int(n_neighbors)
+        self.n_components: Optional[int] = (
+            None if n_components is None else int(n_components)
+        )
         self.metric_kwargs: Dict[str, Any] = metric_kwargs
 
     def __repr__(self) -> str:
@@ -497,7 +492,7 @@ class Knnbs:
     def select_peripheral_cells(
         self,
         subcluster_size: int = 30,
-        key: str = "knnbs",
+        key: Optional[str] = "knnbs",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -509,8 +504,8 @@ class Knnbs:
             Number of cells in each macrostate.
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
-        key: str (default: 'knnbs')
-            Pandas Series name.
+        key: str, optional (default: 'knnbs')
+            Pandas Series name. If None, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -569,7 +564,7 @@ class Knnbs:
     def find_furthest_cells_to_other_barycenters(
         self,
         size: int = 30,
-        key: str = "knnbs",
+        key: Optional[str] = "knnbs",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -591,7 +586,7 @@ class Knnbs:
     def select_central_cells(
         self,
         subcluster_size: int = 30,
-        key: str = "knnbs",
+        key: Optional[str] = "knnbs",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -603,8 +598,8 @@ class Knnbs:
             Number of cells in each macrostate.
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
-        key: str (default: 'knnbs')
-            Pandas Series name.
+        key: str, optional (default: 'knnbs')
+            Pandas Series name. If None, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -653,7 +648,7 @@ class Knnbs:
     def find_closest_cells_to_self_barycenter(
         self,
         size: int = 30,
-        key: str = "knnbs",
+        key: Optional[str] = "knnbs",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -830,7 +825,7 @@ def shared_neighbors(
     scdata: ScData,  # type: ignore
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
-    prune_snn: Union[float, int] = 1 / 15,
+    prune_snn: Optional[Union[float, int]] = 1 / 15,
     metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
     distances_key: Optional[str] = None,
@@ -894,8 +889,6 @@ def shared_neighbors(
         )
     if prune_snn is None:
         prune_snn = 0
-    if metric is None:
-        metric = "euclidean"
     if distances_key is None:
         distances_key = f"{snn_key}_distances"
     if connectivities_key is None:

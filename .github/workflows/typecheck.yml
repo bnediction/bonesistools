@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  basedpyright:
+  pyright:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,7 +19,7 @@ jobs:
       - name: Install package
         run: |
           pip install -e ".[all]"
-          pip install basedpyright
+          pip install pyright
 
-      - name: Run basedpyright
-        run: basedpyright --pythonpath "$(which python)"
+      - name: Run pyright
+        run: pyright .

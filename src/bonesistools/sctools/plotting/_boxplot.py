@@ -6,6 +6,7 @@ from pathlib import Path
 from collections.abc import Mapping as MappingABC
 from typing import (
     Any,
+    Dict,
     Iterator,
     List,
     Mapping,
@@ -41,7 +42,7 @@ from ._colors import (
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
 BoxPlots = Mapping[str, Any]
-BoxplotReturn = Union[BoxPlots, dict[object, BoxPlots]]
+BoxplotReturn = Union[BoxPlots, Dict[object, BoxPlots]]
 
 
 def __set_window_title(fig: Figure, title: str) -> None:
@@ -327,7 +328,7 @@ def boxplot(
             for median in cast(Sequence[Any], bps["medians"]):
                 median.set(linewidth=0)
     else:
-        grouped_bps: dict[object, BoxPlots] = {}
+        grouped_bps: Dict[object, BoxPlots] = {}
         hue_values = cast(Sequence[object], hues)
 
         if box_colors is None:

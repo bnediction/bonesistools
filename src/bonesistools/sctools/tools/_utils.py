@@ -14,9 +14,9 @@ from .._typing import (
 @anndata_checker
 def choose_mtx_representation(
     adata: AnnData,
-    use_raw: Optional[bool] = False,
+    use_raw: bool = False,
     layer: Optional[str] = None,
-    copy: Optional[bool] = True,
+    copy: bool = True,
 ) -> ndarray:
     """
     Select the expression matrix from an AnnData object.

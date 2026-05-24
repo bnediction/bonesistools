@@ -116,7 +116,7 @@ def test_knnbs_validates_init_arguments_and_repr():
         metric="cosine",
     )
 
-    assert "Knnbs(n_neighbors=5.0" in repr(estimator)
+    assert "Knnbs(n_neighbors=5" in repr(estimator)
 
     with pytest.warns(DeprecationWarning, match="metric_kwds"):
         assert estimator.metric_kwds == {}
@@ -199,7 +199,6 @@ def test_shared_neighbors_pruning_and_inplace_modes(mini_adata):
     result = bt.sct.tl.shared_neighbors(
         mini_adata,
         prune_snn=None,
-        metric=None,
         normalize_connectivities=False,
         distances_key="raw_snn_distances",
         connectivities_key="raw_snn_connectivities",

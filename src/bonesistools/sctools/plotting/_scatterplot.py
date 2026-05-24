@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterator,
     Mapping,
     Optional,
@@ -146,7 +147,7 @@ def __scatterplot_discrete(
     obs: str,
     use_rep: str,
     colors: Optional[Colors] = None,
-    n_components: Optional[int] = 2,
+    n_components: int = 2,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
@@ -316,7 +317,7 @@ def __scatterplot_continuous(
     obs: str,
     use_rep: str,
     colors: Optional[Colormap] = None,
-    n_components: Optional[int] = 2,
+    n_components: int = 2,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
@@ -422,12 +423,12 @@ def __add_labels(
     obs: str,
     use_rep: str,
     ax: Optional[Axes] = None,
-    dim: Optional[int] = 2,
+    dim: int = 2,
     **kwargs: Any,
 ) -> None:
 
     barycenter_values = cast(
-        dict[object, np.ndarray],
+        Dict[object, np.ndarray],
         barycenters(scdata=scdata, obs=obs, use_rep=use_rep),
     )
     keys_to_remove = []
@@ -457,7 +458,7 @@ def __add_labels(
 def __graph_to_plot(
     scdata: ScData,  # type: ignore
     ax: Optional[Axes] = None,
-    dim: Optional[int] = 2,
+    dim: int = 2,
     z_offset: float = 0.0,
     **kwargs: Any,
 ) -> None:
@@ -505,7 +506,7 @@ def __graph_to_plot(
 def __add_labels_to_graph(
     scdata: ScData,  # type: ignore
     ax: Optional[Axes] = None,
-    dim: Optional[int] = 2,
+    dim: int = 2,
     **kwargs: Any,
 ) -> None:
 
@@ -542,7 +543,7 @@ def embedding_plot(
     obs: str,
     use_rep: str,
     colors: Optional[Colormap] = None,
-    n_components: Optional[int] = 2,
+    n_components: int = 2,
     title: Optional[Union[str, dict[str, Any]]] = None,
     add_labels: bool = False,
     add_graph: bool = False,
@@ -634,7 +635,7 @@ def embedding_plot(
     10(1), 1903 (https://www.nature.com/articles/s41467-019-09670-4)
     """
 
-    if n_components is None or n_components not in [2, 3]:
+    if n_components not in [2, 3]:
         raise ValueError(
             f"invalid argument value for 'n_components': "
             f"expected 2 or 3 but received {n_components!r}"
