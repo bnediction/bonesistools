@@ -7,6 +7,7 @@ from typing import (
     List,
     Optional,
     Union,
+    cast,
 )
 
 try:
@@ -168,14 +169,16 @@ def load_dorothea_grn(
         dorothea_db = pd.read_csv(cache_file)
 
     else:
-        import decoupler as dc  # type: ignore
+        import decoupler as _dc  # type: ignore
+
+        dc = cast(Any, _dc)
 
         if wrapper == "op":
             if not hasattr(dc, "op") or not hasattr(dc.op, "dorothea"):
                 _raise_missing_dorothea_wrapper(wrapper, dc)
 
             dorothea_db = dc.op.dorothea(
-                organism=organism,
+                organism=cast(str, organism),
                 levels=["A", "B", "C", "D"],
                 **kwargs,
             )
@@ -185,13 +188,17 @@ def load_dorothea_grn(
                 _raise_missing_dorothea_wrapper(wrapper, dc)
 
             dorothea_db = dc.get_dorothea(
-                organism=organism,
+                organism=cast(str, organism),
                 **kwargs,
             )
 
         dorothea_db.to_csv(cache_file, index=False)
 
-    dorothea_db = dorothea_db[dorothea_db["confidence"].isin(levels)]
+    dorothea_columns = list(dorothea_db.columns)
+    dorothea_db = pd.DataFrame.from_records(
+        (row for row in dorothea_db.to_dict("records") if row["confidence"] in levels),
+        columns=dorothea_columns,
+    )
     dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
     dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 

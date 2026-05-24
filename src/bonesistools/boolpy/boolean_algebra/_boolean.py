@@ -4,7 +4,8 @@ from typing import Any, Union
 
 import math
 
-PartialBooleanValue = Union[bool, int, str]
+PartialBooleanValue = Union[bool, int, float, str]
+
 
 class PartialBoolean:
     """
@@ -49,7 +50,7 @@ class PartialBoolean:
 
     __slots__ = ("_value",)
 
-    def __init__(self, value: PartialBooleanValue) -> None:
+    def __init__(self, value: Any) -> None:
 
         self._value = self._coerce_value(value)
 
@@ -114,7 +115,7 @@ class PartialBoolean:
     def __hash__(self) -> int:
 
         return hash(self._value)
-    
+
     def __lt__(self, other: "PartialBoolean") -> bool:
         """
         Return whether the current partial Boolean value is biologically lower
@@ -154,7 +155,6 @@ class PartialBoolean:
 
         return order[self] < order[other]
 
-
     def __gt__(self, other: "PartialBoolean") -> bool:
         """
         Return whether the current partial Boolean value is biologically greater
@@ -187,7 +187,6 @@ class PartialBoolean:
         """
 
         return other < self
-
 
     def __le__(self, other: "PartialBoolean") -> bool:
         """
@@ -222,7 +221,6 @@ class PartialBoolean:
         """
 
         return self == other or self < other
-
 
     def __ge__(self, other: "PartialBoolean") -> bool:
         """
@@ -347,12 +345,15 @@ class PartialBoolean:
 
         if isinstance(value, bool):
             return int(value)
-        
+
         if isinstance(value, float) and math.isnan(value):
             return "*"
 
-        if value in [0, 1, "*"]:
-            return value
+        if value in [0, 1]:
+            return int(value)
+
+        if value == "*":
+            return "*"
 
         raise ValueError(
             "invalid argument value for 'value': "

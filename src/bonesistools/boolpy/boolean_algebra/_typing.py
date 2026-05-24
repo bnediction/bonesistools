@@ -4,19 +4,21 @@
 Typing aliases and runtime validators for Boolean algebra objects.
 """
 
+from collections.abc import Mapping
 from typing import (
     Any,
-    Mapping,
     Union,
 )
+
+from typing_extensions import TypeGuard
 
 from boolean import Expression
 from ._boolean import PartialBoolean
 
 BooleanRule = Union[Expression, bool, int, str]
 
-PartialBooleanLike = Union[PartialBoolean, bool, int, str]
-ConfigurationLike = Mapping[str, bool]
+PartialBooleanLike = Union[PartialBoolean, bool, int, float, str]
+ConfigurationLike = Mapping[str, Union[PartialBoolean, bool, int]]
 HypercubeLike = Mapping[str, PartialBooleanLike]
 
 
@@ -37,7 +39,7 @@ def is_boolean_expression_available() -> bool:
     return Expression is not type(NotImplemented)
 
 
-def is_boolean_expression_like(obj: Any) -> bool:
+def is_boolean_expression_like(obj: Any) -> TypeGuard[Expression]:
     """
     Test whether an object behaves as a Boolean expression.
 
@@ -63,7 +65,7 @@ def is_boolean_expression_like(obj: Any) -> bool:
     return is_boolean_expression_available() and isinstance(obj, Expression)
 
 
-def is_boolean_rule_like(obj: Any) -> bool:
+def is_boolean_rule_like(obj: Any) -> TypeGuard[BooleanRule]:
     """
     Test whether an object can be interpreted as a Boolean rule.
 
@@ -99,7 +101,7 @@ def is_boolean_rule_like(obj: Any) -> bool:
     )
 
 
-def is_partial_boolean_like(value: Any) -> bool:
+def is_partial_boolean_like(value: Any) -> TypeGuard[PartialBooleanLike]:
     """
     Test whether an object can be coerced into a PartialBoolean.
 
@@ -131,7 +133,48 @@ def is_partial_boolean_like(value: Any) -> bool:
         return False
 
 
-def is_hypercube_like(obj: Any) -> bool:
+def is_configuration_like(obj: Any) -> TypeGuard[ConfigurationLike]:
+    """
+    Test whether an object behaves as a concrete Boolean configuration.
+
+    A configuration-like object maps string components to fixed Boolean values.
+    Unlike hypercubes, configurations cannot contain the free value `"*"`.
+
+    Examples
+    --------
+    >>> is_configuration_like({"A": 0, "B": True})
+    True
+    >>> is_configuration_like({"A": "*"})
+    False
+    >>> is_configuration_like(3)
+    False
+
+    Parameters
+    ----------
+    obj: Any
+        Object to test.
+
+    Returns
+    -------
+    bool
+        True if `obj` is a mapping from string components to fixed Boolean
+        values.
+    """
+
+    if not isinstance(obj, Mapping):
+        return False
+
+    try:
+        return all(
+            isinstance(component, str) and _is_configuration_value_like(value)
+            for component, value in obj.items()
+        )
+
+    except Exception:
+        return False
+
+
+def is_hypercube_like(obj: Any) -> TypeGuard[HypercubeLike]:
     """
     Test whether an object behaves as a hypercube mapping.
 
@@ -167,6 +210,17 @@ def is_hypercube_like(obj: Any) -> bool:
             isinstance(component, str) and is_partial_boolean_like(value)
             for component, value in obj.items()
         )
+
+    except Exception:
+        return False
+
+
+def _is_configuration_value_like(value: Any) -> bool:
+    if isinstance(value, PartialBoolean):
+        value = value.value
+
+    try:
+        return value in [0, 1]
 
     except Exception:
         return False

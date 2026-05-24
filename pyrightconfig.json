@@ -1,0 +1,14 @@
+{
+  "include": ["src/bonesistools"],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "ensemble",
+    "tests"
+  ],
+  "extraPaths": ["src"],
+  "pythonVersion": "3.13"
+}

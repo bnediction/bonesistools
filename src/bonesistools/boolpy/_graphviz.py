@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import importlib
 from typing import (
     Any,
     Mapping,
@@ -8,15 +9,13 @@ from typing import (
 
 def _graphviz_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str]:
     return {
-        str(key): str(value)
-        for key, value in attributes.items()
-        if value is not None
+        str(key): str(value) for key, value in attributes.items() if value is not None
     }
 
 
-def _new_graphviz_digraph(program: str, **kwargs: Any):
+def _new_graphviz_digraph(program: str, **kwargs: Any) -> Any:
     try:
-        from graphviz import Digraph
+        graphviz = importlib.import_module("graphviz")
 
     except ImportError:
         raise ImportError(
@@ -24,7 +23,7 @@ def _new_graphviz_digraph(program: str, **kwargs: Any):
             "Install it with `pip install graphviz` or `bonesistools[graphviz]`."
         )
 
-    graph = Digraph(engine=program)
+    graph = graphviz.Digraph(engine=program)
 
     if kwargs:
         graph.attr(**_graphviz_attributes(kwargs))
@@ -32,7 +31,11 @@ def _new_graphviz_digraph(program: str, **kwargs: Any):
     return graph
 
 
-def _networkx_to_graphviz(networkx_graph, program: str = "dot", **kwargs: Any):
+def _networkx_to_graphviz(
+    networkx_graph: Any,
+    program: str = "dot",
+    **kwargs: Any,
+) -> Any:
     graphviz_graph = _new_graphviz_digraph(program=program, **kwargs)
 
     for node, data in networkx_graph.nodes(data=True):

@@ -9,6 +9,7 @@ related AnnData objects.
 """
 
 import warnings as _warnings
+from typing import Any, List
 
 from ._simple import (
     filter_obs,
@@ -44,7 +45,7 @@ __all__ = [
 ]
 
 
-def regress_out(*args, **kwargs):
+def regress_out(*args: Any, **kwargs: Any) -> Any:
     """
     Deprecated. Regress out unwanted sources of variation.
 
@@ -61,5 +62,5 @@ def regress_out(*args, **kwargs):
     return _regress_out(*args, **kwargs)
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

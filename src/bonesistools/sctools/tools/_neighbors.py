@@ -1,13 +1,21 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 from typing import (
     Any,
+    cast,
+    Dict,
+    Iterable,
     Optional,
     Sequence,
+    Set,
+    TYPE_CHECKING,
     Type,
     Union,
 )
-import importlib
+from importlib import import_module
+from importlib import util as importlib_util
 
 try:
     from typing import Literal, get_args
@@ -51,12 +59,12 @@ def kneighbors_graph(
     use_rep: Optional[str] = None,
     n_components: Optional[int] = None,
     metric: Metric = "euclidean",
-    create_using: Type = DiGraph,
+    create_using: Type[Any] = DiGraph,
     edge_attr: str = "distance",
     index_or_name: Literal["index", "name"] = "index",
     n_jobs: int = 1,
-    **metric_kwds: Any,
-) -> Graph:
+    **metric_kwargs: Any,
+) -> Graph[Any]:
     """
     Compute a k-nearest-neighbor graph from an embedding space.
 
@@ -80,7 +88,7 @@ def kneighbors_graph(
         Whether graph nodes use integer positions or observation names.
     n_jobs: int (default: 1)
         Number of allocated processors.
-    **metric_kwds: Any
+    **metric_kwargs: Any
         Additional keyword arguments passed to the distance function.
 
     Returns
@@ -103,7 +111,7 @@ def kneighbors_graph(
         mode="distance",
         metric=metric,
         n_jobs=n_jobs,
-        **metric_kwds,
+        **metric_kwargs,
     )
     try:
         kneighbors_graph = nx.from_scipy_sparse_array(
@@ -112,7 +120,8 @@ def kneighbors_graph(
             edge_attribute=edge_attr,
         )
     except AttributeError:
-        kneighbors_graph = nx.from_scipy_sparse_matrix(
+        from_scipy_sparse_matrix = getattr(nx, "from_scipy_sparse_matrix")
+        kneighbors_graph = from_scipy_sparse_matrix(
             weighted_adjacency_matrix,
             create_using=create_using,
             edge_attribute=edge_attr,
@@ -132,7 +141,7 @@ def kneighbors_graph(
         )
 
 
-class Knnbs(object):
+class Knnbs:
     """
     K-nearest-neighbor-based subcluster detection.
 
@@ -151,7 +160,7 @@ class Knnbs(object):
         Number of dimensions to use. If None, use all dimensions.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
-    **metric_kwds: Any
+    **metric_kwargs: Any
         Additional keyword arguments passed to the distance function.
 
     Raises
@@ -162,13 +171,22 @@ class Knnbs(object):
         If `n_neighbors`, `n_components` or `metric` has an unsupported value.
     """
 
+    if TYPE_CHECKING:
+        kneighbors_graph: Graph[Any] = cast(Graph[Any], cast(object, None))
+        cluster_key: str = cast(str, cast(object, None))
+        obs: pd.Series = cast(pd.Series, cast(object, None))
+        shortest_path_lengths_df: pd.DataFrame = cast(
+            pd.DataFrame,
+            cast(object, None),
+        )
+
     def __init__(
         self,
         n_neighbors: int,
         use_rep: str = "X_pca",
         n_components: Optional[int] = None,
         metric: Metric = "euclidean",
-        **metric_kwds: Any,
+        **metric_kwargs: Any,
     ):
 
         if isinstance(n_neighbors, int):
@@ -226,14 +244,14 @@ class Knnbs(object):
             )
 
         if metric in get_args(Metric):
-            self.metric = metric
+            self.metric: Metric = metric
         else:
             raise ValueError(
                 f"invalid argument value for 'metric': "
                 f"expected one of {get_args(Metric)} but received {metric!r}"
             )
 
-        self.metric_kwds = metric_kwds
+        self.metric_kwargs: Dict[str, Any] = metric_kwargs
 
     def __repr__(self) -> str:
         """
@@ -247,28 +265,60 @@ class Knnbs(object):
 
         return (
             f"{self.__class__.__name__}("
-            f"n_neighbors={self.n_neighbors},"
-            f"use_rep={self.use_rep},"
-            f"n_components={self.n_components},"
-            f"metric={self.metric},"
-            f"metric_kwds={self.metric_kwds})"
+            f"n_neighbors={self.n_neighbors}, "
+            f"use_rep={self.use_rep}, "
+            f"n_components={self.n_components}, "
+            f"metric={self.metric}, "
+            f"metric_kwargs={self.metric_kwargs})"
         )
 
+    @property
+    def metric_kwds(self) -> Dict[str, Any]:
+        """
+        Deprecated alias for `metric_kwargs`.
+        """
+
+        warnings.warn(
+            "`metric_kwds` is deprecated; use `metric_kwargs` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.metric_kwargs
+
+    @metric_kwds.setter
+    def metric_kwds(self, value: Dict[str, Any]) -> None:
+        warnings.warn(
+            "`metric_kwds` is deprecated; use `metric_kwargs` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.metric_kwargs = value
+
     @require_sklearn
-    def fit(self, adata: AnnData, obs: str, n_jobs: int = 1) -> None:
+    def fit(
+        self,
+        adata: AnnData,
+        cluster_key: Optional[str] = None,
+        n_jobs: int = 1,
+        *,
+        obs: Optional[str] = None,
+    ) -> None:
         """
         Compute the k-nearest neighbors-based graph using an embedding space.
-        If parameters set at the knnbs instanciation are not desired,
-        first update knnbs object-related attributes with desired options.
+
+        The estimator parameters stored in the object are used for graph
+        construction.
 
         Parameters
         ----------
         adata: AnnData
             Unimodal annotated data matrix.
-        obs: str
+        cluster_key: str
             Observation column in `adata.obs` defining clusters.
         n_jobs: int (default: 1)
             Number of allocated processors.
+        obs: str, optional
+            Deprecated alias for `cluster_key`.
 
         Notes
         -----
@@ -278,7 +328,23 @@ class Knnbs(object):
 
         from sklearn.metrics import pairwise_distances
 
-        X = choose_representation(
+        if obs is not None:
+            warnings.warn(
+                "`obs` is deprecated; use `cluster_key` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if cluster_key is not None:
+                raise TypeError(
+                    "received both 'cluster_key' and deprecated 'obs'; "
+                    "please use only 'cluster_key'"
+                )
+            cluster_key = obs
+
+        if cluster_key is None:
+            raise TypeError("missing required argument: 'cluster_key'")
+
+        representation = choose_representation(
             adata, use_rep=self.use_rep, n_components=self.n_components
         )
 
@@ -294,12 +360,15 @@ class Knnbs(object):
         )
 
         _barycenters = barycenters(
-            adata, obs=obs, use_rep=self.use_rep, n_components=self.n_components
+            adata, obs=cluster_key, use_rep=self.use_rep, n_components=self.n_components
         )
         for key, value in _barycenters.items():
             barycenter_coordinate = value.reshape(1, -1)
             distances = pairwise_distances(
-                X, barycenter_coordinate, metric=self.metric, n_jobs=n_jobs
+                representation,
+                barycenter_coordinate,
+                metric=self.metric,
+                n_jobs=n_jobs,
             ).reshape(1, -1)
             _kneighbors_graph.add_node(key)
             knn_indices = list(
@@ -319,19 +388,32 @@ class Knnbs(object):
             scc = list(nx.connected_components(_kneighbors_graph))
             scc = [list(cc - set(_barycenters.keys())) for cc in scc]
             for paired_scc in combinations(scc, 2):
-                X = choose_representation(adata[paired_scc[0], :], use_rep=self.use_rep)
-                Y = choose_representation(adata[paired_scc[1], :], use_rep=self.use_rep)
-                dists = pairwise_distances(X, Y, metric=self.metric, n_jobs=n_jobs)
+                adata_any = cast(Any, adata)
+                x_matrix = choose_representation(
+                    adata_any[paired_scc[0], :],
+                    use_rep=self.use_rep,
+                )
+                y_matrix = choose_representation(
+                    adata_any[paired_scc[1], :],
+                    use_rep=self.use_rep,
+                )
+                dists = pairwise_distances(
+                    x_matrix,
+                    y_matrix,
+                    metric=self.metric,
+                    n_jobs=n_jobs,
+                )
                 i, j = np.unravel_index(np.argmin(dists), shape=dists.shape, order="C")
                 _kneighbors_graph.add_edge(
                     paired_scc[0][i], paired_scc[1][j], distance=dists[i, j]
                 )
 
         self.kneighbors_graph = _kneighbors_graph
-        self.obs = adata.obs[obs]
+        self.cluster_key = cluster_key
+        self.obs = cast(pd.Series, adata.obs[cluster_key])
         return None
 
-    def shortest_path_lengths(
+    def compute_shortest_path_lengths(
         self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
     ) -> None:
         """
@@ -365,14 +447,9 @@ class Knnbs(object):
             )
             return (source, distances)
 
-        try:
-            _multiprocess_is_available = (
-                importlib.util.find_spec("multiprocess") is not None
-            )
-        except AttributeError:
-            _multiprocess_is_available = (
-                importlib.find_loader("multiprocess") is not None
-            )
+        _multiprocess_is_available = (
+            importlib_util.find_spec("multiprocess") is not None
+        )
 
         if n_jobs == 1:
             shortest_path_lengths_ls = [
@@ -381,7 +458,7 @@ class Knnbs(object):
             ]
 
         elif _multiprocess_is_available:
-            from multiprocess import Pool
+            Pool = import_module("multiprocess").Pool
 
             with Pool(processes=n_jobs) as pool:
                 shortest_path_lengths_ls = pool.map(
@@ -408,47 +485,35 @@ class Knnbs(object):
         )
         return None
 
-    def get(self, attribute: str) -> Any:
+    def shortest_path_lengths(
+        self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
+    ) -> None:
         """
-        Return an attribute by name.
-
-        Parameters
-        ----------
-        attribute: str
-            Attribute name.
-
-        Returns
-        -------
-        Any
-            Attribute value.
-
-        Raises
-        ------
-        AttributeError
-            If the attribute does not exist.
+        Deprecated alias for `compute_shortest_path_lengths`.
         """
 
-        if hasattr(self, attribute):
-            return getattr(self, attribute)
-        else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{attribute}'"
-            )
+        warnings.warn(
+            "`shortest_path_lengths` is deprecated; use "
+            "`compute_shortest_path_lengths` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
 
-    def find_furthest_cells_to_other_barycenters(
+    def select_peripheral_cells(
         self,
-        size: int = 30,
+        subcluster_size: int = 30,
         key: str = "knnbs",
-        clusters: Optional[Sequence[str]] = None,
+        clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
         Find cells farthest from other clusters' barycenters.
 
         Parameters
         ----------
-        size: int (default: 30)
+        subcluster_size: int (default: 30)
             Number of cells in each macrostate.
-            If `size` is greater than the cluster size, the corresponding
+            If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
@@ -461,8 +526,10 @@ class Knnbs(object):
             Subcluster labels for cells farthest from other barycenters.
         """
 
-        if clusters is None:
-            clusters = self.obs.cat.categories
+        clusters_iterable = cast(
+            Iterable[str],
+            self.obs.cat.categories if clusters is None else clusters,
+        )
 
         subclusters_series = pd.Series(
             data=np.nan, index=self.obs.index, dtype="category", copy=True
@@ -474,45 +541,73 @@ class Knnbs(object):
             self.shortest_path_lengths_df.copy(deep=True)
         )
         for idx, obs in self.obs.items():
-            if not pd.isna(obs):
+            if not bool(pd.isna(obs)):
                 shortest_path_length_free_from_self_cluster_df.at[idx, obs] = np.nan
 
-        _min_dists = shortest_path_length_free_from_self_cluster_df.min(
-            axis=1, skipna=True
+        _min_dists = cast(
+            pd.Series,
+            shortest_path_length_free_from_self_cluster_df.min(
+                axis=1,
+                skipna=True,
+            ),
         )
         _min_dists.name = "min_dist"
         min_dists = _min_dists.to_frame().merge(
             right=self.obs.to_frame(), left_index=True, right_index=True
         )
-        for cluster in clusters:
-            _min_dists_cluster = min_dists[min_dists[self.obs.name] == cluster][
-                "min_dist"
-            ]
-            if len(_min_dists_cluster) < size:
+        for cluster in clusters_iterable:
+            _min_dists_cluster = cast(
+                pd.Series,
+                min_dists[min_dists[self.obs.name] == cluster]["min_dist"],
+            )
+            if len(_min_dists_cluster) < subcluster_size:
                 _obs = _min_dists_cluster.index
             else:
                 _idx = np.argpartition(
-                    _min_dists_cluster, kth=len(_min_dists_cluster) - size
-                )[-size:]
+                    _min_dists_cluster,
+                    kth=len(_min_dists_cluster) - subcluster_size,
+                )[-subcluster_size:]
                 _obs = _min_dists_cluster.iloc[_idx].index
             subclusters_series.loc[_obs] = cluster
 
         return subclusters_series
 
-    def find_closest_cells_to_self_barycenter(
+    def find_furthest_cells_to_other_barycenters(
         self,
         size: int = 30,
         key: str = "knnbs",
-        clusters: Optional[Sequence[str]] = None,
+        clusters: Optional[Iterable[str]] = None,
+    ) -> pd.Series:
+        """
+        Deprecated alias for `select_peripheral_cells`.
+        """
+
+        warnings.warn(
+            "`find_furthest_cells_to_other_barycenters` is deprecated; use "
+            "`select_peripheral_cells` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.select_peripheral_cells(
+            subcluster_size=size,
+            key=key,
+            clusters=clusters,
+        )
+
+    def select_central_cells(
+        self,
+        subcluster_size: int = 30,
+        key: str = "knnbs",
+        clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
         Find cells closest to their own cluster barycenter.
 
         Parameters
         ----------
-        size: int (default: 30)
+        subcluster_size: int (default: 30)
             Number of cells in each macrostate.
-            If `size` is greater than the cluster size, the corresponding
+            If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
@@ -525,8 +620,10 @@ class Knnbs(object):
             Subcluster labels for cells closest to their own barycenter.
         """
 
-        if clusters is None:
-            clusters = self.obs.cat.categories
+        clusters_iterable = cast(
+            Iterable[str],
+            self.obs.cat.categories if clusters is None else clusters,
+        )
 
         subclusters_series = pd.Series(
             data=np.nan, index=self.obs.index, dtype="category", copy=True
@@ -534,48 +631,75 @@ class Knnbs(object):
         if key is not None:
             subclusters_series.name = key
 
-            _dists = pd.Series(data=np.nan, index=self.obs.index)
-            _dists.name = "dist"
-            for idx, obs in self.obs.items():
-                if not pd.isna(obs):
-                    _dists.at[idx] = self.shortest_path_lengths_df.loc[idx, obs]
+        _central_scores = pd.Series(data=np.nan, index=self.obs.index)
+        _central_scores.name = "dist"
+        for idx, obs in self.obs.items():
+            if not bool(pd.isna(obs)):
+                _central_scores.at[idx] = self.shortest_path_lengths_df.loc[idx, obs]
 
-        _dists = _dists.to_frame().merge(
+        _central_scores = _central_scores.to_frame().merge(
             right=self.obs.to_frame(), left_index=True, right_index=True
         )
-        for cluster in clusters:
-            _dists_cluster = _dists[_dists[self.obs.name] == cluster]["dist"]
-            if len(_dists_cluster) < size:
-                _obs = _dists_cluster.index
+        for cluster in clusters_iterable:
+            _central_scores_cluster = cast(
+                pd.Series,
+                _central_scores[_central_scores[self.obs.name] == cluster]["dist"],
+            )
+            if len(_central_scores_cluster) < subcluster_size:
+                _obs = _central_scores_cluster.index
             else:
-                _idx = np.argpartition(_dists_cluster, kth=size)[:size]
-                _obs = _dists_cluster.iloc[_idx].index
+                _idx = np.argpartition(
+                    _central_scores_cluster, kth=subcluster_size
+                )[:subcluster_size]
+                _obs = _central_scores_cluster.iloc[_idx].index
             subclusters_series.loc[_obs] = cluster
 
         return subclusters_series
 
-    def knnbs(
+    def find_closest_cells_to_self_barycenter(
         self,
         size: int = 30,
         key: str = "knnbs",
-        subclusters_maximizing_distances: Optional[Sequence[str]] = None,
-        subclusters_minimizing_distances: Optional[Sequence[str]] = None,
+        clusters: Optional[Iterable[str]] = None,
+    ) -> pd.Series:
+        """
+        Deprecated alias for `select_central_cells`.
+        """
+
+        warnings.warn(
+            "`find_closest_cells_to_self_barycenter` is deprecated; use "
+            "`select_central_cells` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.select_central_cells(
+            subcluster_size=size,
+            key=key,
+            clusters=clusters,
+        )
+
+    def predict(
+        self,
+        subcluster_size: int = 30,
+        key: str = "knnbs",
+        peripheral_clusters: Optional[Sequence[str]] = None,
+        central_clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
         """
         Find cluster related-cell manifolds using k-nearest neighbors-based subclusters algorithm.
 
         Parameters
         ----------
-        size: int (default: 30)
+        subcluster_size: int (default: 30)
             Number of cells in each macrostate.
-            If `size` is greater than the cluster size, the corresponding
+            If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
         key: str (default: 'knnbs')
             Pandas Series name.
-        subclusters_maximizing_distances: Sequence[str] (optional, default: None)
+        peripheral_clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
             by maximizing distances to other clusters' barycenters.
-        subclusters_minimizing_distances: Sequence[str] (optional, default: None)
+        central_clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
             by minimizing distances to their own barycenter.
 
@@ -588,52 +712,79 @@ class Knnbs(object):
         Raises
         ------
         RuntimeError
-            If the maximizing and minimizing cluster sets overlap.
+            If the peripheral and central cluster sets overlap.
         """
 
-        if (
-            subclusters_maximizing_distances is None
-            and subclusters_minimizing_distances is None
-        ):
-            subclusters_maximizing_distances = set(self.obs.cat.categories)
-            subclusters_minimizing_distances = set()
+        if peripheral_clusters is None and central_clusters is None:
+            peripheral_cluster_set: Set[str] = set(self.obs.cat.categories)
+            central_cluster_set: Set[str] = set()
         else:
-            subclusters_maximizing_distances = set(subclusters_maximizing_distances)
-            subclusters_minimizing_distances = set(subclusters_minimizing_distances)
+            peripheral_cluster_set = (
+                set() if peripheral_clusters is None else set(peripheral_clusters)
+            )
+            central_cluster_set = (
+                set() if central_clusters is None else set(central_clusters)
+            )
 
-        if subclusters_maximizing_distances & subclusters_minimizing_distances:
+        if peripheral_cluster_set & central_cluster_set:
             raise RuntimeError(
-                "'subclusters_maximizing_distances' and "
-                "'subclusters_minimizing_distances' are not disjoint"
+                "'peripheral_clusters' and 'central_clusters' are not disjoint"
             )
 
-        if subclusters_maximizing_distances:
-            max_dists = self.find_furthest_cells_to_other_barycenters(
-                size=size, key="max_dists", clusters=subclusters_maximizing_distances
-            )
-        else:
-            max_dists = pd.Series(
-                data=np.nan, index=self.obs.index, dtype="category", copy=True
-            ).cat.add_categories(self.obs.cat.categories)
-            max_dists.name = "max_dists"
-
-        if subclusters_minimizing_distances:
-            min_dists = self.find_closest_cells_to_self_barycenter(
-                size=size, key="min_dists", clusters=subclusters_minimizing_distances
+        if peripheral_cluster_set:
+            peripheral_subclusters = self.select_peripheral_cells(
+                subcluster_size=subcluster_size,
+                key="peripheral_subclusters",
+                clusters=peripheral_cluster_set,
             )
         else:
-            min_dists = pd.Series(
+            peripheral_subclusters = pd.Series(
                 data=np.nan, index=self.obs.index, dtype="category", copy=True
             ).cat.add_categories(self.obs.cat.categories)
-            min_dists.name = "min_dists"
+            peripheral_subclusters.name = "peripheral_subclusters"
 
-        dists = max_dists.to_frame().merge(
-            right=min_dists.to_frame(), left_index=True, right_index=True
+        if central_cluster_set:
+            central_subclusters = self.select_central_cells(
+                subcluster_size=subcluster_size,
+                key="central_subclusters",
+                clusters=central_cluster_set,
+            )
+        else:
+            central_subclusters = pd.Series(
+                data=np.nan, index=self.obs.index, dtype="category", copy=True
+            ).cat.add_categories(self.obs.cat.categories)
+            central_subclusters.name = "central_subclusters"
+
+        subcluster_candidates = peripheral_subclusters.to_frame().merge(
+            right=central_subclusters.to_frame(), left_index=True, right_index=True
         )
-        subclusters = dists.bfill(axis=1).iloc[:, 0]
+        subclusters = subcluster_candidates.bfill(axis=1).iloc[:, 0]
         subclusters.name = key
 
         return subclusters
+
+    def knnbs(
+        self,
+        size: int = 30,
+        key: str = "knnbs",
+        subclusters_maximizing_distances: Optional[Sequence[str]] = None,
+        subclusters_minimizing_distances: Optional[Sequence[str]] = None,
+    ) -> pd.Series:
+        """
+        Deprecated alias for `predict`.
+        """
+
+        warnings.warn(
+            "`knnbs` is deprecated; use `predict` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.predict(
+            subcluster_size=size,
+            key=key,
+            peripheral_clusters=subclusters_maximizing_distances,
+            central_clusters=subclusters_minimizing_distances,
+        )
 
 
 @anndata_or_mudata_checker

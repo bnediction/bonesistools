@@ -11,6 +11,21 @@ import pytest
 ADATA = bt.sct.datasets.nestorowa()
 
 
+def _set_manual_shortest_path_lengths(estimator):
+    estimator.obs = pd.Series(
+        pd.Categorical(["A", "A", "B", "B"]),
+        index=["c1", "c2", "c3", "c4"],
+        name="cluster",
+    )
+    estimator.shortest_path_lengths_df = pd.DataFrame(
+        {
+            "A": [0.1, 0.8, 2.0, 1.5],
+            "B": [2.0, 1.5, 0.2, 0.9],
+        },
+        index=estimator.obs.index,
+    )
+
+
 def test_kneighbors_graph_returns_graph_with_named_nodes():
 
     adata = ADATA.copy()
@@ -30,7 +45,7 @@ def test_kneighbors_graph_returns_graph_with_named_nodes():
     assert set(graph.nodes) == set(adata.obs_names)
 
 
-def test_knnbs_fits_and_returns_subclusters():
+def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
 
     adata = ADATA[:200, :].copy()
 
@@ -46,11 +61,14 @@ def test_knnbs_fits_and_returns_subclusters():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
 
-        knnbs.fit(adata, obs="cluster", n_jobs=1)
+        with pytest.warns(DeprecationWarning, match="obs"):
+            knnbs.fit(adata, obs="cluster", n_jobs=1)
 
-    knnbs.shortest_path_lengths(n_jobs=1)
+    with pytest.warns(DeprecationWarning, match="shortest_path_lengths"):
+        knnbs.shortest_path_lengths(n_jobs=1)
 
-    subclusters = knnbs.knnbs(size=5, key="knnbs")
+    with pytest.warns(DeprecationWarning, match="knnbs"):
+        subclusters = knnbs.knnbs(size=5, key="knnbs")
 
     assert hasattr(knnbs, "kneighbors_graph")
     assert hasattr(knnbs, "shortest_path_lengths_df")
@@ -67,7 +85,7 @@ def test_knnbs_fits_and_returns_subclusters():
     )
 
 
-def test_knnbs_validates_init_arguments_and_getter():
+def test_knnbs_validates_init_arguments_and_repr():
     with pytest.raises(ValueError, match="invalid argument value for 'n_neighbors'"):
         bt.sct.tl.Knnbs(n_neighbors=0)
 
@@ -92,37 +110,37 @@ def test_knnbs_validates_init_arguments_and_getter():
     with pytest.raises(ValueError, match="invalid argument value for 'metric'"):
         bt.sct.tl.Knnbs(n_neighbors=5, metric="not-a-metric")
 
-    knnbs = bt.sct.tl.Knnbs(n_neighbors=5.0, n_components=2.0, metric="cosine")
+    estimator = bt.sct.tl.Knnbs(
+        n_neighbors=5.0,
+        n_components=2.0,
+        metric="cosine",
+    )
 
-    assert knnbs.get("metric") == "cosine"
-    assert "Knnbs(n_neighbors=5.0" in repr(knnbs)
+    assert "Knnbs(n_neighbors=5.0" in repr(estimator)
 
-    with pytest.raises(AttributeError, match="no attribute 'missing'"):
-        knnbs.get("missing")
+    with pytest.warns(DeprecationWarning, match="metric_kwds"):
+        assert estimator.metric_kwds == {}
+    with pytest.warns(DeprecationWarning, match="metric_kwds"):
+        estimator.metric_kwds = {"p": 1}
+    assert estimator.metric_kwargs == {"p": 1}
 
-
-def test_knnbs_distance_selection_modes_and_overlap_error():
+def test_knnbs_distance_selection_modes_and_overlap_error_with_deprecated_api():
     knnbs = bt.sct.tl.Knnbs(n_neighbors=1)
-    knnbs.obs = pd.Series(
-        pd.Categorical(["A", "A", "B", "B"]),
-        index=["c1", "c2", "c3", "c4"],
-        name="cluster",
-    )
-    knnbs.shortest_path_lengths_df = pd.DataFrame(
-        {
-            "A": [0.1, 0.8, 2.0, 1.5],
-            "B": [2.0, 1.5, 0.2, 0.9],
-        },
-        index=knnbs.obs.index,
-    )
+    _set_manual_shortest_path_lengths(knnbs)
 
-    closest = knnbs.find_closest_cells_to_self_barycenter(size=1, key="closest")
-    furthest = knnbs.find_furthest_cells_to_other_barycenters(size=1, key="furthest")
-    mixed = knnbs.knnbs(
-        size=1,
-        subclusters_maximizing_distances=["A"],
-        subclusters_minimizing_distances=["B"],
-    )
+    with pytest.warns(DeprecationWarning, match="find_closest"):
+        closest = knnbs.find_closest_cells_to_self_barycenter(size=1, key="closest")
+    with pytest.warns(DeprecationWarning, match="find_furthest"):
+        furthest = knnbs.find_furthest_cells_to_other_barycenters(
+            size=1,
+            key="furthest",
+        )
+    with pytest.warns(DeprecationWarning, match="knnbs"):
+        mixed = knnbs.knnbs(
+            size=1,
+            subclusters_maximizing_distances=["A"],
+            subclusters_minimizing_distances=["B"],
+        )
 
     assert closest.name == "closest"
     assert furthest.name == "furthest"
@@ -130,17 +148,51 @@ def test_knnbs_distance_selection_modes_and_overlap_error():
     assert furthest.dropna().to_dict() == {"c1": "A", "c3": "B"}
     assert mixed.dropna().to_dict() == {"c1": "A", "c3": "B"}
 
-    all_from_a = knnbs.find_closest_cells_to_self_barycenter(
-        size=5,
-        clusters=["A"],
-    )
+    with pytest.warns(DeprecationWarning, match="find_closest"):
+        all_from_a = knnbs.find_closest_cells_to_self_barycenter(
+            size=5,
+            clusters=["A"],
+        )
     assert all_from_a.dropna().to_dict() == {"c1": "A", "c2": "A"}
 
-    with pytest.raises(RuntimeError, match="not disjoint"):
-        knnbs.knnbs(
-            subclusters_maximizing_distances=["A"],
-            subclusters_minimizing_distances=["A"],
-        )
+    with pytest.warns(DeprecationWarning, match="knnbs"):
+        with pytest.raises(RuntimeError, match="not disjoint"):
+            knnbs.knnbs(
+                subclusters_maximizing_distances=["A"],
+                subclusters_minimizing_distances=["A"],
+            )
+
+
+def test_knnbs_new_api_names_are_available():
+    estimator = bt.sct.tl.Knnbs(
+        n_neighbors=1,
+    )
+    _set_manual_shortest_path_lengths(estimator)
+
+    closest = estimator.select_central_cells(subcluster_size=1, key="closest")
+    closest_without_name = estimator.select_central_cells(subcluster_size=1, key=None)
+    furthest = estimator.select_peripheral_cells(subcluster_size=1, key="furthest")
+    mixed = estimator.predict(
+        subcluster_size=1,
+        peripheral_clusters=["A"],
+        central_clusters=["B"],
+    )
+    peripheral_only = estimator.predict(
+        subcluster_size=1,
+        peripheral_clusters=["A"],
+    )
+    central_only = estimator.predict(
+        subcluster_size=1,
+        central_clusters=["B"],
+    )
+
+    assert closest.dropna().to_dict() == {"c1": "A", "c3": "B"}
+    assert closest_without_name.name is None
+    assert closest_without_name.dropna().to_dict() == {"c1": "A", "c3": "B"}
+    assert furthest.dropna().to_dict() == {"c1": "A", "c3": "B"}
+    assert mixed.dropna().to_dict() == {"c1": "A", "c3": "B"}
+    assert peripheral_only.dropna().to_dict() == {"c1": "A"}
+    assert central_only.dropna().to_dict() == {"c3": "B"}
 
 
 def test_shared_neighbors_pruning_and_inplace_modes(mini_adata):

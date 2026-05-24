@@ -9,21 +9,18 @@ from typing import (
     Tuple,
     Callable,
     Any,
+    cast,
 )
 
 if TYPE_CHECKING:
-    from ...boolpy.boolean_network._typing import BooleanNetwork
+    from ...boolpy.boolean_network._typing import BooleanNetworkLike
 
 try:
     from typing import Literal, get_args
 except ImportError:
     from typing_extensions import Literal, get_args  # type: ignore
-try:
-    from collections import Mapping as MappingInstance
-    from collections import Sequence as SequenceInstance
-except ImportError:
-    from collections.abc import Mapping as MappingInstance
-    from collections.abc import Sequence as SequenceInstance
+from collections.abc import Mapping as MappingInstance
+from collections.abc import Sequence as SequenceInstance
 
 import copy
 import ctypes
@@ -171,7 +168,7 @@ class GeneSynonyms:
     - interaction lists are converted with `convert_interaction_list`,
     - pandas DataFrames are converted with `convert_df`,
     - NetworkX graphs are converted with `convert_graph`,
-    - BooleanNetwork-like objects are converted with `convert_bn`.
+    - BooleanNetworkLike objects are converted with `convert_bn`.
 
     Examples
     --------
@@ -257,7 +254,7 @@ class GeneSynonyms:
 
     def __call__(
         self,
-        data: Union[InteractionList, DataFrame, Graph, "BooleanNetwork"],
+        data: Union[InteractionList, DataFrame, Graph, "BooleanNetworkLike"],
         *args: Any,
         **kwargs: Any,
     ):
@@ -270,7 +267,7 @@ class GeneSynonyms:
 
         Parameters
         ----------
-        data: sequence, InteractionList, DataFrame, Graph or BooleanNetwork-like
+        data: sequence, InteractionList, DataFrame, Graph or BooleanNetworkLike
             Object containing gene identifiers to convert.
         *args: Any
             Positional arguments forwarded to the selected conversion method.
@@ -292,11 +289,15 @@ class GeneSynonyms:
         from ...boolpy.boolean_network._typing import is_boolean_network_like
 
         if _is_interaction_list(data):
-            return self.convert_interaction_list(data, *args, **kwargs)
+            return self.convert_interaction_list(
+                cast(InteractionList, data),
+                *args,
+                **kwargs,
+            )
         elif (
             isinstance(data, SequenceInstance) and not isinstance(data, str)
         ) or isinstance(data, set):
-            return self.convert_sequence(data, *args, **kwargs)
+            return self.convert_sequence(cast(Sequence[str], data), *args, **kwargs)
         elif isinstance(data, DataFrame):
             return self.convert_df(data, *args, **kwargs)
         elif isinstance(data, Graph):
@@ -316,7 +317,7 @@ class GeneSynonyms:
         gene: str,
         input_identifier_type: Union[InputIdentifierType, str] = "name",
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
-    ) -> str:
+    ) -> Optional[str]:
         """
         Convert gene identifiers into the user-defined alias type.
 
@@ -360,7 +361,10 @@ class GeneSynonyms:
                 f"'get_{output_identifier_type}'"
             )
 
-        return convert(gene=gene, input_identifier_type=input_identifier_type)
+        return convert(
+            gene=gene,
+            input_identifier_type=cast(InputIdentifierType, input_identifier_type),
+        )
 
     @support_legacy_gene_synonyms_args
     def convert_sequence(
@@ -415,7 +419,8 @@ class GeneSynonyms:
             )
             aliases.append(output_alias)
 
-        aliases = type(genes)(aliases)
+        sequence_constructor = cast(Callable[[Sequence[str]], Sequence[str]], type(genes))
+        aliases = sequence_constructor(aliases)
 
         return aliases
 
@@ -600,18 +605,18 @@ class GeneSynonyms:
     @support_legacy_gene_synonyms_args
     def convert_bn(
         self,
-        bn: "BooleanNetwork",
+        bn: "BooleanNetworkLike",
         input_identifier_type: Union[InputIdentifierType, str] = "name",
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
         copy: bool = False,
-    ) -> "BooleanNetwork":
+    ) -> Union["BooleanNetworkLike", None]:
         """
         Convert gene identifiers in Boolean network components and rules.
 
         Parameters
         ----------
-        bn: BooleanNetwork
-            Boolean network whose component identifiers are converted.
+        bn: BooleanNetworkLike
+            BooleanNetworkLike object whose component identifiers are converted.
         input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
@@ -625,8 +630,11 @@ class GeneSynonyms:
 
         Returns
         -------
-        BooleanNetwork or None
-            Converted BooleanNetwork if `copy=True`; otherwise None.
+        BooleanNetworkLike or None
+            Converted BooleanNetworkLike object if `copy=True`; otherwise None.
+            If `copy=True` and `bn` does not provide a `rename` method, a
+            temporary `BooleanNetwork` is used to perform the rule-safe
+            renaming, then the result is converted back to the input type.
 
         Notes
         -----
@@ -634,18 +642,62 @@ class GeneSynonyms:
         `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
-        bn = bn.copy() if copy else bn
+        from ...boolpy.boolean_network import BooleanNetwork
+        from ...boolpy.boolean_network._typing import is_boolean_network_like
+
+        if not is_boolean_network_like(bn):
+            raise TypeError(
+                "unsupported argument type for 'bn': "
+                "expected Boolean network-like object "
+                f"but received {type(bn)}"
+            )
+
+        input_type = type(bn)
+        bn_any: Any = bn
+        rebuild_as_input_type = False
+        rename = getattr(bn_any, "rename", None)
+
+        if copy:
+            copy_method = getattr(bn_any, "copy", None)
+            bn_any = (
+                copy_method()
+                if callable(copy_method)
+                else BooleanNetwork(bn_any, check=False)
+            )
+            rename = getattr(bn_any, "rename", None)
+            if not callable(rename):
+                bn_any = BooleanNetwork(bn_any, check=False)
+                rename = bn_any.rename
+                rebuild_as_input_type = True
+        elif not callable(rename):
+            raise TypeError(
+                "unsupported argument value for 'bn': in-place Boolean network "
+                "conversion requires a 'rename' method; use copy=True to return "
+                "a converted copy"
+            )
 
         alias_conversion = self.__conversion_function(output_identifier_type)
-        genes = tuple(bn.keys())
+        genes = tuple(gene for gene, _ in bn_any.items())
         for gene in genes:
             output_alias = alias_conversion(
                 gene=gene, input_identifier_type=input_identifier_type
             )
             output_alias = gene if output_alias is None else output_alias
-            bn.rename(gene, output_alias)
+            rename(gene, output_alias)
 
-        return bn if copy else None
+        if copy and rebuild_as_input_type:
+            try:
+                return cast(
+                    "BooleanNetworkLike",
+                    cast(Callable[[Any], Any], input_type)(bn_any.rules),
+                )
+            except Exception as e:
+                raise TypeError(
+                    "unable to return converted Boolean network with original "
+                    f"type {input_type}"
+                ) from e
+
+        return cast("BooleanNetworkLike", bn_any) if copy else None
 
     def standardize_sequence(
         self, genes: Sequence[str], keep_if_missing: bool = True
@@ -761,22 +813,22 @@ class GeneSynonyms:
         )
 
     def standardize_bn(
-        self, bn: "BooleanNetwork", copy: bool = False
-    ) -> "BooleanNetwork":
+        self, bn: "BooleanNetworkLike", copy: bool = False
+    ) -> Union["BooleanNetworkLike", None]:
         """
         Standardize gene names in Boolean network components and rules.
 
         Parameters
         ----------
-        bn: BooleanNetwork
-            Boolean network whose component identifiers are standardized.
+        bn: BooleanNetworkLike
+            BooleanNetworkLike object whose component identifiers are standardized.
         copy: bool (default: False)
             Return a copy instead of modifying `bn`.
 
         Returns
         -------
-        BooleanNetwork or None
-            Standardized BooleanNetwork if `copy=True`; otherwise None.
+        BooleanNetworkLike or None
+            Standardized BooleanNetworkLike object if `copy=True`; otherwise None.
         """
 
         return self.convert_bn(
@@ -788,7 +840,7 @@ class GeneSynonyms:
 
     def reset(
         self,
-        organism: str = None,
+        organism: Optional[str] = None,
         force_download: bool = False,
         show_warnings: bool = False,
     ) -> None:
@@ -1297,7 +1349,7 @@ class GeneSynonyms:
         output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
         *args: Any,
         **kwargs: Any,
-    ) -> Callable:
+    ) -> Callable[..., Optional[str]]:
         """
         Function converting gene identifiers.
 

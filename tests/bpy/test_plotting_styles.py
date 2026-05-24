@@ -30,12 +30,12 @@ def test_count_and_stability_node_style_thresholds():
         "style": "rounded,filled,bold",
         "shape": "oval",
     }
-    assert stability_node_style({"function_stability": 0.75})[
-        "fillcolor"
-    ] == "lightgoldenrod1"
-    assert stability_node_style({"function_stability": 0.5})[
-        "fillcolor"
-    ] == "cornsilk"
-    assert stability_node_style({"function_stability": 0.49})[
-        "style"
-    ] == "rounded,filled,dotted"
+    assert (
+        stability_node_style({"function_stability": 0.75})["fillcolor"]
+        == "lightgoldenrod1"
+    )
+    assert stability_node_style({"function_stability": 0.5})["fillcolor"] == "cornsilk"
+    assert (
+        stability_node_style({"function_stability": 0.49})["style"]
+        == "rounded,filled,dotted"
+    )

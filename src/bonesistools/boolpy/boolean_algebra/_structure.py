@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Iterable, Tuple, Union
 
 try:
     from typing import Literal
@@ -156,16 +150,20 @@ def expressions_equivalent(
 
 
 def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:
-    if isinstance(literal, ba.NOT):
-        if not literal.args[0].isliteral:
-            raise ValueError(f"invalid DNF literal: {literal!r}")
+    literal_any: Any = literal
 
-        return literal.args[0].obj, False
+    if isinstance(literal_any, ba.NOT):
+        operand = literal_any.args[0]
 
-    if literal.isliteral:
-        return literal.obj, True
+        if not operand.isliteral:
+            raise ValueError(f"invalid DNF literal: {literal_any!r}")
 
-    raise ValueError(f"invalid DNF literal: {literal!r}")
+        return str(operand.obj), False
+
+    if literal_any.isliteral:
+        return str(literal_any.obj), True
+
+    raise ValueError(f"invalid DNF literal: {literal_any!r}")
 
 
 def _clause_to_structure(

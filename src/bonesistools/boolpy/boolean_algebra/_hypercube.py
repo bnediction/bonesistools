@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import (
     Iterable,
     Iterator,
+    Mapping,
     MutableMapping,
     MutableSet,
 )
@@ -69,7 +70,7 @@ class Hypercube(MutableMapping):
 
     def __init__(
         self,
-        mapping: Optional[Dict[str, PartialBooleanLike]] = None,
+        mapping: Optional[Mapping[str, PartialBooleanLike]] = None,
     ) -> None:
 
         self._values: Dict[str, PartialBoolean] = {}
@@ -936,6 +937,9 @@ class HypercubeCollection(MutableSet):
             NotImplemented when `other` cannot be interpreted as a collection.
         """
         if not isinstance(other, HypercubeCollection):
+            if not isinstance(other, Iterable):
+                return NotImplemented
+
             try:
                 other = HypercubeCollection(other)
             except (TypeError, ValueError):

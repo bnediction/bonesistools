@@ -72,30 +72,40 @@ def test_get_distances_and_connectivities_from_default_neighbors(mini_adata):
 
 def test_get_distances_and_connectivities_from_explicit_keys(mini_adata):
     mini_adata.obsp["custom_distances"] = mini_adata.obsp["distances"].copy()
-    mini_adata.obsp["custom_connectivities"] = mini_adata.obsp[
-        "connectivities"
-    ].copy()
+    mini_adata.obsp["custom_connectivities"] = mini_adata.obsp["connectivities"].copy()
     mini_adata.uns["custom_neighbors"] = {
         "distances_key": "custom_distances",
         "connectivities_key": "custom_connectivities",
     }
 
-    assert _utils._get_distances(
-        mini_adata,
-        obsp="custom_distances",
-    ) is mini_adata.obsp["custom_distances"]
-    assert _utils._get_connectivities(
-        mini_adata,
-        obsp="custom_connectivities",
-    ) is mini_adata.obsp["custom_connectivities"]
-    assert _utils._get_distances(
-        mini_adata,
-        neighbors_key="custom_neighbors",
-    ) is mini_adata.obsp["custom_distances"]
-    assert _utils._get_connectivities(
-        mini_adata,
-        neighbors_key="custom_neighbors",
-    ) is mini_adata.obsp["custom_connectivities"]
+    assert (
+        _utils._get_distances(
+            mini_adata,
+            obsp="custom_distances",
+        )
+        is mini_adata.obsp["custom_distances"]
+    )
+    assert (
+        _utils._get_connectivities(
+            mini_adata,
+            obsp="custom_connectivities",
+        )
+        is mini_adata.obsp["custom_connectivities"]
+    )
+    assert (
+        _utils._get_distances(
+            mini_adata,
+            neighbors_key="custom_neighbors",
+        )
+        is mini_adata.obsp["custom_distances"]
+    )
+    assert (
+        _utils._get_connectivities(
+            mini_adata,
+            neighbors_key="custom_neighbors",
+        )
+        is mini_adata.obsp["custom_connectivities"]
+    )
 
 
 @pytest.mark.parametrize(

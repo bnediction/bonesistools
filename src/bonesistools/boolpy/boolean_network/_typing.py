@@ -1,40 +1,25 @@
 #!/usr/bin/env python
 
-from typing import Any, ItemsView
+"""
+Typing aliases and runtime validators for BooleanNetworkLike objects.
+"""
 
-try:
-    from typing import Protocol, runtime_checkable
-except ImportError:
-    from typing_extensions import Protocol, runtime_checkable
+from collections.abc import Mapping as MappingABC
+from typing import TYPE_CHECKING, Any, Mapping
+
+from typing_extensions import TypeAlias, TypeGuard
 
 from ..boolean_algebra import BooleanRule, is_boolean_rule_like
 
+if TYPE_CHECKING:
+    BooleanNetworkLike: TypeAlias = Mapping[str, BooleanRule]
+else:
+    BooleanNetworkLike = MappingABC
 
-@runtime_checkable
-class BooleanNetworkLike(Protocol):
+
+def is_boolean_network_like(obj: Any) -> TypeGuard[BooleanNetworkLike]:
     """
-    Protocol for Boolean network-like objects.
-
-    A Boolean network-like object is expected to behave as a mapping from
-    component names to Boolean rules.
-    """
-
-    def items(self) -> ItemsView[str, BooleanRule]:
-        """
-        Return Boolean network items.
-
-        Returns
-        -------
-        ItemsView[str, BooleanRule]
-            View over `(component, rule)` pairs.
-        """
-
-        ...
-
-
-def is_boolean_network_like(obj: Any) -> bool:
-    """
-    Test whether an object behaves as a Boolean network mapping.
+    Test whether an object behaves as a BooleanNetworkLike mapping.
 
     Parameters
     ----------
@@ -48,7 +33,7 @@ def is_boolean_network_like(obj: Any) -> bool:
         values.
     """
 
-    if not isinstance(obj, BooleanNetworkLike):
+    if not isinstance(obj, MappingABC):
         return False
 
     try:

@@ -8,6 +8,8 @@ standardising gene identifiers and handling ambiguous nomenclature
 across heterogeneous biological resources.
 """
 
+from typing import List
+
 from ._genesyn import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -23,5 +25,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

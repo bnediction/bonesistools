@@ -4,6 +4,7 @@ import pytest
 import networkx as nx
 
 import bonesistools as bt
+from bonesistools.boolpy.interaction_graph import _scoring
 
 
 def test_interaction_graph_scoring_is_exported_from_public_namespace():
@@ -94,6 +95,36 @@ def test_interaction_scores_from_walks_ignores_self_scores():
     assert scores["A"]["B"].path_number == 2
 
 
+def test_interaction_scores_from_walks_handles_digraphs_and_missing_sources():
+    graph = nx.DiGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("B", "C", sign=1)
+
+    scores = bt.bpy.ig.interaction_scores_from_walks(
+        graph,
+        genes=["A", "C", "missing"],
+        max_depth=2,
+        weights=[1.0, 0.5],
+    )
+
+    assert scores["A"]["C"] == bt.bpy.ig.InteractionScore(
+        score=0.5,
+        total_weight=0.5,
+        path_number=1,
+    )
+    assert scores["missing"] == {}
+    assert _scoring._edge_signs(graph, "C", "A") == []
+    assert _scoring._walk_signs(graph, ["A", "C"]) == []
+
+    with pytest.raises(ValueError, match="expected at least 2 values"):
+        bt.bpy.ig.interaction_scores_from_walks(
+            graph,
+            genes=["A", "C"],
+            max_depth=2,
+            weights=[1.0],
+        )
+
+
 def test_infer_signed_interactions_from_walks_matches_two_step_pipeline():
     graph = nx.MultiDiGraph()
     graph.add_edge("A", "D", sign=1)
@@ -113,12 +144,16 @@ def test_infer_signed_interactions_from_walks_matches_two_step_pipeline():
         threshold=0.6,
     )
 
-    assert bt.bpy.ig.infer_signed_interactions_from_walks(
-        graph,
-        genes=["A", "D"],
-        max_depth=2,
-        threshold=0.6,
-    ) == expected == [("A", "D", {"sign": 1})]
+    assert (
+        bt.bpy.ig.infer_signed_interactions_from_walks(
+            graph,
+            genes=["A", "D"],
+            max_depth=2,
+            threshold=0.6,
+        )
+        == expected
+        == [("A", "D", {"sign": 1})]
+    )
 
 
 def test_infer_signed_interactions_keeps_clear_dominant_direction():

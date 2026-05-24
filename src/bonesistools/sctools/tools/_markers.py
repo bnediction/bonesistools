@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 
-try:
-    from collections import Sequence as Seq
-except ImportError:
-    from collections.abc import Sequence as Seq
+from collections.abc import Sequence as Seq
 
 try:
     from typing import Literal

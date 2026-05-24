@@ -2,9 +2,43 @@
 
 import importlib
 from functools import wraps
+from typing import Callable, Optional, TypeVar, Union, overload
+
+from typing_extensions import ParamSpec
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
-def require_dependency(function=None, *, module: str, package: str, extra: str):
+@overload
+def require_dependency(
+    function: Callable[P, R],
+    *,
+    module: str,
+    package: str,
+    extra: str,
+) -> Callable[P, R]:
+    ...
+
+
+@overload
+def require_dependency(
+    function: None = None,
+    *,
+    module: str,
+    package: str,
+    extra: str,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
+
+
+def require_dependency(
+    function: Optional[Callable[P, R]] = None,
+    *,
+    module: str,
+    package: str,
+    extra: str,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
     """
     Decorate a function with an optional dependency check.
 
@@ -29,9 +63,9 @@ def require_dependency(function=None, *, module: str, package: str, extra: str):
         Decorated function if `function` is provided, otherwise a decorator.
     """
 
-    def decorator(function):
+    def decorator(function: Callable[P, R]) -> Callable[P, R]:
         @wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             try:
                 importlib.import_module(module)
             except ImportError as error:
@@ -46,7 +80,21 @@ def require_dependency(function=None, *, module: str, package: str, extra: str):
     return decorator(function) if function is not None else decorator
 
 
-def require_sklearn(function=None):
+@overload
+def require_sklearn(function: Callable[P, R]) -> Callable[P, R]:
+    ...
+
+
+@overload
+def require_sklearn(
+    function: None = None,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
+
+
+def require_sklearn(
+    function: Optional[Callable[P, R]] = None,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
     """
     Decorate a function requiring scikit-learn.
 

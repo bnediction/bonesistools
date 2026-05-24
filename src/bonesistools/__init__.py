@@ -21,10 +21,14 @@ Credits: BNeDiction; PEPR Santé Numérique 2030.
 import importlib as _importlib
 import sys as _sys
 import warnings as _warnings
+from typing import TYPE_CHECKING, Any, List
 
 from . import boolpy as bpy
 from . import databases as dbs
 from . import sctools as sct
+
+if TYPE_CHECKING:
+    from . import grntools as grn
 
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 
@@ -51,7 +55,7 @@ _sys.modules.update(
 )
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name == "grn":
         _warnings.warn(
             "`bt.grn` is deprecated and will be removed in a future release; "
@@ -68,5 +72,5 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

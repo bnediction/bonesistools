@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+import builtins
+import sys
+from types import ModuleType
+
 import networkx as nx
 import pytest
 
@@ -224,6 +228,27 @@ def test_structural_families_and_family_compressed_graph_from_docstring():
     ]
 
 
+def test_structural_families_can_ignore_successors_and_feedback_nodes():
+    ig = bt.bpy.ig.InfluenceGraph()
+    ig.add_edges_from(
+        [
+            ("TF", "g1", {"sign": 1}),
+            ("TF", "g2", {"sign": 1}),
+            ("g1", "out1", {"sign": 1}),
+            ("g2", "out2", {"sign": -1}),
+            ("A", "B", {"sign": 1}),
+            ("B", "A", {"sign": 1}),
+        ]
+    )
+
+    families = ig.structural_families(
+        include_successors=False,
+        exclude_feedback_nodes=True,
+    )
+
+    assert set(map(frozenset, families.values())) == {frozenset({"g1", "g2"})}
+
+
 def test_edge_sign_autoregulations_and_path_sign_from_docstrings():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edge("A", "B", sign=1)
@@ -335,6 +360,43 @@ def test_marker_paths_from_docstring():
         ig.marker_paths(["marker2"], direction="sideways")
 
 
+def test_marker_paths_supports_upstream_paths_and_sign_filter():
+    ig = bt.bpy.ig.InfluenceGraph()
+    ig.add_edges_from(
+        [
+            ("marker", "A", {"sign": -1}),
+            ("A", "B", {"sign": 1}),
+            ("B", "A", {"sign": 1}),
+            ("C", "D", {"sign": 1}),
+            ("D", "C", {"sign": 1}),
+        ]
+    )
+
+    observed = ig.marker_paths(
+        ["marker"],
+        direction="upstream",
+        sccs=[["A", "B"], ["C", "D"]],
+        sign=-1,
+    )
+
+    assert observed == [
+        {
+            "marker": "marker",
+            "scc": frozenset({"A", "B"}),
+            "direction": "upstream",
+            "paths": [{"path": ["marker", "A"], "sign": -1}],
+        }
+    ]
+    assert (
+        ig.marker_paths(
+            ["marker"],
+            direction="downstream",
+            sccs=[["A", "B"]],
+        )
+        == []
+    )
+
+
 def test_circuits_positive_and_negative_circuits_from_docstring():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(
@@ -416,9 +478,7 @@ def test_to_graphviz_applies_signed_edge_styles_and_custom_options(fake_graphviz
         rankdir="LR",
     )
 
-    edge_styles = {
-        (source, target): attrs for source, target, attrs in graph.edges
-    }
+    edge_styles = {(source, target): attrs for source, target, attrs in graph.edges}
 
     assert isinstance(graph, fake_graphviz)
     assert graph.engine == "neato"
@@ -471,6 +531,65 @@ def test_to_pydot_applies_signed_edge_styles_and_custom_options():
         "arrowhead": "tee",
         "label": "-1",
     }
+
+
+def test_show_uses_ipython_display(monkeypatch):
+    ig = bt.bpy.ig.InfluenceGraph()
+    displayed = []
+
+    class FakeDot:
+        def create_svg(self):
+            return b"<svg></svg>"
+
+    display_module = ModuleType("IPython.display")
+    display_module.SVG = lambda svg: ("SVG", svg)
+    display_module.display = displayed.append
+
+    monkeypatch.setitem(sys.modules, "IPython", ModuleType("IPython"))
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setattr(
+        bt.bpy.ig.InfluenceGraph,
+        "to_pydot",
+        lambda self, **kwargs: FakeDot(),
+    )
+
+    ig.show()
+
+    assert displayed == [("SVG", "<svg></svg>")]
+
+
+def test_show_requires_ipython(monkeypatch):
+    ig = bt.bpy.ig.InfluenceGraph()
+    original_import = builtins.__import__
+
+    def import_without_ipython(name, *args, **kwargs):
+        if name == "IPython.display":
+            raise ImportError
+
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_ipython)
+
+    with pytest.raises(RuntimeError, match="requires an IPython/Jupyter"):
+        ig.show()
+
+
+def test_private_sign_and_graph_validation_guards():
+    ig = bt.bpy.ig.InfluenceGraph()
+
+    with pytest.raises(ValueError, match="unsupported edge sign"):
+        ig.add_edge("A", "B", sign=True)
+
+    nx.MultiDiGraph.add_edge(ig, "A", "B")
+    with pytest.raises(ValueError, match="missing edge attribute 'sign'"):
+        ig._validate_graph()
+
+    duplicate = bt.bpy.ig.InfluenceGraph()
+    nx.MultiDiGraph.add_edge(duplicate, "A", "B", sign="+")
+    nx.MultiDiGraph.add_edge(duplicate, "A", "B", sign=1)
+
+    with pytest.raises(ValueError, match="duplicated edge sign"):
+        duplicate._validate_graph()
 
 
 def test_walks_from_returns_non_simple_walks_from_docstring():

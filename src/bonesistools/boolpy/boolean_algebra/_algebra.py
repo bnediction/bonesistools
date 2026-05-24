@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from numbers import Number
-from typing import Any, Iterable, Mapping, Optional, Union
+from typing import Any, Iterable, Mapping, Optional
 from ._typing import PartialBooleanLike, HypercubeLike
 
 from ._boolean import PartialBoolean
@@ -217,18 +217,17 @@ class BooleanPredecessorInference:
 
         if sign not in {-1, 1}:
             raise ValueError(
-                "invalid interaction sign: expected -1 or 1 "
-                f"but received {sign!r}"
+                "invalid interaction sign: expected -1 or 1 " f"but received {sign!r}"
             )
 
         return sign
 
     @staticmethod
     def pairwise_predecessor_test(
-        source_v1: Union[bool, Number, str, PartialBoolean],
-        source_v2: Union[bool, Number, str, PartialBoolean],
-        target_v1: Union[bool, Number, str, PartialBoolean],
-        target_v2: Union[bool, Number, str, PartialBoolean],
+        source_v1: PartialBooleanLike,
+        source_v2: PartialBooleanLike,
+        target_v1: PartialBooleanLike,
+        target_v2: PartialBooleanLike,
         sign: int,
     ) -> Optional[bool]:
         """

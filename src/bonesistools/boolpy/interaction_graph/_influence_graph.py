@@ -7,6 +7,8 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    NoReturn,
+    cast,
     FrozenSet,
     Iterable,
     Mapping,
@@ -120,7 +122,7 @@ class InfluenceGraph(nx.MultiDiGraph):
 
         return self.copy()
 
-    def to_undirected(self, *args: Any, **kwargs: Any) -> None:
+    def to_undirected(self, *args: Any, **kwargs: Any) -> NoReturn:
         """
         Disable conversion to undirected graphs.
 
@@ -139,11 +141,12 @@ class InfluenceGraph(nx.MultiDiGraph):
 
     def add_edge(
         self,
-        source: Any,
-        target: Any,
-        sign: CircuitSign,
+        u_for_edge: Any,
+        v_for_edge: Any,
+        key: Any = None,
+        sign: Optional[CircuitSign] = None,
         **attr: Any,
-    ) -> None:
+    ) -> int:
         """
         Add a signed influence edge between two nodes.
 
@@ -181,22 +184,30 @@ class InfluenceGraph(nx.MultiDiGraph):
             If `sign` is invalid or duplicates an existing signed edge.
         """
 
-        sign = self._normalize_sign(sign)
+        if sign is None:
+            sign = key
+            key = None
 
-        if self.has_edge(source, target):
-            signs = self._edge_signs(source, target)
+        if sign is None:
+            raise TypeError("missing required argument: 'sign'")
+
+        sign = cast(CircuitSign, self._normalize_sign(sign))
+
+        if self.has_edge(u_for_edge, v_for_edge):
+            signs = self._edge_signs(u_for_edge, v_for_edge)
 
             if sign in signs:
                 raise ValueError(
                     f"duplicated edge sign for edge "
-                    f"{source!r} -> {target!r} with sign {sign!r}"
+                    f"{u_for_edge!r} -> {v_for_edge!r} with sign {sign!r}"
                 )
 
         attr["sign"] = sign
 
-        super().add_edge(
-            source,
-            target,
+        return super().add_edge(
+            u_for_edge,
+            v_for_edge,
+            key=key,
             **attr,
         )
 
@@ -1005,29 +1016,27 @@ class InfluenceGraph(nx.MultiDiGraph):
         """
 
         path = nodes
-        
+
         if len(nodes) == 1 and isinstance(nodes[0], (list, tuple)):
             path = tuple(nodes[0])
-        
+
         if len(path) < 2:
-            raise ValueError(
-                "path must contain at least two nodes"
-            )
-        
+            raise ValueError("path must contain at least two nodes")
+
         string = str(path[0])
-        
+
         for source, target in zip(path, path[1:]):
             sign = self.edge_sign(source, target)
-        
+
             if sign == 1:
                 string += f" -> {target}"
-        
+
             elif sign == -1:
                 string += f" -| {target}"
-        
+
             else:
                 string += f" -- {target}"
-        
+
         return string
 
     def marker_paths(
@@ -1586,15 +1595,15 @@ class InfluenceGraph(nx.MultiDiGraph):
         except ImportError:
             raise RuntimeError("show() requires an IPython/Jupyter environment.")
 
-        svg = (
+        dot = cast(
+            Any,
             self.to_pydot(
                 program=program,
                 edge_style=edge_style,
                 **kwargs,
-            )
-            .create_svg()
-            .decode()
+            ),
         )
+        svg = dot.create_svg().decode()
 
         display(SVG(svg))
 
@@ -1610,14 +1619,14 @@ class InfluenceGraph(nx.MultiDiGraph):
         plain_graph.add_nodes_from(
             (node, data.copy()) for node, data in source_graph.nodes(data=True)
         )
-        plain_graph.add_edges_from(
-            (
-                (source, target, key, data.copy())
-                for source, target, key, data in source_graph.edges(
-                    keys=True, data=True
-                )
-            ),
-        )
+        for source, target, key, data in source_graph.edges(keys=True, data=True):
+            nx.MultiDiGraph.add_edge(
+                plain_graph,
+                source,
+                target,
+                key=key,
+                **data.copy(),
+            )
 
         return plain_graph
 

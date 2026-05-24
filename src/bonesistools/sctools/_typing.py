@@ -1,19 +1,24 @@
 #!/usr/bin/env python
 
-import importlib
+import importlib as _importlib
 from typing import (
+    Any,
     Callable,
     List,
     Optional,
     Sequence,
+    TYPE_CHECKING,
     Tuple,
+    TypeVar,
     Union,
+    overload,
 )
 
 try:
     from typing import Literal
 except ImportError:
     from typing_extensions import Literal  # type: ignore
+from typing_extensions import ParamSpec, TypeAlias
 
 from anndata import AnnData
 from pandas import DataFrame
@@ -21,10 +26,18 @@ import numpy as np
 
 from functools import wraps
 
-try:
-    _mudata_is_available = importlib.util.find_spec("mudata") is not None
-except AttributeError:
-    _mudata_is_available = importlib.find_loader("mudata") is not None
+P = ParamSpec("P")
+R = TypeVar("R")
+
+_importlib_util = getattr(_importlib, "util", None)
+
+if _importlib_util is not None:
+    _mudata_is_available = _importlib_util.find_spec("mudata") is not None
+else:
+    _find_loader = getattr(_importlib, "find_loader", None)
+    _mudata_is_available = (
+        False if _find_loader is None else _find_loader("mudata") is not None
+    )
 
 
 class UnionType(object):
@@ -43,26 +56,31 @@ class UnionType(object):
     __repr__ = __str__
 
 
-DataFrameList = List[DataFrame]
-Suffixes = Tuple[Optional[str], Optional[str]]
+DataFrameList: TypeAlias = List[DataFrame]
+Suffixes: TypeAlias = Tuple[Optional[str], Optional[str]]
 
-AxisInt = int
-Axis = Union[AxisInt, Literal["obs", "var"]]
-Keys = Union[str, Sequence[str]]
+AxisInt: TypeAlias = int
+Axis: TypeAlias = Union[AxisInt, Literal["obs", "var"]]
+Keys: TypeAlias = Union[str, Sequence[str]]
 
-AnnDataList = List[AnnData]
+AnnDataList: TypeAlias = List[AnnData]
 
-if _mudata_is_available:
-    from mudata import MuData  # type: ignore
-
-    MuDataList = List[MuData]
-    ScData = Union[AnnData, MuData]
+if TYPE_CHECKING:
+    MuData = object
+    MuDataList: TypeAlias = List[Any]
+    ScData: TypeAlias = Any
 else:
-    MuData = type(NotImplemented)
-    MuDataList = List[type(NotImplemented)]
-    ScData = AnnData
+    if _mudata_is_available:
+        from mudata import MuData  # type: ignore
 
-Metric = Literal[
+        MuDataList = List[MuData]
+        ScData = Union[AnnData, MuData]
+    else:
+        MuData = type(NotImplemented)
+        MuDataList = List[type(NotImplemented)]
+        ScData = AnnData
+
+Metric: TypeAlias = Literal[
     "cityblock",
     "cosine",
     "euclidean",
@@ -87,12 +105,31 @@ Metric = Literal[
     "sqeuclidean",
     "yule",
 ]
-Metric_Function = Callable[[np.ndarray, np.ndarray], float]
+Metric_Function: TypeAlias = Callable[[np.ndarray, np.ndarray], float]
 
-Shortest_Path_Method = Literal["dijkstra", "bellman-ford"]
+Shortest_Path_Method: TypeAlias = Literal["dijkstra", "bellman-ford"]
 
 
-def type_checker(function: Optional[Callable] = None, **options):
+@overload
+def type_checker(
+    function: Callable[P, R],
+    **options: Any,
+) -> Callable[P, R]:
+    ...
+
+
+@overload
+def type_checker(
+    function: None = None,
+    **options: Any,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
+
+
+def type_checker(
+    function: Optional[Callable[P, R]] = None,
+    **options: Any,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
     """
     Decorate a function with runtime argument type checks.
 
@@ -119,13 +156,14 @@ def type_checker(function: Optional[Callable] = None, **options):
     if function is not None:
 
         @wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             if len(options) == 0:
                 raise Exception("Expected verification arguments")
             function_code = function.__code__
             arg_names = function_code.co_varnames
             for key, value in options.items():
                 idx = arg_names.index(key)
+                arg = None
                 if len(args) > idx:
                     arg = args[idx]
                 else:
@@ -153,14 +191,29 @@ def type_checker(function: Optional[Callable] = None, **options):
 
     else:
 
-        @wraps(function)
-        def partial_wrapper(function):
+        def partial_wrapper(function: Callable[P, R]) -> Callable[P, R]:
             return type_checker(function, **options)
 
         return partial_wrapper
 
 
-def anndata_checker(function: Optional[Callable] = None, n: int = 1):
+@overload
+def anndata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]:
+    ...
+
+
+@overload
+def anndata_checker(
+    function: None = None,
+    n: int = 1,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
+
+
+def anndata_checker(
+    function: Optional[Callable[P, R]] = None,
+    n: int = 1,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
     """
     Decorate a function by checking that the first arguments are AnnData objects.
 
@@ -185,7 +238,7 @@ def anndata_checker(function: Optional[Callable] = None, n: int = 1):
     if function is not None:
 
         @wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             iterator = iter(list(args) + list(kwargs.values()))
             for i in range(n):
                 value = next(iterator)
@@ -200,191 +253,143 @@ def anndata_checker(function: Optional[Callable] = None, n: int = 1):
 
     else:
 
-        @wraps(function)
-        def partial_wrapper(function):
+        def partial_wrapper(function: Callable[P, R]) -> Callable[P, R]:
             return anndata_checker(function, n)
 
         return partial_wrapper
 
 
-if _mudata_is_available:
+@overload
+def mudata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]:
+    ...
 
-    def mudata_checker(function: Optional[Callable] = None, n: int = 1):
-        """
-        Decorate a function by checking that the first arguments are MuData objects.
 
-        Parameters
-        ----------
-        function: Callable, optional
-            Function to decorate. If None, return a decorator.
-        n: int (default: 1)
-            Number of arguments to test.
+@overload
+def mudata_checker(
+    function: None = None,
+    n: int = 1,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
 
-        Returns
-        -------
-        Callable
-            Decorated function, or decorator if `function` is None.
 
-        Raises
-        ------
-        TypeError
-            If one of the first `n` arguments is not a MuData object.
-        """
+def mudata_checker(
+    function: Optional[Callable[P, R]] = None,
+    n: int = 1,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
+    """
+    Decorate a function by checking that the first arguments are MuData objects.
 
-        if function is not None:
+    Parameters
+    ----------
+    function: Callable, optional
+        Function to decorate. If None, return a decorator.
+    n: int (default: 1)
+        Number of arguments to test.
 
-            @wraps(function)
-            def wrapper(*args, **kwargs):
-                iterator = iter(list(args) + list(kwargs.values()))
-                for i in range(n):
-                    value = next(iterator)
-                    if not isinstance(value, MuData):
-                        raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: "
-                            f"expected {MuData} but received {type(value)}"
-                        )
-                return function(*args, **kwargs)
+    Returns
+    -------
+    Callable
+        Decorated function, or decorator if `function` is None.
 
-            return wrapper
+    Raises
+    ------
+    ModuleNotFoundError
+        If the decorated function is called while mudata is not installed.
+    TypeError
+        If one of the first `n` arguments is not a MuData object.
+    """
 
-        else:
+    if function is not None:
 
-            @wraps(function)
-            def partial_wrapper(function):
-                return mudata_checker(function, n)
-
-            return partial_wrapper
-
-    def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
-        """
-        Decorate a function by checking that the first arguments are AnnData or MuData objects.
-
-        Parameters
-        ----------
-        function: Callable, optional
-            Function to decorate. If None, return a decorator.
-        n: int (default: 1)
-            Number of arguments to test.
-
-        Returns
-        -------
-        Callable
-            Decorated function, or decorator if `function` is None.
-
-        Raises
-        ------
-        TypeError
-            If one of the first `n` arguments is neither an AnnData nor a
-            MuData object.
-        """
-
-        if function is not None:
-
-            @wraps(function)
-            def wrapper(*args, **kwargs):
-                iterator = iter(list(args) + list(kwargs.values()))
-                for i in range(n):
-                    value = next(iterator)
-                    if not (isinstance(value, AnnData) or isinstance(value, MuData)):
-                        raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: "
-                            f"expected {AnnData} or {MuData} but received "
-                            f"{type(value)}"
-                        )
-                return function(*args, **kwargs)
-
-            return wrapper
-
-        else:
-
-            @wraps(function)
-            def partial_wrapper(function):
-                return mudata_checker(function, n)
-
-            return partial_wrapper
-
-else:
-
-    def mudata_checker(function: Optional[Callable] = None, n: int = 1):
-        """
-        Decorate a function by checking that the first arguments are MuData objects.
-
-        Parameters
-        ----------
-        function: Callable, optional
-            Function to decorate. If None, return a decorator.
-        n: int (default: 1)
-            Number of arguments to test.
-
-        Returns
-        -------
-        Callable
-            Decorated function, or decorator if `function` is None.
-
-        Raises
-        ------
-        ModuleNotFoundError
-            If the decorated function is called while mudata is not installed.
-        """
-
-        if function is not None:
-
-            @wraps(function)
-            def wrapper(*args, **kwargs):
+        @wraps(function)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            if not _mudata_is_available:
                 raise ModuleNotFoundError("no module named 'mudata'")
 
-            return wrapper
+            iterator = iter(list(args) + list(kwargs.values()))
+            for i in range(n):
+                value = next(iterator)
+                if not isinstance(value, MuData):
+                    raise TypeError(
+                        f"unsupported argument type for '{i+1}'-th argument: "
+                        f"expected {MuData} but received {type(value)}"
+                    )
+            return function(*args, **kwargs)
 
-        else:
+        return wrapper
 
-            @wraps(function)
-            def partial_wrapper(function):
-                return mudata_checker(function, n)
+    def partial_wrapper(function: Callable[P, R]) -> Callable[P, R]:
+        return mudata_checker(function, n)
 
-            return partial_wrapper
+    return partial_wrapper
 
-    def anndata_or_mudata_checker(function: Optional[Callable] = None, n: int = 1):
-        """
-        Decorate a function by checking that the first arguments are AnnData or MuData objects.
 
-        Parameters
-        ----------
-        function: Callable, optional
-            Function to decorate. If None, return a decorator.
-        n: int (default: 1)
-            Number of arguments to test.
+@overload
+def anndata_or_mudata_checker(
+    function: Callable[P, R],
+    n: int = 1,
+) -> Callable[P, R]:
+    ...
 
-        Returns
-        -------
-        Callable
-            Decorated function, or decorator if `function` is None.
 
-        Raises
-        ------
-        TypeError
-            If one of the first `n` arguments is not an AnnData object.
-        """
+@overload
+def anndata_or_mudata_checker(
+    function: None = None,
+    n: int = 1,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
 
-        if function is not None:
 
-            @wraps(function)
-            def wrapper(*args, **kwargs):
-                iterator = iter(list(args) + list(kwargs.values()))
-                for i in range(n):
-                    value = next(iterator)
-                    if not isinstance(value, AnnData):
-                        raise TypeError(
-                            f"unsupported argument type for '{i+1}'-th argument: "
-                            f"expected {AnnData} but received {type(value)}"
-                        )
-                return function(*args, **kwargs)
+def anndata_or_mudata_checker(
+    function: Optional[Callable[P, R]] = None,
+    n: int = 1,
+) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
+    """
+    Decorate a function by checking that the first arguments are AnnData or MuData objects.
 
-            return wrapper
+    Parameters
+    ----------
+    function: Callable, optional
+        Function to decorate. If None, return a decorator.
+    n: int (default: 1)
+        Number of arguments to test.
 
-        else:
+    Returns
+    -------
+    Callable
+        Decorated function, or decorator if `function` is None.
 
-            @wraps(function)
-            def partial_wrapper(function):
-                return mudata_checker(function, n)
+    Raises
+    ------
+    TypeError
+        If one of the first `n` arguments is neither an AnnData nor an
+        available MuData object.
+    """
 
-            return partial_wrapper
+    if function is not None:
+
+        @wraps(function)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            iterator = iter(list(args) + list(kwargs.values()))
+            for i in range(n):
+                value = next(iterator)
+                if _mudata_is_available:
+                    valid = isinstance(value, (AnnData, MuData))
+                    expected = f"{AnnData} or {MuData}"
+                else:
+                    valid = isinstance(value, AnnData)
+                    expected = str(AnnData)
+
+                if not valid:
+                    raise TypeError(
+                        f"unsupported argument type for '{i+1}'-th argument: "
+                        f"expected {expected} but received {type(value)}"
+                    )
+            return function(*args, **kwargs)
+
+        return wrapper
+
+    def partial_wrapper(function: Callable[P, R]) -> Callable[P, R]:
+        return anndata_or_mudata_checker(function, n)
+
+    return partial_wrapper

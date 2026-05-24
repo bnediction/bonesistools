@@ -8,6 +8,8 @@ Boolean algebra, including partial Boolean values and Boolean
 differential and predecessor inference utilities.
 """
 
+from typing import List
+
 from ._algebra import BooleanPredecessorInference, PartialBooleanDifferential
 from ._boolean import PartialBoolean
 from ._hypercube import Hypercube, HypercubeCollection
@@ -16,11 +18,13 @@ from ._representation import rule_to_string
 from ._parser import read_hypercube, read_hypercubes
 from ._typing import (
     BooleanRule,
+    ConfigurationLike,
     PartialBooleanLike,
     HypercubeLike,
     is_boolean_expression_available,
     is_boolean_expression_like,
     is_boolean_rule_like,
+    is_configuration_like,
     is_partial_boolean_like,
     is_hypercube_like,
 )
@@ -37,15 +41,17 @@ __all__ = [
     "read_hypercube",
     "read_hypercubes",
     "BooleanRule",
+    "ConfigurationLike",
     "PartialBooleanLike",
     "HypercubeLike",
     "is_boolean_expression_available",
     "is_boolean_expression_like",
     "is_boolean_rule_like",
+    "is_configuration_like",
     "is_partial_boolean_like",
     "is_hypercube_like",
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

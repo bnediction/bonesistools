@@ -6,6 +6,7 @@ import networkx as nx
 import pytest
 
 import bonesistools as bt
+from bonesistools.boolpy.interaction_graph import _parser
 
 
 def test_read_interaction_graph_keeps_edge_attributes(tmp_path):
@@ -63,3 +64,36 @@ def test_read_interaction_graph_rejects_invalid_genesyn(tmp_path):
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
         bt.bpy.ig.read_interaction_graph(infile, genesyn=object())
+
+
+def test_read_interaction_graph_applies_genesyn(monkeypatch, tmp_path):
+    class FakeGeneSynonyms:
+        def __init__(self):
+            self.calls = []
+
+        def __call__(self, graph, **kwargs):
+            self.calls.append((graph, kwargs))
+
+    infile = tmp_path / "graph.csv"
+    infile.write_text("source,target,sign\nA,B,1\n")
+    genesyn = FakeGeneSynonyms()
+
+    monkeypatch.setattr(_parser, "GeneSynonyms", FakeGeneSynonyms)
+
+    graph = bt.bpy.ig.read_interaction_graph(
+        infile,
+        genesyn=genesyn,
+        input_identifier_type="gene_id",
+        output_identifier_type="ensembl_id",
+    )
+
+    assert genesyn.calls == [
+        (
+            graph,
+            {
+                "input_identifier_type": "gene_id",
+                "output_identifier_type": "ensembl_id",
+                "copy": False,
+            },
+        )
+    ]

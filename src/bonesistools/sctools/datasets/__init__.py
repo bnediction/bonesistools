@@ -13,9 +13,11 @@ except ImportError:
     from importlib_resources import files
 
 import anndata as ad
+from anndata import AnnData
+from typing import List
 
 
-def nestorowa():
+def nestorowa() -> AnnData:
     """
     Load the Nestorowa et al. hematopoietic stem and progenitor cell dataset.
     The dataset is a lightweight version intended for examples, testing and tutorials.
@@ -45,5 +47,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

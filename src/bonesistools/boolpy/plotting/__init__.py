@@ -8,6 +8,8 @@ helpers for objects related to logical modelling, including Boolean
 networks, influence graphs and ensemble representations.
 """
 
+from typing import List
+
 from ._styles import (
     ratio_edge_style,
     count_node_style,
@@ -21,5 +23,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

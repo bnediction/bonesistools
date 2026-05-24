@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ._typing import Graph
+import networkx as nx
 
 
 def walks_from(
-    graph: Graph,
+    graph: nx.Graph,
     source: str,
     max_depth: int = 3,
 ) -> list[list[str]]:
@@ -68,7 +68,7 @@ def walks_from(
         if remaining_depth == 0:
             return
 
-        for successor in graph.successors(node):
+        for successor in getattr(graph, "successors")(node):
             new_path = path + [successor]
             walks.append(new_path)
             explore(successor, new_path, remaining_depth - 1)

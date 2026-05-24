@@ -7,6 +7,8 @@ The `pl` namespace provides embedding, density, boxplot and graph plotting
 helpers, along with colour palettes and Matplotlib styling utilities.
 """
 
+from typing import List
+
 from ._scatterplot import embedding_plot
 from ._boxplot import boxplot
 from ._graphplot import draw_paga
@@ -46,5 +48,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

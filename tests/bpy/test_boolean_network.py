@@ -203,6 +203,15 @@ def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
     assert copied.undefined_symbols == {"B"}
 
 
+def test_is_boolean_network_like_accepts_mapping_rules_and_rejects_invalid_objects():
+    assert bt.bpy.bn.typing.is_boolean_network_like({"A": "B", "B": 1})
+    assert bt.bpy.bn.typing.is_boolean_network_like(bt.bpy.bn.BooleanNetwork({"A": 1}))
+
+    assert not bt.bpy.bn.typing.is_boolean_network_like({"A": object()})
+    assert not bt.bpy.bn.typing.is_boolean_network_like({1: "A"})
+    assert not bt.bpy.bn.typing.is_boolean_network_like(object())
+
+
 def test_boolean_network_to_bnet_returns_string():
 
     bn = bt.bpy.bn.BooleanNetwork(
@@ -434,6 +443,12 @@ def test_boolean_network_fixed_points_validate_inputs():
 
     with pytest.raises(ValueError, match="expected 0 or 1"):
         bn.is_fixed_point({"A": 1, "B": "*"})
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'state'"):
+        bn.is_fixed_point(object())
+
+    with pytest.raises(ValueError, match="expected string component names"):
+        bn.is_fixed_point({"A": 1, 2: 0})
 
 
 def test_boolean_network_to_influence_graph():

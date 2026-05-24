@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional
+from typing import Any, Optional, cast
 from anndata import AnnData
 from numpy import ndarray
 
@@ -52,22 +52,22 @@ def choose_mtx_representation(
             "'use_raw' and 'layer' cannot be both specified"
         )
     elif layer is not None:
-        X = adata.layers[layer]
+        matrix: Any = adata.layers[layer]
     elif use_raw:
-        X = adata.raw.X
+        matrix = adata.raw.X
     else:
-        X = adata.X
+        matrix = adata.X
 
     if copy:
-        return X.copy()
+        return cast(ndarray, matrix.copy())
     else:
-        return X
+        return cast(ndarray, matrix)
 
 
 @anndata_or_mudata_checker
 def choose_representation(
     scdata: ScData,  # type: ignore
-    use_rep: str = "X_pca",
+    use_rep: Optional[str] = "X_pca",
     n_components: Optional[int] = None,
 ) -> ndarray:
     """
@@ -105,9 +105,9 @@ def choose_representation(
             raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
     if n_components is None:
-        return scdata.obsm[use_rep]
+        return cast(ndarray, scdata.obsm[use_rep])
     else:
-        return scdata.obsm[use_rep][:, :n_components]
+        return cast(ndarray, scdata.obsm[use_rep][:, :n_components])
 
 
 @anndata_or_mudata_checker
@@ -148,14 +148,14 @@ def _get_distances(
             "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
-        return scdata.obsp[obsp]
+        return cast(ndarray, scdata.obsp[obsp])
     elif neighbors_key is not None:
         distances_key = scdata.uns[neighbors_key]["distances_key"]
-        return scdata.obsp[distances_key]
+        return cast(ndarray, scdata.obsp[distances_key])
     else:
         if "neighbors" in scdata.uns:
             distances_key = scdata.uns["neighbors"]["distances_key"]
-            return scdata.obsp[distances_key]
+            return cast(ndarray, scdata.obsp[distances_key])
         else:
             raise KeyError(
                 "distances not found in 'scdata': "
@@ -201,14 +201,14 @@ def _get_connectivities(
             "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
-        return scdata.obsp[obsp]
+        return cast(ndarray, scdata.obsp[obsp])
     elif neighbors_key is not None:
         connectivities_key = scdata.uns[neighbors_key]["connectivities_key"]
-        return scdata.obsp[connectivities_key]
+        return cast(ndarray, scdata.obsp[connectivities_key])
     else:
         if "neighbors" in scdata.uns:
             connectivities_key = scdata.uns["neighbors"]["connectivities_key"]
-            return scdata.obsp[connectivities_key]
+            return cast(ndarray, scdata.obsp[connectivities_key])
         else:
             raise KeyError(
                 "connectivities not found in 'scdata': "

@@ -8,6 +8,8 @@ distance calculations, marker statistics, lightweight export functions and
 feature classification utilities.
 """
 
+from typing import List
+
 from ._utils import choose_mtx_representation, choose_representation
 
 from ._neighbors import (
@@ -60,5 +62,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

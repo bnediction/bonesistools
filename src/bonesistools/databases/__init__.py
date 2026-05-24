@@ -14,6 +14,8 @@ omnipath
     Access to regulatory and interaction prior knowledge databases.
 """
 
+from typing import List
+
 from . import omnipath, ncbi
 
 __all__ = [
@@ -22,5 +24,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

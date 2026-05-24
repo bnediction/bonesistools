@@ -1,0 +1,25 @@
+name: typecheck
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  basedpyright:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install package
+        run: |
+          pip install -e ".[all]"
+          pip install basedpyright
+
+      - name: Run basedpyright
+        run: basedpyright --pythonpath "$(which python)"

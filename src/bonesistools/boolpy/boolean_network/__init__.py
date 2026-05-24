@@ -4,8 +4,10 @@
 Utilities for Boolean networks and logical modelling.
 
 The `bn` sub-package provides data structures, analyses and helper functions
-for Boolean network-like objects used in logical modelling frameworks.
+for BooleanNetworkLike objects used in logical modelling frameworks.
 """
+
+from typing import Any, List
 
 from . import _typing as typing
 
@@ -27,9 +29,9 @@ __all__ = [
 ]
 
 
-def bn_to_pydot(bn, **kwargs):
+def bn_to_pydot(bn: Any, **kwargs: Any) -> Any:
     """
-    Deprecated. Convert a Boolean-network-like object into a pydot graph.
+    Deprecated. Convert a BooleanNetworkLike object into a pydot graph.
 
     Use `BooleanNetwork(bn).to_pydot(**kwargs)` instead.
     """
@@ -46,5 +48,5 @@ def bn_to_pydot(bn, **kwargs):
     return BooleanNetwork(bn).to_pydot(**kwargs)
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

@@ -7,11 +7,13 @@ This module re-exports interaction-graph utilities for backward
 compatibility. Prefer `bonesistools.bpy.ig` for new code.
 """
 
-from ..boolpy.ig import __all__ as __all__
-from ..boolpy.ig import *  # type: ignore  # noqa: F401,F403
+from typing import List
 
-__all__ = list(__all__)
+from ..boolpy.interaction_graph import __all__ as _INTERACTION_GRAPH_ALL
+from ..boolpy.interaction_graph import *  # type: ignore  # noqa: F401,F403
+
+__all__ = list(_INTERACTION_GRAPH_ALL)
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

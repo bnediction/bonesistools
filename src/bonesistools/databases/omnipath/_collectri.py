@@ -4,9 +4,11 @@ from typing import (
     Any,
     Optional,
     Union,
+    cast,
 )
 
 import networkx as nx
+import pandas as pd
 
 from ..ncbi import OutputIdentifierType, GeneSynonyms
 
@@ -73,15 +75,21 @@ def load_collectri_grn(
             f"expected {bool} but received {type(remove_pmid)}"
         )
 
-    import decoupler as dc  # type: ignore
+    import decoupler as _dc  # type: ignore
+
+    dc = cast(Any, _dc)
 
     try:
         collectri_db = dc.get_collectri(
-            organism=organism, split_complexes=split_complexes, **kwargs
+            organism=cast(str, organism),
+            split_complexes=split_complexes,
+            **kwargs,
         )
     except AttributeError:
         collectri_db = dc.op.collectri(
-            organism=organism, remove_complexes=split_complexes, **kwargs
+            organism=cast(str, organism),
+            remove_complexes=split_complexes,
+            **kwargs,
         )
     collectri_db = collectri_db.rename(columns={"weight": "sign"})
     if remove_pmid:
@@ -90,7 +98,20 @@ def load_collectri_grn(
             for column in ("PMID", "references")
             if column in collectri_db.columns
         ]
-        collectri_db = collectri_db.drop(reference_columns, axis=1)
+        remaining_columns = [
+            column for column in collectri_db.columns if column not in reference_columns
+        ]
+        collectri_db = pd.DataFrame.from_records(
+            (
+                {
+                    column: value
+                    for column, value in row.items()
+                    if column in remaining_columns
+                }
+                for row in collectri_db.to_dict("records")
+            ),
+            columns=remaining_columns,
+        )
     collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
     grn = nx.from_pandas_edgelist(

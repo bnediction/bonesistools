@@ -18,6 +18,7 @@ ig
 
 import warnings as _warnings
 import sys as _sys
+from typing import Any, List
 
 from . import boolean_algebra as ba
 from . import boolean_network as bn
@@ -36,7 +37,7 @@ _DEPRECATED = {
 }
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name in _DEPRECATED:
         module_alias, attr = _DEPRECATED[name]
         _warnings.warn(
@@ -56,5 +57,5 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return sorted(set(globals()) | set(__all__))

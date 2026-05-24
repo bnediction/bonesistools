@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
-from collections.abc import MutableSequence
+from collections.abc import Mapping as MappingABC, MutableSequence
 from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    cast,
     Iterable,
     Mapping,
     Optional,
@@ -34,9 +35,11 @@ from boolean.boolean import (
     _FALSE,
 )
 from ..boolean_algebra import (
+    ConfigurationLike,
     PartialBoolean,
     dnf_to_structure,
     expressions_equivalent,
+    is_configuration_like,
     rule_to_string,
 )
 from .._graphviz import _networkx_to_graphviz
@@ -54,8 +57,7 @@ from ..plotting import (
     stability_node_style,
 )
 
-
-class BooleanNetwork(dict):
+class BooleanNetwork(Dict[str, Expression]):
     """
     Dictionary-like representation of a Boolean network.
 
@@ -254,7 +256,7 @@ class BooleanNetwork(dict):
         Parameters
         ----------
         other: object
-            Boolean-network-like object to compare against.
+            BooleanNetworkLike object to compare against.
 
         Returns
         -------
@@ -276,12 +278,12 @@ class BooleanNetwork(dict):
         Test structural inequality between Boolean networks.
 
         This is the logical negation of `__eq__` when the other object can be
-        interpreted as a Boolean network-like object.
+        interpreted as a BooleanNetworkLike object.
 
         Parameters
         ----------
         other: object
-            Boolean-network-like object to compare against.
+            BooleanNetworkLike object to compare against.
 
         Returns
         -------
@@ -590,7 +592,7 @@ class BooleanNetwork(dict):
 
         self.validate()
 
-    def next_state(self, component: str, configuration: Mapping[str, int]) -> int:
+    def next_state(self, component: str, configuration: ConfigurationLike) -> int:
         """
         Return the next state of one component from a Boolean configuration.
 
@@ -606,7 +608,7 @@ class BooleanNetwork(dict):
         ----------
         component: str
             Component whose Boolean rule is evaluated.
-        configuration: Mapping[str, int]
+        configuration: ConfigurationLike
             Complete Boolean configuration used to evaluate the rule.
 
         Returns
@@ -643,7 +645,7 @@ class BooleanNetwork(dict):
 
     def next_configuration(
         self,
-        configuration: Mapping[str, int],
+        configuration: ConfigurationLike,
     ) -> Dict[str, int]:
         """
         Return the next Boolean configuration.
@@ -658,7 +660,7 @@ class BooleanNetwork(dict):
 
         Parameters
         ----------
-        configuration: Mapping[str, int]
+        configuration: ConfigurationLike
             Complete Boolean state used to evaluate every rule.
 
         Returns
@@ -699,7 +701,7 @@ class BooleanNetwork(dict):
 
         return next_configuration
 
-    def is_fixed_point(self, state: Mapping[str, int]) -> bool:
+    def is_fixed_point(self, state: ConfigurationLike) -> bool:
         """
         Test whether a fully specified state is a fixed point.
 
@@ -716,7 +718,7 @@ class BooleanNetwork(dict):
 
         Parameters
         ----------
-        state: Mapping[str, int]
+        state: ConfigurationLike
             Fully specified Boolean state.
 
         Returns
@@ -812,7 +814,7 @@ class BooleanNetwork(dict):
         Parameters
         ----------
         other: object
-            Boolean-network-like object to compare with.
+            BooleanNetworkLike object to compare with.
         method: {"simplify", "truth_table"} (default: "simplify")
             Equivalence strategy used to compare component rules.
 
@@ -886,9 +888,12 @@ class BooleanNetwork(dict):
         influences = set()
 
         for target, rule in self.items():
-            for literal in rule.simplify().literalize().get_literals():
+            literals = cast(Iterable[Any], rule.simplify().literalize().get_literals())
+
+            for literal in literals:
                 if isinstance(literal, self.ba.NOT):
-                    source = literal.args[0].obj
+                    operand = literal.args[0]
+                    source = operand.obj
                     sign = -1
                 else:
                     source = literal.obj
@@ -926,7 +931,7 @@ class BooleanNetwork(dict):
             graph.add_node(component)
 
         for source, target, sign in self.influences():
-            graph.add_edge(source, target, sign=sign)
+            graph.add_edge(source, target, sign=1 if sign == 1 else -1)
 
         return graph
 
@@ -1060,12 +1065,36 @@ class BooleanNetwork(dict):
 
         return None
 
-    def _normalize_state(self, state: Mapping[str, Any]) -> Dict[str, int]:
+    def _normalize_state(self, state: ConfigurationLike) -> Dict[str, int]:
+        if not isinstance(state, MappingABC):
+            raise TypeError(
+                "unsupported argument type for 'state': "
+                f"expected Mapping but received {type(state)}"
+            )
+
+        if not all(isinstance(component, str) for component in state):
+            raise ValueError(
+                "invalid argument value for 'state': " "expected string component names"
+            )
+
         if set(state) != self.components:
             raise ValueError(
                 "invalid argument value for 'state': "
                 f"expected components {sorted(self.components)} but received "
                 f"{sorted(state)}"
+            )
+
+        if not is_configuration_like(state):
+            for component in self:
+                self._normalize_boolean_value(
+                    state[component],
+                    name="state",
+                    component=component,
+                )
+
+            raise ValueError(
+                "invalid argument value for 'state': "
+                "expected a concrete Boolean configuration"
             )
 
         return {
@@ -1116,19 +1145,19 @@ class BooleanNetwork(dict):
             return self.ba.parse(rule_to_string(rule))
 
         if isinstance(rule, bool):
-            return self.ba.TRUE if rule else self.ba.FALSE
+            return cast(Expression, self.ba.TRUE if rule else self.ba.FALSE)
 
         if rule in [0, 1]:
-            return self.ba.TRUE if rule else self.ba.FALSE
+            return cast(Expression, self.ba.TRUE if rule else self.ba.FALSE)
 
         if isinstance(rule, str):
             expr = rule.strip()
 
             if expr == "0":
-                return self.ba.FALSE
+                return cast(Expression, self.ba.FALSE)
 
             if expr == "1":
-                return self.ba.TRUE
+                return cast(Expression, self.ba.TRUE)
 
             return self.ba.parse(expr)
 
@@ -1161,7 +1190,7 @@ class BooleanNetworkEnsemble(MutableSequence):
     """
     Mutable sequence of Boolean networks sharing the same components.
 
-    A Boolean network ensemble stores Boolean-network-like objects while
+    A Boolean network ensemble stores BooleanNetworkLike objects while
     enforcing that all networks are defined over the same component set.
 
     Examples
@@ -1183,7 +1212,7 @@ class BooleanNetworkEnsemble(MutableSequence):
         Components expected in each Boolean network. If specified without
         `bns`, initialise an empty ensemble with this component set.
     bns: Iterable[BooleanNetworkLike] (optional, default: None)
-        Boolean-network-like objects used to initialise the ensemble. All
+        BooleanNetworkLike objects used to initialise the ensemble. All
         networks must contain exactly the same components.
 
     Notes
@@ -1196,7 +1225,7 @@ class BooleanNetworkEnsemble(MutableSequence):
     ------
     TypeError
         If initialisation arguments are inconsistent or if provided networks
-        are not Boolean network-like objects.
+        are not BooleanNetworkLike objects.
     ValueError
         If `bns` is empty or if a network has missing or additional
         components.
@@ -1228,6 +1257,7 @@ class BooleanNetworkEnsemble(MutableSequence):
             self._components = set(components)
             return
 
+        assert bns is not None
         bns = list(bns)
 
         if len(bns) == 0:
@@ -1302,13 +1332,13 @@ class BooleanNetworkEnsemble(MutableSequence):
         index: int or slice
             Index or slice selecting positions to replace.
         value: BooleanNetworkLike or Iterable[BooleanNetworkLike]
-            Boolean-network-like object, or iterable of Boolean-network-like
+            BooleanNetworkLike object, or iterable of BooleanNetworkLike
             objects when `index` is a slice.
 
         Raises
         ------
         TypeError
-            If a provided object is not a Boolean-network-like object.
+            If a provided object is not a BooleanNetworkLike object.
         ValueError
             If a provided object does not contain exactly the expected
             components.
@@ -1434,12 +1464,12 @@ class BooleanNetworkEnsemble(MutableSequence):
         index: int
             Position where the Boolean network is inserted.
         value: BooleanNetworkLike
-            Boolean-network-like object to insert.
+            BooleanNetworkLike object to insert.
 
         Raises
         ------
         TypeError
-            If `value` is not a Boolean-network-like object.
+            If `value` is not a BooleanNetworkLike object.
         ValueError
             If `value` does not contain exactly the expected components.
         """
@@ -1686,15 +1716,18 @@ class BooleanNetworkEnsemble(MutableSequence):
         if edge_style is True:
             edge_style = ratio_edge_style
 
+        node_style_callable = node_style if callable(node_style) else None
+        edge_style_callable = edge_style if callable(edge_style) else None
+
         if node_style == "count":
-            node_style = count_node_style
+            node_style_callable = count_node_style
 
         elif node_style == "stability":
-            node_style = stability_node_style
+            node_style_callable = stability_node_style
 
         for _, data in graph.nodes(data=True):
-            if node_style not in (None, False):
-                data.update(node_style(data))
+            if node_style_callable is not None:
+                data.update(node_style_callable(data))
 
         for _, _, data in graph.edges(data=True):
             sign = data["sign"]
@@ -1710,8 +1743,8 @@ class BooleanNetworkEnsemble(MutableSequence):
             if show_edge_labels:
                 data["label"] = str(count)
 
-            if edge_style not in (None, False):
-                data.update(edge_style(ratio))
+            if edge_style_callable is not None:
+                data.update(edge_style_callable(ratio))
 
         return _networkx_to_graphviz(graph, program=program, **kwargs)
 
@@ -1811,16 +1844,19 @@ class BooleanNetworkEnsemble(MutableSequence):
         if edge_style is True:
             edge_style = ratio_edge_style
 
+        node_style_callable = node_style if callable(node_style) else None
+        edge_style_callable = edge_style if callable(edge_style) else None
+
         if node_style == "count":
-            node_style = count_node_style
+            node_style_callable = count_node_style
 
         elif node_style == "stability":
-            node_style = stability_node_style
+            node_style_callable = stability_node_style
 
         for _, data in graph.nodes(data=True):
 
-            if node_style not in (None, False):
-                data.update(node_style(data))
+            if node_style_callable is not None:
+                data.update(node_style_callable(data))
 
         for _, _, data in graph.edges(data=True):
             sign = data["sign"]
@@ -1836,8 +1872,8 @@ class BooleanNetworkEnsemble(MutableSequence):
             if show_edge_labels:
                 data["label"] = str(count)
 
-            if edge_style not in (None, False):
-                data.update(edge_style(ratio))
+            if edge_style_callable is not None:
+                data.update(edge_style_callable(ratio))
 
         dot = nx.drawing.nx_pydot.to_pydot(graph)
 
@@ -1850,17 +1886,17 @@ class BooleanNetworkEnsemble(MutableSequence):
 
     def _check_network(self, bn: BooleanNetworkLike) -> None:
         """
-        Validate a Boolean-network-like object before insertion.
+        Validate a BooleanNetworkLike object before insertion.
 
         Parameters
         ----------
         bn: BooleanNetworkLike
-            Boolean-network-like object to validate.
+            BooleanNetworkLike object to validate.
 
         Raises
         ------
         TypeError
-            If `bn` is not a Boolean-network-like object.
+            If `bn` is not a BooleanNetworkLike object.
         ValueError
             If `bn` does not contain exactly the expected components.
         """
@@ -1879,12 +1915,12 @@ class BooleanNetworkEnsemble(MutableSequence):
 
     def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:
         """
-        Convert a Boolean-network-like object to a BooleanNetwork.
+        Convert a BooleanNetworkLike object to a BooleanNetwork.
 
         Parameters
         ----------
         bn: BooleanNetworkLike
-            Boolean-network-like object to coerce.
+            BooleanNetworkLike object to coerce.
 
         Returns
         -------
@@ -1894,7 +1930,7 @@ class BooleanNetworkEnsemble(MutableSequence):
         Raises
         ------
         TypeError
-            If `bn` is not Boolean-network-like.
+            If `bn` is not BooleanNetworkLike.
         ValueError
             If `bn` does not contain exactly the expected components.
         """

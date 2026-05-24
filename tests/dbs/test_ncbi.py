@@ -44,6 +44,15 @@ NCBI_NAMES = [
 ]
 
 
+class CopyableBooleanNetworkLike(dict):
+    """
+    Minimal BooleanNetworkLike object with copy support but no rename method.
+    """
+
+    def copy(self):
+        return type(self)(self)
+
+
 @pytest.fixture(scope="module")
 def mouse_genesyn():
     return bt.dbs.ncbi.GeneSynonyms(organism="mouse")
@@ -171,6 +180,24 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     assert converted_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
     assert bn.rules == {"Tp53": "Myc", "Myc": "Tp53"}
 
+    mapping_bn = {"Tp53": "Myc", "Myc": "Tp53"}
+    converted_mapping_bn = mouse_genesyn.standardize_bn(mapping_bn, copy=True)
+    assert type(converted_mapping_bn) is type(mapping_bn)
+    assert converted_mapping_bn == {"Trp53": "Myc", "Myc": "Trp53"}
+    assert mapping_bn == {"Tp53": "Myc", "Myc": "Tp53"}
+
+    copyable_bn = CopyableBooleanNetworkLike({"Tp53": "Myc", "Myc": "Tp53"})
+    converted_copyable_bn = mouse_genesyn.standardize_bn(copyable_bn, copy=True)
+    assert type(converted_copyable_bn) is type(copyable_bn)
+    assert converted_copyable_bn == {"Trp53": "Myc", "Myc": "Trp53"}
+    assert isinstance(copyable_bn.copy(), CopyableBooleanNetworkLike)
+
+    with pytest.raises(TypeError, match="requires a 'rename' method"):
+        mouse_genesyn.standardize_bn(mapping_bn, copy=False)
+
+    with pytest.raises(TypeError, match="Boolean network-like"):
+        mouse_genesyn.standardize_bn({"Tp53": object()}, copy=True)
+
     df = pd.DataFrame([[1]], index=["Tp53"], columns=["NF-kappaB"])
     assert mouse_genesyn.standardize_df(df).index.tolist() == ["Trp53"]
 
@@ -200,7 +227,9 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
             )
 
 
-def test_gene_synonyms_validation_errors_and_missing_warnings(mouse_genesyn, monkeypatch):
+def test_gene_synonyms_validation_errors_and_missing_warnings(
+    mouse_genesyn, monkeypatch
+):
     with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
         bt.dbs.ncbi.GeneSynonyms(organism="rat")
 

@@ -106,8 +106,7 @@ def _walk_signs(
     walk: Sequence[str],
 ) -> list[int]:
     edge_signs = [
-        _edge_signs(graph, source, target)
-        for source, target in zip(walk, walk[1:])
+        _edge_signs(graph, source, target) for source, target in zip(walk, walk[1:])
     ]
 
     if any(len(signs) == 0 for signs in edge_signs):
@@ -175,9 +174,7 @@ def interaction_scores_from_walks(
     gene_set = set(genes)
 
     scores: dict[str, dict[str, InteractionScore]] = {gene: {} for gene in genes}
-    accumulators: dict[str, dict[str, dict[str, float]]] = {
-        gene: {} for gene in genes
-    }
+    accumulators: dict[str, dict[str, dict[str, float]]] = {gene: {} for gene in genes}
 
     for source in genes:
         if source not in graph:
@@ -295,14 +292,15 @@ def infer_signed_interactions(
                 if not _passes_threshold(score, minimum_path_number, threshold):
                     continue
 
-                if (
-                    not allow_bidirectional
-                    and abs(score.normalized_score) <= abs(opposite.normalized_score)
+                if not allow_bidirectional and abs(score.normalized_score) <= abs(
+                    opposite.normalized_score
                 ):
                     continue
 
                 sign = 1 if score.normalized_score > 0 else -1
-                interactions.append((candidate_source, candidate_target, {"sign": sign}))
+                interactions.append(
+                    (candidate_source, candidate_target, {"sign": sign})
+                )
 
     return interactions
 
