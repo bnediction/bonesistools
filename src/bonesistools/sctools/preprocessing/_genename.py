@@ -163,11 +163,13 @@ def var_names_merge_duplicates(
 
     if var_names_column is None:
         var_names = "copy_var_names"
-        adata.var[var_names] = list(adata.var.index)
+        adata_var = cast(DataFrame, adata.var)
+        adata_var[var_names] = list(adata_var.index)
     else:
         var_names = var_names_column
 
-    obs = DataFrame(adata.obs.index).set_index(0)
+    adata_obs = cast(DataFrame, adata.obs)
+    obs = DataFrame(adata_obs.index).set_index(0)
     adatas = list()
     duplicated_var_names = {
         str(adata.var_names[idx])
@@ -180,11 +182,12 @@ def var_names_merge_duplicates(
         adata = adata[:, adata.var.index != var_name]
 
         X = csr_matrix(cast(Any, adata_spec.X).sum(axis=1))
-        if var_name in list(adata_spec.var[var_names]):
-            filter = adata_spec.var[var_names] == var_name
-            var = adata_spec.var[filter].iloc[:1]
+        adata_spec_var = cast(DataFrame, adata_spec.var)
+        if var_name in list(adata_spec_var[var_names]):
+            filter = adata_spec_var[var_names] == var_name
+            var = adata_spec_var[filter].iloc[:1]
         else:
-            var = adata_spec.var.iloc[:1]
+            var = adata_spec_var.iloc[:1]
         adata_spec = AnnData(X=X, var=var, obs=obs)
         adatas.append(adata_spec)
 
@@ -195,6 +198,7 @@ def var_names_merge_duplicates(
     )
 
     if var_names_column is None:
-        adata.var.drop(labels=var_names, axis="columns", inplace=True)
+        adata_var = cast(DataFrame, adata.var)
+        adata_var.drop(labels=var_names, axis="columns", inplace=True)
 
     return adata

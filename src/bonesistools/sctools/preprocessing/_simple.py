@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Union, cast
 
 from anndata import AnnData
+from pandas import DataFrame
 
 from .._typing import (
     Axis,
@@ -181,11 +182,15 @@ def merge(
     left_ad = left_ad.copy() if copy else left_ad
 
     if axis in [0, "obs"]:
-        left_df = left_ad.obs.copy()
-        right_df = right_ad.obs.copy()
+        left_obs = cast(DataFrame, left_ad.obs)
+        right_obs = cast(DataFrame, right_ad.obs)
+        left_df = left_obs.copy()
+        right_df = right_obs.copy()
     elif axis in [1, "var"]:
-        left_df = left_ad.var.copy()
-        right_df = right_ad.var.copy()
+        left_var = cast(DataFrame, left_ad.var)
+        right_var = cast(DataFrame, right_ad.var)
+        left_df = left_var.copy()
+        right_df = right_var.copy()
     else:
         raise ValueError(
             f"invalid argument value for 'axis': "

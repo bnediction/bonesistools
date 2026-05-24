@@ -162,15 +162,17 @@ def transfer_obs_sti(
     adata = adata.copy() if copy else adata
     obs = [obs] if isinstance(obs, str) else obs
 
-    all_samples_df = []
+    all_samples_dfs: List[DataFrame] = []
     for _condition, _adata in zip(conditions, adatas):
-        _df = _adata.obs.loc[:, obs].copy()
+        _adata_obs = cast(DataFrame, _adata.obs)
+        _df = _adata_obs.loc[:, obs].copy()
         _df[condition_colname] = _condition
-        all_samples_df.append(_df)
+        all_samples_dfs.append(_df)
         del _df
 
-    all_samples_df = pd.concat(all_samples_df)
-    one_sample_df = adata.obs.copy()
+    all_samples_df = pd.concat(all_samples_dfs)
+    adata_obs = cast(DataFrame, adata.obs)
+    one_sample_df = adata_obs.copy()
 
     index_name = __generate_unique_index_name([all_samples_df, one_sample_df])
 
@@ -237,9 +239,11 @@ def transfer_obs_its(
         adatas = [_adata.copy() for _adata in adatas]
 
     for _condition, _adata in zip(conditions, adatas):
-        _cond = adata.obs[condition_colname] == _condition
-        df = adata.obs.loc[_cond][obs]
-        _adata.obs = _adata.obs.merge(
+        adata_obs = cast(DataFrame, adata.obs)
+        _adata_obs = cast(DataFrame, _adata.obs)
+        _cond = adata_obs[condition_colname] == _condition
+        df = adata_obs.loc[_cond][obs]
+        _adata.obs = _adata_obs.merge(
             right=df, how="left", left_index=True, right_index=True
         )
         if copy:

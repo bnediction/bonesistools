@@ -6,6 +6,7 @@ from typing import Any, Optional, Union, cast
 
 import numpy as np
 from anndata import AnnData
+from pandas import DataFrame
 from scipy.sparse import issparse
 
 from .._dependencies import require_sklearn
@@ -79,7 +80,8 @@ def regress_out(
         counts = cast(Any, counts).toarray()
 
     counts = np.asarray(counts)
-    regressors = adata.obs[[keys]] if isinstance(keys, str) else adata.obs[keys]
+    adata_obs = cast(DataFrame, adata.obs)
+    regressors = adata_obs[[keys]] if isinstance(keys, str) else adata_obs[keys]
     regressors.insert(0, "ones", 1.0)
     regressors = regressors.to_numpy()
 

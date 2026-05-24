@@ -19,7 +19,7 @@ jobs:
       - name: Install package
         run: |
           pip install -e ".[all]"
-          pip install pyright
+          pip install ipython pyright
 
       - name: Run pyright
         run: pyright .

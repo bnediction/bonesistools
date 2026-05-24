@@ -51,7 +51,10 @@ def anndata_to_dataframe(
     if issparse(matrix):
         matrix = cast(Any, matrix).toarray()
 
-    counts_df = DataFrame(matrix, index=adata.obs.index, columns=adata.var.index)
+    adata_obs = cast(DataFrame, adata.obs)
+    adata_var = cast(DataFrame, adata.var)
+
+    counts_df = DataFrame(matrix, index=adata_obs.index, columns=adata_var.index)
 
     if is_log:
         if "log1p" in adata.uns_keys() and adata.uns["log1p"].get("base") is not None:
@@ -59,13 +62,13 @@ def anndata_to_dataframe(
         else:
             matrix = np.expm1(counts_df)
 
-        counts_df = DataFrame(matrix, index=adata.obs.index, columns=adata.var.index)
+        counts_df = DataFrame(matrix, index=adata_obs.index, columns=adata_var.index)
 
     if obs is not None:
         if isinstance(obs, str):
-            obs_df = adata.obs.loc[:, [obs]]
+            obs_df = adata_obs.loc[:, [obs]]
         else:
-            obs_df = adata.obs.loc[:, list(obs)]
+            obs_df = adata_obs.loc[:, list(obs)]
 
         counts_df = counts_df.join(obs_df)
 
