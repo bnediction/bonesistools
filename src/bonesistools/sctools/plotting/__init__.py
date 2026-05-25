@@ -9,24 +9,22 @@ helpers, along with colour palettes and Matplotlib styling utilities.
 
 from typing import List
 
-from ._scatterplot import embedding_plot
 from ._boxplot import boxplot
-from ._graphplot import draw_paga
-from ._density import kde_plot, ecdf_plot
-
 from ._colors import (
-    rgb,
-    rgb2hex,
-    get_color,
-    generate_colormap,
     COLORS,
     LIGHT_COLORS,
     QUALITATIVE_COLORS,
-    color_cycle,
     bonesis_cm,
+    color_cycle,
+    generate_colormap,
+    get_color,
+    rgb,
+    rgb2hex,
 )
-
-from ._figure import set_default_params, set_default_axis
+from ._density import ecdf_plot, kde_plot
+from ._figure import set_default_axis, set_default_params
+from ._graphplot import draw_paga
+from ._scatterplot import embedding_plot
 
 __all__ = [
     "embedding_plot",

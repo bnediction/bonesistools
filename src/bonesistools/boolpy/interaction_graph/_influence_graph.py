@@ -7,20 +7,19 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    NoReturn,
-    cast,
     FrozenSet,
     Iterable,
     Mapping,
+    NoReturn,
     Optional,
     Tuple,
-    Sequence,
+    Union,
+    cast,
 )
-
-from ..._compat import Literal
 
 import networkx as nx
 
+from ..._compat import Literal
 from .._graphviz import _networkx_to_graphviz
 
 if TYPE_CHECKING:
@@ -59,9 +58,26 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def __init__(
         self,
-        graph: Optional[nx.DiGraph[Any]] = None,
+        graph: Optional[Union[nx.DiGraph[Any], nx.MultiDiGraph[Any]]] = None,
         **attr: Any,
     ) -> None:
+        """
+        Initialize a signed influence graph.
+
+        Parameters
+        ----------
+        graph: nx.DiGraph, optional
+            Signed directed graph. Edges must define a `sign` attribute equal to
+            -1 or 1. MultiDiGraph inputs are accepted and normalized.
+        **attr: Any
+            Graph attributes passed to the underlying NetworkX graph.
+
+        Raises
+        ------
+        ValueError
+            If an input edge is missing `sign`, contains an invalid sign, or
+            duplicates an existing signed edge.
+        """
 
         super().__init__(**attr)
 
@@ -141,10 +157,12 @@ class InfluenceGraph(_MultiDiGraphBase):
             "InfluenceGraph does not support conversion to undirected graphs."
         )
 
-    def add_edge(
+    # InfluenceGraph intentionally exposes source/target names instead of
+    # NetworkX's u_for_edge/v_for_edge names.
+    def add_edge(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
-        u_for_edge: Any,
-        v_for_edge: Any,
+        source: Any,
+        target: Any,
         key: Any = None,
         sign: Optional[CircuitSign] = None,
         **attr: Any,
@@ -195,20 +213,20 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         sign = cast(CircuitSign, self._normalize_sign(sign))
 
-        if self.has_edge(u_for_edge, v_for_edge):
-            signs = self._edge_signs(u_for_edge, v_for_edge)
+        if self.has_edge(source, target):
+            signs = self._edge_signs(source, target)
 
             if sign in signs:
                 raise ValueError(
                     f"duplicated edge sign for edge "
-                    f"{u_for_edge!r} -> {v_for_edge!r} with sign {sign!r}"
+                    f"{source!r} -> {target!r} with sign {sign!r}"
                 )
 
         attr["sign"] = sign
 
         return super().add_edge(
-            u_for_edge,
-            v_for_edge,
+            source,
+            target,
             key=key,
             **attr,
         )
@@ -1001,8 +1019,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        path: Sequence[str]
-            Ordered sequence of nodes describing a directed path.
+        *nodes: str
+            Nodes describing a directed path in traversal order.
 
         Returns
         -------
@@ -1399,7 +1417,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         )
 
         return type(self)(
-            self.subgraph(feedback_nodes).copy(),
+            cast(_MultiDiGraphBase, self.subgraph(feedback_nodes).copy()),
         )
 
     def compressed_graph(

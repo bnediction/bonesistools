@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence as Seq
-
-from ..._compat import Literal
-
 from typing import (
     Any,
     Callable,
@@ -15,14 +12,14 @@ from typing import (
     Union,
     cast,
 )
-from .._typing import anndata_checker
 
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 from anndata import AnnData
 from numpy import log2
 
+from ..._compat import Literal
+from .._typing import anndata_checker
 from ._conversion import anndata_to_dataframe
 
 _CorrMethod = Literal["benjamini-hochberg", "bonferroni"]

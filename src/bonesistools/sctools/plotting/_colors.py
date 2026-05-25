@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
+import math
+from itertools import cycle
 from typing import Any, Optional, Sequence, cast
 
-from ..._compat import Literal
-from ._typing import RGB
-
-import math
 import numpy as np
-
-from itertools import cycle
 from matplotlib.colors import Colormap, ListedColormap
+
+from ..._compat import Literal
 
 
 def rgb(color):
@@ -290,9 +288,7 @@ def generate_colormap(
         )
     elif color_number <= cm.N:
         if isinstance(cm, ListedColormap):
-            return ListedColormap(
-                cast(Sequence[Any], cm.colors)[0:color_number]
-            )
+            return ListedColormap(cast(Sequence[Any], cm.colors)[0:color_number])
 
         return ListedColormap(cm(np.linspace(0, 1, color_number)))
 

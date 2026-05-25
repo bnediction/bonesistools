@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 from typing import Any, Optional, Union, cast
+
+import anndata as ad
+from anndata import AnnData
+from pandas import DataFrame
+from scipy.sparse import csr_matrix
+
+from ...databases.ncbi import (
+    GeneSynonyms,
+    InputIdentifierType,
+    OutputIdentifierType,
+    support_legacy_gene_synonyms_args,
+)
 from .._typing import (
     Axis,
     ScData,
     anndata_checker,
     anndata_or_mudata_checker,
-)
-from pandas import DataFrame
-from anndata import AnnData
-from scipy.sparse import csr_matrix
-
-import anndata as ad
-
-from ...databases.ncbi import (
-    InputIdentifierType,
-    OutputIdentifierType,
-    GeneSynonyms,
-    support_legacy_gene_synonyms_args,
 )
 
 

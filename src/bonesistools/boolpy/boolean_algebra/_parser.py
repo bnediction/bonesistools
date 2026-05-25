@@ -6,10 +6,9 @@ Parsers for Boolean algebra objects.
 
 import json
 from pathlib import Path
-from typing import Union, Dict
+from typing import Dict, Union
 
 from ..._compat import Literal
-
 from ._hypercube import Hypercube
 
 Axis = Literal["columns", "rows"]
@@ -131,4 +130,10 @@ def read_hypercubes(
     if axis == "rows":
         data = data.T
 
-    return {name: Hypercube(data[name].to_dict()) for name in data.columns}
+    hypercubes = {}
+
+    for name in data.columns:
+        mapping = {str(gene): value for gene, value in data[name].to_dict().items()}
+        hypercubes[str(name)] = Hypercube(mapping)
+
+    return hypercubes

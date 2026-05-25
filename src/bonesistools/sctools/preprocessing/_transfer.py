@@ -128,9 +128,11 @@ def transfer_obs_sti(
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
-    Transfer observations from specific to integrated dataset, i.e. transfer columns
-    from multiple AnnData 'adatas' towards a unique AnnData 'adata'.
-    This function handles issues whenever there are identical indices between AnnData objects.
+    Transfer observation columns from specific AnnData objects to an
+    integrated AnnData object.
+
+    This function handles cases where identical observation indices are shared
+    by several AnnData objects.
 
     The merge is performed on observation index and condition, allowing
     condition-specific AnnData objects to contain overlapping observation names.
@@ -203,8 +205,8 @@ def transfer_obs_its(
     copy: bool = False,
 ) -> Union[AnnDataList, None]:
     """
-    Transfer observations from integrated to specific datasets,
-    i.e. transfer columns from a unique AnnData 'adata' towards multiple AnnData 'adatas'.
+    Transfer observation columns from an integrated AnnData object to
+    specific AnnData objects.
 
     Rows are matched by observation index after splitting the integrated
     AnnData object by `condition_colname`.

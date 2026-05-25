@@ -2,10 +2,11 @@
 
 import warnings
 
-import bonesistools as bt
 import networkx as nx
 import pandas as pd
 import pytest
+
+import bonesistools as bt
 
 GENE_IDS = [
     "20375",

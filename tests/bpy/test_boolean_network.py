@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import pytest
-
 from boolean import BooleanAlgebra
 
 import bonesistools as bt
@@ -70,7 +69,7 @@ def test_boolean_network_rejects_invalid_rule_type():
         bt.bpy.bn.BooleanNetwork({"A": object()})
 
 
-def test_boolean_network_validity():
+def test_boolean_network_rejects_undefined_symbols():
     with pytest.raises(ValueError):
         bt.bpy.bn.BooleanNetwork({"A": "B"})
 
@@ -203,7 +202,7 @@ def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
     assert copied.undefined_symbols == {"B"}
 
 
-def test_is_boolean_network_like_accepts_mapping_rules_and_rejects_invalid_objects():
+def test_is_boolean_network_like_validates_mapping_rules():
     assert bt.bpy.bn.typing.is_boolean_network_like({"A": "B", "B": 1})
     assert bt.bpy.bn.typing.is_boolean_network_like(bt.bpy.bn.BooleanNetwork({"A": 1}))
 

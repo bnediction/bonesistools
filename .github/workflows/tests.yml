@@ -1,17 +1,67 @@
-name: tests
+name: ci
 
 on:
   push:
   pull_request:
 
 jobs:
-  import-test:
+  ruff:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check .
+
+  pyright:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install package and pyright
+        run: |
+          pip install -e ".[all]"
+          pip install ipython pyright
+
+      - name: Run pyright
+        run: pyright -p pyrightconfig.ci.json
+
+  pytest:
     runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9"]
+        include:
+          - python-version: "3.7"
+            test-mode: import
+          - python-version: "3.8"
+            test-mode: import
+          - python-version: "3.9"
+            test-mode: import
+          - python-version: "3.10"
+            test-mode: pytest
+          - python-version: "3.11"
+            test-mode: pytest
+          - python-version: "3.12"
+            test-mode: pytest
+          - python-version: "3.13"
+            test-mode: coverage
 
     steps:
       - uses: actions/checkout@v6
@@ -22,40 +72,24 @@ jobs:
           cache: "pip"
 
       - name: Install package
+        if: matrix.test-mode == 'import'
         run: pip install -e .
 
-      - name: Check package import
-        run: python -c "import bonesistools"
-
-  full-test:
-    runs-on: ubuntu-22.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-  
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "pip"
-
       - name: Install package with all extras
+        if: matrix.test-mode != 'import'
         run: pip install -e ".[all]"
 
       - name: Install test dependencies
+        if: matrix.test-mode != 'import'
         run: pip install pytest pytest-cov
 
       - name: Check package import
         run: python -c "import bonesistools"
 
       - name: Run tests with coverage
-        if: matrix.python-version == '3.13'
+        if: matrix.test-mode == 'coverage'
         run: pytest --cov=bonesistools --cov-report=xml --cov-report=term-missing
 
       - name: Run tests
-        if: matrix.python-version != '3.13'
+        if: matrix.test-mode == 'pytest'
         run: pytest

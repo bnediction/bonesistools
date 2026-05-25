@@ -7,13 +7,13 @@ from typing import (
     Optional,
     cast,
 )
-from .._typing import anndata_checker, Keys
-
-from anndata import AnnData
-from pandas import DataFrame
 
 import numpy as np
+from anndata import AnnData
+from pandas import DataFrame
 from scipy.sparse import issparse
+
+from .._typing import Keys, anndata_checker
 
 
 @anndata_checker
@@ -51,6 +51,8 @@ def anndata_to_dataframe(
     if issparse(matrix):
         matrix = cast(Any, matrix).toarray()
 
+    matrix = cast(np.ndarray, matrix)
+
     adata_obs = cast(DataFrame, adata.obs)
     adata_var = cast(DataFrame, adata.var)
 
@@ -62,6 +64,7 @@ def anndata_to_dataframe(
         else:
             matrix = np.expm1(counts_df)
 
+        matrix = cast(np.ndarray, matrix)
         counts_df = DataFrame(matrix, index=adata_obs.index, columns=adata_var.index)
 
     if obs is not None:

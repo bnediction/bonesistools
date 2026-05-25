@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 import pytest
+from matplotlib.axes import Axes
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +8,42 @@ from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.tools import _utils
+
+
+def _toy_logfoldchange_adata():
+    return ad.AnnData(
+        X=np.array(
+            [
+                [4.0, 2.0, 1.0],
+                [4.0, 2.0, 1.0],
+                [1.0, 4.0, 1.0],
+                [1.0, 4.0, 1.0],
+            ]
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A", "A", "B", "B"])},
+            index=["c1", "c2", "c3", "c4"],
+        ),
+        var=pd.DataFrame(index=["g1", "g2", "g3"]),
+    )
+
+
+def _toy_smirnov_adata():
+    return ad.AnnData(
+        X=np.array(
+            [
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+            ]
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A", "A", "B", "B"])},
+            index=["c1", "c2", "c3", "c4"],
+        ),
+        var=pd.DataFrame(index=["separated", "identical"]),
+    )
 
 
 def test_choose_mtx_representation_selects_x_layer_and_raw(mini_adata):
@@ -196,7 +233,10 @@ def test_anndata_to_dataframe_handles_sparse_x_sparse_layer_and_obs_string(mini_
     assert layer_df["cluster"].tolist() == ["A", "A", "B", "B"]
 
 
-def test_pairwise_distances_returns_or_stores_matrix(mini_adata):
+def test_pairwise_distances_returns_or_stores_matrix(
+    mini_adata,
+    expected_mini_pca2_distances,
+):
     distances = bt.sct.tl.pairwise_distances(
         mini_adata,
         use_rep="X_pca",
@@ -204,7 +244,7 @@ def test_pairwise_distances_returns_or_stores_matrix(mini_adata):
     )
 
     assert distances.shape == (4, 4)
-    assert np.allclose(np.diag(distances), 0.0)
+    assert np.allclose(distances, expected_mini_pca2_distances)
 
     result = bt.sct.tl.pairwise_distances(
         mini_adata,
@@ -216,12 +256,15 @@ def test_pairwise_distances_returns_or_stores_matrix(mini_adata):
     assert mini_adata.uns["custom_distances"]["use_rep"] == "X_pca"
 
 
-def test_barycenters_returns_cluster_means(mini_adata):
+def test_barycenters_returns_cluster_means(
+    mini_adata,
+    expected_mini_cluster_barycenters,
+):
     barycenters = bt.sct.tl.barycenters(mini_adata, obs="cluster", use_rep="X_pca")
 
     assert sorted(barycenters) == ["A", "B"]
-    assert np.allclose(barycenters["A"], np.array([0.1, 0.05, 1.05]))
-    assert np.allclose(barycenters["B"], np.array([2.1, 2.05, 0.05]))
+    assert np.allclose(barycenters["A"], expected_mini_cluster_barycenters["A"])
+    assert np.allclose(barycenters["B"], expected_mini_cluster_barycenters["B"])
 
 
 def test_barycenters_requires_categorical_obs(mini_adata):
@@ -231,32 +274,45 @@ def test_barycenters_requires_categorical_obs(mini_adata):
         bt.sct.tl.barycenters(mini_adata, obs="plain")
 
 
-def test_calculate_logfoldchanges_returns_non_empty_dataframe(mini_adata):
+def test_calculate_logfoldchanges_recovers_expected_deseq2_style_contrasts():
+    adata = _toy_logfoldchange_adata()
+
     result = bt.sct.tl.calculate_logfoldchanges(
-        mini_adata,
+        adata,
         groupby="cluster",
     )
+    observed = result.set_index(["group", "names"])["logfoldchanges"].to_dict()
 
-    assert set(result.columns) == {
-        "group",
-        "names",
-        "logfoldchanges",
-    }
+    # Simple two-group DESeq2-style contrast with size factors equal to 1:
+    # log2(mean normalized counts in group / mean normalized counts in reference).
+    assert observed == pytest.approx(
+        {
+            ("A", "g1"): 2.0,
+            ("A", "g2"): -1.0,
+            ("A", "g3"): 0.0,
+            ("B", "g1"): -2.0,
+            ("B", "g2"): 1.0,
+            ("B", "g3"): 0.0,
+        }
+    )
 
-    assert not result.empty
-    assert set(result["group"]).issubset({"A", "B"})
-    assert np.isfinite(result["logfoldchanges"]).all()
 
+def test_calculate_logfoldchanges_filtering_keeps_expected_positive_ratios():
+    adata = _toy_logfoldchange_adata()
 
-def test_calculate_logfoldchanges_filtering(mini_adata):
     filtered = bt.sct.tl.calculate_logfoldchanges(
-        mini_adata,
+        adata,
         groupby="cluster",
         filter_logfoldchanges=lambda values: values > 0,
     )
+    observed = filtered.set_index(["group", "names"])["logfoldchanges"].to_dict()
 
-    assert not filtered.empty
-    assert (filtered["logfoldchanges"] > 0).all()
+    assert observed == pytest.approx(
+        {
+            ("A", "g1"): 2.0,
+            ("B", "g2"): 1.0,
+        }
+    )
 
 
 def test_calculate_logfoldchanges_rejects_invalid_filter(mini_adata):
@@ -271,29 +327,43 @@ def test_calculate_logfoldchanges_rejects_invalid_filter(mini_adata):
         )
 
 
-def test_hypergeometric_test_returns_probability(mini_adata):
-    pvalue = bt.sct.tl.hypergeometric_test(
-        mini_adata,
-        signature=["g1", "g2"],
-        markers=["g1", "g3"],
+def test_hypergeometric_test_returns_expected_probability():
+    adata = ad.AnnData(
+        X=np.ones((1, 10)),
+        var=pd.DataFrame(index=[f"g{i}" for i in range(1, 11)]),
     )
 
-    assert 0.0 <= pvalue <= 1.0
+    pvalue = bt.sct.tl.hypergeometric_test(
+        adata,
+        signature=["g1", "g2", "g3", "g4"],
+        markers=["g1", "g2", "g5"],
+    )
+
+    # P(X >= 2) for X ~ Hypergeometric(M=10, n=4, N=3):
+    # (C(4, 2) C(6, 1) + C(4, 3) C(6, 0)) / C(10, 3) = 1/3.
+    assert pvalue == pytest.approx(1 / 3)
 
 
-def test_smirnov_tests_stores_results(mini_adata):
+def test_smirnov_tests_recovers_expected_ks_statistics():
+    adata = _toy_smirnov_adata()
+
     bt.sct.tl.smirnov_tests(
-        mini_adata,
+        adata,
         groupby="cluster",
         groups=["A"],
+        reference="B",
+        corr_method="bonferroni",
         key_added="ks",
     )
 
-    result = mini_adata.uns["ks"]["results"]
+    result = adata.uns["ks"]["results"].set_index("names")
     assert result["group"].unique().tolist() == ["A"]
-    assert {"statistics", "locations", "signs", "pvals", "pvals_adj"}.issubset(
-        result.columns
-    )
+    assert result.loc["separated", "statistics"] == pytest.approx(1.0)
+    assert result.loc["separated", "pvals"] == pytest.approx(1 / 3)
+    assert result.loc["separated", "pvals_adj"] == pytest.approx(2 / 3)
+    assert result.loc["identical", "statistics"] == pytest.approx(0.0)
+    assert result.loc["identical", "pvals"] == pytest.approx(1.0)
+    assert result.loc["identical", "pvals_adj"] == pytest.approx(1.0)
 
 
 def test_smirnov_tests_copy_returns_dataframe(mini_adata):

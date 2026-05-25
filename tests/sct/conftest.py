@@ -71,6 +71,38 @@ def mini_adata():
 
 
 @pytest.fixture
+def expected_mini_cluster_barycenters():
+    return {
+        "A": np.array([0.1, 0.05, 1.05]),
+        "B": np.array([2.1, 2.05, 0.05]),
+    }
+
+
+@pytest.fixture
+def expected_mini_pca2_distances():
+    return np.array(
+        [
+            [0.0, np.sqrt(0.05), np.sqrt(8.0), np.sqrt(9.25)],
+            [np.sqrt(0.05), 0.0, np.sqrt(6.85), np.sqrt(8.0)],
+            [np.sqrt(8.0), np.sqrt(6.85), 0.0, np.sqrt(0.05)],
+            [np.sqrt(9.25), np.sqrt(8.0), np.sqrt(0.05), 0.0],
+        ]
+    )
+
+
+@pytest.fixture
+def expected_mini_snn_connectivities():
+    return np.array(
+        [
+            [0.0, 0.0, 0.0, 2.0],
+            [0.0, 0.0, 2.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0, 0.0],
+        ]
+    )
+
+
+@pytest.fixture
 def fake_gene_synonyms_cls():
     class FakeGeneSynonyms:
         gene_aliases_mapping = {
@@ -110,7 +142,9 @@ def fake_gene_synonyms_cls():
             elif output_identifier_type == "gene_id":
                 convert = self.get_gene_id
             else:
-                convert = lambda gene, **__: gene
+
+                def convert(gene, **__):
+                    return gene
 
             if axis in [0, "index"]:
                 data.index = [convert(gene) for gene in data.index]

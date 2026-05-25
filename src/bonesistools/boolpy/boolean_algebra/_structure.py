@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Mapping, Tuple, Union
-
-from ..._compat import Literal
-
 from itertools import product
+from typing import Any, Callable, Iterable, Mapping, Tuple, Union
 
 from boolean import (
     BooleanAlgebra,
     Expression,
 )
-from boolean.boolean import _TRUE, _FALSE
+from boolean.boolean import _FALSE, _TRUE
+
+from ..._compat import Literal
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
 

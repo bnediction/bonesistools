@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Any, Optional, cast
+
 from anndata import AnnData
 from numpy import ndarray
 

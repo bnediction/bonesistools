@@ -3,7 +3,6 @@
 from collections import Counter
 
 import pytest
-
 from boolean import BooleanAlgebra
 
 import bonesistools as bt
@@ -95,7 +94,7 @@ def test_boolean_predecessor_inference_pairwise_no_conclusion(
     )
 
 
-def test_boolean_predecessor_inference_scores_cell_order_from_single_influence():
+def test_predecessor_inference_scores_single_influence():
     inference = bt.bpy.ba.BooleanPredecessorInference
 
     cell1 = {"A": 1, "B": 0}
@@ -175,7 +174,7 @@ def test_boolean_predecessor_inference_counts_inconclusive_interactions():
     assert inference.predecessor_score(cell1, cell2, interactions) == 1.0
 
 
-def test_boolean_predecessor_inference_returns_no_predecessor_for_tied_votes():
+def test_predecessor_inference_returns_none_for_tied_votes():
     inference = bt.bpy.ba.BooleanPredecessorInference
 
     cell1 = {"A": 1, "B": 0, "C": 1, "D": 1}
@@ -196,7 +195,7 @@ def test_boolean_predecessor_inference_returns_no_predecessor_for_tied_votes():
     assert inference.predecessor_score(cell1, cell2, interactions) == 0.0
 
 
-def test_boolean_predecessor_inference_scores_zero_without_conclusive_votes():
+def test_predecessor_score_is_zero_without_conclusive_votes():
     inference = bt.bpy.ba.BooleanPredecessorInference
 
     cell1 = {"A": "*", "B": 0}

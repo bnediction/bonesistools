@@ -2,48 +2,44 @@
 
 from __future__ import annotations
 
+import math
+import warnings
+from importlib import import_module
+from importlib import util as importlib_util
+from itertools import combinations
 from typing import (
+    TYPE_CHECKING,
     Any,
-    cast,
     Dict,
+    Hashable,
     Iterable,
     Optional,
     Sequence,
     Set,
-    TYPE_CHECKING,
     Type,
     Union,
+    cast,
 )
-from importlib import import_module
-from importlib import util as importlib_util
-
-from ..._compat import Literal, get_args
-from .._typing import (
-    AnnData,
-    ScData,
-    Metric,
-    Shortest_Path_Method,
-    anndata_or_mudata_checker,
-)
-from .._dependencies import require_sklearn
-
-import warnings
-
-import math
-from itertools import combinations
-
-import numpy as np
-import pandas as pd
 
 import networkx as nx
-from networkx import Graph, DiGraph
-
+import numpy as np
+import pandas as pd
+from networkx import DiGraph, Graph
 from scipy.sparse import (
     csr_matrix,
     diags,
     issparse,
 )
 
+from ..._compat import Literal, get_args
+from .._dependencies import require_sklearn
+from .._typing import (
+    AnnData,
+    Metric,
+    ScData,
+    Shortest_Path_Method,
+    anndata_or_mudata_checker,
+)
 from ._maths import barycenters
 from ._utils import choose_representation
 
@@ -360,13 +356,11 @@ class Knnbs:
                 n_jobs=n_jobs,
             ).reshape(1, -1)
             _kneighbors_graph.add_node(key)
-            knn_indices = list(
-                np.argpartition(distances, kth=self.n_neighbors, axis=1)[
-                    :, : self.n_neighbors
-                ].reshape(-1)
-            )
+            knn_indices = np.argpartition(distances, kth=self.n_neighbors, axis=1)[
+                :, : self.n_neighbors
+            ].reshape(-1)
             distances = list(distances[0, knn_indices].reshape(-1))
-            for obs_name, distance in zip(adata.obs.index[knn_indices], distances):
+            for obs_name, distance in zip(adata.obs.index.take(knn_indices), distances):
                 _kneighbors_graph.add_edge(key, obs_name, distance=distance)
 
         if nx.number_connected_components(_kneighbors_graph) > 1:
@@ -624,7 +618,9 @@ class Knnbs:
         _central_scores.name = "dist"
         for idx, obs in self.obs.items():
             if not bool(pd.isna(obs)):
-                _central_scores.at[idx] = self.shortest_path_lengths_df.loc[idx, obs]
+                row = cast(Hashable, idx)
+                column = cast(Hashable, obs)
+                _central_scores.at[row] = self.shortest_path_lengths_df.at[row, column]
 
         _central_scores = _central_scores.to_frame().merge(
             right=self.obs.to_frame(), left_index=True, right_index=True
@@ -637,9 +633,9 @@ class Knnbs:
             if len(_central_scores_cluster) < subcluster_size:
                 _obs = _central_scores_cluster.index
             else:
-                _idx = np.argpartition(
-                    _central_scores_cluster, kth=subcluster_size
-                )[:subcluster_size]
+                _idx = np.argpartition(_central_scores_cluster, kth=subcluster_size)[
+                    :subcluster_size
+                ]
                 _obs = _central_scores_cluster.iloc[_idx].index
             subclusters_series.loc[_obs] = cluster
 
@@ -675,7 +671,7 @@ class Knnbs:
         central_clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
         """
-        Find cluster related-cell manifolds using k-nearest neighbors-based subclusters algorithm.
+        Find cluster-related cell manifolds with the KNNBS algorithm.
 
         Parameters
         ----------
@@ -849,7 +845,8 @@ def shared_neighbors(
     prune_snn: float | int (default: 1/15)
         If zero, no pruning is performed. If strictly positive, remove edges
         whose number of shared neighbors is less than or equal to the threshold.
-        Value can be relative (float between 0 and 1) or absolute (integer between 1 and k).
+        Value can be relative (float between 0 and 1) or absolute
+        (integer between 1 and k).
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     normalize_connectivities: bool (default: True)

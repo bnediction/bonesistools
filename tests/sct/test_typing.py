@@ -143,7 +143,7 @@ def test_mudata_checker_matches_optional_dependency_state():
         identity(object())
 
 
-def test_anndata_or_mudata_checker_falls_back_to_anndata_when_mudata_is_missing(
+def test_mudata_checker_falls_back_when_missing(
     monkeypatch,
 ):
     typing_module = _load_typing_module(

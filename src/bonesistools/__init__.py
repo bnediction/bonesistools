@@ -26,9 +26,9 @@ import warnings as _warnings
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from . import sctools as sct
 from . import boolpy as bpy
 from . import databases as dbs
+from . import sctools as sct
 
 if TYPE_CHECKING:
     from . import grntools as grn

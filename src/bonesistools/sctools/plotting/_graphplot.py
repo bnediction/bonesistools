@@ -12,18 +12,14 @@ from typing import (
     cast,
 )
 
-from anndata import AnnData
-from ._typing import RGB
-from .._typing import anndata_checker
-
 import matplotlib.pyplot as plt
+import networkx as nx
+from anndata import AnnData
 from matplotlib.axes._axes import Axes
 
-from ._colors import black
-
-import networkx as nx
-
+from .._typing import anndata_checker
 from ..tools import get_paga_graph
+from ._colors import black
 
 
 @anndata_checker
@@ -101,7 +97,7 @@ def draw_paga(
         and len(node_color) in [3, 4]
         and all(isinstance(channel, Number) for channel in node_color)
     ):
-            node_color = [node_color for _ in paga]
+        node_color = [node_color for _ in paga]
 
     nx.draw_networkx(
         paga,

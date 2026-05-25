@@ -13,20 +13,20 @@ from typing import List
 from ._algebra import BooleanPredecessorInference, PartialBooleanDifferential
 from ._boolean import PartialBoolean
 from ._hypercube import Hypercube, HypercubeCollection
-from ._structure import expressions_equivalent, dnf_to_structure
-from ._representation import rule_to_string
 from ._parser import read_hypercube, read_hypercubes
+from ._representation import rule_to_string
+from ._structure import dnf_to_structure, expressions_equivalent
 from ._typing import (
     BooleanRule,
     ConfigurationLike,
-    PartialBooleanLike,
     HypercubeLike,
+    PartialBooleanLike,
     is_boolean_expression_available,
     is_boolean_expression_like,
     is_boolean_rule_like,
     is_configuration_like,
-    is_partial_boolean_like,
     is_hypercube_like,
+    is_partial_boolean_like,
 )
 
 __all__ = [

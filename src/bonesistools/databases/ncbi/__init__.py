@@ -11,9 +11,9 @@ across heterogeneous biological resources.
 from typing import List
 
 from ._genesyn import (
+    GeneSynonyms,
     InputIdentifierType,
     OutputIdentifierType,
-    GeneSynonyms,
     support_legacy_gene_synonyms_args,
 )
 

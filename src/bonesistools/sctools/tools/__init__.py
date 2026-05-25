@@ -10,18 +10,22 @@ feature classification utilities.
 
 from typing import List
 
-from ._utils import choose_mtx_representation, choose_representation
-
+from ._classification import mitochondrial_genes, ribosomal_genes
+from ._conversion import anndata_to_dataframe
+from ._graph import get_paga_graph
+from ._markers import (
+    calculate_logfoldchanges,
+    hypergeometric_test,
+    smirnov_tests,
+)
+from ._maths import barycenters, pairwise_distances
 from ._neighbors import (
     Knnbs,
     kneighbors_graph,
     shared_neighbors,
 )
-from ._conversion import anndata_to_dataframe
-from ._graph import get_paga_graph
-from ._maths import pairwise_distances, barycenters
 from ._regress import regress_out
-
+from ._utils import choose_mtx_representation, choose_representation
 from ._write import (
     to_csv,
     to_csv_or_mtx,
@@ -29,14 +33,6 @@ from ._write import (
     to_mtx,
     to_npz,
 )
-
-from ._markers import (
-    calculate_logfoldchanges,
-    hypergeometric_test,
-    smirnov_tests,
-)
-
-from ._classification import mitochondrial_genes, ribosomal_genes
 
 __all__ = [
     "choose_mtx_representation",

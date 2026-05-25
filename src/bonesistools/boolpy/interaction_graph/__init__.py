@@ -9,9 +9,9 @@ utilities for interaction networks.
 
 from typing import List
 
-from ._parser import read_interaction_graph
 from ._algorithms import walks_from
 from ._influence_graph import InfluenceGraph
+from ._parser import read_interaction_graph
 from ._scoring import (
     InteractionScore,
     infer_signed_interactions,

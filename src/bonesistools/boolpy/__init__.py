@@ -56,7 +56,8 @@ def __getattr__(name: str) -> object:
     if name in _DEPRECATED:
         module_alias, attr = _DEPRECATED[name]
         _warnings.warn(
-            f"`bt.bpy.{name}` is deprecated; use `bt.bpy.{module_alias}.{attr}` instead.",
+            f"`bt.bpy.{name}` is deprecated; use "
+            f"`bt.bpy.{module_alias}.{attr}` instead.",
             DeprecationWarning,
             stacklevel=2,
         )

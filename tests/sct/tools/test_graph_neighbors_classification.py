@@ -20,7 +20,17 @@ def test_kneighbors_graph_can_use_observation_names(mini_adata):
 
     assert set(graph.nodes) == set(mini_adata.obs_names)
     assert graph.number_of_edges() == mini_adata.n_obs
-    assert all("distance" in data for _, _, data in graph.edges(data=True))
+    assert {
+        (source, target): data["distance"]
+        for source, target, data in graph.edges(data=True)
+    } == pytest.approx(
+        {
+            ("c1", "c2"): np.sqrt(0.06),
+            ("c2", "c1"): np.sqrt(0.06),
+            ("c3", "c4"): np.sqrt(0.06),
+            ("c4", "c3"): np.sqrt(0.06),
+        }
+    )
 
 
 def test_kneighbors_graph_rejects_invalid_node_label_mode(mini_adata):
@@ -33,7 +43,11 @@ def test_kneighbors_graph_rejects_invalid_node_label_mode(mini_adata):
         )
 
 
-def test_shared_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
+def test_shared_neighbors_stores_distances_connectivities_and_metadata(
+    mini_adata,
+    expected_mini_pca2_distances,
+    expected_mini_snn_connectivities,
+):
     result = bt.sct.tl.shared_neighbors(
         mini_adata,
         prune_snn=0,
@@ -44,8 +58,21 @@ def test_shared_neighbors_stores_distances_connectivities_and_metadata(mini_adat
     assert "snn" not in mini_adata.uns
     assert result.uns["snn"]["distances_key"] == "snn_distances"
     assert result.uns["snn"]["connectivities_key"] == "snn_connectivities"
-    assert result.obsp["snn_distances"].shape == (4, 4)
-    assert result.obsp["snn_connectivities"].shape == (4, 4)
+
+    expected_distances = np.zeros_like(expected_mini_pca2_distances)
+    expected_distances[0, 3] = expected_mini_pca2_distances[0, 3]
+    expected_distances[1, 2] = expected_mini_pca2_distances[1, 2]
+    expected_distances[2, 1] = expected_mini_pca2_distances[2, 1]
+    expected_distances[3, 0] = expected_mini_pca2_distances[3, 0]
+
+    assert np.allclose(
+        result.obsp["snn_distances"].toarray(),
+        expected_distances,
+    )
+    assert np.allclose(
+        result.obsp["snn_connectivities"].toarray(),
+        expected_mini_snn_connectivities / 3,
+    )
 
 
 def test_shared_neighbors_validates_source_graph_and_pruning(mini_adata):
@@ -56,7 +83,10 @@ def test_shared_neighbors_validates_source_graph_and_pruning(mini_adata):
         bt.sct.tl.shared_neighbors(mini_adata, prune_snn=-1)
 
 
-def test_get_paga_graph_builds_directed_cluster_graph(mini_adata):
+def test_get_paga_graph_builds_directed_cluster_graph(
+    mini_adata,
+    expected_mini_cluster_barycenters,
+):
     mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
 
     graph = bt.sct.tl.get_paga_graph(
@@ -69,7 +99,8 @@ def test_get_paga_graph_builds_directed_cluster_graph(mini_adata):
 
     assert set(graph.nodes) == {"A", "B"}
     assert list(graph.edges) == [("B", "A")]
-    assert np.allclose(graph.nodes["A"]["pos"], np.array([0.1, 0.05, 1.05]))
+    assert np.allclose(graph.nodes["A"]["pos"], expected_mini_cluster_barycenters["A"])
+    assert np.allclose(graph.nodes["B"]["pos"], expected_mini_cluster_barycenters["B"])
 
 
 def test_get_paga_graph_validates_threshold(mini_adata):

@@ -38,7 +38,7 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
         bt.sct.pp.convert_gene_identifiers(adata, axis="bad")
 
 
-def test_var_names_merge_duplicates_sums_sparse_counts_and_selects_var_rows():
+def test_var_names_merge_duplicates_sums_counts_and_var_rows():
     with pytest.warns(UserWarning, match="Variable names are not unique"):
         adata = ad.AnnData(
             X=csr_matrix(

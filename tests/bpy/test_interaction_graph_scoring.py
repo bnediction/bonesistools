@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import pytest
 import networkx as nx
+import pytest
 
 import bonesistools as bt
 from bonesistools.boolpy.interaction_graph import _scoring
@@ -95,7 +95,7 @@ def test_interaction_scores_from_walks_ignores_self_scores():
     assert scores["A"]["B"].path_number == 2
 
 
-def test_interaction_scores_from_walks_handles_digraphs_and_missing_sources():
+def test_scores_from_walks_handles_digraphs_and_missing_sources():
     graph = nx.DiGraph()
     graph.add_edge("A", "B", sign=1)
     graph.add_edge("B", "C", sign=1)

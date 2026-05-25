@@ -2,10 +2,10 @@
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 import numpy as np
 import pytest
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _boxplot

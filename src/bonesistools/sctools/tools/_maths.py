@@ -9,19 +9,18 @@ from typing import (
     Union,
     cast,
 )
-from anndata import AnnData
+
+import numpy as np
+
+from .._dependencies import require_sklearn
 from .._typing import (
-    ScData,
     Metric,
     Metric_Function,
+    ScData,
     anndata_checker,
     anndata_or_mudata_checker,
 )
-from .._dependencies import require_sklearn
-
 from ._utils import choose_representation
-
-import numpy as np
 
 
 @require_sklearn

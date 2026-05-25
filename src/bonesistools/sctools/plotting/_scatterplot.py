@@ -16,25 +16,20 @@ from typing import (
     cast,
 )
 
-from ._typing import RGB
-from .._typing import ScData, anndata_or_mudata_checker
-
-import pandas as pd
-import numpy as np
-
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+import networkx as nx
+import numpy as np
+import pandas as pd
 from matplotlib.axes._axes import Axes
+from matplotlib.colors import Colormap, ListedColormap
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FormatStrFormatter
-from matplotlib.colors import Colormap, ListedColormap
-from mpl_toolkits.mplot3d import Axes3D, art3d
+from mpl_toolkits.mplot3d import art3d
 
-Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
-
+from .._typing import ScData, anndata_or_mudata_checker
+from ..tools import barycenters
 from ..tools._utils import choose_representation
-
 from ._colors import (
     QUALITATIVE_COLORS,
     black,
@@ -42,9 +37,8 @@ from ._colors import (
     gray,
     lightgray,
 )
-from ..tools import barycenters
 
-import networkx as nx
+Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 
 
 def __figure_from_axes(ax: Axes) -> Figure:
@@ -204,9 +198,7 @@ def __scatterplot_discrete(
                 X[idx, 1],
                 s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
                 facecolors=(
-                    kwargs["nan"]["facecolor"]
-                    if "facecolor" in kwargs["nan"]
-                    else gray
+                    kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else gray
                 ),
                 edgecolors=(
                     kwargs["nan"]["edgecolor"]
@@ -325,9 +317,9 @@ def __scatterplot_continuous(
     cmap = colors if colors is not None else plt.get_cmap("autumn_r")
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
-    if "facecolor" in kwargs["nan"] and not "color" in kwargs["nan"]:
+    if "facecolor" in kwargs["nan"] and "color" not in kwargs["nan"]:
         kwargs["nan"]["color"] = kwargs["nan"]["facecolor"]
-    if not np.all(cmap.get_bad() != 0) and not "facecolor" in kwargs["nan"]:
+    if not np.all(cmap.get_bad() != 0) and "facecolor" not in kwargs["nan"]:
         kwargs["nan"]["color"] = cmap.get_bad()
 
     X = cast(
@@ -658,8 +650,7 @@ def embedding_plot(
         )
     else:
         raise TypeError(
-            f"unsupported dtype for observation {obs!r}: "
-            f"{scdata.obs[obs].dtype!r}"
+            f"unsupported dtype for observation {obs!r}: " f"{scdata.obs[obs].dtype!r}"
         )
 
     if add_labels:

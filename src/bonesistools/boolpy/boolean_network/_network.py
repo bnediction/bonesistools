@@ -24,16 +24,14 @@ from typing import (
 )
 
 import networkx as nx
-
 from boolean.boolean import (
-    BooleanAlgebra,
-    Expression,
     _FALSE,
     _TRUE,
+    BooleanAlgebra,
+    Expression,
 )
 
 from ..._compat import Literal
-from ._typing import BooleanNetworkLike, is_boolean_network_like
 from .._graphviz import _networkx_to_graphviz
 from ..boolean_algebra import (
     BooleanRule,
@@ -50,6 +48,7 @@ from ..plotting import (
     ratio_edge_style,
     stability_node_style,
 )
+from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -824,7 +823,12 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Examples
         --------
-        >>> bn1 = BooleanNetwork({"A": "(B & C) | (~B & D) | (C & D)", "B": 0, "C": 1, "D": 0})
+        >>> bn1 = BooleanNetwork({
+        ...     "A": "(B & C) | (~B & D) | (C & D)",
+        ...     "B": 0,
+        ...     "C": 1,
+        ...     "D": 0,
+        ... })
         >>> bn2 = BooleanNetwork({"A": "(B & C) | (~B & D)", "B": 0, "C": 1, "D": 0})
         >>> bn1.equivalent(bn2, method="simplify")
         False
@@ -1314,12 +1318,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         return len(self._networks)
 
     @overload
-    def __getitem__(self, index: int) -> BooleanNetwork:
-        ...
+    def __getitem__(self, index: int) -> BooleanNetwork: ...
 
     @overload
-    def __getitem__(self, index: slice) -> List[BooleanNetwork]:
-        ...
+    def __getitem__(self, index: slice) -> List[BooleanNetwork]: ...
 
     def __getitem__(
         self,
@@ -1348,16 +1350,14 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         return self._networks[index]
 
     @overload
-    def __setitem__(self, index: int, value: BooleanNetworkLike) -> None:
-        ...
+    def __setitem__(self, index: int, value: BooleanNetworkLike) -> None: ...
 
     @overload
     def __setitem__(
         self,
         index: slice,
         value: Iterable[BooleanNetworkLike],
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def __setitem__(
         self,

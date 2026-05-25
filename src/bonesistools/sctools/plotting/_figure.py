@@ -5,7 +5,6 @@ from typing import Optional
 import cycler
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import ListedColormap
 from matplotlib.ticker import FormatStrFormatter
@@ -88,7 +87,6 @@ def set_default_params(tex: bool = True):
             "showcaps": True,
             "showbox": True,
             "showfliers": True,
-            "flierprops.markerfacecolor": None,
             "flierprops.markerfacecolor": black,
             "flierprops.linewidth": 2.0,
             "whiskerprops.color": black,

@@ -17,8 +17,7 @@ def require_dependency(
     module: str,
     package: str,
     extra: str,
-) -> Callable[P, R]:
-    ...
+) -> Callable[P, R]: ...
 
 
 @overload
@@ -28,8 +27,7 @@ def require_dependency(
     module: str,
     package: str,
     extra: str,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def require_dependency(
@@ -81,15 +79,13 @@ def require_dependency(
 
 
 @overload
-def require_sklearn(function: Callable[P, R]) -> Callable[P, R]:
-    ...
+def require_sklearn(function: Callable[P, R]) -> Callable[P, R]: ...
 
 
 @overload
 def require_sklearn(
     function: None = None,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def require_sklearn(

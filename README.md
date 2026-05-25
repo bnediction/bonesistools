@@ -162,7 +162,5 @@ https://github.com/bnediction/bonesistools/issues
 This package is distributed under the [CeCILL v2.1](http://www.cecill.info/index.en.html) free software license (GNU GPL compatible).
 
 This package also includes third-party data resources derived from the
-NCBI Gene database (`gene_info`).
-
-NCBI places no restrictions on the use or redistribution of these data:
-https://www.ncbi.nlm.nih.gov/home/about/policies/
+NCBI Gene database (`gene_info`). NCBI places no restrictions on the
+use or redistribution of these data: https://www.ncbi.nlm.nih.gov/home/about/policies/

@@ -55,7 +55,7 @@ def _integrated_and_specific_adatas():
     return integrated, [ctrl, stim]
 
 
-def test_transfer_obs_sti_transfers_multiple_columns_with_colliding_cell_ids():
+def test_transfer_obs_sti_handles_colliding_cell_ids():
     integrated, adatas = _integrated_and_specific_adatas()
 
     result = bt.sct.pp.transfer_obs_sti(
@@ -76,7 +76,7 @@ def test_transfer_obs_sti_transfers_multiple_columns_with_colliding_cell_ids():
     ]
 
 
-def test_transfer_obs_sti_copy_returns_new_integrated_object_without_mutating_input():
+def test_transfer_obs_sti_copy_does_not_mutate_input():
     integrated, adatas = _integrated_and_specific_adatas()
 
     copied = bt.sct.pp.transfer_obs_sti(
@@ -136,7 +136,7 @@ def test_transfer_obs_sti_supports_custom_condition_column():
     assert integrated.obs["local_score"].tolist() == [1.0, 2.0, 10.0, 30.0]
 
 
-def test_transfer_obs_its_transfers_multiple_columns_to_matching_conditions():
+def test_transfer_obs_its_matches_conditions():
     integrated, adatas = _integrated_and_specific_adatas()
 
     result = bt.sct.pp.transfer_obs_its(
@@ -160,7 +160,7 @@ def test_transfer_obs_its_transfers_multiple_columns_to_matching_conditions():
     ]
 
 
-def test_transfer_obs_its_copy_returns_new_specific_objects_without_mutating_inputs():
+def test_transfer_obs_its_copy_does_not_mutate_inputs():
     integrated, adatas = _integrated_and_specific_adatas()
 
     copied_adatas = bt.sct.pp.transfer_obs_its(

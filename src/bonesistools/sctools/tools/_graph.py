@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from anndata import AnnData
-from .._typing import anndata_checker
-
-import numpy as np
-
 import networkx as nx
+import numpy as np
+from anndata import AnnData
+
+from .._typing import anndata_checker
 
 
 @anndata_checker

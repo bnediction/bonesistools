@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import warnings
+from pathlib import Path
 from typing import (
     Any,
     List,
@@ -12,12 +12,11 @@ from typing import (
     cast,
 )
 
-from ..._compat import Literal
-
 import networkx as nx
 import pandas as pd
 
-from ..ncbi import OutputIdentifierType, GeneSynonyms
+from ..._compat import Literal
+from ..ncbi import GeneSynonyms, OutputIdentifierType
 
 DorotheaWrapper = Literal["op", "get"]
 

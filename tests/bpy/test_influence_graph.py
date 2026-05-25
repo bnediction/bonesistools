@@ -98,7 +98,7 @@ def test_influence_graph_add_edges_from_is_transactional():
     ]
 
 
-def test_influence_graph_update_is_transactional_and_view_methods_are_disabled():
+def test_update_is_transactional_and_views_are_disabled():
     g1 = bt.bpy.ig.InfluenceGraph()
     g1.add_edge("A", "B", sign=1)
 
@@ -153,7 +153,7 @@ def test_influence_graph_update_is_transactional_and_view_methods_are_disabled()
         ig.add_weighted_edges_from([("A", "B", 1.0)])
 
 
-def test_strongly_connected_components_feedback_nodes_regulators_and_targets():
+def test_scc_feedback_regulators_and_targets():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(
         [
@@ -341,16 +341,18 @@ def test_marker_paths_from_docstring():
             ],
         },
     ]
-    normalize = lambda records: sorted(
-        (
-            {
-                **record,
-                "paths": sorted(record["paths"], key=lambda path: path["path"]),
-            }
-            for record in records
-        ),
-        key=lambda record: sorted(record["scc"]),
-    )
+
+    def normalize(records):
+        return sorted(
+            (
+                {
+                    **record,
+                    "paths": sorted(record["paths"], key=lambda path: path["path"]),
+                }
+                for record in records
+            ),
+            key=lambda record: sorted(record["scc"]),
+        )
 
     assert normalize(observed) == normalize(expected)
 

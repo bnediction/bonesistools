@@ -103,6 +103,15 @@ Repository = "https://github.com/bnediction/bonesistools"
 [tool.black]
 target-version = ["py37"]
 
+[tool.ruff]
+target-version = "py37"
+line-length = 88
+extend-exclude = ["ensemble"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+typing-modules = ["bonesistools._compat"]
+
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore:The NumPy module was reloaded:UserWarning",

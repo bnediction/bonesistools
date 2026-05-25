@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _colors

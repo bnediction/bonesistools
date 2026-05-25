@@ -1,4 +1,5 @@
 {
+  "typeCheckingMode": "basic",
   "include": ["src/bonesistools"],
   "exclude": [
     "**/__pycache__",
@@ -6,7 +7,6 @@
     ".pytest_cache",
     "build",
     "dist",
-    "ensemble",
     "tests"
   ],
   "extraPaths": ["src"],

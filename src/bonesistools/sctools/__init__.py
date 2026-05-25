@@ -22,11 +22,11 @@ datasets
 import sys as _sys
 from typing import List
 
+from . import _typing as typing
+from . import datasets
+from . import plotting as pl
 from . import preprocessing as pp
 from . import tools as tl
-from . import plotting as pl
-from . import datasets
-from . import _typing as typing
 
 __all__ = [
     "pp",

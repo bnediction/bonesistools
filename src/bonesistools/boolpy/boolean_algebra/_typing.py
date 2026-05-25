@@ -4,16 +4,16 @@
 Typing aliases and runtime validators for Boolean algebra objects.
 """
 
+from collections.abc import Mapping as MappingABC
 from typing import (
     Any,
     Mapping,
     Union,
 )
-from collections.abc import Mapping as MappingABC
-
-from typing_extensions import TypeGuard
 
 from boolean import Expression
+from typing_extensions import TypeGuard
+
 from ._boolean import PartialBoolean
 
 BooleanRule = Union[Expression, bool, int, str]

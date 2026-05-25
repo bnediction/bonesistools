@@ -4,42 +4,37 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
-    Union,
+    Any,
+    Callable,
+    Dict,
     Optional,
     Sequence,
-    Dict,
     Tuple,
-    Callable,
-    Any,
+    Union,
     cast,
 )
 
 if TYPE_CHECKING:
     from ...boolpy.boolean_network._typing import BooleanNetworkLike
 
-from ..._compat import Literal, get_args
-from collections.abc import Mapping as MappingInstance
-from collections.abc import Sequence as SequenceInstance
-
 import copy
 import ctypes
 import inspect
+import re
+import subprocess
+import warnings
 from collections import namedtuple
+from collections.abc import Mapping as MappingInstance
+from collections.abc import Sequence as SequenceInstance
 from functools import partial, wraps
+from pathlib import Path
 
+import networkx as nx
+from networkx import Graph
 from pandas import DataFrame
 from pandas._typing import Axis
 
-from networkx import Graph
-
-import subprocess
-import warnings
-from pathlib import Path
-
-import re
-
-import networkx as nx
-
+from ..._compat import Literal, get_args
 from ._typing import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -324,7 +319,8 @@ class GeneSynonyms:
         ----------
         gene: str
             Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
         output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
@@ -418,7 +414,9 @@ class GeneSynonyms:
             )
             aliases.append(output_alias)
 
-        sequence_constructor = cast(Callable[[Sequence[str]], Sequence[str]], type(genes))
+        sequence_constructor = cast(
+            Callable[[Sequence[str]], Sequence[str]], type(genes)
+        )
         aliases = sequence_constructor(aliases)
 
         return aliases
@@ -954,7 +952,8 @@ class GeneSynonyms:
             else:
                 if self.show_warnings:
                     warnings.warn(
-                        f"no gene_id correspondence for {input_identifier_type} '{gene}'",
+                        f"no gene_id correspondence found for {gene!r} "
+                        f"using input_identifier_type={input_identifier_type!r}",
                         stacklevel=10,
                     )
                 return None
@@ -966,7 +965,8 @@ class GeneSynonyms:
             else:
                 if self.show_warnings:
                     warnings.warn(
-                        f"no gene_id correspondence for {input_identifier_type} '{gene}'",
+                        f"no gene_id correspondence found for {gene!r} "
+                        f"using input_identifier_type={input_identifier_type!r}",
                         stacklevel=10,
                     )
                 return None
@@ -1010,7 +1010,8 @@ class GeneSynonyms:
         else:
             if self.show_warnings:
                 warnings.warn(
-                    f"no NCBI reference name correspondence for {input_identifier_type} '{gene}'",
+                    f"no NCBI reference name correspondence found for {gene!r} "
+                    f"using input_identifier_type={input_identifier_type!r}",
                     stacklevel=10,
                 )
             return None
@@ -1026,7 +1027,8 @@ class GeneSynonyms:
         ----------
         gene: str
             Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database> (default: 'name')
+        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
 
@@ -1047,7 +1049,8 @@ class GeneSynonyms:
         else:
             if self.show_warnings:
                 warnings.warn(
-                    f"no official name correspondence for {input_identifier_type} '{gene}'",
+                    f"no official name correspondence found for {gene!r} "
+                    f"using input_identifier_type={input_identifier_type!r}",
                     stacklevel=10,
                 )
             return None
@@ -1085,7 +1088,8 @@ class GeneSynonyms:
         else:
             if self.show_warnings:
                 warnings.warn(
-                    f"no Ensembl id correspondence for {input_identifier_type} '{gene}'",
+                    f"no Ensembl id correspondence found for {gene!r} "
+                    f"using input_identifier_type={input_identifier_type!r}",
                     stacklevel=10,
                 )
             return None
@@ -1134,14 +1138,16 @@ class GeneSynonyms:
             else:
                 if self.show_warnings:
                     warnings.warn(
-                        f"no {database} correspondence for {input_identifier_type} '{gene}'",
+                        f"no {database} correspondence found for {gene!r} "
+                        f"using input_identifier_type={input_identifier_type!r}",
                         stacklevel=10,
                     )
                 return None
         else:
             if self.show_warnings:
                 warnings.warn(
-                    f"no {database} correspondence for {input_identifier_type} '{gene}'",
+                    f"no {database} correspondence found for {gene!r} "
+                    f"using input_identifier_type={input_identifier_type!r}",
                     stacklevel=10,
                 )
             return None
@@ -1164,7 +1170,7 @@ class GeneSynonyms:
 
     def __parse_ncbi_gene_info(self, gi_file: Path) -> Dict[str, Any]:
         """
-        Parse NCBI gene_info file and create mappings between multiple gene identifiers.
+        Parse NCBI gene_info into mappings between gene identifiers.
 
         Parameters
         ----------
@@ -1181,12 +1187,8 @@ class GeneSynonyms:
 
         # Output columns:
         # gene_id | official_name | ncbi_name | synonyms | dbXrefs | gene_type
-        cmd = (
-            'awk -F\'\t\' \'NR>1 {print $2 "\t" $11 "\t" $3 "\t" $5 "\t" $6 "\t" $10}\' '
-            + str(gi_file)
-            + " > "
-            + str(gi_file_cut)
-        )
+        awk_script = 'NR>1 {print $2 "\t" $11 "\t" $3 "\t" $5 "\t" $6 "\t" $10}'
+        cmd = f"awk -F'\t' '{awk_script}' {gi_file} > {gi_file_cut}"
         try:
             subprocess.run(cmd, shell=True, check=True)
         except subprocess.CalledProcessError as e:

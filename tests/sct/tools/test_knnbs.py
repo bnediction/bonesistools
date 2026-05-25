@@ -2,11 +2,12 @@
 
 import warnings
 
-import bonesistools as bt
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+
+import bonesistools as bt
 
 ADATA = bt.sct.datasets.nestorowa()
 
@@ -124,7 +125,8 @@ def test_knnbs_validates_init_arguments_and_repr():
         estimator.metric_kwds = {"p": 1}
     assert estimator.metric_kwargs == {"p": 1}
 
-def test_knnbs_distance_selection_modes_and_overlap_error_with_deprecated_api():
+
+def test_knnbs_deprecated_selection_modes_and_overlap_error():
     knnbs = bt.sct.tl.Knnbs(n_neighbors=1)
     _set_manual_shortest_path_lengths(knnbs)
 
@@ -195,7 +197,10 @@ def test_knnbs_new_api_names_are_available():
     assert central_only.dropna().to_dict() == {"c3": "B"}
 
 
-def test_shared_neighbors_pruning_and_inplace_modes(mini_adata):
+def test_shared_neighbors_pruning_and_inplace_modes(
+    mini_adata,
+    expected_mini_snn_connectivities,
+):
     result = bt.sct.tl.shared_neighbors(
         mini_adata,
         prune_snn=None,
@@ -208,7 +213,10 @@ def test_shared_neighbors_pruning_and_inplace_modes(mini_adata):
     assert "raw_snn_distances" in result.obsp
     assert "raw_snn_connectivities" in result.obsp
     assert result.uns["shared_neighbors"]["params"]["metric"] == "euclidean"
-    assert np.all(result.obsp["raw_snn_connectivities"].data >= 1)
+    assert np.allclose(
+        result.obsp["raw_snn_connectivities"].toarray(),
+        expected_mini_snn_connectivities,
+    )
 
     returned = bt.sct.tl.shared_neighbors(
         mini_adata,

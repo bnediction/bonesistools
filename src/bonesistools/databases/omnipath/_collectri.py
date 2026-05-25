@@ -12,7 +12,7 @@ from typing import (
 import networkx as nx
 import pandas as pd
 
-from ..ncbi import OutputIdentifierType, GeneSynonyms
+from ..ncbi import GeneSynonyms, OutputIdentifierType
 
 
 def load_collectri_grn(
@@ -56,8 +56,9 @@ def load_collectri_grn(
 
     References
     ----------
-    [1] Müller-Dott et al. (2023). Expanding the coverage of regulons from high-confidence
-    prior knowledge for accurate estimation of transcription factor activities.
+    [1] Müller-Dott et al. (2023). Expanding the coverage of regulons
+    from high-confidence prior knowledge for accurate estimation of
+    transcription factor activities.
     Nucleic Acids Research, 51(20), 10934-10949 (https://doi.org/10.1093/nar/gkad841)
     """
 

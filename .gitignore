@@ -1,56 +1,24 @@
-### Data ###
-data/
-results/
-*.png
-*.jpg
-*.txt
-*.csv
-*.tsv
-*.bin
-*.desc
-*.h5ad
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 
-### Distributions/packaging ###
+# Build / packaging
 build/
+dist/
 downloads/
 eggs/
 .eggs/
 *.egg-info/
 *.egg
-lib/
-lib64/
-parts/
-dist/
 sdist/
-var/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
 .installed.cfg
 
-### Duplicates ###
-*copy/
-*copy.*
-*[0-9]/
-*_[0-9]
-*_[0-9][0-9]
-*.[0-9]
-*.[0-9][0-9]
-
-### Python ###
-__pycache__
-__pycache__/
-*.py[cod]
-*$py.class
-ipython_config.py
-
-### R ###
-.Rhistory
-
-### C extensions ###
-*.so
-
-### Environments ###
+# Virtual environments
 .env
 .venv
 env/
@@ -59,35 +27,87 @@ ENV/
 env.bak/
 venv.bak/
 
-### Vscode ###
+# Test / coverage / type-checker caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.pyre/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+ipython_config.py
+
+# Editors / IDEs
 .vscode/
-launch.json
-settings.json
-jsconfig.json
-tsconfig.json
+.idea/
+*.swp
+*.swo
+*~
 
-### TeX ###
-q.log
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs / temporary files
+*.log
+/logs/
+/tmp/
+/temp/
+*.tmp
+*.bak
+
+# Generated figures / graph exports
+*.dot
+*.dot.pdf
+*.gv
+*.gv.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Large local single-cell files
+*.h5ad
+*.h5mu
+*.loom
+
+# LaTeX artifacts
 *.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
 *.nav
-*.snm
-*.toc
 *.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+q.log
 
-### Others ###
-!.gitignore
-!.github/workflows/tests.yml
-!.placeholder
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# Project-specific
+*.md
+!README.md
+!docs/**/*.md
+
+src/bonesistools/databases/omnipath/.cache/
+/data/
+/results/
 !tests/
 !tests/data/
 !tests/data/*.h5ad
 !src/bonesistools/sctools/datasets/
 !src/bonesistools/sctools/datasets/*.h5ad
-.coverage
-src/bonesistools/databases/omnipath/.cache/
-*.log
-logs/
-*debug*/
-*tmp*
-*tmp/
-todo.*

@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 
 from typing import Union
+
 from anndata import AnnData
-from .._typing import (
-    anndata_checker,
-    Axis,
-)
 
 from ...databases.ncbi import (
-    InputIdentifierType,
     GeneSynonyms,
+    InputIdentifierType,
+)
+from .._typing import (
+    Axis,
+    anndata_checker,
 )
 
 

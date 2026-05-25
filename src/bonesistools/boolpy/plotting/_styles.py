@@ -2,8 +2,8 @@
 
 from typing import (
     Any,
-    Mapping,
     Dict,
+    Mapping,
 )
 
 

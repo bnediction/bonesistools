@@ -164,7 +164,7 @@ def test_boolean_network_ensemble_to_graphviz(bnet_ensemble, fake_graphviz):
     assert all("fillcolor" in attrs for attrs in nodes.values())
 
 
-def test_boolean_network_ensemble_to_graphviz_styles_thresholds_and_options(
+def test_ensemble_to_graphviz_styles_thresholds(
     bnet_ensemble,
     fake_graphviz,
 ):
@@ -234,7 +234,7 @@ def test_boolean_network_ensemble_to_pydot_with_edge_labels(bnet_ensemble):
     assert "1" in labels
 
 
-def test_boolean_network_ensemble_allows_external_regulators_when_unchecked():
+def test_ensemble_allows_external_regulators_unchecked():
     bn = bt.bpy.bn.BooleanNetwork({"A": "X"}, check=False)
     ensemble = bt.bpy.bn.BooleanNetworkEnsemble(bns=[bn])
 

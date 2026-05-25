@@ -8,12 +8,12 @@ from collections.abc import (
     Mapping,
 )
 from typing import (
-    cast,
     Dict,
     MutableMapping,
     MutableSet,
     Optional,
     Set,
+    cast,
 )
 
 from ._boolean import PartialBoolean

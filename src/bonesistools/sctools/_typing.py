@@ -3,24 +3,24 @@
 import importlib as _importlib
 from functools import wraps
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     List,
     Optional,
     Sequence,
-    TYPE_CHECKING,
     Tuple,
     TypeVar,
     Union,
     overload,
 )
 
-from bonesistools._compat import Literal
+import numpy as np
+from anndata import AnnData
+from pandas import DataFrame
 from typing_extensions import ParamSpec, TypeAlias
 
-from anndata import AnnData
-import numpy as np
-from pandas import DataFrame
+from bonesistools._compat import Literal
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -110,16 +110,14 @@ Shortest_Path_Method: TypeAlias = Literal["dijkstra", "bellman-ford"]
 def type_checker(
     function: Callable[P, R],
     **options: Any,
-) -> Callable[P, R]:
-    ...
+) -> Callable[P, R]: ...
 
 
 @overload
 def type_checker(
     function: None = None,
     **options: Any,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def type_checker(
@@ -170,7 +168,7 @@ def type_checker(
                     for dtype in value.types:
                         if isinstance(arg, dtype):
                             types_match = True
-                    if types_match == False:
+                    if not types_match:
                         raise TypeError(
                             f"unsupported argument type for '{key}': "
                             f"expected {value} but received {type(arg)}"
@@ -194,16 +192,14 @@ def type_checker(
 
 
 @overload
-def anndata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]:
-    ...
+def anndata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]: ...
 
 
 @overload
 def anndata_checker(
     function: None = None,
     n: int = 1,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def anndata_checker(
@@ -256,16 +252,14 @@ def anndata_checker(
 
 
 @overload
-def mudata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]:
-    ...
+def mudata_checker(function: Callable[P, R], n: int = 1) -> Callable[P, R]: ...
 
 
 @overload
 def mudata_checker(
     function: None = None,
     n: int = 1,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def mudata_checker(
@@ -324,16 +318,14 @@ def mudata_checker(
 def anndata_or_mudata_checker(
     function: Callable[P, R],
     n: int = 1,
-) -> Callable[P, R]:
-    ...
+) -> Callable[P, R]: ...
 
 
 @overload
 def anndata_or_mudata_checker(
     function: None = None,
     n: int = 1,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def anndata_or_mudata_checker(
@@ -341,7 +333,8 @@ def anndata_or_mudata_checker(
     n: int = 1,
 ) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
     """
-    Decorate a function by checking that the first arguments are AnnData or MuData objects.
+    Decorate a function by checking that the first arguments are
+    AnnData or MuData objects.
 
     Parameters
     ----------

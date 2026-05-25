@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import cycle
 from pathlib import Path
 from typing import (
     Any,
@@ -16,20 +15,17 @@ from typing import (
     cast,
 )
 
-from anndata import AnnData
-from ._typing import RGB
-from .._typing import anndata_checker
-
-import pandas as pd
-import numpy as np
-
-import scipy
-
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+import numpy as np
+import pandas as pd
+import scipy
+from anndata import AnnData
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
+from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
+
+from .._typing import anndata_checker
 from ._colors import (
     COLORS,
     QUALITATIVE_COLORS,
@@ -306,9 +302,7 @@ def ecdf_plot(
         if not colors:
             colors = [
                 gray,
-                *COLORS[
-                    1 : len(adata.obs[obs].astype("category").cat.categories) + 1
-                ],
+                *COLORS[1 : len(adata.obs[obs].astype("category").cat.categories) + 1],
             ]
         elif isinstance(colors, Mapping):
             colors = [

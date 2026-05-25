@@ -11,8 +11,8 @@ networks, influence graphs and ensemble representations.
 from typing import List
 
 from ._styles import (
-    ratio_edge_style,
     count_node_style,
+    ratio_edge_style,
     stability_node_style,
 )
 

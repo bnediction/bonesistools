@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
-from typing import Any, Union
-
 import math
+from typing import Any, Union
 
 PartialBooleanValue = Union[bool, int, float, str]
 

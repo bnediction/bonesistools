@@ -11,25 +11,22 @@ related AnnData objects.
 import warnings as _warnings
 from typing import Any, List
 
-from ._simple import (
-    filter_obs,
-    filter_var,
-    merge,
-)
-
-from ._transfer import (
-    transfer_layer,
-    transfer_obs_sti,
-    transfer_obs_its,
-)
-
+from ..tools import regress_out as _regress_out
 from ._genename import (
     convert_gene_identifiers,
     standardize_gene_identifiers,
     var_names_merge_duplicates,
 )
-
-from ..tools import regress_out as _regress_out
+from ._simple import (
+    filter_obs,
+    filter_var,
+    merge,
+)
+from ._transfer import (
+    transfer_layer,
+    transfer_obs_its,
+    transfer_obs_sti,
+)
 
 __all__ = [
     "filter_obs",

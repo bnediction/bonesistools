@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -23,19 +24,42 @@ def test_filter_obs_and_filter_var_validate_inputs(mini_adata):
         bt.sct.pp.filter_var(mini_adata, "kind", "not callable")
 
 
-def test_regress_out_updates_layer_or_returns_copy(mini_adata):
-    original_layer = mini_adata.layers["counts"].copy()
+def test_regress_out_removes_linear_covariate_and_preserves_copy():
+    score = np.array([-1.0, 0.0, 1.0, 2.0])
+    g1 = 5 + 2 * score
+    g2 = 4 - score
+
+    adata = ad.AnnData(
+        X=np.zeros((4, 2)),
+        obs=pd.DataFrame(
+            {"score": score},
+            index=["c1", "c2", "c3", "c4"],
+        ),
+        var=pd.DataFrame(index=["g1", "g2"]),
+    )
+    adata.layers["counts"] = np.column_stack([g1, g2])
+    original_layer = adata.layers["counts"].copy()
 
     copied = bt.sct.tl.regress_out(
-        mini_adata,
+        adata,
         keys="score",
         layer="counts",
+        intercept=True,
         copy=True,
     )
 
-    assert np.array_equal(mini_adata.layers["counts"], original_layer)
-    assert copied.layers["counts"].shape == original_layer.shape
-    assert not np.allclose(copied.layers["counts"], original_layer)
+    assert np.array_equal(adata.layers["counts"], original_layer)
+    assert np.allclose(
+        copied.layers["counts"],
+        np.array(
+            [
+                [5.0, 4.0],
+                [5.0, 4.0],
+                [5.0, 4.0],
+                [5.0, 4.0],
+            ]
+        ),
+    )
 
 
 def test_preprocessing_regress_out_is_deprecated(mini_adata):

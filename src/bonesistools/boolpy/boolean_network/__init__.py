@@ -9,13 +9,13 @@ for BooleanNetworkLike objects used in logical modelling frameworks.
 
 from typing import Any, List
 
+from . import _typing as typing
 from ._network import (
     BooleanNetwork,
     BooleanNetworkEnsemble,
     ratio_edge_style,
 )
 from ._parser import read_bnet, read_bnet_directory
-from . import _typing as typing
 
 __all__ = [
     "BooleanNetwork",
