@@ -20,7 +20,7 @@ from typing import (
 import networkx as nx
 
 from ..._compat import Literal
-from .._graphviz import _networkx_to_graphviz
+from ..plotting._graphviz import _networkx_to_graphviz
 
 if TYPE_CHECKING:
     from pydot import Dot

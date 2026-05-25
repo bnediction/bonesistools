@@ -53,9 +53,10 @@ Main responsibilities:
 - Interaction scoring from signed walks.
 - Graph parsing utilities.
 
-### `plotting` and `_graphviz`
+### `plotting`
 
-Shared visualization helpers for Boolean networks and influence graphs.
+Shared visualization helpers and graph export backends for Boolean networks
+and influence graphs.
 
 ## Single-cell tools: `sctools`
 

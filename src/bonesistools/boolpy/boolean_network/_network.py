@@ -32,7 +32,6 @@ from boolean.boolean import (
 )
 
 from ..._compat import Literal
-from .._graphviz import _networkx_to_graphviz
 from ..boolean_algebra import (
     BooleanRule,
     ConfigurationLike,
@@ -48,6 +47,7 @@ from ..plotting import (
     ratio_edge_style,
     stability_node_style,
 )
+from ..plotting._graphviz import _networkx_to_graphviz
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 if TYPE_CHECKING:
