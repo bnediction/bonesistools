@@ -9,7 +9,7 @@ import bonesistools as bt
 from bonesistools.boolpy.influence_graph import _parser
 
 
-def test_read_interaction_graph_keeps_edge_attributes(tmp_path):
+def test_read_influence_graph_keeps_edge_attributes(tmp_path):
     infile = tmp_path / "graph.csv"
     infile.write_text(
         "source,target,sign,confidence\n"
@@ -18,7 +18,7 @@ def test_read_interaction_graph_keeps_edge_attributes(tmp_path):
         "C,A,,unknown\n",
     )
 
-    graph = bt.bpy.ig.read_interaction_graph(infile)
+    graph = bt.bpy.ig.read_influence_graph(infile)
 
     assert isinstance(graph, nx.MultiDiGraph)
     assert set(graph.nodes) == {"A", "B", "C"}
@@ -28,45 +28,45 @@ def test_read_interaction_graph_keeps_edge_attributes(tmp_path):
     assert math.isnan(graph["C"]["A"][0]["sign"])
 
 
-def test_read_interaction_graph_supports_custom_separator(tmp_path):
+def test_read_influence_graph_supports_custom_separator(tmp_path):
     infile = tmp_path / "graph.tsv"
     infile.write_text(
         "source\ttarget\tsign\n" "A\tB\t1\n",
     )
 
-    graph = bt.bpy.ig.read_interaction_graph(infile, sep="\t")
+    graph = bt.bpy.ig.read_influence_graph(infile, sep="\t")
 
     assert list(graph.edges(data=True)) == [("A", "B", {"sign": 1.0})]
 
 
-def test_read_interaction_graph_validates_file_columns_and_signs(tmp_path):
+def test_read_influence_graph_validates_file_columns_and_signs(tmp_path):
     missing = tmp_path / "missing.csv"
 
     with pytest.raises(FileNotFoundError):
-        bt.bpy.ig.read_interaction_graph(missing)
+        bt.bpy.ig.read_influence_graph(missing)
 
     missing_column = tmp_path / "missing_column.csv"
     missing_column.write_text("source,target\nA,B\n")
 
     with pytest.raises(ValueError, match="missing columns"):
-        bt.bpy.ig.read_interaction_graph(missing_column)
+        bt.bpy.ig.read_influence_graph(missing_column)
 
     invalid_sign = tmp_path / "invalid_sign.csv"
     invalid_sign.write_text("source,target,sign\nA,B,0\n")
 
     with pytest.raises(ValueError, match="unsupported sign values"):
-        bt.bpy.ig.read_interaction_graph(invalid_sign)
+        bt.bpy.ig.read_influence_graph(invalid_sign)
 
 
-def test_read_interaction_graph_rejects_invalid_genesyn(tmp_path):
+def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        bt.bpy.ig.read_interaction_graph(infile, genesyn=object())
+        bt.bpy.ig.read_influence_graph(infile, genesyn=object())
 
 
-def test_read_interaction_graph_applies_genesyn(monkeypatch, tmp_path):
+def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
     class FakeGeneSynonyms:
         def __init__(self):
             self.calls = []
@@ -80,7 +80,7 @@ def test_read_interaction_graph_applies_genesyn(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_parser, "GeneSynonyms", FakeGeneSynonyms)
 
-    graph = bt.bpy.ig.read_interaction_graph(
+    graph = bt.bpy.ig.read_influence_graph(
         infile,
         genesyn=genesyn,
         input_identifier_type="gene_id",

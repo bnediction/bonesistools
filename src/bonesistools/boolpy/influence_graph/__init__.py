@@ -11,7 +11,7 @@ from typing import List as _List
 
 from ._algorithms import walks_from
 from ._influence_graph import InfluenceGraph
-from ._parser import read_interaction_graph
+from ._parser import read_influence_graph
 from ._scoring import (
     InteractionScore,
     infer_signed_interactions,
@@ -20,7 +20,7 @@ from ._scoring import (
 )
 
 __all__ = [
-    "read_interaction_graph",
+    "read_influence_graph",
     "walks_from",
     "InfluenceGraph",
     "InteractionScore",

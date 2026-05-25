@@ -15,7 +15,7 @@ from ..boolpy.influence_graph import (
     infer_signed_interactions,
     infer_signed_interactions_from_walks,
     interaction_scores_from_walks,
-    read_interaction_graph,
+    read_influence_graph,
     walks_from,
 )
 
@@ -25,7 +25,7 @@ __all__ = [
     "infer_signed_interactions",
     "infer_signed_interactions_from_walks",
     "interaction_scores_from_walks",
-    "read_interaction_graph",
+    "read_influence_graph",
     "walks_from",
 ]
 

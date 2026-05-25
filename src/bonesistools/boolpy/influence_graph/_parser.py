@@ -24,7 +24,7 @@ else:
     GeneSynonyms = None
 
 
-def read_interaction_graph(
+def read_influence_graph(
     infile: Union[str, Path],
     genesyn: Optional[GeneSynonyms] = None,
     input_identifier_type: InputIdentifierType = "name",
@@ -33,7 +33,7 @@ def read_interaction_graph(
     **kwargs: Any,
 ) -> nx.MultiDiGraph[Any]:
     """
-    Read an interaction graph from a tabular file.
+    Read an influence graph from a tabular file.
 
     The input file must contain at least three columns: 'source', 'target' and
     'sign'. Additional columns are kept as edge attributes.
@@ -41,7 +41,7 @@ def read_interaction_graph(
     Parameters
     ----------
     infile: str | Path
-        Path to the tabular file containing the interaction graph.
+        Path to the tabular file containing the influence graph.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
     input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
@@ -60,7 +60,7 @@ def read_interaction_graph(
     Returns
     -------
     nx.MultiDiGraph
-        Directed interaction graph.
+        Directed influence graph.
         Edges store all columns from the input file as attributes.
 
     Raises
@@ -86,17 +86,17 @@ def read_interaction_graph(
     if not infile.is_file():
         raise FileNotFoundError(f"file not found: {infile}")
 
-    interaction_graph = pd.read_csv(infile, sep=sep, **kwargs)
+    influence_graph = pd.read_csv(infile, sep=sep, **kwargs)
 
     required_columns = {"source", "target", "sign"}
-    missing_columns = required_columns - set(interaction_graph.columns)
+    missing_columns = required_columns - set(influence_graph.columns)
 
     if missing_columns:
         raise ValueError(f"invalid file: missing columns {sorted(missing_columns)}")
 
-    interaction_graph["sign"] = interaction_graph["sign"].astype(float)
+    influence_graph["sign"] = influence_graph["sign"].astype(float)
 
-    invalid_signs = set(interaction_graph["sign"].dropna().unique()) - {-1.0, 1.0}
+    invalid_signs = set(influence_graph["sign"].dropna().unique()) - {-1.0, 1.0}
 
     if invalid_signs:
         raise ValueError(
@@ -104,7 +104,7 @@ def read_interaction_graph(
         )
 
     grn = nx.from_pandas_edgelist(
-        df=interaction_graph,
+        df=influence_graph,
         source="source",
         target="target",
         edge_attr=True,
