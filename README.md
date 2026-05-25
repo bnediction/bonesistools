@@ -5,13 +5,13 @@
 
 # BoNesisTools
 
-`BoNesisTools` is a Python package providing utilities for Boolean modelling, regulatory interaction graphs and single-cell analyses around the [BoNesis](https://github.com/bnediction/bonesis) ecosystem.
+`BoNesisTools` is a Python package providing utilities for Boolean modelling, regulatory influence graphs and single-cell analyses around the [BoNesis](https://github.com/bnediction/bonesis) ecosystem.
 
 The package provides:
 
 - Boolean algebra and partial Boolean abstractions
 - Boolean network manipulation and analysis
-- signed interaction and influence graph utilities
+- signed influence graph utilities
 - GRN-informed Boolean predecessor inference
 - single-cell and multimodal analysis helpers
 - biological database interfaces
@@ -50,8 +50,6 @@ Submodules:
 
 Submodules:
 
-Submodules:
-
 - Boolean algebra: `bt.bpy.ba`
   - partial Boolean abstractions and hypercube representations
   - Boolean differential and predecessor inference utilities
@@ -62,7 +60,7 @@ Submodules:
   - `.bnet` import/export
 
 - influence graph: `bt.bpy.ig`
-  - signed regulatory interaction graphs
+  - signed regulatory influence graphs
   - feedback circuit and SCC analysis
   - signed interaction scoring from bounded walks
   - graph compression and visualization utilities

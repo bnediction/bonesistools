@@ -3,8 +3,8 @@
 """
 Utilities for Boolean modelling.
 
-The `bpy` package provides tools for Boolean algebra, Boolean networks
-and interaction/influence graphs.
+The `bpy` package provides tools for Boolean algebra, Boolean networks,
+influence graphs and plotting.
 
 Sub-packages
 ------------
@@ -13,28 +13,34 @@ ba
 bn
     Boolean networks and logical modelling utilities.
 ig
-    Interaction and influence graph utilities.
+    Influence graph utilities.
+pl
+    Plotting utilities.
 """
 
 from __future__ import annotations
 
 import sys as _sys
 import warnings as _warnings
-from types import ModuleType
-from typing import cast
+from types import ModuleType as _ModuleType
+from typing import cast as _cast
 
 from . import boolean_algebra as ba
 from . import boolean_network as bn
-from . import interaction_graph as ig
+from . import influence_graph as ig
+from . import plotting as pl
+
+del annotations
 
 _sys.modules.update(
-    {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig"]}
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig", "pl"]}
 )
 
-_MODULES: dict[str, ModuleType] = {
+_MODULES: dict[str, _ModuleType] = {
     "ba": ba,
     "bn": bn,
     "ig": ig,
+    "pl": pl,
 }
 
 _DEPRECATED: dict[str, tuple[str, str]] = {
@@ -49,6 +55,7 @@ __all__ = [
     "ba",
     "bn",
     "ig",
+    "pl",
 ]
 
 
@@ -61,7 +68,7 @@ def __getattr__(name: str) -> object:
             DeprecationWarning,
             stacklevel=2,
         )
-        return cast(object, getattr(_MODULES[module_alias], attr))
+        return _cast(object, getattr(_MODULES[module_alias], attr))
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

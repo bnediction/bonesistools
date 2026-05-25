@@ -8,7 +8,7 @@ Boolean algebra, including partial Boolean values and Boolean
 differential and predecessor inference utilities.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._algebra import BooleanPredecessorInference, PartialBooleanDifferential
 from ._boolean import PartialBoolean
@@ -53,5 +53,5 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

@@ -9,7 +9,8 @@ related AnnData objects.
 """
 
 import warnings as _warnings
-from typing import Any, List
+from typing import Any as _Any
+from typing import List as _List
 
 from ..tools import regress_out as _regress_out
 from ._genename import (
@@ -42,7 +43,7 @@ __all__ = [
 ]
 
 
-def regress_out(*args: Any, **kwargs: Any) -> Any:
+def regress_out(*args: _Any, **kwargs: _Any) -> _Any:
     """
     Deprecated. Regress out unwanted sources of variation.
 
@@ -59,5 +60,5 @@ def regress_out(*args: Any, **kwargs: Any) -> Any:
     return _regress_out(*args, **kwargs)
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

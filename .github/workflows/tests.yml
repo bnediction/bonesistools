@@ -55,11 +55,11 @@ jobs:
           - python-version: "3.9"
             test-mode: import
           - python-version: "3.10"
-            test-mode: pytest
+            test-mode: test
           - python-version: "3.11"
-            test-mode: pytest
+            test-mode: test
           - python-version: "3.12"
-            test-mode: pytest
+            test-mode: test
           - python-version: "3.13"
             test-mode: coverage
 
@@ -91,5 +91,5 @@ jobs:
         run: pytest --cov=bonesistools --cov-report=xml --cov-report=term-missing
 
       - name: Run tests
-        if: matrix.test-mode == 'pytest'
+        if: matrix.test-mode == 'test'
         run: pytest

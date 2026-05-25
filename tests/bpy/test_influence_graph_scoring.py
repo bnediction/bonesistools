@@ -4,10 +4,10 @@ import networkx as nx
 import pytest
 
 import bonesistools as bt
-from bonesistools.boolpy.interaction_graph import _scoring
+from bonesistools.boolpy.influence_graph import _scoring
 
 
-def test_interaction_graph_scoring_is_exported_from_public_namespace():
+def test_influence_graph_scoring_is_exported_from_public_namespace():
     score = bt.bpy.ig.InteractionScore(score=0.0, total_weight=0.0, path_number=0)
 
     assert score.normalized_score == 0.0

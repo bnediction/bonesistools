@@ -8,7 +8,7 @@ helpers for objects related to logical modelling, including Boolean
 networks, influence graphs and ensemble representations.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._styles import (
     count_node_style,
@@ -23,5 +23,5 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

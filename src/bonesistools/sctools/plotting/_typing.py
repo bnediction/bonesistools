@@ -1,5 +1,5 @@
 #!/usr/bin/env python
 
-from typing import Tuple
+from typing import Tuple as _Tuple
 
-RGB = Tuple[int, int, int]
+RGB = _Tuple[int, int, int]

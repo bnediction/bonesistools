@@ -20,7 +20,7 @@ datasets
 """
 
 import sys as _sys
-from typing import List
+from typing import List as _List
 
 from . import _typing as typing
 from . import datasets
@@ -44,5 +44,5 @@ _sys.modules.update(
 )
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

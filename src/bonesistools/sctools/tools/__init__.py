@@ -8,7 +8,7 @@ distance calculations, marker statistics, lightweight export functions and
 feature classification utilities.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._classification import mitochondrial_genes, ribosomal_genes
 from ._conversion import anndata_to_dataframe
@@ -58,5 +58,5 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

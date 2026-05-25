@@ -7,7 +7,8 @@ The `bn` sub-package provides data structures, analyses and helper functions
 for BooleanNetworkLike objects used in logical modelling frameworks.
 """
 
-from typing import Any, List
+from typing import Any as _Any
+from typing import List as _List
 
 from . import _typing as typing
 from ._network import (
@@ -28,7 +29,7 @@ __all__ = [
 ]
 
 
-def bn_to_pydot(bn: Any, **kwargs: Any) -> Any:
+def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
     """
     Deprecated. Convert a BooleanNetworkLike object into a pydot graph.
 
@@ -47,5 +48,5 @@ def bn_to_pydot(bn: Any, **kwargs: Any) -> Any:
     return BooleanNetwork(bn).to_pydot(**kwargs)
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

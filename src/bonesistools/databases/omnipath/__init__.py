@@ -8,7 +8,7 @@ constructing biological interaction priors and regulatory domains
 from OmniPath-related resources such as CollecTRI and DoRothEA.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._collectri import load_collectri_grn
 from ._dorothea import load_dorothea_grn
@@ -19,5 +19,5 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

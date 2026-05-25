@@ -8,22 +8,20 @@ standardising gene identifiers and handling ambiguous nomenclature
 across heterogeneous biological resources.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._genesyn import (
     GeneSynonyms,
     InputIdentifierType,
     OutputIdentifierType,
-    support_legacy_gene_synonyms_args,
 )
 
 __all__ = [
     "InputIdentifierType",
     "OutputIdentifierType",
     "GeneSynonyms",
-    "support_legacy_gene_synonyms_args",
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

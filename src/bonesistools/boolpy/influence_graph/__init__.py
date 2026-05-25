@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 """
-Utilities for biological interaction graphs and regulatory domains.
+Utilities for biological influence graphs and regulatory domains.
 
 The `ig` sub-package provides parsers, analyses and graph-related
-utilities for interaction networks.
+utilities for signed regulatory networks.
 """
 
-from typing import List
+from typing import List as _List
 
 from ._algorithms import walks_from
 from ._influence_graph import InfluenceGraph
@@ -30,5 +30,5 @@ __all__ = [
 ]
 
 
-def __dir__() -> List[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

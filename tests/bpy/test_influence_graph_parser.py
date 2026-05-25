@@ -6,7 +6,7 @@ import networkx as nx
 import pytest
 
 import bonesistools as bt
-from bonesistools.boolpy.interaction_graph import _parser
+from bonesistools.boolpy.influence_graph import _parser
 
 
 def test_read_interaction_graph_keeps_edge_attributes(tmp_path):

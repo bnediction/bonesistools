@@ -41,7 +41,7 @@ from ..boolean_algebra import (
     is_configuration_like,
     rule_to_string,
 )
-from ..interaction_graph._influence_graph import InfluenceGraph
+from ..influence_graph._influence_graph import InfluenceGraph
 from ..plotting import (
     count_node_style,
     ratio_edge_style,

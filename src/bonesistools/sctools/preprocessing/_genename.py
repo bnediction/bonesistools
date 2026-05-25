@@ -13,8 +13,8 @@ from ...databases.ncbi import (
     GeneSynonyms,
     InputIdentifierType,
     OutputIdentifierType,
-    support_legacy_gene_synonyms_args,
 )
+from ...databases.ncbi._genesyn import support_legacy_gene_synonyms_args
 from .._typing import (
     Axis,
     ScData,

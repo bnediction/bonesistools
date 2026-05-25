@@ -41,13 +41,13 @@ Main responsibilities:
 - `.bnet` import/export.
 - Rule validation and network-level operations.
 
-### `interaction_graph`
+### `influence_graph`
 
 Signed regulatory and influence graph utilities.
 
 Main responsibilities:
 
-- Signed directed interaction graphs.
+- Signed directed influence graphs.
 - Influence graph representation.
 - Signed path and walk algorithms.
 - Interaction scoring from signed walks.

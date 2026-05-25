@@ -23,15 +23,17 @@ from __future__ import annotations
 import importlib as _importlib
 import sys as _sys
 import warnings as _warnings
-from types import ModuleType
-from typing import TYPE_CHECKING
+from types import ModuleType as _ModuleType
+from typing import TYPE_CHECKING as _TYPE_CHECKING
 
 from . import boolpy as bpy
 from . import databases as dbs
 from . import sctools as sct
 
-if TYPE_CHECKING:
+if _TYPE_CHECKING:
     from . import grntools as grn
+
+del annotations
 
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 
@@ -54,11 +56,14 @@ _sys.modules.update(
 )
 
 _sys.modules.update(
-    {f"{__name__}.bpy.{alias}": getattr(bpy, alias) for alias in ["ba", "bn", "ig"]}
+    {
+        f"{__name__}.bpy.{alias}": getattr(bpy, alias)
+        for alias in ["ba", "bn", "ig", "pl"]
+    }
 )
 
 
-def __getattr__(name: str) -> ModuleType:
+def __getattr__(name: str) -> _ModuleType:
     if name == "grn":
         message = (
             "`bt.grn` is deprecated and will be removed in a future release; "
