@@ -5,7 +5,7 @@
 
 # BoNesisTools
 
-`BoNesisTools` is a Python package providing utilities for Boolean modelling, regulatory influence graphs and single-cell analyses around the [BoNesis](https://github.com/bnediction/bonesis) ecosystem.
+`BoNesisTools` provides Python-implemented toolkits for upstream and downstream analyses around the [BoNesis](https://github.com/bnediction/bonesis) ecosystem.
 
 The package provides:
 
@@ -38,9 +38,21 @@ import bonesistools as bt
 Submodules:
 
 - preprocessing: `bt.sct.pp`
+  - gene name harmonization
+  - metadata transfer utilities
+  - lightweight preprocessing helpers
+
 - tools: `bt.sct.tl`
+  - K-nearest-neighbor and shared-neighbor graph utilities
+  - marker and log-fold-change analysis
+  - regression and matrix conversion utilities
+
 - plotting: `bt.sct.pl`
+  - scatter, density and graph visualizations
+  - boxplot and embedding utilities
+
 - datasets: `bt.sct.datasets`
+  - packaged reference datasets
 
 ---
 
