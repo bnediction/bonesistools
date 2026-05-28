@@ -22,6 +22,8 @@ def test_partial_boolean_equality_and_contains():
     assert pb0.contains(0)
     assert not pb0.contains(1)
     assert not pb0.contains("*")
+    assert pb0.__eq__(object()) is NotImplemented
+    assert pb0.__ne__(object()) is NotImplemented
 
 
 def test_partial_boolean_properties_and_conversion():

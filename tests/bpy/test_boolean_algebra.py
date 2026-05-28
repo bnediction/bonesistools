@@ -32,6 +32,14 @@ def test_partial_boolean_differential_uses_partial_boolean_order():
     assert differential.differential(float("nan"), pbstar) == 0
 
 
+def test_static_boolean_algebra_utilities_cannot_be_instantiated():
+    with pytest.raises(TypeError, match="PartialBooleanDifferential"):
+        bt.bpy.ba.PartialBooleanDifferential()
+
+    with pytest.raises(TypeError, match="BooleanPredecessorInference"):
+        bt.bpy.ba.BooleanPredecessorInference()
+
+
 @pytest.mark.parametrize(
     "source_value,target_values,sign,expected",
     [

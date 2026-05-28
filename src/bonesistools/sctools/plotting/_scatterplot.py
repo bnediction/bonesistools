@@ -59,6 +59,19 @@ def __colormap_colors(colors: Colors) -> Sequence[object]:
     return cast(Sequence[object], colors)
 
 
+def __normalize_color(color: object) -> object:
+    if isinstance(color, str):
+        return color
+
+    normalized_color = (
+        color.tolist() if isinstance(color, np.ndarray) else list(cast(Any, color))
+    )
+    if len(normalized_color) == 3:
+        normalized_color.append(1)
+
+    return normalized_color
+
+
 def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
 
     def wrapper(
@@ -232,14 +245,10 @@ def __scatterplot_discrete(
     for _cluster, _color in zip(
         scdata.obs[obs].astype("category").cat.categories, color_values
     ):
-        _color = cast(Any, _color)
+        _color = __normalize_color(_color)
 
         if _cluster not in categories:
             continue
-        if len(_color) == 4:
-            if isinstance(_color, np.ndarray):
-                _color = _color.tolist()
-            del _color[-1]
         idx = np.where(scdata.obs[obs] == _cluster)[0]
         if n_components == 2:
             ax.scatter(

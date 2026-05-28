@@ -265,8 +265,10 @@ def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):
     infile.write_text("# ignored\n\nA, B\nB, 1\n")
 
     bn = bt.bpy.bn.BooleanNetwork.from_bnet(infile)
+    read_bn = bt.bpy.bn.read_bnet(infile)
 
     assert bn.rules == {"A": "B", "B": "1"}
+    assert read_bn.rules == bn.rules
     assert bn.to_bnet(outfile) is None
     assert outfile.read_text() == "A, B\nB, 1\n"
 
@@ -427,6 +429,14 @@ def test_boolean_network_next_methods():
     with pytest.raises(ValueError, match="expected components"):
         bn.next_state("A", {"A": 0, "B": 1, "C": 0, "D": 1})
 
+    unchecked = bt.bpy.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    with pytest.raises(ValueError, match="still depends on"):
+        unchecked.next_state("A", {"A": 0})
+
+    with pytest.raises(ValueError, match="still depends on"):
+        unchecked.next_configuration({"A": 0})
+
 
 def test_boolean_network_fixed_points_validate_inputs():
     bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
@@ -442,6 +452,9 @@ def test_boolean_network_fixed_points_validate_inputs():
 
     with pytest.raises(ValueError, match="expected 0 or 1"):
         bn.is_fixed_point({"A": 1, "B": "*"})
+
+    with pytest.raises(ValueError, match="expected 0 or 1"):
+        bn.is_fixed_point({"A": 1, "B": bt.bpy.ba.PartialBoolean("*")})
 
     with pytest.raises(TypeError, match="unsupported argument type for 'state'"):
         bn.is_fixed_point(object())

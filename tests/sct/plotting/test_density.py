@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 
+import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
+from bonesistools.sctools.plotting import _density
 
 ADATA = bt.sct.datasets.nestorowa()
 
@@ -87,6 +91,54 @@ def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_p
         bt.sct.pl.kde_plot(mini_adata, gene="g1", obs="missing")
 
 
+def test_kde_plot_default_generated_and_listed_colormap_colors(
+    mini_adata,
+    monkeypatch,
+):
+    fig, ax = bt.sct.pl.kde_plot(
+        mini_adata,
+        gene="g1",
+        obs="cluster",
+        not_all=True,
+    )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    monkeypatch.setattr(_density, "QUALITATIVE_COLORS", _density.QUALITATIVE_COLORS[:1])
+    adata = ad.AnnData(
+        X=np.array([[1.0], [2.0], [2.0], [3.0], [3.0], [4.0], [4.0], [5.0]]),
+        obs=pd.DataFrame(
+            {"many_clusters": pd.Categorical(["A", "A", "B", "B", "C", "C", "D", "D"])},
+            index=[f"c{i}" for i in range(8)],
+        ),
+        var=pd.DataFrame(index=["g1"]),
+    )
+
+    fig, ax = bt.sct.pl.kde_plot(
+        adata,
+        gene="g1",
+        obs="many_clusters",
+        title={"label": "kde generated colors"},
+    )
+
+    assert ax.get_title() == "kde generated colors"
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    mini_adata.obs["cluster"] = mini_adata.obs["cluster"].cat.remove_unused_categories()
+    fig, ax = bt.sct.pl.kde_plot(
+        mini_adata,
+        gene="g1",
+        obs="cluster",
+        colors=ListedColormap(["red", "blue"]),
+        not_all=True,
+    )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+
 def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     fig, ax = plt.subplots()
     called = []
@@ -114,3 +166,17 @@ def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     outfile = tmp_path / "ecdf.png"
     assert bt.sct.pl.ecdf_plot(mini_adata, gene="g1", outfile=outfile) is None
     assert outfile.exists()
+
+
+def test_ecdf_plot_uses_mapping_colors_for_groups(mini_adata):
+    fig, ax = bt.sct.pl.ecdf_plot(
+        mini_adata,
+        gene="g1",
+        obs="cluster",
+        colors={"A": "red", "B": "blue"},
+        show_legend=True,
+    )
+
+    assert ax.get_legend() is not None
+    assert [line.get_color() for line in ax.lines] == [_density.gray, "red", "blue"]
+    plt.close(fig)

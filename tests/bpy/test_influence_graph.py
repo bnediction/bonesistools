@@ -38,6 +38,14 @@ def test_influence_graph_add_edge_normalizes_signs_and_rejects_duplicates():
 
     assert _edge_signs(ig) == [("A", "B", -1), ("A", "B", 1)]
 
+    key_style = bt.bpy.ig.InfluenceGraph()
+    key_style.add_edge("A", "B", 1)
+
+    assert _edge_signs(key_style) == [("A", "B", 1)]
+
+    with pytest.raises(TypeError, match="missing required argument"):
+        key_style.add_edge("B", "C")
+
 
 def test_influence_graph_constructor_validates_existing_graph():
     graph = nx.MultiDiGraph()

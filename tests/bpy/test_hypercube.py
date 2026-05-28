@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json
+from types import MappingProxyType
 
 import pytest
 
@@ -21,6 +22,7 @@ def test_hypercube_mapping_interface():
     assert hc["A"] == 0
     assert hc["B"] == "*"
     assert hc["C"] == 1
+    assert len(hc) == 3
 
     assert hc.components == frozenset({"A", "B", "C"})
     assert hc.is_fully_specified is False
@@ -56,8 +58,10 @@ def test_hypercube_comparisons():
     fixed = bt.bpy.ba.Hypercube({"A": 0, "B": 1})
     partial = bt.bpy.ba.Hypercube({"A": 0})
     explicit_partial = bt.bpy.ba.Hypercube({"A": 0, "B": "*"})
+    readonly_partial = MappingProxyType({"A": 0, "B": "*"})
 
     assert partial == explicit_partial
+    assert partial == readonly_partial
     assert partial.contains(fixed)
     assert fixed < partial
     assert fixed <= partial
@@ -98,6 +102,9 @@ def test_hypercube_invalid_values():
 
     with pytest.raises(ValueError):
         hc["B"] = 3
+
+    with pytest.raises(TypeError):
+        hc.contains(object())
 
 
 def test_read_hypercube(tmp_path):

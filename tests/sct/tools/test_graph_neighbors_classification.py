@@ -32,6 +32,16 @@ def test_kneighbors_graph_can_use_observation_names(mini_adata):
         }
     )
 
+    index_graph = bt.sct.tl.kneighbors_graph(
+        mini_adata,
+        n_neighbors=1,
+        use_rep="X_pca",
+        create_using=nx.DiGraph,
+        index_or_name="index",
+    )
+
+    assert set(index_graph.nodes) == set(range(mini_adata.n_obs))
+
 
 def test_kneighbors_graph_rejects_invalid_node_label_mode(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'index_or_name'"):
@@ -102,9 +112,28 @@ def test_get_paga_graph_builds_directed_cluster_graph(
     assert np.allclose(graph.nodes["A"]["pos"], expected_mini_cluster_barycenters["A"])
     assert np.allclose(graph.nodes["B"]["pos"], expected_mini_cluster_barycenters["B"])
 
+    mini_adata.uns["connectivities"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
+    fallback_graph = bt.sct.tl.get_paga_graph(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+        edges="missing",
+        threshold=0.1,
+    )
+
+    assert list(fallback_graph.edges) == [("B", "A")]
+
 
 def test_get_paga_graph_validates_threshold(mini_adata):
     mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
+
+    with pytest.raises(KeyError, match="key 'missing' not found in adata.uns"):
+        bt.sct.tl.get_paga_graph(
+            mini_adata,
+            obs="cluster",
+            use_rep="X_pca",
+            edges="missing",
+        )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'threshold'"):
         bt.sct.tl.get_paga_graph(
@@ -139,7 +168,19 @@ def test_mitochondrial_and_ribosomal_gene_classification(
     assert mini_adata.var["mt"].tolist() == [True, False, False]
     assert mini_adata.var["rps"].tolist() == [False, True, False]
 
+    obs_adata = mini_adata.copy()
+    obs_adata.obs_names = ["mt-Co1", "Rps1", "Other1", "Other2"]
+
+    bt.sct.tl.mitochondrial_genes(obs_adata, axis="obs", key="mt_obs")
+    bt.sct.tl.ribosomal_genes(obs_adata, axis=0, key="rps_obs")
+
+    assert obs_adata.obs["mt_obs"].tolist() == [True, False, False, False]
+    assert obs_adata.obs["rps_obs"].tolist() == [False, True, False, False]
+
 
 def test_gene_classification_rejects_invalid_axis(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
         bt.sct.tl.mitochondrial_genes(mini_adata, axis="bad")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
+        bt.sct.tl.ribosomal_genes(mini_adata, axis="bad")

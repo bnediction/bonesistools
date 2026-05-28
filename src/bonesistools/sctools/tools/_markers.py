@@ -91,7 +91,11 @@ def calculate_logfoldchanges(
     counts_df = anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log)
 
     if cluster_rebalancing:
-        mean_counts_df = counts_df.groupby(by=groupby, sort=True).mean()
+        mean_counts_df = counts_df.groupby(
+            by=groupby,
+            sort=True,
+            observed=False,
+        ).mean()
 
         for cluster in sorted(adata.obs[groupby].dropna().unique()):
             _mean_in = mean_counts_df.loc[cluster]

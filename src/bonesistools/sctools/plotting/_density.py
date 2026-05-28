@@ -64,6 +64,19 @@ def _colormap_colors(colors: Colors) -> Sequence[object]:
     return cast(Sequence[object], colors)
 
 
+def _normalize_color(color: object) -> object:
+    if isinstance(color, str):
+        return color
+
+    normalized_color = (
+        color.tolist() if isinstance(color, np.ndarray) else list(cast(Any, color))
+    )
+    if len(normalized_color) == 3:
+        normalized_color.append(1)
+
+    return normalized_color
+
+
 @anndata_checker
 def kde_plot(
     adata: AnnData,
@@ -187,16 +200,11 @@ def kde_plot(
         for _cluster, _color in zip(
             adata.obs[obs].astype("category").cat.categories, color_values
         ):
-            _color = cast(Any, _color)
-
-            if len(_color) == 4:
-                if isinstance(_color, np.ndarray):
-                    _color = _color.tolist()
-                del _color[-1]
+            _color = _normalize_color(_color)
             sns.kdeplot(
                 data=cast(Any, counts.loc[counts[obs] == _cluster]["counting"]),
                 ax=ax,
-                color=_color,
+                color=cast(Any, _color),
                 fill=False,
                 clip=clip_range,
                 label=_cluster,

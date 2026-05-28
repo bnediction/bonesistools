@@ -81,6 +81,34 @@ def test_mouse_gene_synonyms_convert_gene_names_to_ncbi_names(mouse_genesyn):
     assert converted == NCBI_NAMES
 
 
+def test_gene_synonyms_contains_and_find(mouse_genesyn):
+    assert mouse_genesyn.contains() == []
+    assert mouse_genesyn.contains("Tp53") == [True]
+    assert mouse_genesyn.contains("Tp53", "not-a-gene") == [True, False]
+    assert mouse_genesyn.contains("22059", identifier_type="gene_id") == [True]
+    assert mouse_genesyn.contains(
+        "ENSMUSG00000022346", identifier_type="ensembl_id"
+    ) == [True]
+    assert mouse_genesyn.contains("MGI:97250", identifier_type="MGI") == [True]
+    assert mouse_genesyn.contains("bad-id", identifier_type="MGI") == [False]
+    assert mouse_genesyn.find() == []
+    assert mouse_genesyn.find("Tp53", "not-a-gene", "Myc") == ["Tp53", "Myc"]
+    assert mouse_genesyn.find("22059", "bad-id", identifier_type="gene_id") == [
+        "22059"
+    ]
+    assert mouse_genesyn.find("bad-id", identifier_type="MGI") == []
+
+    with pytest.raises(
+        ValueError, match="invalid argument value for 'identifier_type'"
+    ):
+        mouse_genesyn.contains("Tp53", identifier_type="bad")
+
+    with pytest.raises(
+        ValueError, match="invalid argument value for 'identifier_type'"
+    ):
+        mouse_genesyn.find("Tp53", identifier_type="bad")
+
+
 def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
     assert mouse_genesyn.get_gene_id("NF-kappaB") == "18033"
     assert mouse_genesyn.get_gene_id("ENSMUSG00000022346", "ensembl_id") == "17869"
@@ -165,6 +193,7 @@ def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
         ("Trp53", "Nfkb1", {"sign": -1})
     ]
 
+    assert mouse_genesyn([]) == []
     assert mouse_genesyn(interactions) == [("Trp53", "Nfkb1", {"sign": -1})]
     assert list(mouse_genesyn(("Tp53", "unknown"))) == ["Trp53", "unknown"]
 
@@ -176,10 +205,18 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     ]
 
     bn = bt.bpy.bn.BooleanNetwork({"Tp53": "Myc", "Myc": "Tp53"})
-    converted_bn = mouse_genesyn.standardize_bn(bn, copy=True)
+    converted_bn = mouse_genesyn.convert_bn(bn, copy=True)
     assert isinstance(converted_bn, bt.bpy.bn.BooleanNetwork)
     assert converted_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
     assert bn.rules == {"Tp53": "Myc", "Myc": "Tp53"}
+
+    dispatched_bn = mouse_genesyn(bn, copy=True)
+    assert isinstance(dispatched_bn, bt.bpy.bn.BooleanNetwork)
+    assert dispatched_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
+
+    standardized_bn = mouse_genesyn.standardize_bn(bn, copy=True)
+    assert isinstance(standardized_bn, bt.bpy.bn.BooleanNetwork)
+    assert standardized_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
 
     mapping_bn = {"Tp53": "Myc", "Myc": "Tp53"}
     converted_mapping_bn = mouse_genesyn.standardize_bn(mapping_bn, copy=True)
@@ -198,6 +235,9 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
 
     with pytest.raises(TypeError, match="Boolean network-like"):
         mouse_genesyn.standardize_bn({"Tp53": object()}, copy=True)
+
+    with pytest.raises(AttributeError, match="no attribute 'get_bad'"):
+        mouse_genesyn.convert_bn(bn, output_identifier_type="bad", copy=True)
 
     df = pd.DataFrame([[1]], index=["Tp53"], columns=["NF-kappaB"])
     assert mouse_genesyn.standardize_df(df).index.tolist() == ["Trp53"]
@@ -226,6 +266,43 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
                 gene_type="name",
                 input_identifier_type="name",
             )
+
+
+def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch):
+    calls = []
+
+    def fake_download(genesyn, force_download=False):
+        calls.append(("download", force_download))
+
+    def fake_initialize(genesyn, show_warnings):
+        calls.append(("initialize", show_warnings))
+        genesyn.show_warnings = show_warnings
+        genesyn.gene_aliases_mapping = {"databases": {}}
+        genesyn.databases = set()
+
+    monkeypatch.setattr(
+        bt.dbs.ncbi.GeneSynonyms,
+        "_GeneSynonyms__download_gene_info",
+        fake_download,
+    )
+    monkeypatch.setattr(
+        bt.dbs.ncbi.GeneSynonyms,
+        "_GeneSynonyms__initialize_mappings",
+        fake_initialize,
+    )
+
+    genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
+    genesyn.reset(
+        organism="mouse",
+        force_download=False,
+        show_warnings=False,
+    )
+
+    assert genesyn.organism == "mouse"
+    assert genesyn.force_download is False
+    assert genesyn.show_warnings is False
+    assert genesyn.ncbi_file.name == "mus_musculus_gene_info.tsv"
+    assert calls == [("download", False), ("initialize", False)]
 
 
 def test_gene_synonyms_validation_errors_and_missing_warnings(
@@ -265,10 +342,19 @@ def test_gene_synonyms_validation_errors_and_missing_warnings(
 
         assert genesyn.get_gene_id("not-a-gene") is None
         assert genesyn.get_gene_id("not-an-ensembl", "ensembl_id") is None
+        assert genesyn.get_gene_id("bad-id", "MGI") is None
         assert genesyn.get_ncbi_name("not-a-gene") is None
         assert genesyn.get_official_name("not-a-gene") is None
         assert genesyn.get_ensembl_id("not-a-gene") is None
         assert genesyn.get_alias_from_database("not-a-gene", database="MGI") is None
+        assert (
+            genesyn.get_alias_from_database(
+                "12305",
+                database="miRBase",
+                input_identifier_type="gene_id",
+            )
+            is None
+        )
 
     warning_messages = [str(warning.message) for warning in recorded]
     assert any("no correspondence" in message for message in warning_messages)
@@ -284,6 +370,7 @@ def test_gene_synonyms_validation_errors_and_missing_warnings(
         "no Ensembl id correspondence" in message for message in warning_messages
     )
     assert any("no MGI correspondence" in message for message in warning_messages)
+    assert any("no miRBase correspondence" in message for message in warning_messages)
 
     with pytest.raises(
         ValueError, match="invalid argument value for 'input_identifier_type'"

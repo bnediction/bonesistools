@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from types import MappingProxyType
+
 import pytest
 
 import bonesistools as bt
@@ -26,6 +28,7 @@ def test_hypercube_collection_initialization_and_set_behavior():
     equivalent = bt.bpy.ba.HypercubeCollection([{"A": 0}, {"A": 1}])
     assert hcs == equivalent
     assert hcs.__eq__(object()) is NotImplemented
+    assert hcs.__eq__([{"A": 2}]) is NotImplemented
 
 
 def test_hypercube_collection_add_discard_and_copy():
@@ -34,8 +37,9 @@ def test_hypercube_collection_add_discard_and_copy():
 
     hcs.add({"A": 0})
     hcs.add(bt.bpy.ba.Hypercube({"A": 1}))
+    hcs.add(MappingProxyType({"B": "*"}))
 
-    assert len(hcs) == 2
+    assert len(hcs) == 3
 
     copied = hcs.copy()
 
@@ -48,7 +52,9 @@ def test_hypercube_collection_add_discard_and_copy():
 
     assert {"A": 0} not in hcs
     assert {"A": 1} in hcs
+    assert {"B": "*"} in hcs
     assert {"A": 1} in copied
+    assert {"B": "*"} in copied
 
 
 def test_hypercube_collection_filtering():

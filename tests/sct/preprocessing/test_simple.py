@@ -4,6 +4,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 
@@ -19,6 +20,18 @@ def test_filter_obs_and_filter_var_subset_in_place(mini_adata):
 def test_filter_obs_and_filter_var_validate_inputs(mini_adata):
     with pytest.raises(KeyError, match="key 'missing' not found in adata.obs"):
         bt.sct.pp.filter_obs(mini_adata, "missing", lambda values: values)
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'obs'"):
+        bt.sct.pp.filter_obs(mini_adata, 1, lambda values: values)
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'function'"):
+        bt.sct.pp.filter_obs(mini_adata, "score", "not callable")
+
+    with pytest.raises(KeyError, match="key 'missing' not found in adata.var"):
+        bt.sct.pp.filter_var(mini_adata, "missing", lambda values: values)
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'var'"):
+        bt.sct.pp.filter_var(mini_adata, 1, lambda values: values)
 
     with pytest.raises(TypeError, match="unsupported argument type for 'function'"):
         bt.sct.pp.filter_var(mini_adata, "kind", "not callable")
@@ -61,6 +74,17 @@ def test_regress_out_removes_linear_covariate_and_preserves_copy():
         ),
     )
 
+    adata.layers["sparse_counts"] = csr_matrix(np.column_stack([g1, g2]))
+    sparse_copied = bt.sct.tl.regress_out(
+        adata,
+        keys="score",
+        layer="sparse_counts",
+        intercept=True,
+        copy=True,
+    )
+
+    assert np.allclose(sparse_copied.layers["sparse_counts"], copied.layers["counts"])
+
 
 def test_preprocessing_regress_out_is_deprecated(mini_adata):
     with pytest.warns(DeprecationWarning, match="bt.sct.pp.regress_out"):
@@ -83,6 +107,9 @@ def test_merge_obs_and_var(mini_adata):
 
     assert merged_obs.obs["annotation"].tolist() == ["x", "y", "z", "w"]
     assert merged_var.var["symbol"].tolist() == ["G1", "G2", "G3"]
+
+    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
+        bt.sct.pp.merge(mini_adata, right, axis="bad")
 
 
 def test_transfer_layer_aligns_obs_and_var(mini_adata):

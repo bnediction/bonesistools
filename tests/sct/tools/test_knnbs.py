@@ -86,7 +86,7 @@ def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
     )
 
 
-def test_knnbs_validates_init_arguments_and_repr():
+def test_knnbs_validates_init_and_fit_arguments_and_repr(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'n_neighbors'"):
         bt.sct.tl.Knnbs(n_neighbors=0)
 
@@ -124,6 +124,13 @@ def test_knnbs_validates_init_arguments_and_repr():
     with pytest.warns(DeprecationWarning, match="metric_kwds"):
         estimator.metric_kwds = {"p": 1}
     assert estimator.metric_kwargs == {"p": 1}
+
+    with pytest.warns(DeprecationWarning, match="obs"):
+        with pytest.raises(TypeError, match="received both 'cluster_key'"):
+            estimator.fit(mini_adata, cluster_key="cluster", obs="cluster")
+
+    with pytest.raises(TypeError, match="missing required argument: 'cluster_key'"):
+        estimator.fit(mini_adata)
 
 
 def test_knnbs_deprecated_selection_modes_and_overlap_error():
@@ -174,6 +181,10 @@ def test_knnbs_new_api_names_are_available():
     closest = estimator.select_central_cells(subcluster_size=1, key="closest")
     closest_without_name = estimator.select_central_cells(subcluster_size=1, key=None)
     furthest = estimator.select_peripheral_cells(subcluster_size=1, key="furthest")
+    furthest_all_from_a = estimator.select_peripheral_cells(
+        subcluster_size=5,
+        clusters=["A"],
+    )
     mixed = estimator.predict(
         subcluster_size=1,
         peripheral_clusters=["A"],
@@ -192,6 +203,7 @@ def test_knnbs_new_api_names_are_available():
     assert closest_without_name.name is None
     assert closest_without_name.dropna().to_dict() == {"c1": "A", "c3": "B"}
     assert furthest.dropna().to_dict() == {"c1": "A", "c3": "B"}
+    assert furthest_all_from_a.dropna().to_dict() == {"c1": "A", "c2": "A"}
     assert mixed.dropna().to_dict() == {"c1": "A", "c3": "B"}
     assert peripheral_only.dropna().to_dict() == {"c1": "A"}
     assert central_only.dropna().to_dict() == {"c3": "B"}
@@ -216,6 +228,20 @@ def test_shared_neighbors_pruning_and_inplace_modes(
     assert np.allclose(
         result.obsp["raw_snn_connectivities"].toarray(),
         expected_mini_snn_connectivities,
+    )
+
+    dense_adata = mini_adata.copy()
+    dense_adata.obsp["distances"] = dense_adata.obsp["distances"].toarray()
+    dense_result = bt.sct.tl.shared_neighbors(
+        dense_adata,
+        prune_snn=1,
+        snn_key="dense_snn",
+        copy=True,
+    )
+
+    assert np.allclose(
+        dense_result.obsp["dense_snn_connectivities"].toarray(),
+        expected_mini_snn_connectivities / 3,
     )
 
     returned = bt.sct.tl.shared_neighbors(

@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
+import anndata as ad
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 
 import bonesistools as bt
@@ -134,6 +137,79 @@ def test_boxplot_with_hue_custom_colors_and_hidden_medians(mini_adata):
     assert ax.get_legend() is not None
     for bp in bps.values():
         assert all(median.get_linewidth() == 0 for median in bp["medians"])
+    plt.close(fig)
+
+
+def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
+    mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
+    mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
+
+    fig, ax, bps = bt.sct.pl.boxplot(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        hue="condition",
+        title="score by condition",
+        showpoints=True,
+        showlegend=True,
+    )
+
+    assert ax.get_title() == "score by condition"
+    assert set(bps) == {"ctrl", "stim"}
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    monkeypatch.setattr(_boxplot, "QUALITATIVE_COLORS", _boxplot.QUALITATIVE_COLORS[:1])
+    hue_adata = ad.AnnData(
+        X=np.ones((8, 1)),
+        obs=pd.DataFrame(
+            {
+                "score": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
+                "group": pd.Categorical(["A", "B"] * 4),
+                "hue4": pd.Categorical(
+                    ["h1", "h1", "h2", "h2", "h3", "h3", "h4", "h4"]
+                ),
+            },
+            index=[f"c{i}" for i in range(8)],
+        ),
+        var=pd.DataFrame(index=["g1"]),
+    )
+    box_colors = ListedColormap(["red", "green", "blue", "purple"])
+    point_colors = ListedColormap(["pink", "lightgreen", "lightblue", "plum"])
+
+    fig, _, bps = bt.sct.pl.boxplot(
+        hue_adata,
+        obs="score",
+        groupby="group",
+        hue="hue4",
+        box_colors=box_colors,
+        point_colors=point_colors,
+        showpoints=False,
+    )
+
+    assert set(bps) == {"h1", "h2", "h3", "h4"}
+    plt.close(fig)
+
+    fig, _, bps = bt.sct.pl.boxplot(
+        hue_adata,
+        obs="score",
+        groupby="group",
+        hue="hue4",
+        showpoints=False,
+    )
+
+    assert set(bps) == {"h1", "h2", "h3", "h4"}
+    plt.close(fig)
+
+    fig, _, bps = bt.sct.pl.boxplot(
+        hue_adata,
+        obs="score",
+        groupby="group",
+        hue="hue4",
+        showpoints=True,
+    )
+
+    assert set(bps) == {"h1", "h2", "h3", "h4"}
     plt.close(fig)
 
 

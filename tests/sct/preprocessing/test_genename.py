@@ -70,3 +70,22 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
 
     ordered = merged[:, ["g1", "g2"]]
     assert ordered.X.toarray().tolist() == [[3.0, 7.0], [11.0, 15.0]]
+
+    with pytest.warns(UserWarning, match="Variable names are not unique"):
+        adata_without_column = ad.AnnData(
+            X=csr_matrix(np.array([[1.0, 2.0], [3.0, 4.0]])),
+            obs=pd.DataFrame(index=["c1", "c2"]),
+            var=pd.DataFrame(
+                {"tag": ["first", "second"]},
+                index=["g1", "g1"],
+            ),
+        )
+
+    with pytest.warns(UserWarning, match="Variable names are not unique"):
+        merged_without_column = bt.sct.pp.var_names_merge_duplicates(
+            adata_without_column,
+        )
+
+    assert merged_without_column.var_names.tolist() == ["g1"]
+    assert "copy_var_names" not in merged_without_column.var
+    assert merged_without_column.X.toarray().tolist() == [[3.0], [7.0]]

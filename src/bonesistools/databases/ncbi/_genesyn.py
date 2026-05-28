@@ -7,6 +7,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -911,6 +912,112 @@ class GeneSynonyms:
         """
 
         return copy.deepcopy(self.gene_aliases_mapping)
+
+    def contains(
+        self,
+        *genes: str,
+        identifier_type: Union[InputIdentifierType, str] = "name",
+    ) -> List[bool]:
+        """
+        Test whether gene identifiers are present in the synonym resource.
+
+        Examples
+        --------
+        >>> genesyn = GeneSynonyms(organism="mouse")
+        >>> genesyn.contains("Trp53")
+        [True]
+        >>> genesyn.contains("Trp53", "not-a-gene")
+        [True, False]
+        >>> genesyn.contains("22059", identifier_type="gene_id")
+        [True]
+
+        Parameters
+        ----------
+        *genes: str
+            Gene identifiers to test.
+        identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Identifier type used to interpret `genes`.
+
+        Returns
+        -------
+        list of bool
+            Boolean values ordered like `genes`. An empty input returns an
+            empty list.
+
+        Raises
+        ------
+        ValueError
+            If `identifier_type` is not supported.
+        """
+
+        if identifier_type == "name":
+            return [
+                gene.upper() in self.__upper_gene_names_mapping for gene in genes
+            ]
+
+        if identifier_type == "gene_id":
+            return [gene in self.gene_aliases_mapping["gene_id"] for gene in genes]
+
+        if identifier_type == "ensembl_id":
+            return [
+                gene in self.gene_aliases_mapping["ensembl_id"] for gene in genes
+            ]
+
+        if identifier_type in self.databases:
+            database_mapping = self.gene_aliases_mapping["databases"][identifier_type]
+            return [gene in database_mapping for gene in genes]
+
+        raise ValueError(
+            f"invalid argument value for 'identifier_type': "
+            f"expected one of {self.valid_input_identifier_types} "
+            f"but received {identifier_type!r}"
+        )
+
+    def find(
+        self,
+        *genes: str,
+        identifier_type: Union[InputIdentifierType, str] = "name",
+    ) -> List[str]:
+        """
+        Return gene identifiers found in the synonym resource.
+
+        Examples
+        --------
+        >>> genesyn = GeneSynonyms(organism="mouse")
+        >>> genesyn.find("Trp53", "not-a-gene", "Myc")
+        ['Trp53', 'Myc']
+        >>> genesyn.find("22059", "bad-id", identifier_type="gene_id")
+        ['22059']
+
+        Parameters
+        ----------
+        *genes: str
+            Gene identifiers to test.
+        identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Identifier type used to interpret `genes`.
+
+        Returns
+        -------
+        list of str
+            Input gene identifiers present in the synonym resource, preserving
+            their input order.
+
+        Raises
+        ------
+        ValueError
+            If `identifier_type` is not supported.
+        """
+
+        return [
+            gene
+            for gene, found in zip(
+                genes,
+                self.contains(*genes, identifier_type=identifier_type),
+            )
+            if found
+        ]
 
     @support_legacy_gene_synonyms_args
     def get_gene_id(

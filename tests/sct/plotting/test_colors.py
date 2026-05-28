@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
+import math
+
 import pytest
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 import bonesistools as bt
 
@@ -30,12 +32,27 @@ def test_get_color_returns_rgb_or_hex_and_rejects_invalid_values():
 
 def test_generate_colormap_shorter_and_longer_than_base_colormap():
     shorter = bt.sct.pl.generate_colormap(color_number=3)
+    continuous_cm = LinearSegmentedColormap.from_list(
+        "continuous",
+        ["black", "white"],
+    )
+    shorter_from_continuous = bt.sct.pl.generate_colormap(
+        color_number=3,
+        cm=continuous_cm,
+    )
     longer = bt.sct.pl.generate_colormap(color_number=40, shade_number=5)
+    longer_with_default_shades = bt.sct.pl.generate_colormap(color_number=40)
 
     assert isinstance(shorter, ListedColormap)
     assert shorter.N == 3
+    assert isinstance(shorter_from_continuous, ListedColormap)
+    assert shorter_from_continuous.N == 3
     assert isinstance(longer, ListedColormap)
     assert longer.N == 40
+    assert isinstance(longer_with_default_shades, ListedColormap)
+    assert longer_with_default_shades.N == (
+        math.ceil(40 / bt.sct.pl.bonesis_cm.N) * bt.sct.pl.bonesis_cm.N
+    )
 
 
 def test_generate_colormap_validates_arguments():

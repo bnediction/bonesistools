@@ -6,10 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 
 import bonesistools as bt
-from bonesistools.sctools.plotting import _colors
+from bonesistools.sctools.plotting import _scatterplot
 
 bt.sct.pl.set_default_params(tex=False)
 
@@ -174,6 +175,7 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
         tick_params={"labelsize": 6},
         title="discrete 3d",
         nan={"facecolors": "gray", "edgecolors": "none", "alpha": 0.2},
+        ztick_params={"labelsize": 5},
     )
 
     assert returned_fig is fig
@@ -221,7 +223,11 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
     monkeypatch,
 ):
     categories = [f"cat{i}" for i in range(4)]
-    monkeypatch.setattr(_colors, "QUALITATIVE_COLORS", _colors.QUALITATIVE_COLORS[:1])
+    monkeypatch.setattr(
+        _scatterplot,
+        "QUALITATIVE_COLORS",
+        _scatterplot.QUALITATIVE_COLORS[:1],
+    )
     mini_adata.obs["many_categories"] = pd.Categorical(
         categories,
         categories=categories,
@@ -247,6 +253,7 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
         add_graph=True,
         add_labels_to_graph=True,
         background_visible=False,
+        lgd_params={"title": "groups"},
         graph={"linewidth": 5},
         graph_z_offset=0.2,
     )
@@ -260,3 +267,42 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
     assert ax.lines[0].get_linewidth() == 5
     assert np.allclose(ax.lines[0].get_data_3d()[2], np.array([0.2, 1.2]))
     plt.close(fig)
+
+
+def test_embedding_plot_discrete_listed_colormap_skips_unused_category(mini_adata):
+    mini_adata.obs["cluster_with_unused"] = pd.Categorical(
+        ["A", "A", "B", "B"],
+        categories=["A", "B", "C"],
+    )
+
+    with pytest.warns(RuntimeWarning, match="Mean of empty slice"):
+        fig, ax = bt.sct.pl.embedding_plot(
+            mini_adata,
+            obs="cluster_with_unused",
+            use_rep="X_pca",
+            colors=ListedColormap(["red", "blue", "green"]),
+            add_legend=True,
+            add_labels=True,
+            text={"verticalalignment": "bottom"},
+        )
+
+    handles, labels = ax.get_legend_handles_labels()
+    assert len(handles) == 2
+    assert labels == ["A", "B"]
+    assert {text.get_text() for text in ax.texts} == {"A", "B"}
+    plt.close(fig)
+
+
+def test_embedding_plot_rejects_unsupported_object_dtype(mini_adata):
+    mini_adata.obs["object_values"] = pd.Series(
+        [(1,), (2,), (1,), (2,)],
+        index=mini_adata.obs.index,
+        dtype=object,
+    )
+
+    with pytest.raises(TypeError, match="unsupported dtype"):
+        bt.sct.pl.embedding_plot(
+            mini_adata,
+            obs="object_values",
+            use_rep="X_pca",
+        )
