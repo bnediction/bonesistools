@@ -2,6 +2,7 @@
 
 import warnings
 
+import anndata as ad
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -25,6 +26,31 @@ def _set_manual_shortest_path_lengths(estimator):
         },
         index=estimator.obs.index,
     )
+
+
+def _grid_cloud(center, radius=0.2, steps=5):
+    x_center, y_center = center
+    return np.array(
+        [
+            (x, y)
+            for x in np.linspace(x_center - radius, x_center + radius, steps)
+            for y in np.linspace(y_center - radius, y_center + radius, steps)
+        ]
+    )
+
+
+def _make_two_cluster_adata(cloud_a, cloud_b, names_a, names_b):
+    coordinates = np.vstack([cloud_a, cloud_b])
+    obs_names = names_a + names_b
+    adata = ad.AnnData(
+        X=np.zeros((coordinates.shape[0], 1)),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A"] * len(cloud_a) + ["B"] * len(cloud_b))},
+            index=obs_names,
+        ),
+    )
+    adata.obsm["X_toy"] = coordinates
+    return adata, coordinates, obs_names
 
 
 def test_kneighbors_graph_returns_graph_with_named_nodes():
@@ -84,6 +110,125 @@ def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
     assert set(subclusters.dropna().cat.categories) == set(
         adata.obs["cluster"].cat.categories
     )
+
+
+def test_knnbs_fit_reconnects_disconnected_neighbor_graph():
+    cloud_a = _grid_cloud(center=(-5.0, -5.0))
+    cloud_b = _grid_cloud(center=(5.0, 5.0))
+    adata, _, _ = _make_two_cluster_adata(
+        cloud_a=cloud_a,
+        cloud_b=cloud_b,
+        names_a=[f"a{i}" for i in range(len(cloud_a))],
+        names_b=[f"b{i}" for i in range(len(cloud_b))],
+    )
+
+    estimator = bt.sct.tl.Knnbs(n_neighbors=20, use_rep="X_toy")
+
+    with pytest.warns(UserWarning, match="not weakly connected"):
+        estimator.fit(adata, cluster_key="cluster", n_jobs=1)
+
+    cell_nodes = set(adata.obs_names)
+    cell_clusters = adata.obs["cluster"].to_dict()
+    bridge_distances = [
+        data["distance"]
+        for source, target, data in estimator.kneighbors_graph.edges(data=True)
+        if (
+            source in cell_nodes
+            and target in cell_nodes
+            and cell_clusters[source] != cell_clusters[target]
+        )
+    ]
+
+    assert nx.is_connected(estimator.kneighbors_graph)
+    assert len(bridge_distances) == 1
+    assert min(bridge_distances) > 13.0
+
+
+def test_knnbs_select_central_cells_recovers_nearest_single_cluster_cells():
+    central_points = np.array(
+        [
+            [0.0, 0.0],
+            [0.05, 0.0],
+            [-0.05, 0.0],
+            [0.0, 0.05],
+            [0.0, -0.05],
+        ]
+    )
+    remote_points = np.array(
+        [
+            [8.0, 0.0],
+            [-8.0, 0.0],
+            [0.0, 8.0],
+            [0.0, -8.0],
+            [6.0, 6.0],
+            [-6.0, -6.0],
+            [6.0, -6.0],
+            [-6.0, 6.0],
+            [10.0, 0.0],
+            [-10.0, 0.0],
+        ]
+    )
+    coordinates = np.vstack([central_points, remote_points])
+    obs_names = [f"central_{i}" for i in range(len(central_points))] + [
+        f"remote_{i}" for i in range(len(remote_points))
+    ]
+    adata = ad.AnnData(
+        X=np.zeros((coordinates.shape[0], 1)),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A"] * len(coordinates))},
+            index=obs_names,
+        ),
+    )
+    adata.obsm["X_toy"] = coordinates
+    estimator = bt.sct.tl.Knnbs(n_neighbors=10, use_rep="X_toy")
+
+    estimator.fit(adata, cluster_key="cluster", n_jobs=1)
+
+    estimator.compute_shortest_path_lengths(n_jobs=1)
+    central = estimator.select_central_cells(subcluster_size=5)
+
+    assert set(central[central == "A"].index) == {
+        f"central_{i}" for i in range(len(central_points))
+    }
+
+
+def test_knnbs_select_peripheral_cells_recovers_remote_cells():
+    core_a = _grid_cloud(center=(-5.0, -5.0), radius=0.1, steps=4)
+    remote_a = _grid_cloud(center=(-6.0, -6.0), radius=0.04, steps=3)[
+        [0, 2, 4, 6, 8]
+    ]
+    core_b = _grid_cloud(center=(5.0, 5.0), radius=0.1, steps=4)
+    remote_b = _grid_cloud(center=(6.0, 6.0), radius=0.04, steps=3)[
+        [0, 2, 4, 6, 8]
+    ]
+    cloud_a = np.vstack([core_a, remote_a])
+    cloud_b = np.vstack([core_b, remote_b])
+    names_a = [f"a_core_{i}" for i in range(len(core_a))] + [
+        f"a_remote_{i}" for i in range(len(remote_a))
+    ]
+    names_b = [f"b_core_{i}" for i in range(len(core_b))] + [
+        f"b_remote_{i}" for i in range(len(remote_b))
+    ]
+    adata, _, _ = _make_two_cluster_adata(
+        cloud_a=cloud_a,
+        cloud_b=cloud_b,
+        names_a=names_a,
+        names_b=names_b,
+    )
+    estimator = bt.sct.tl.Knnbs(n_neighbors=16, use_rep="X_toy")
+
+    with pytest.warns(UserWarning, match="not weakly connected"):
+        estimator.fit(adata, cluster_key="cluster", n_jobs=1)
+
+    estimator.compute_shortest_path_lengths(n_jobs=1)
+    peripheral = estimator.select_peripheral_cells(subcluster_size=5)
+
+    assert set(peripheral[peripheral == "A"].index) == {
+        f"a_remote_{i}" for i in range(5)
+    }
+    assert set(peripheral[peripheral == "B"].index) == {
+        f"b_remote_{i}" for i in range(5)
+    }
 
 
 def test_knnbs_validates_init_and_fit_arguments_and_repr(mini_adata):

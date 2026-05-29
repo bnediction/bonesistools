@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Optional, Union, cast
 
 import anndata as ad
@@ -177,25 +178,37 @@ def var_names_merge_duplicates(
         if value
     }
 
-    for var_name in duplicated_var_names:
-        adata_spec = adata[:, adata.var.index == var_name]
-        adata = adata[:, adata.var.index != var_name]
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
 
-        X = csr_matrix(cast(Any, adata_spec.X).sum(axis=1))
-        adata_spec_var = cast(DataFrame, adata_spec.var)
-        if var_name in list(adata_spec_var[var_names]):
-            filter = adata_spec_var[var_names] == var_name
-            var = adata_spec_var[filter].iloc[:1]
-        else:
-            var = adata_spec_var.iloc[:1]
-        adata_spec = AnnData(X=X, var=var, obs=obs)
-        adatas.append(adata_spec)
+        for var_name in duplicated_var_names:
+            adata_spec = adata[:, adata.var.index == var_name]
+            adata = adata[:, adata.var.index != var_name]
 
-    adatas.append(adata)
+            X = csr_matrix(cast(Any, adata_spec.X).sum(axis=1))
+            adata_spec_var = cast(DataFrame, adata_spec.var)
+            if var_name in list(adata_spec_var[var_names]):
+                filter = adata_spec_var[var_names] == var_name
+                var = adata_spec_var[filter].iloc[:1]
+            else:
+                var = adata_spec_var.iloc[:1]
+            adata_spec = AnnData(X=X, var=var, obs=obs)
+            adatas.append(adata_spec)
 
-    adata = ad.concat(
-        adatas=adatas, join="outer", axis=1, merge="same", uns_merge="first", label=None
-    )
+        adatas.append(adata)
+
+        adata = ad.concat(
+            adatas=adatas,
+            join="outer",
+            axis=1,
+            merge="same",
+            uns_merge="first",
+            label=None,
+        )
 
     if var_names_column is None:
         adata_var = cast(DataFrame, adata.var)
