@@ -59,7 +59,7 @@ def anndata_to_dataframe(
     counts_df = DataFrame(matrix, index=adata_obs.index, columns=adata_var.index)
 
     if is_log:
-        if "log1p" in adata.uns_keys() and adata.uns["log1p"].get("base") is not None:
+        if "log1p" in adata.uns and adata.uns["log1p"].get("base") is not None:
             matrix = np.expm1(counts_df * np.log(adata.uns["log1p"]["base"]))
         else:
             matrix = np.expm1(counts_df)

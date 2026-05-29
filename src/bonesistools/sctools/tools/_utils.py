@@ -97,7 +97,7 @@ def choose_representation(
     if use_rep is None:
         use_rep = "X_pca"
 
-    if use_rep not in scdata.obsm_keys():
+    if use_rep not in scdata.obsm:
         if use_rep == "X_pca":
             raise KeyError(
                 "key 'X_pca' not found in scdata.obsm: please run scanpy.tl.pca"

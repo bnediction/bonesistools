@@ -111,3 +111,4 @@ src/bonesistools/databases/omnipath/.cache/
 !tests/data/*.h5ad
 !src/bonesistools/sctools/datasets/
 !src/bonesistools/sctools/datasets/*.h5ad
+scripts/

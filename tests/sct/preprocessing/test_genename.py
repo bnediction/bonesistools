@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import warnings
+
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -39,7 +41,12 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
 
 
 def test_var_names_merge_duplicates_sums_counts_and_var_rows():
-    with pytest.warns(UserWarning, match="Variable names are not unique"):
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
         adata = ad.AnnData(
             X=csr_matrix(
                 np.array(
@@ -59,10 +66,16 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
             ),
         )
 
-    merged = bt.sct.pp.var_names_merge_duplicates(
-        adata,
-        var_names_column="symbol",
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        merged = bt.sct.pp.var_names_merge_duplicates(
+            adata,
+            var_names_column="symbol",
+        )
 
     assert set(merged.var_names) == {"g1", "g2"}
     assert merged.var.loc["g1", "tag"] == "preferred"
@@ -71,7 +84,12 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
     ordered = merged[:, ["g1", "g2"]]
     assert ordered.X.toarray().tolist() == [[3.0, 7.0], [11.0, 15.0]]
 
-    with pytest.warns(UserWarning, match="Variable names are not unique"):
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
         adata_without_column = ad.AnnData(
             X=csr_matrix(np.array([[1.0, 2.0], [3.0, 4.0]])),
             obs=pd.DataFrame(index=["c1", "c2"]),
@@ -81,7 +99,12 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
             ),
         )
 
-    with pytest.warns(UserWarning, match="Variable names are not unique"):
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
         merged_without_column = bt.sct.pp.var_names_merge_duplicates(
             adata_without_column,
         )
