@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from itertools import product
 from typing import (
     TYPE_CHECKING,
@@ -10,6 +11,7 @@ from typing import (
     FrozenSet,
     Iterable,
     Mapping,
+    MutableMapping,
     NoReturn,
     Optional,
     Tuple,
@@ -21,12 +23,16 @@ import networkx as nx
 
 from ..._compat import Literal
 from ..plotting._graphviz import _networkx_to_graphviz
+from ..plotting._styles import ratio_edge_style
 
 if TYPE_CHECKING:
     from pydot import Dot
 
+    from ..boolean_network import BooleanNetwork, BooleanNetworkEnsemble
+
 CircuitSign = Literal[-1, 1]
 Direction = Literal["upstream", "downstream", "both"]
+CollapseMode = Literal["family", "feedback", "both"]
 
 StructuralSignature = Tuple[
     FrozenSet[Tuple[str, int]],
@@ -46,7 +52,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     InfluenceGraph is a domain-specific NetworkX MultiDiGraph for signed
     regulatory influence graphs. It enforces signed edges and provides analyses
     specific to logical and regulatory graphs, such as feedback circuits, signed
-    autoregulations, strongly connected components and graph compression.
+    autoregulations, strongly connected components and graph collapse.
 
     Edge signs must be stored in the edge attribute `sign`, using either:
         - 1, "+", or "positive" for positive influences,
@@ -605,7 +611,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         By default, nodes involved in feedback structures are excluded from family
         detection, since feedback circuits often carry important dynamical
-        information that should not be compressed.
+            information that should not be collapsed.
 
         Examples
         --------
@@ -704,7 +710,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             if len(family) >= min_size
         }
 
-    def family_compressed_graph(
+    def family_collapsed_graph(
         self,
         include_successors: bool = True,
         exclude_feedback_nodes: bool = True,
@@ -721,7 +727,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Edges incident to collapsed nodes are rewired to the corresponding composite
         node. Since structural families are defined from signed predecessor and
-        successor signatures, this compression preserves signed influence structure.
+        successor signatures, this collapse preserves signed influence structure.
 
         Examples
         --------
@@ -735,13 +741,13 @@ class InfluenceGraph(_MultiDiGraphBase):
             TF2 ─| g3
             TF2 ─| g4
 
-        >>> compressed = ig.family_compressed_graph()
-        >>> sorted(compressed.nodes())
+        >>> collapsed = ig.family_collapsed_graph()
+        >>> sorted(collapsed.nodes())
         ['TF1', 'TF2', 'g1|g2', 'g3|g4']
 
         The composite nodes store their original members:
 
-        >>> compressed.nodes["g1|g2"]["members"]
+        >>> collapsed.nodes["g1|g2"]["members"]
         {'g1', 'g2'}
 
         Parameters
@@ -751,7 +757,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             structural equivalence criterion.
         exclude_feedback_nodes: bool (default: True)
             Whether nodes participating in feedback structures should be excluded
-            from compression.
+            from collapsing.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
@@ -760,7 +766,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         Returns
         -------
         InfluenceGraph
-            Family-compressed influence graph.
+            Family-collapsed influence graph.
         """
 
         families = self.structural_families(
@@ -777,46 +783,72 @@ class InfluenceGraph(_MultiDiGraphBase):
             for node in family:
                 node_mapping[node] = family_name
 
-        compressed = type(self)()
+        collapsed = type(self)()
 
         for node, data in self.nodes(data=True):
-            compressed_node = node_mapping.get(node, node)
+            collapsed_node = node_mapping.get(node, node)
 
-            if compressed_node not in compressed:
-                compressed.add_node(compressed_node)
+            if collapsed_node not in collapsed:
+                collapsed.add_node(collapsed_node)
 
             if node in node_mapping:
-                compressed.nodes[compressed_node].setdefault("members", set())
-                compressed.nodes[compressed_node]["members"].add(node)
+                collapsed.nodes[collapsed_node].setdefault("members", set())
+                collapsed.nodes[collapsed_node]["members"].add(node)
 
             else:
-                compressed.nodes[compressed_node].update(data)
-                compressed.nodes[compressed_node].setdefault("members", {node})
+                collapsed.nodes[collapsed_node].update(data)
+                collapsed.nodes[collapsed_node].setdefault("members", {node})
 
         for source, target, data in self.edges(data=True):
-            compressed_source = node_mapping.get(source, source)
-            compressed_target = node_mapping.get(target, target)
+            collapsed_source = node_mapping.get(source, source)
+            collapsed_target = node_mapping.get(target, target)
 
-            if compressed_source == compressed_target:
+            if collapsed_source == collapsed_target:
                 continue
 
             sign = self._normalize_sign(data["sign"])
 
-            if compressed.has_edge(
-                compressed_source, compressed_target
-            ) and sign in compressed._edge_signs(
-                compressed_source,
-                compressed_target,
+            if collapsed.has_edge(
+                collapsed_source, collapsed_target
+            ) and sign in collapsed._edge_signs(
+                collapsed_source,
+                collapsed_target,
             ):
                 continue
 
-            compressed.add_edge(
-                compressed_source,
-                compressed_target,
+            collapsed.add_edge(
+                collapsed_source,
+                collapsed_target,
                 **data,
             )
 
-        return compressed
+        return collapsed
+
+    def family_compressed_graph(
+        self,
+        include_successors: bool = True,
+        exclude_feedback_nodes: bool = True,
+        min_size: int = 2,
+        sep: str = "|",
+    ) -> "InfluenceGraph":
+        """
+        Deprecated alias for `family_collapsed_graph()`.
+        """
+
+        if type(self) is InfluenceGraph:
+            warnings.warn(
+                "family_compressed_graph(...) is deprecated and will be removed in "
+                "a future release; use family_collapsed_graph(...) instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        return self.family_collapsed_graph(
+            include_successors=include_successors,
+            exclude_feedback_nodes=exclude_feedback_nodes,
+            min_size=min_size,
+            sep=sep,
+        )
 
     def edge_sign(
         self,
@@ -1073,7 +1105,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         connected component (SCC). For a given SCC/marker pair, all shortest paths
         with minimal length are returned.
 
-        No graph compression is performed, so alternative minimal routes are
+        No graph collapse is performed, so alternative minimal routes are
         preserved whenever several SCC exit or entry points exist.
 
         Examples
@@ -1420,7 +1452,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             cast(_MultiDiGraphBase, self.subgraph(feedback_nodes).copy()),
         )
 
-    def compressed_graph(
+    def collapsed_graph(
         self,
         include_singleton_selfloops: bool = True,
         include_successors: bool = True,
@@ -1429,11 +1461,11 @@ class InfluenceGraph(_MultiDiGraphBase):
         sep: str = "|",
     ) -> "InfluenceGraph":
         """
-        Return a compressed influence graph.
+        Return a collapsed influence graph.
 
-        Compression is applied sequentially through:
+        Collapse is applied sequentially through:
             1. feedback-induced graph extraction,
-            2. structural family compression.
+            2. structural family collapse.
 
         Parameters
         ----------
@@ -1445,7 +1477,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             family detection.
         exclude_feedback_nodes: bool (default: False)
             Whether nodes participating in feedback structures should be excluded
-            from structural family compression.
+            from structural family collapse.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
@@ -1454,19 +1486,47 @@ class InfluenceGraph(_MultiDiGraphBase):
         Returns
         -------
         InfluenceGraph
-            Compressed influence graph.
+            Collapsed influence graph.
 
         See Also
         --------
         feedback_induced_graph
-        family_compressed_graph
+        family_collapsed_graph
         """
 
         graph = self.feedback_induced_graph(
             include_singleton_selfloops=include_singleton_selfloops,
         )
 
-        return graph.family_compressed_graph(
+        return graph.family_collapsed_graph(
+            include_successors=include_successors,
+            exclude_feedback_nodes=exclude_feedback_nodes,
+            min_size=min_size,
+            sep=sep,
+        )
+
+    def compressed_graph(
+        self,
+        include_singleton_selfloops: bool = True,
+        include_successors: bool = True,
+        exclude_feedback_nodes: bool = False,
+        min_size: int = 2,
+        sep: str = "|",
+    ) -> "InfluenceGraph":
+        """
+        Deprecated alias for `collapsed_graph()`.
+        """
+
+        if type(self) is InfluenceGraph:
+            warnings.warn(
+                "compressed_graph(...) is deprecated and will be removed in a "
+                "future release; use collapsed_graph(...) instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        return self.collapsed_graph(
+            include_singleton_selfloops=include_singleton_selfloops,
             include_successors=include_successors,
             exclude_feedback_nodes=exclude_feedback_nodes,
             min_size=min_size,
@@ -1743,3 +1803,1541 @@ class InfluenceGraph(_MultiDiGraphBase):
                 )
 
             seen.add(key)
+
+
+class AggregatedInfluenceGraph(InfluenceGraph):
+    """
+    Influence graph aggregated across several Boolean networks or influence graphs.
+
+    An `AggregatedInfluenceGraph` extends `InfluenceGraph` by requiring each
+    edge to store an occurrence count. The count represents the number of
+    source graphs in which the signed influence was observed. The total number
+    of aggregated graphs is exposed through the `total` property and updated
+    through its validated setter.
+
+    Edge frequencies are not stored as edge attributes. They are computed as:
+
+        count / total
+
+    Examples
+    --------
+    >>> graph = AggregatedInfluenceGraph(total=4)
+    >>> graph.add_edge("A", "B", sign=1, count=3)
+    >>> graph.add_edge("B", "C", sign=-1, count=1)
+    >>> graph.edge_frequency("A", "B")
+    0.75
+
+    >>> graph.autoregulations()
+    []
+
+    Parameters
+    ----------
+    graph: DiGraph or MultiDiGraph, optional
+        Initial graph. Every edge must define both `sign` and `count`.
+    total: int
+        Total number of graphs used to construct the aggregated influence graph.
+
+    Raises
+    ------
+    TypeError
+        If `total` is not an integer, or if an edge count is not an integer.
+    ValueError
+        If `total` is not positive.
+        If an edge count is negative or greater than `total`.
+    KeyError
+        If an edge does not define a required `sign` or `count` attribute.
+    """
+
+    __slots__ = ("__total",)
+
+    def __init__(
+        self,
+        graph: Optional[_MultiDiGraphBase] = None,
+        total: int = 1,
+        **attr: Any,
+    ) -> None:
+        self.__total = self._validate_total(total)
+        super().__init__(graph=graph, **attr)
+        self.validate_counts()
+
+    @property
+    def total(self) -> int:
+        """
+        Return the total number of aggregated source graphs.
+
+        Assignment through this property is validated, so `graph.total = value`
+        cannot set a total smaller than an existing edge count.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.total
+        4
+
+        >>> graph.total = 6
+        >>> graph.total
+        6
+
+        Returns
+        -------
+        int
+            Total number of aggregated source graphs.
+        """
+
+        return self.__total
+
+    @total.setter
+    def total(self, value: int) -> None:
+        """
+        Set the total number of aggregated source graphs.
+
+        The new total must be a positive integer and must remain greater than or
+        equal to every edge count already stored in the graph.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        >>> graph.total = 6
+        >>> graph.total
+        6
+
+        >>> graph.edge_frequency("A", "B")
+        0.5
+
+        Counts cannot exceed the new total:
+
+        >>> graph.total = 2
+        Traceback (most recent call last):
+            ...
+        ValueError: invalid edge count for edge 'A' -> 'B':
+            expected value between 0 and 2 but received 3
+
+        Raises
+        ------
+        TypeError
+            If `value` is not an integer.
+        ValueError
+            If `value` is not positive or if one existing edge count is greater
+            than `value`.
+        """
+
+        value = self._validate_total(value)
+
+        for source, target, data in self.edges(data=True):
+            self._validate_count(source, target, data.get("count"), total=value)
+
+        self.__total = value
+
+    def copy(self, as_view: bool = False) -> "AggregatedInfluenceGraph":
+        """
+        Return a copy of the aggregated influence graph.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        >>> copied = graph.copy()
+        >>> copied.total
+        4
+
+        >>> copied.edge_count("A", "B")
+        3
+
+        Parameters
+        ----------
+        as_view: bool (default: False)
+            Whether to return a view instead of a copy. Views are not supported.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Copy of the aggregated influence graph.
+
+        Raises
+        ------
+        NotImplementedError
+            If `as_view` is True.
+        """
+
+        if as_view:
+            raise NotImplementedError(
+                "AggregatedInfluenceGraph does not support view copies."
+            )
+
+        return type(self)(graph=self._plain_graph(self), total=self.total)
+
+    def add_edge(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        source: Any,
+        target: Any,
+        key: Any = None,
+        sign: Optional[CircuitSign] = None,
+        count: Optional[int] = None,
+        **attr: Any,
+    ) -> int:
+        """
+        Add an aggregated signed influence.
+
+        Nodes are automatically added to the graph if they do not already exist.
+        The edge sign follows the same normalization and duplicate rules as
+        `InfluenceGraph`: at most one positive edge and one negative edge may
+        exist between a source and target pair.
+
+        The edge count must be an integer between 0 and `total`.
+
+        For compatibility with `InfluenceGraph`, the sign may be passed as the
+        third positional argument when no explicit `sign` keyword is provided.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        0
+
+        >>> graph.add_edge("A", "B", -1, count=1)
+        1
+
+        >>> sorted(
+        ...     (source, target, data["sign"], data["count"])
+        ...     for source, target, data in graph.edges(data=True)
+        ... )
+        [('A', 'B', -1, 1), ('A', 'B', 1, 3)]
+
+        Parameters
+        ----------
+        source, target: Any
+            Source and target nodes.
+        sign: {-1, 1}
+            Influence sign. If omitted, `key` is interpreted as the sign, as in
+            `InfluenceGraph.add_edge("A", "B", 1)`.
+        count: int
+            Number of source graphs in which the signed influence is observed.
+        **attr: Any
+            Additional edge attributes.
+
+        Returns
+        -------
+        int
+            NetworkX multiedge key assigned to the added edge.
+
+        Raises
+        ------
+        TypeError
+            If `count` is missing or is not an integer.
+        ValueError
+            If `sign` is invalid, if the signed edge already exists, or if
+            `count` is outside the valid range.
+        """
+
+        if sign is None:
+            sign = key
+            key = None
+
+        if count is None:
+            raise TypeError("missing required argument: 'count'")
+
+        self._validate_count(source, target, count)
+
+        return super().add_edge(
+            source,
+            target,
+            key=key,
+            sign=sign,
+            count=count,
+            **attr,
+        )
+
+    def add_edges_from(
+        self,
+        ebunch_to_add: Iterable[Any],
+        **attr: Any,
+    ) -> None:
+        """
+        Add multiple aggregated signed edges transactionally.
+
+        All added edges must define valid `sign` and `count` attributes, either
+        directly in the edge data mapping or through shared keyword attributes.
+        If one edge is invalid, the graph is left unchanged.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=3)
+        >>> graph.add_edges_from(
+        ...     [
+        ...         ("A", "B", {"sign": 1, "count": 2}),
+        ...         ("B", "C", {"sign": -1, "count": 1}),
+        ...     ]
+        ... )
+
+        >>> sorted(
+        ...     (source, target, data["sign"], data["count"])
+        ...     for source, target, data in graph.edges(data=True)
+        ... )
+        [('A', 'B', 1, 2), ('B', 'C', -1, 1)]
+
+        Invalid edges are rejected without modifying the graph:
+
+        >>> graph.add_edges_from([("C", "D", {"sign": 1, "count": 4})])
+        Traceback (most recent call last):
+            ...
+        ValueError: invalid edge count for edge 'C' -> 'D':
+            expected value between 0 and 3 but received 4
+
+        Parameters
+        ----------
+        ebunch_to_add: Iterable
+            Iterable of edges to add. Each edge must contain `sign` and `count`,
+            unless these attributes are supplied through shared keyword
+            arguments.
+        **attr: Any
+            Shared edge attributes added to all edges.
+
+        Raises
+        ------
+        KeyError
+            If one added edge has no `count` attribute.
+        TypeError
+            If one added edge count is not an integer.
+        ValueError
+            If one edge has no valid sign, duplicates an existing signed edge, or
+            has a count outside the valid range.
+        """
+
+        candidate = self._plain_graph(self)
+        candidate.add_edges_from(ebunch_to_add, **attr)
+        candidate = type(self)(candidate, total=self.total)
+
+        self._replace_with_graph(candidate)
+
+    def update(
+        self,
+        edges: Any = None,
+        nodes: Any = None,
+    ) -> None:
+        """
+        Update the graph while preserving signed-edge and count invariants.
+
+        This method follows `InfluenceGraph.update()` but also requires all
+        added edges to define a valid `count`. The update is transactional: if an
+        added edge is invalid, the current graph is left unchanged.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=2)
+        >>> graph.add_edge("A", "B", sign=1, count=1)
+
+        >>> graph.update(
+        ...     edges=[("B", "C", {"sign": -1, "count": 2})],
+        ... )
+        >>> graph.edge_count("B", "C")
+        2
+
+        Parameters
+        ----------
+        edges: graph-like object or collection of edges, optional
+            Graph-like object or edge collection used to update the aggregated
+            influence graph. Added edges must contain valid `sign` and `count`
+            attributes.
+        nodes: collection of nodes, optional
+            Nodes to add. Ignored when `edges` is a graph-like object.
+
+        Raises
+        ------
+        KeyError
+            If one added edge has no `count` attribute.
+        TypeError
+            If one added edge count is not an integer.
+        ValueError
+            If one added edge has no valid sign, duplicates an existing signed
+            edge, or has a count outside the valid range.
+        """
+
+        candidate = self._plain_graph(self)
+        nx.MultiDiGraph.update(candidate, edges=edges, nodes=nodes)
+        candidate = type(self)(candidate, total=self.total)
+
+        self._replace_with_graph(candidate)
+
+    def edge_count(
+        self,
+        source: str,
+        target: str,
+        sign: Optional[CircuitSign] = None,
+    ) -> int:
+        """
+        Return the occurrence count of an aggregated signed influence.
+
+        If both positive and negative edges exist between the same source and
+        target, `sign` must be supplied to select one signed influence.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        >>> graph.edge_count("A", "B")
+        3
+
+        >>> graph.add_edge("A", "B", sign=-1, count=1)
+        >>> graph.edge_count("A", "B", sign=-1)
+        1
+
+        Parameters
+        ----------
+        source: str
+            Source node.
+        target: str
+            Target node.
+        sign: {-1, 1}, optional
+            Signed influence to select when several signed edges exist between
+            `source` and `target`.
+
+        Returns
+        -------
+        int
+            Occurrence count of the selected signed influence.
+
+        Raises
+        ------
+        KeyError
+            If no matching edge exists.
+        ValueError
+            If both positive and negative edges exist and `sign` is not provided.
+        """
+
+        return int(self._aggregated_edge_data(source, target, sign)["count"])
+
+    def edge_frequency(
+        self,
+        source: str,
+        target: str,
+        sign: Optional[CircuitSign] = None,
+    ) -> float:
+        """
+        Return the occurrence frequency of an aggregated signed influence.
+
+        The frequency is computed as `edge_count(source, target, sign) / total`.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        >>> graph.edge_frequency("A", "B")
+        0.75
+
+        Parameters
+        ----------
+        source: str
+            Source node.
+        target: str
+            Target node.
+        sign: {-1, 1}, optional
+            Signed influence to select when several signed edges exist between
+            `source` and `target`.
+
+        Returns
+        -------
+        float
+            Occurrence frequency of the selected signed influence.
+
+        Raises
+        ------
+        KeyError
+            If no matching edge exists.
+        ValueError
+            If both positive and negative edges exist and `sign` is not provided.
+        """
+
+        return self.edge_count(source, target, sign=sign) / self.total
+
+    def autoregulations(
+        self,
+        sign: Optional[CircuitSign] = None,
+    ) -> list[tuple[str, int, float]]:
+        """
+        Return autoregulations with their sign and occurrence frequency.
+
+        Autoregulations correspond to self-loops. Edge signs are normalized to
+        -1 or 1, and frequencies are computed from edge counts and `total`.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "A", sign=1, count=3)
+        >>> graph.add_edge("B", "B", sign=-1, count=1)
+        >>> graph.autoregulations()
+        [('A', 1, 0.75), ('B', -1, 0.25)]
+
+        >>> graph.autoregulations(sign=1)
+        [('A', 1, 0.75)]
+
+        Parameters
+        ----------
+        sign: {-1, 1}, optional
+            If provided, return only autoregulations with the requested sign.
+
+        Returns
+        -------
+        list of tuple
+            Tuples `(node, sign, frequency)`.
+
+        Raises
+        ------
+        ValueError
+            If `sign` is provided and is not a valid edge sign.
+        """
+
+        loops = []
+        normalized_sign = None if sign is None else self._normalize_sign(sign)
+
+        for node in nx.nodes_with_selfloops(self):
+            edge_data = self.get_edge_data(node, node, default={})
+
+            for data in edge_data.values():
+                edge_sign = self._normalize_sign(data["sign"])
+
+                if normalized_sign is None or edge_sign == normalized_sign:
+                    loops.append((node, edge_sign, data["count"] / self.total))
+
+        return loops
+
+    def frequency_bin(
+        self,
+        source: str,
+        target: str,
+        bins: Iterable[float],
+        sign: Optional[CircuitSign] = None,
+    ) -> Tuple[float, float]:
+        """
+        Return the frequency interval containing an edge frequency.
+
+        Intervals are interpreted as closed intervals over consecutive bin
+        values: `(bins[i], bins[i + 1])`. If a frequency is exactly on a shared
+        boundary, it belongs to both adjacent intervals and the first matching
+        interval is returned.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        >>> graph.frequency_bin("A", "B", bins=(0.0, 0.5, 0.75, 1.0))
+        (0.5, 0.75)
+
+        Parameters
+        ----------
+        source: str
+            Source node.
+        target: str
+            Target node.
+        bins: Iterable of float
+            Ordered bin boundaries used to classify frequencies.
+        sign: {-1, 1}, optional
+            Signed influence to select when several signed edges exist between
+            `source` and `target`.
+
+        Returns
+        -------
+        tuple of float
+            Lower and upper bounds of the matching frequency interval.
+
+        Raises
+        ------
+        KeyError
+            If no matching edge exists.
+        ValueError
+            If the edge is ambiguous without `sign`, or if its frequency is not
+            covered by `bins`.
+        """
+
+        bins = tuple(bins)
+        frequency = self.edge_frequency(source, target, sign=sign)
+
+        for lower, upper in zip(bins[:-1], bins[1:]):
+            if lower <= frequency <= upper:
+                return (lower, upper)
+
+        raise ValueError(
+            f"edge frequency {frequency!r} is not covered by bins {bins!r}"
+        )
+
+    def structural_families(
+        self,
+        include_successors: bool = True,
+        exclude_feedback_nodes: bool = True,
+        min_size: int = 2,
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        protect_feedback_nodes: Optional[bool] = None,
+    ) -> dict[tuple[Any, ...], set[str]]:
+        """
+        Group structurally equivalent nodes using signed frequency-aware edges.
+
+        Two nodes are grouped only if they have the same signed predecessor and,
+        optionally, successor structure with the same frequency bins.
+
+        Frequency bins are part of the structural signature. Therefore two nodes
+        with the same signed regulators are separated if the corresponding edge
+        counts fall in different frequency intervals.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edges_from(
+        ...     [
+        ...         ("TF", "g1", {"sign": 1, "count": 3}),
+        ...         ("TF", "g2", {"sign": 1, "count": 3}),
+        ...         ("TF", "g3", {"sign": 1, "count": 1}),
+        ...     ]
+        ... )
+        >>> families = graph.structural_families(
+        ...     include_successors=False,
+        ...     bins=(0.0, 0.5, 1.0),
+        ... )
+        >>> set(map(frozenset, families.values()))
+        {frozenset({'g1', 'g2'})}
+
+        Parameters
+        ----------
+        include_successors: bool (default: True)
+            Whether signed successor signatures should also be included in the
+            structural equivalence criterion.
+        exclude_feedback_nodes: bool (default: True)
+            Whether nodes participating in feedback structures should be excluded.
+        min_size: int (default: 2)
+            Minimum family size required to keep a structural family.
+        bins: Iterable of float
+            Ordered bin boundaries used to classify edge frequencies.
+        protect_feedback_nodes: bool, optional
+            Backward-compatible alias for `exclude_feedback_nodes`. If provided,
+            it takes precedence over `exclude_feedback_nodes`.
+
+        Returns
+        -------
+        dict
+            Mapping from frequency-aware structural signatures to node families.
+        """
+
+        if protect_feedback_nodes is not None:
+            exclude_feedback_nodes = protect_feedback_nodes
+
+        bins = tuple(bins)
+        feedback_nodes = self.feedback_nodes() if exclude_feedback_nodes else set()
+        families = {}
+
+        for node in self.nodes():
+            if node in feedback_nodes:
+                continue
+
+            predecessors = tuple(
+                sorted(
+                    (
+                        predecessor,
+                        self._normalize_sign(data["sign"]),
+                        self._frequency_bin_for_count(data["count"], bins),
+                    )
+                    for predecessor, _, data in self.in_edges(node, data=True)
+                )
+            )
+
+            if include_successors:
+                successors = tuple(
+                    sorted(
+                        (
+                            successor,
+                            self._normalize_sign(data["sign"]),
+                            self._frequency_bin_for_count(data["count"], bins),
+                        )
+                        for _, successor, data in self.out_edges(node, data=True)
+                    )
+                )
+
+            else:
+                successors = tuple()
+
+            signature = (predecessors, successors)
+            families.setdefault(signature, set()).add(node)
+
+        return {
+            signature: family
+            for signature, family in families.items()
+            if len(family) >= min_size
+        }
+
+    def family_collapsed_graph(
+        self,
+        include_successors: bool = True,
+        exclude_feedback_nodes: bool = True,
+        min_size: int = 2,
+        sep: str = "|",
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+    ) -> InfluenceGraph:
+        """
+        Return a frequency-aware graph where structural families are collapsed.
+
+        Nodes belonging to the same frequency-aware structural family are
+        replaced by a composite node. The composite node name is obtained by
+        joining member names with `sep`, and original members are stored in the
+        node attribute `members`.
+
+        The returned graph is a plain `InfluenceGraph`, not an
+        `AggregatedInfluenceGraph`: after node fusion, edge counts no longer have
+        the exact meaning “number of source graphs containing this signed
+        interaction”. Collapsed edges therefore store `frequency`,
+        `min_frequency` and `max_frequency` metadata.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edges_from(
+        ...     [
+        ...         ("TF", "g1", {"sign": 1, "count": 3}),
+        ...         ("TF", "g2", {"sign": 1, "count": 3}),
+        ...         ("g1", "out", {"sign": -1, "count": 2}),
+        ...         ("g2", "out", {"sign": -1, "count": 2}),
+        ...     ]
+        ... )
+        >>> collapsed = graph.family_collapsed_graph(
+        ...     exclude_feedback_nodes=False,
+        ... )
+        >>> sorted(collapsed.nodes())
+        ['TF', 'g1|g2', 'out']
+
+        >>> collapsed.nodes["g1|g2"]["members"]
+        {'g1', 'g2'}
+
+        >>> collapsed["TF"]["g1|g2"][0]["frequency"]
+        0.75
+
+        Parameters
+        ----------
+        include_successors: bool (default: True)
+            Whether signed successor signatures should also be included in
+            structural family detection.
+        exclude_feedback_nodes: bool (default: True)
+            Whether nodes participating in feedback structures should be excluded
+            from collapsing.
+        min_size: int (default: 2)
+            Minimum family size required to collapse nodes.
+        sep: str (default: "|")
+            Separator used to build composite node names.
+        bins: Iterable of float
+            Ordered bin boundaries used to classify edge frequencies.
+
+        Returns
+        -------
+        InfluenceGraph
+            Plain influence graph with collapsed nodes and frequency metadata
+            on edges.
+
+        Raises
+        ------
+        ValueError
+            If an edge frequency is not covered by `bins`.
+        """
+
+        families = self.structural_families(
+            include_successors=include_successors,
+            exclude_feedback_nodes=exclude_feedback_nodes,
+            min_size=min_size,
+            bins=bins,
+        )
+
+        node_mapping = {}
+
+        for family in families.values():
+            family_name = sep.join(sorted(family))
+
+            for node in family:
+                node_mapping[node] = family_name
+
+        collapsed = InfluenceGraph()
+
+        for node, data in self.nodes(data=True):
+            collapsed_node = node_mapping.get(node, node)
+
+            if collapsed_node not in collapsed:
+                collapsed.add_node(collapsed_node)
+
+            if node in node_mapping:
+                collapsed.nodes[collapsed_node].setdefault("members", set())
+                collapsed.nodes[collapsed_node]["members"].add(node)
+
+            else:
+                collapsed.nodes[collapsed_node].update(data)
+                collapsed.nodes[collapsed_node].setdefault("members", {node})
+
+        edge_frequencies = {}
+
+        for source, target, data in self.edges(data=True):
+            collapsed_source = node_mapping.get(source, source)
+            collapsed_target = node_mapping.get(target, target)
+
+            if collapsed_source == collapsed_target:
+                continue
+
+            sign = self._normalize_sign(data["sign"])
+            key = (collapsed_source, collapsed_target, sign)
+            edge_frequencies.setdefault(key, []).append(
+                data["count"] / self.total
+            )
+
+        for (source, target, sign), frequencies in edge_frequencies.items():
+            frequency = sum(frequencies) / len(frequencies)
+
+            collapsed.add_edge(
+                source,
+                target,
+                sign=sign,
+                frequency=frequency,
+                min_frequency=min(frequencies),
+                max_frequency=max(frequencies),
+            )
+
+        return collapsed
+
+    def family_compressed_graph(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> NoReturn:
+        """
+        Disable the deprecated `InfluenceGraph.family_compressed_graph()` alias.
+
+        `AggregatedInfluenceGraph` uses collapse terminology directly. Use
+        `family_collapsed_graph()` instead.
+
+        Raises
+        ------
+        NotImplementedError
+            Always raised.
+        """
+
+        raise NotImplementedError(
+            "AggregatedInfluenceGraph does not support "
+            "family_compressed_graph(); use family_collapsed_graph() instead."
+        )
+
+    def feedback_induced_graph(
+        self,
+        include_singleton_selfloops: bool = True,
+    ) -> "AggregatedInfluenceGraph":
+        """
+        Return the aggregated graph induced by feedback nodes.
+
+        Feedback nodes are computed as in `InfluenceGraph.feedback_induced_graph`.
+        The returned graph preserves `count` attributes and the aggregation total.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=3)
+        >>> graph.add_edges_from(
+        ...     [
+        ...         ("A", "B", {"sign": 1, "count": 2}),
+        ...         ("B", "A", {"sign": 1, "count": 2}),
+        ...         ("B", "C", {"sign": -1, "count": 1}),
+        ...     ]
+        ... )
+        >>> feedback = graph.feedback_induced_graph()
+        >>> sorted(feedback.nodes())
+        ['A', 'B']
+
+        >>> feedback.total
+        3
+
+        Parameters
+        ----------
+        include_singleton_selfloops: bool (default: True)
+            Whether singleton SCCs corresponding to self-regulated nodes should
+            be included.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Aggregated influence graph induced by feedback nodes.
+        """
+
+        feedback_nodes = self.feedback_nodes(
+            include_singleton_selfloops=include_singleton_selfloops,
+        )
+
+        return type(self)(
+            self._plain_graph(self.subgraph(feedback_nodes)),
+            total=self.total,
+        )
+
+    def collapsed_graph(
+        self,
+        include_singleton_selfloops: bool = True,
+        include_successors: bool = True,
+        exclude_feedback_nodes: bool = False,
+        min_size: int = 2,
+        sep: str = "|",
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+    ) -> InfluenceGraph:
+        """
+        Return a collapsed influence graph for visualization or summaries.
+
+        Collapse is applied sequentially through:
+            1. feedback-induced graph extraction,
+            2. frequency-aware structural family collapse.
+
+        The returned graph is a plain `InfluenceGraph` with frequency metadata
+        on edges, not an exact `AggregatedInfluenceGraph`.
+
+        Parameters
+        ----------
+        include_singleton_selfloops: bool (default: True)
+            Whether singleton SCCs corresponding to self-regulated nodes should
+            be included in the feedback-induced graph.
+        include_successors: bool (default: True)
+            Whether signed successor signatures should be included in structural
+            family detection.
+        exclude_feedback_nodes: bool (default: False)
+            Whether nodes participating in feedback structures should be excluded
+            from structural family collapse.
+        min_size: int (default: 2)
+            Minimum family size required to collapse nodes.
+        sep: str (default: "|")
+            Separator used to build composite node names.
+        bins: Iterable of float
+            Ordered bin boundaries used to classify edge frequencies.
+
+        Returns
+        -------
+        InfluenceGraph
+            Collapsed influence graph with `frequency`, `min_frequency` and
+            `max_frequency` edge attributes.
+
+        See Also
+        --------
+        feedback_induced_graph
+        family_collapsed_graph
+        """
+
+        graph = self.feedback_induced_graph(
+            include_singleton_selfloops=include_singleton_selfloops,
+        )
+
+        return graph.family_collapsed_graph(
+            include_successors=include_successors,
+            exclude_feedback_nodes=exclude_feedback_nodes,
+            min_size=min_size,
+            sep=sep,
+            bins=bins,
+        )
+
+    def compressed_graph(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> NoReturn:
+        """
+        Disable the deprecated `InfluenceGraph.compressed_graph()` alias.
+
+        `AggregatedInfluenceGraph` uses collapse terminology directly. Use
+        `collapsed_graph()` instead.
+
+        Raises
+        ------
+        NotImplementedError
+            Always raised.
+        """
+
+        raise NotImplementedError(
+            "AggregatedInfluenceGraph does not support compressed_graph(); "
+            "use collapsed_graph() instead."
+        )
+
+    def to_graphviz(
+        self,
+        collapse: Optional[CollapseMode] = None,
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        protect_feedback_nodes: bool = True,
+        include_singleton_selfloops: bool = True,
+        min_frequency: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        program: str = "dot",
+        **kwargs: Any,
+    ):
+        """
+        Convert the aggregated influence graph to a native graphviz Digraph.
+
+        Rendering is always performed from an `InfluenceGraph`. Without
+        collapse, the graph preserves exact edge counts and labels display
+        counts. With `collapse="family"`, `collapse="feedback"` or
+        `collapse="both"`, the rendered graph uses frequency labels.
+
+        Parameters
+        ----------
+        collapse: {None, "family", "feedback", "both"} (default: None)
+            Optional collapse applied before rendering. `"family"` uses
+            `family_collapsed_graph()`. `"feedback"` keeps only the
+            feedback-induced graph. `"both"` uses `collapsed_graph()`.
+        bins: Iterable of float
+            Ordered bin boundaries used by collapsed structural families.
+        protect_feedback_nodes: bool (default: True)
+            Whether feedback nodes are protected from family collapse.
+        include_singleton_selfloops: bool (default: True)
+            Whether singleton self-loop SCCs are retained when using
+            `collapse="feedback"`.
+        min_frequency: float (default: 0.0)
+            Minimum edge frequency required for display.
+        show_edge_labels: bool (default: True)
+            Whether to display counts or frequencies as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to frequency. If True, use
+            `ratio_edge_style`. If False or None, no frequency style is applied.
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting graph.
+        **kwargs: Any
+            Graph attributes assigned to the resulting graphviz object.
+
+        Returns
+        -------
+        graphviz.Digraph
+            Styled graphviz object.
+
+        Raises
+        ------
+        ImportError
+            If the `graphviz` Python package is not installed.
+        ValueError
+            If `collapse` is invalid or `min_frequency` is outside [0, 1].
+        """
+
+        graph = self._visualization_graph(
+            collapse=collapse,
+            bins=bins,
+            protect_feedback_nodes=protect_feedback_nodes,
+            include_singleton_selfloops=include_singleton_selfloops,
+            min_frequency=min_frequency,
+            show_edge_labels=show_edge_labels,
+            edge_style=edge_style,
+        )
+
+        return _networkx_to_graphviz(graph, program=program, **kwargs)
+
+    def to_pydot(
+        self,
+        collapse: Optional[CollapseMode] = None,
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        protect_feedback_nodes: bool = True,
+        include_singleton_selfloops: bool = True,
+        min_frequency: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        program: str = "dot",
+        **kwargs: Any,
+    ) -> "Dot":
+        """
+        Convert the aggregated influence graph to a pydot graph.
+
+        Rendering is always performed from an `InfluenceGraph`. Without
+        collapse, the graph preserves exact edge counts and labels display
+        counts. With `collapse="family"`, `collapse="feedback"` or
+        `collapse="both"`, the rendered graph uses frequency labels.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        0
+        >>> dot = graph.to_pydot(rankdir="LR")
+        >>> dot.get_rankdir()
+        'LR'
+
+        Parameters
+        ----------
+        collapse: {None, "family", "feedback", "both"} (default: None)
+            Optional collapse applied before rendering. `"family"` uses
+            `family_collapsed_graph()`. `"feedback"` keeps only the
+            feedback-induced graph. `"both"` uses `collapsed_graph()`.
+        bins: Iterable of float
+            Ordered bin boundaries used by collapsed structural families.
+        protect_feedback_nodes: bool (default: True)
+            Whether feedback nodes are protected from family collapse.
+        include_singleton_selfloops: bool (default: True)
+            Whether singleton self-loop SCCs are retained when using
+            `collapse="feedback"`.
+        min_frequency: float (default: 0.0)
+            Minimum edge frequency required for display.
+        show_edge_labels: bool (default: True)
+            Whether to display counts or frequencies as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to frequency. If True, use
+            `ratio_edge_style`. If False or None, no frequency style is applied.
+        program: str (default: "dot")
+            Graphviz layout program assigned to the resulting pydot graph.
+        **kwargs: Any
+            Keyword arguments passed to the resulting pydot graph using
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        Dot
+            Styled pydot graph.
+
+        Raises
+        ------
+        ValueError
+            If `collapse` is invalid or `min_frequency` is outside [0, 1].
+        """
+
+        graph = self._visualization_graph(
+            collapse=collapse,
+            bins=bins,
+            protect_feedback_nodes=protect_feedback_nodes,
+            include_singleton_selfloops=include_singleton_selfloops,
+            min_frequency=min_frequency,
+            show_edge_labels=show_edge_labels,
+            edge_style=edge_style,
+        )
+
+        dot = nx.drawing.nx_pydot.to_pydot(graph)
+
+        dot.set_prog(program)
+
+        for key, value in kwargs.items():
+            dot.set(key, value)
+
+        return dot
+
+    def validate_counts(self) -> None:
+        """
+        Validate aggregated edge counts.
+
+        Every edge must define a `count` attribute. Counts must be integers
+        between 0 and `total`.
+
+        Examples
+        --------
+        >>> graph = AggregatedInfluenceGraph(total=3)
+        >>> graph.add_edge("A", "B", sign=1, count=2)
+        >>> graph.validate_counts()
+
+        Invalid counts are rejected:
+
+        >>> invalid = nx.MultiDiGraph()
+        >>> invalid.add_edge("A", "B", sign=1, count=4)
+        >>> AggregatedInfluenceGraph(invalid, total=3)
+        Traceback (most recent call last):
+            ...
+        ValueError: invalid edge count for edge 'A' -> 'B':
+            expected value between 0 and 3 but received 4
+
+        Raises
+        ------
+        KeyError
+            If an edge does not define `count`.
+        TypeError
+            If an edge count is not an integer.
+        ValueError
+            If an edge count is negative or greater than `total`.
+        """
+
+        for source, target, data in self.edges(data=True):
+            if "count" not in data:
+                raise KeyError(
+                    f"missing required edge attribute 'count' "
+                    f"for edge {source!r} -> {target!r}"
+                )
+
+            count = data["count"]
+
+            self._validate_count(source, target, count)
+
+    def _visualization_graph(
+        self,
+        collapse: Optional[CollapseMode],
+        bins: Iterable[float],
+        protect_feedback_nodes: bool,
+        include_singleton_selfloops: bool,
+        min_frequency: float,
+        show_edge_labels: bool,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ],
+    ) -> InfluenceGraph:
+        """
+        Return a styled InfluenceGraph for pydot or graphviz rendering.
+        """
+
+        if not 0 <= min_frequency <= 1:
+            raise ValueError(
+                f"invalid argument value for 'min_frequency': "
+                f"expected value between 0 and 1 but received {min_frequency!r}"
+            )
+
+        if collapse is None:
+            graph = InfluenceGraph(self._plain_graph(self))
+
+        elif collapse == "family":
+            graph = self.family_collapsed_graph(
+                exclude_feedback_nodes=protect_feedback_nodes,
+                bins=bins,
+            )
+
+        elif collapse == "feedback":
+            graph = InfluenceGraph(
+                self._plain_graph(
+                    self.feedback_induced_graph(
+                        include_singleton_selfloops=include_singleton_selfloops,
+                    )
+                )
+            )
+
+        elif collapse == "both":
+            graph = self.collapsed_graph(
+                include_singleton_selfloops=include_singleton_selfloops,
+                exclude_feedback_nodes=protect_feedback_nodes,
+                bins=bins,
+            )
+
+        else:
+            raise ValueError(
+                "unsupported collapse: expected None, 'family', 'feedback' "
+                f"or 'both', but received {collapse!r}"
+            )
+
+        edge_style_callable = None
+
+        if edge_style is True:
+            edge_style_callable = ratio_edge_style
+
+        elif callable(edge_style):
+            edge_style_callable = edge_style
+
+        edges_to_remove = []
+
+        for source, target, key, data in graph.edges(keys=True, data=True):
+            frequency = data.get("frequency")
+
+            if frequency is None:
+                frequency = data["count"] / self.total
+                data["frequency"] = frequency
+
+            if frequency < min_frequency:
+                edges_to_remove.append((source, target, key))
+                continue
+
+            sign = self._normalize_sign(data["sign"])
+
+            data.update(
+                color="green4" if sign == 1 else "red2",
+                arrowhead="normal" if sign == 1 else "tee",
+                penwidth="2",
+            )
+
+            if show_edge_labels:
+                if collapse is None:
+                    data["label"] = str(data["count"])
+                else:
+                    data["label"] = f"{frequency:.2g}"
+
+            if edge_style_callable is not None:
+                data.update(edge_style_callable(frequency))
+
+        graph.remove_edges_from(edges_to_remove)
+
+        return graph
+
+    def _replace_with_graph(self, graph: Any) -> None:
+        """
+        Replace graph contents while preserving aggregated invariants.
+        """
+
+        plain_graph = self._plain_graph(graph)
+
+        self.clear()
+        self.graph.update(plain_graph.graph)
+        nx.MultiDiGraph.add_nodes_from(
+            self,
+            ((node, data.copy()) for node, data in plain_graph.nodes(data=True)),
+        )
+
+        for source, target, data in plain_graph.edges(data=True):
+            data = data.copy()
+
+            if "sign" not in data:
+                raise ValueError(
+                    f"missing edge attribute 'sign' for edge "
+                    f"{source!r} -> {target!r}"
+                )
+
+            if "count" not in data:
+                raise KeyError(
+                    f"missing required edge attribute 'count' "
+                    f"for edge {source!r} -> {target!r}"
+                )
+
+            sign = data.pop("sign")
+            self.add_edge(source, target, sign=sign, **data)
+
+    def _aggregated_edge_data(
+        self,
+        source: str,
+        target: str,
+        sign: Optional[CircuitSign] = None,
+    ) -> MutableMapping[str, Any]:
+        """
+        Return one aggregated edge data mapping.
+        """
+
+        edge_data = self.get_edge_data(source, target)
+
+        if edge_data is None:
+            raise KeyError(f"no edge found between {source!r} and {target!r}")
+
+        if sign is not None:
+            normalized_sign = self._normalize_sign(sign)
+
+            for data in edge_data.values():
+                if self._normalize_sign(data["sign"]) == normalized_sign:
+                    return data
+
+            raise KeyError(
+                f"no edge found between {source!r} and {target!r} "
+                f"with sign {normalized_sign!r}"
+            )
+
+        if len(edge_data) != 1:
+            raise ValueError(
+                f"ambiguous aggregated edge between {source!r} and {target!r}: "
+                "pass sign=... to select one signed influence"
+            )
+
+        return next(iter(edge_data.values()))
+
+    def _frequency_bin_for_count(
+        self,
+        count: int,
+        bins: Iterable[float],
+    ) -> Tuple[float, float]:
+        """
+        Return the frequency interval containing an edge count.
+        """
+
+        bins = tuple(bins)
+        frequency = count / self.total
+
+        for lower, upper in zip(bins[:-1], bins[1:]):
+            if lower <= frequency <= upper:
+                return (lower, upper)
+
+        raise ValueError(
+            f"edge frequency {frequency!r} is not covered by bins {tuple(bins)!r}"
+        )
+
+    def _validate_count(
+        self,
+        source: Any,
+        target: Any,
+        count: Any,
+        total: Optional[int] = None,
+    ) -> None:
+        """
+        Validate one aggregated edge count.
+        """
+
+        if total is None:
+            total = self.total
+
+        if not isinstance(count, int) or isinstance(count, bool):
+            raise TypeError(
+                f"unsupported edge count type for edge "
+                f"{source!r} -> {target!r}: "
+                f"expected {int} but received {type(count)}"
+            )
+
+        if count < 0 or count > total:
+            raise ValueError(
+                f"invalid edge count for edge {source!r} -> {target!r}: "
+                f"expected value between 0 and {total} "
+                f"but received {count!r}"
+            )
+
+    @staticmethod
+    def _validate_total(total: Any) -> int:
+        """
+        Validate an aggregation total.
+        """
+
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise TypeError(
+                f"unsupported argument type for 'total': "
+                f"expected {int} but received {type(total)}"
+            )
+
+        if total <= 0:
+            raise ValueError(
+                f"invalid argument value for 'total': "
+                f"expected positive value but received {total!r}"
+            )
+
+        return total
+
+    @classmethod
+    def from_influence_graphs(
+        cls,
+        *graphs: InfluenceGraph,
+    ) -> "AggregatedInfluenceGraph":
+        """
+        Build an aggregated influence graph from influence graphs.
+
+        Each input graph contributes at most one occurrence to each signed edge.
+        The resulting `total` is the number of input graphs, and every aggregated
+        edge stores the number of graphs in which the same signed influence was
+        observed.
+
+        Positive and negative influences between the same source and target are
+        aggregated as distinct signed edges, matching `InfluenceGraph`
+        multiedge semantics.
+
+        Examples
+        --------
+        >>> ig1 = InfluenceGraph()
+        >>> ig1.add_edge("A", "B", sign=1)
+        >>> ig1.add_edge("A", "B", sign=-1)
+
+        >>> ig2 = InfluenceGraph()
+        >>> ig2.add_edge("A", "B", sign=1)
+        >>> ig2.add_edge("B", "C", sign=-1)
+
+        >>> graph = AggregatedInfluenceGraph.from_influence_graphs(ig1, ig2)
+        >>> graph.total
+        2
+
+        >>> graph.edge_count("A", "B", sign=1)
+        2
+
+        >>> graph.edge_count("A", "B", sign=-1)
+        1
+
+        Parameters
+        ----------
+        *graphs: InfluenceGraph
+            Influence graphs to aggregate. At least one graph is required.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Aggregated graph whose edge counts indicate in how many input graphs
+            each signed influence was observed.
+
+        Raises
+        ------
+        ValueError
+            If no graph is provided, or if one input graph contains an invalid
+            edge sign.
+        """
+
+        total = len(graphs)
+
+        if total == 0:
+            raise ValueError("expected at least one influence graph")
+
+        aggregated = cls(total=total)
+
+        for graph in graphs:
+            aggregated.add_nodes_from(
+                (node, data.copy()) for node, data in graph.nodes(data=True)
+            )
+
+            for source, target, data in graph.edges(data=True):
+                sign = cast(CircuitSign, cls._normalize_sign(data["sign"]))
+
+                try:
+                    edge_data = aggregated._aggregated_edge_data(
+                        source,
+                        target,
+                        sign=sign,
+                    )
+                except KeyError:
+                    aggregated.add_edge(source, target, sign=sign, count=1)
+                else:
+                    edge_data["count"] += 1
+
+        aggregated.validate_counts()
+
+        return aggregated
+
+    @classmethod
+    def from_boolean_networks(
+        cls,
+        *networks: Union["BooleanNetwork", "BooleanNetworkEnsemble"],
+    ) -> "AggregatedInfluenceGraph":
+        """
+        Build an aggregated influence graph from Boolean networks.
+
+        Each Boolean network is converted with `to_influence_graph()` before
+        aggregation. A single `BooleanNetworkEnsemble` argument is accepted and
+        expanded automatically.
+
+        Examples
+        --------
+        >>> from bonesistools.boolpy.boolean_network import BooleanNetwork
+
+        >>> bn1 = BooleanNetwork({"A": "B", "B": 0, "C": 1})
+        >>> bn2 = BooleanNetwork({"A": "B", "B": "C", "C": 0})
+        >>> bn3 = BooleanNetwork({"A": "!B", "B": "C", "C": 1})
+
+        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(
+        ...     bn1,
+        ...     bn2,
+        ...     bn3,
+        ... )
+        >>> graph.edge_count("B", "A", sign=1)
+        2
+
+        >>> graph.edge_count("B", "A", sign=-1)
+        1
+
+        A Boolean network ensemble can also be passed directly:
+
+        >>> from bonesistools.boolpy.boolean_network import BooleanNetworkEnsemble
+        >>> ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
+        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
+        >>> graph.total
+        3
+
+        Parameters
+        ----------
+        *networks: BooleanNetwork
+            Boolean networks to convert and aggregate, or a single
+            `BooleanNetworkEnsemble`. At least one network is required.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Aggregated influence graph built from the influence graphs inferred
+            from the input Boolean networks.
+
+        Raises
+        ------
+        AttributeError
+            If one input object does not provide `to_influence_graph()`.
+        ValueError
+            If no network is provided, or if conversion produces an influence
+            graph with invalid edge signs.
+        """
+
+        from ..boolean_network import BooleanNetworkEnsemble
+
+        if len(networks) == 1 and isinstance(networks[0], BooleanNetworkEnsemble):
+            boolean_networks = cast(Tuple["BooleanNetwork", ...], tuple(networks[0]))
+        else:
+            boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
+
+        graphs = tuple(network.to_influence_graph() for network in boolean_networks)
+
+        return cls.from_influence_graphs(*graphs)

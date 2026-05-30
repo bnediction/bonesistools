@@ -203,7 +203,7 @@ def test_scc_feedback_regulators_and_targets():
     assert "E" not in regulator_graph.targets()
 
 
-def test_structural_families_and_family_compressed_graph_from_docstring():
+def test_structural_families_and_family_collapsed_graph_from_docstring():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(
         [
@@ -223,17 +223,22 @@ def test_structural_families_and_family_compressed_graph_from_docstring():
         frozenset({"g3", "g4"}),
     }
 
-    compressed = ig.family_compressed_graph()
+    collapsed = ig.family_collapsed_graph()
 
-    assert isinstance(compressed, bt.bpy.ig.InfluenceGraph)
-    assert sorted(compressed.nodes()) == ["TF1", "TF2", "g1|g2", "g3|g4"]
-    assert compressed.nodes["g1|g2"]["members"] == {"g1", "g2"}
-    assert compressed.nodes["g3|g4"]["members"] == {"g3", "g4"}
-    assert _edge_signs(compressed) == [
+    assert isinstance(collapsed, bt.bpy.ig.InfluenceGraph)
+    assert sorted(collapsed.nodes()) == ["TF1", "TF2", "g1|g2", "g3|g4"]
+    assert collapsed.nodes["g1|g2"]["members"] == {"g1", "g2"}
+    assert collapsed.nodes["g3|g4"]["members"] == {"g3", "g4"}
+    assert _edge_signs(collapsed) == [
         ("TF1", "g1|g2", 1),
         ("TF1", "g3|g4", 1),
         ("TF2", "g3|g4", -1),
     ]
+
+    with pytest.warns(DeprecationWarning, match="family_collapsed_graph"):
+        deprecated = ig.family_compressed_graph()
+
+    assert sorted(deprecated.nodes()) == sorted(collapsed.nodes())
 
 
 def test_structural_families_can_ignore_successors_and_feedback_nodes():
@@ -440,7 +445,7 @@ def test_circuits_positive_and_negative_circuits_from_docstring():
     }
 
 
-def test_feedback_induced_graph_and_compressed_graph_from_docstring():
+def test_feedback_induced_graph_and_collapsed_graph_from_docstring():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(
         [
@@ -471,10 +476,15 @@ def test_feedback_induced_graph_and_compressed_graph_from_docstring():
         ("H", "H"),
     ]
 
-    compressed = ig.compressed_graph()
+    collapsed = ig.collapsed_graph()
 
-    assert isinstance(compressed, bt.bpy.ig.InfluenceGraph)
-    assert set(compressed.nodes()) <= set(feedback.nodes())
+    assert isinstance(collapsed, bt.bpy.ig.InfluenceGraph)
+    assert set(collapsed.nodes()) <= set(feedback.nodes())
+
+    with pytest.warns(DeprecationWarning, match="collapsed_graph"):
+        deprecated = ig.compressed_graph()
+
+    assert sorted(deprecated.nodes()) == sorted(collapsed.nodes())
 
 
 def test_to_graphviz_applies_signed_edge_styles_and_custom_options(fake_graphviz):
