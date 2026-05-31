@@ -2596,8 +2596,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
     def family_compressed_graph(
         self,
-        *args: Any,
-        **kwargs: Any,
+        *_args: Any,
+        **_kwargs: Any,
     ) -> NoReturn:
         """
         Disable the deprecated `InfluenceGraph.family_compressed_graph()` alias.
@@ -2727,8 +2727,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
     def compressed_graph(
         self,
-        *args: Any,
-        **kwargs: Any,
+        *_args: Any,
+        **_kwargs: Any,
     ) -> NoReturn:
         """
         Disable the deprecated `InfluenceGraph.compressed_graph()` alias.
