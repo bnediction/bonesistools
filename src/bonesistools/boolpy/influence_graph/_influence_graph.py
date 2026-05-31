@@ -2250,7 +2250,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         return self.edge_count(source, target, sign=sign) / self.total
 
-    def autoregulations(
+    # Aggregated autoregulations include frequencies by design.
+    def autoregulations(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         sign: Optional[CircuitSign] = None,
     ) -> list[tuple[str, int, float]]:
@@ -2747,7 +2748,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             "use collapsed_graph() instead."
         )
 
-    def to_graphviz(
+    # Aggregated rendering exposes collapse/frequency controls.
+    def to_graphviz(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         collapse: Optional[CollapseMode] = None,
         bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
@@ -2821,7 +2823,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         return _networkx_to_graphviz(graph, program=program, **kwargs)
 
-    def to_pydot(
+    # Aggregated rendering exposes collapse/frequency controls.
+    def to_pydot(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         collapse: Optional[CollapseMode] = None,
         bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
