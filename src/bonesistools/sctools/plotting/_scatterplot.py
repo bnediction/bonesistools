@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import (
     Any,
@@ -37,6 +38,14 @@ from ._colors import (
     gray,
     lightgray,
 )
+from ._utils import (
+    colormap_colors,
+    colors_from_uns,
+    figure_from_axes,
+    normalize_color,
+    qualitative_color_values,
+    set_window_title,
+)
 
 Colors = Union[
     str,
@@ -46,24 +55,6 @@ Colors = Union[
     Mapping[object, object],
 ]
 ContinuousColors = Union[str, Colormap]
-
-
-def __figure_from_axes(ax: Axes) -> Figure:
-    return cast(Figure, ax.figure)
-
-
-def __set_window_title(fig: Figure, title: str) -> None:
-    manager = fig.canvas.manager
-
-    if manager is not None:
-        manager.set_window_title(title)
-
-
-def __colormap_colors(colors: Colors) -> Sequence[object]:
-    if isinstance(colors, ListedColormap):
-        return cast(Sequence[object], colors.colors)
-
-    return cast(Sequence[object], colors)
 
 
 def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
@@ -78,19 +69,6 @@ def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
         "unsupported colors for continuous observations: "
         "expected a matplotlib colormap or colormap name"
     )
-
-
-def __normalize_color(color: object) -> object:
-    if isinstance(color, str):
-        return color
-
-    normalized_color = (
-        color.tolist() if isinstance(color, np.ndarray) else list(cast(Any, color))
-    )
-    if len(normalized_color) == 3:
-        normalized_color.append(1)
-
-    return normalized_color
 
 
 def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
@@ -189,19 +167,21 @@ def __scatterplot_discrete(
         scdata.obs[obs].astype("category").cat.categories
     )
 
-    if not colors:
-        cluster_number = len(scdata.obs[obs].astype("category").cat.categories)
-        if len(QUALITATIVE_COLORS) >= cluster_number:
-            colors = QUALITATIVE_COLORS[0:cluster_number]
-        else:
-            colors = generate_colormap(color_number=cluster_number)
+    category_values = list(scdata.obs[obs].astype("category").cat.categories)
+
+    if colors is None:
+        colors = colors_from_uns(scdata, obs, category_values)
+
+    if colors is None:
+        colors = qualitative_color_values(
+            len(category_values),
+            QUALITATIVE_COLORS,
+            generate_colormap,
+        )
     elif isinstance(colors, Mapping):
-        colors = [
-            colors[cluster]
-            for cluster in scdata.obs[obs].astype("category").cat.categories
-        ]
+        colors = [colors[cluster] for cluster in category_values]
     if isinstance(colors, ListedColormap):
-        colors = __colormap_colors(colors)
+        colors = colormap_colors(colors)
 
     X = cast(
         np.ndarray,
@@ -220,7 +200,7 @@ def __scatterplot_discrete(
             else 6 if n_components == 2 else 8
         )
     else:
-        fig = __figure_from_axes(ax)
+        fig = figure_from_axes(ax)
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
 
@@ -266,7 +246,7 @@ def __scatterplot_discrete(
     for _cluster, _color in zip(
         scdata.obs[obs].astype("category").cat.categories, color_values
     ):
-        _color = __normalize_color(_color)
+        _color = normalize_color(_color)
 
         if _cluster not in categories:
             continue
@@ -369,7 +349,7 @@ def __scatterplot_continuous(
             else 6 if n_components == 2 else 8
         )
     else:
-        fig = __figure_from_axes(ax)
+        fig = figure_from_axes(ax)
 
     if scdata.obs[obs].isna().any():
         idx = scdata.obs[obs].isna()
@@ -560,7 +540,7 @@ def __add_labels_to_graph(
 
 
 @anndata_or_mudata_checker
-def embedding_plot(
+def embedding(
     scdata: ScData,  # type: ignore
     obs: str,
     use_rep: str,
@@ -577,7 +557,7 @@ def embedding_plot(
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
-    Draw a scatterplot from an embedding stored in `scdata.obsm`.
+    Draw an embedding stored in `scdata.obsm`.
 
     Parameters
     ----------
@@ -722,10 +702,10 @@ def embedding_plot(
 
     if title:
         if isinstance(title, str):
-            __set_window_title(fig, title)
+            set_window_title(fig, title)
             ax.set_title(title)
         elif isinstance(title, dict):
-            __set_window_title(fig, title["label"])
+            set_window_title(fig, title["label"])
             ax.set_title(**title)
         else:
             raise TypeError(
@@ -739,3 +719,18 @@ def embedding_plot(
         return None
     else:
         return fig, ax
+
+
+def embedding_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
+    """
+    Deprecated alias for `embedding()`.
+    """
+
+    warnings.warn(
+        "`bt.sct.pl.embedding_plot` is deprecated; use "
+        "`bt.sct.pl.embedding` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return embedding(*args, **kwargs)

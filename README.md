@@ -48,8 +48,8 @@ Submodules:
   - regression and matrix conversion utilities
 
 - plotting: `bt.sct.pl`
-  - scatter, density and graph visualizations
-  - boxplot and embedding utilities
+  - embedding, density, composition and graph visualizations
+  - boxplot utilities
 
 - datasets: `bt.sct.datasets`
   - packaged reference datasets

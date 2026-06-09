@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import (
     Any,
@@ -22,7 +23,7 @@ import pandas as pd
 import scipy
 from anndata import AnnData
 from matplotlib.axes._axes import Axes
-from matplotlib.colors import Colormap, ListedColormap
+from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
@@ -33,6 +34,13 @@ from ._colors import (
     blue,
     generate_colormap,
     gray,
+)
+from ._utils import (
+    colormap_colors,
+    figure_from_axes,
+    normalize_color,
+    qualitative_color_values,
+    set_window_title,
 )
 
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
@@ -47,39 +55,8 @@ def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarra
     return np.asarray(counts).squeeze()
 
 
-def _figure_from_axes(ax: Axes) -> Figure:
-    return cast(Figure, ax.figure)
-
-
-def _set_window_title(fig: Figure, title: str) -> None:
-    manager = fig.canvas.manager
-
-    if manager is not None:
-        manager.set_window_title(title)
-
-
-def _colormap_colors(colors: Colors) -> Sequence[object]:
-    if isinstance(colors, ListedColormap):
-        return cast(Sequence[object], colors.colors)
-
-    return cast(Sequence[object], colors)
-
-
-def _normalize_color(color: object) -> object:
-    if isinstance(color, str):
-        return color
-
-    normalized_color = (
-        color.tolist() if isinstance(color, np.ndarray) else list(cast(Any, color))
-    )
-    if len(normalized_color) == 3:
-        normalized_color.append(1)
-
-    return normalized_color
-
-
 @anndata_checker
-def kde_plot(
+def density(
     adata: AnnData,
     gene: str,
     layer: Optional[str] = None,
@@ -162,22 +139,23 @@ def kde_plot(
         counts[obs] = adata.obs[obs]
         if not colors:
             cluster_number = len(adata.obs[obs].astype("category").cat.categories)
-            if len(QUALITATIVE_COLORS) >= cluster_number:
-                colors = QUALITATIVE_COLORS[0:cluster_number]
-            else:
-                colors = generate_colormap(color_number=cluster_number)
+            colors = qualitative_color_values(
+                cluster_number,
+                QUALITATIVE_COLORS,
+                generate_colormap,
+            )
         elif isinstance(colors, Mapping):
             colors = [
                 colors[cluster]
                 for cluster in adata.obs[obs].astype("category").cat.categories
             ]
         if isinstance(colors, Colormap):
-            colors = _colormap_colors(colors)
+            colors = colormap_colors(colors)
 
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = _figure_from_axes(ax)
+        fig = figure_from_axes(ax)
 
     q = np.quantile(counts["counting"], 0.99)
     clip_range = cast(
@@ -201,7 +179,7 @@ def kde_plot(
         for _cluster, _color in zip(
             adata.obs[obs].astype("category").cat.categories, color_values
         ):
-            _color = _normalize_color(_color)
+            _color = normalize_color(_color)
             sns.kdeplot(
                 data=cast(Any, counts.loc[counts[obs] == _cluster]["counting"]),
                 ax=ax,
@@ -218,10 +196,10 @@ def kde_plot(
 
     if title:
         if isinstance(title, str):
-            _set_window_title(fig, title)
+            set_window_title(fig, title)
             ax.set_title(title)
         elif isinstance(title, dict):
-            _set_window_title(fig, title["label"])
+            set_window_title(fig, title["label"])
             ax.set_title(**title)
 
     if obs and show_legend:
@@ -249,7 +227,7 @@ def kde_plot(
         return fig, ax
 
 
-def ecdf_plot(
+def cdf(
     adata: AnnData,
     gene: str,
     layer: Optional[str] = None,
@@ -327,7 +305,7 @@ def ecdf_plot(
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = _figure_from_axes(ax)
+        fig = figure_from_axes(ax)
 
     x, y = _ecdf(counts["counting"])
     ax.step(x, y, where="post", color=colors[0], label="all")
@@ -367,3 +345,37 @@ def ecdf_plot(
         return None
     else:
         return fig, ax
+
+
+def kde_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
+    """
+    Deprecated alias for `density()`.
+
+    Use `density()` instead. This alias is kept temporarily for backward
+    compatibility.
+    """
+
+    warnings.warn(
+        "`kde_plot()` is deprecated; use `density()` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return density(*args, **kwargs)
+
+
+def ecdf_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
+    """
+    Deprecated alias for `cdf()`.
+
+    Use `cdf()` instead. This alias is kept temporarily for backward
+    compatibility.
+    """
+
+    warnings.warn(
+        "`ecdf_plot()` is deprecated; use `cdf()` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return cdf(*args, **kwargs)

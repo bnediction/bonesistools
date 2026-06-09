@@ -34,25 +34,12 @@ from ._colors import (
     gray,
     white,
 )
+from ._utils import colormap_colors, qualitative_color_values, set_window_title
 
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
 BoxPlots = Mapping[str, Any]
 BoxplotReturn = Union[BoxPlots, Dict[object, BoxPlots]]
-
-
-def __set_window_title(fig: Figure, title: str) -> None:
-    manager = fig.canvas.manager
-
-    if manager is not None:
-        manager.set_window_title(title)
-
-
-def __colormap_colors(colors: Colors) -> Sequence[object]:
-    if isinstance(colors, ListedColormap):
-        return cast(Sequence[object], colors.colors)
-
-    return cast(Sequence[object], colors)
 
 
 def __get_box_positions(
@@ -234,10 +221,10 @@ def boxplot(
 
     if title:
         if isinstance(title, str):
-            __set_window_title(fig, title)
+            set_window_title(fig, title)
             ax.set_title(title)
         elif isinstance(title, dict):
-            __set_window_title(fig, title["label"])
+            set_window_title(fig, title["label"])
             ax.set_title(**title)
         else:
             raise TypeError(
@@ -340,12 +327,13 @@ def boxplot(
             if showpoints is True:
                 box_colors = [black] * len(hue_values)
             else:
-                if len(QUALITATIVE_COLORS) >= len(hue_values):
-                    box_colors = QUALITATIVE_COLORS[0 : len(hue_values)]
-                else:
-                    box_colors = generate_colormap(color_number=len(hue_values))
+                box_colors = qualitative_color_values(
+                    len(hue_values),
+                    QUALITATIVE_COLORS,
+                    generate_colormap,
+                )
         if isinstance(box_colors, ListedColormap):
-            box_colors = __colormap_colors(box_colors)
+            box_colors = colormap_colors(box_colors)
         if not isinstance(box_colors, MappingABC):
             box_colors = {
                 h: cast(Sequence[object], box_colors)[i]
@@ -354,14 +342,15 @@ def boxplot(
 
         if point_colors is None:
             if showpoints is True:
-                if len(QUALITATIVE_COLORS) >= len(hue_values):
-                    point_colors = QUALITATIVE_COLORS[0 : len(hue_values)]
-                else:
-                    point_colors = generate_colormap(color_number=len(hue_values))
+                point_colors = qualitative_color_values(
+                    len(hue_values),
+                    QUALITATIVE_COLORS,
+                    generate_colormap,
+                )
             else:
                 point_colors = [white] * len(hue_values)
         if isinstance(point_colors, ListedColormap):
-            point_colors = __colormap_colors(point_colors)
+            point_colors = colormap_colors(point_colors)
         if not isinstance(point_colors, MappingABC):
             point_colors = {
                 h: cast(Sequence[object], point_colors)[i]

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, to_rgba
 from matplotlib.figure import Figure
 
 import bonesistools as bt
@@ -23,7 +23,7 @@ def test_embedding_plot_with_test_representation():
     adata.obsm["X_test"] = adata.X[:, :2].copy()
     adata.obs["cluster"] = adata.obs["clusters"].astype("category")
 
-    fig, ax = bt.sct.pl.embedding_plot(
+    fig, ax = bt.sct.pl.embedding(
         adata,
         obs="cluster",
         use_rep="X_test",
@@ -50,11 +50,23 @@ def test_embedding_plot_with_test_representation():
     plt.close(fig)
 
 
+def test_embedding_alias_with_test_representation(mini_adata):
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+    )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
 def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
     mini_adata.obs["score_with_nan"] = mini_adata.obs["score"].astype(float)
     mini_adata.obs.loc["c3", "score_with_nan"] = np.nan
 
-    fig, ax = bt.sct.pl.embedding_plot(
+    fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score_with_nan",
         use_rep="X_pca",
@@ -93,7 +105,7 @@ def test_embedding_plot_discrete_handles_nan_mapping_labels_and_graph(mini_adata
     mini_adata.uns["epg"] = epg
     mini_adata.uns["flat_tree"] = flat_tree
 
-    fig, ax = bt.sct.pl.embedding_plot(
+    fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="label_with_nan",
         use_rep="X_pca",
@@ -114,10 +126,27 @@ def test_embedding_plot_discrete_handles_nan_mapping_labels_and_graph(mini_adata
     plt.close(fig)
 
 
+def test_embedding_discrete_uses_colors_from_uns(mini_adata):
+    mini_adata.uns["cluster_color"] = {"A": "red", "B": "blue"}
+
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+    )
+
+    facecolors = [collection.get_facecolor()[0] for collection in ax.collections]
+
+    assert len(facecolors) == 2
+    np.testing.assert_allclose(facecolors[0], to_rgba("red", alpha=0.3))
+    np.testing.assert_allclose(facecolors[1], to_rgba("blue", alpha=0.3))
+    plt.close(fig)
+
+
 def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path):
     outfile = tmp_path / "embedding.png"
 
-    result = bt.sct.pl.embedding_plot(
+    result = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster",
         use_rep="X_pca",
@@ -128,7 +157,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
     assert outfile.exists()
 
     with pytest.raises(ValueError, match="invalid argument value for 'n_components'"):
-        bt.sct.pl.embedding_plot(
+        bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
@@ -136,7 +165,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
         )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'title'"):
-        bt.sct.pl.embedding_plot(
+        bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
@@ -144,10 +173,10 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
         )
 
     with pytest.raises(KeyError):
-        bt.sct.pl.embedding_plot(mini_adata, obs="missing", use_rep="X_pca")
+        bt.sct.pl.embedding(mini_adata, obs="missing", use_rep="X_pca")
 
     with pytest.raises(KeyError):
-        bt.sct.pl.embedding_plot(mini_adata, obs="cluster", use_rep="missing")
+        bt.sct.pl.embedding(mini_adata, obs="cluster", use_rep="missing")
 
 
 def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata):
@@ -160,7 +189,7 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
-    returned_fig, returned_ax = bt.sct.pl.embedding_plot(
+    returned_fig, returned_ax = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster_with_nan",
         use_rep="X_pca",
@@ -193,7 +222,7 @@ def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
 
     fig, ax = plt.subplots()
 
-    returned_fig, returned_ax = bt.sct.pl.embedding_plot(
+    returned_fig, returned_ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score_with_nan",
         use_rep="X_pca",
@@ -221,7 +250,7 @@ def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
 def test_embedding_plot_continuous_accepts_colormap_name(mini_adata):
     mini_adata.obs["score"] = mini_adata.obs["score"].astype(float)
 
-    fig, ax = bt.sct.pl.embedding_plot(
+    fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score",
         use_rep="X_pca",
@@ -259,7 +288,7 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
     mini_adata.uns["epg"] = epg
     mini_adata.uns["flat_tree"] = flat_tree
 
-    fig, ax = bt.sct.pl.embedding_plot(
+    fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="many_categories",
         use_rep="X_pca",
@@ -292,7 +321,7 @@ def test_embedding_plot_discrete_listed_colormap_skips_unused_category(mini_adat
     )
 
     with pytest.warns(RuntimeWarning, match="Mean of empty slice"):
-        fig, ax = bt.sct.pl.embedding_plot(
+        fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster_with_unused",
             use_rep="X_pca",
@@ -317,7 +346,7 @@ def test_embedding_plot_rejects_unsupported_object_dtype(mini_adata):
     )
 
     with pytest.raises(TypeError, match="unsupported dtype"):
-        bt.sct.pl.embedding_plot(
+        bt.sct.pl.embedding(
             mini_adata,
             obs="object_values",
             use_rep="X_pca",

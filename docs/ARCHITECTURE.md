@@ -93,7 +93,8 @@ Plotting utilities built around matplotlib-style APIs.
 Main responsibilities:
 
 - Boxplots.
-- Scatter plots.
+- Composition stacked barplots.
+- Embedding plots.
 - Density plots.
 - Graph plots.
 - Shared colors and figure styling.

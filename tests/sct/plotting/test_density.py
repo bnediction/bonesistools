@@ -16,12 +16,12 @@ from bonesistools.sctools.plotting import _density
 ADATA = bt.sct.datasets.nestorowa()
 
 
-def test_kde_plot_returns_matplotlib_objects():
+def test_density_returns_matplotlib_objects():
     adata = ADATA.copy()
     adata.obs["cluster"] = adata.obs["clusters"].astype("category")
     gene = adata.var_names[0]
 
-    fig, ax = bt.sct.pl.kde_plot(
+    fig, ax = bt.sct.pl.density(
         adata,
         gene=gene,
         xlabel="count",
@@ -34,12 +34,12 @@ def test_kde_plot_returns_matplotlib_objects():
     plt.close(fig)
 
 
-def test_ecdf_plot_returns_matplotlib_objects():
+def test_cdf_returns_matplotlib_objects():
     adata = ADATA.copy()
     adata.obs["cluster"] = adata.obs["clusters"].astype("category")
     gene = adata.var_names[0]
 
-    fig, ax = bt.sct.pl.ecdf_plot(
+    fig, ax = bt.sct.pl.cdf(
         adata,
         gene=gene,
         xlabel="count",
@@ -52,12 +52,12 @@ def test_ecdf_plot_returns_matplotlib_objects():
     plt.close(fig)
 
 
-def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_path):
+def test_density_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_path):
     fig, ax = plt.subplots()
     called = []
     mini_adata.layers["sparse_counts"] = csr_matrix(mini_adata.layers["counts"])
 
-    returned_fig, returned_ax = bt.sct.pl.kde_plot(
+    returned_fig, returned_ax = bt.sct.pl.density(
         mini_adata,
         gene="g1",
         layer="sparse_counts",
@@ -81,21 +81,21 @@ def test_kde_plot_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_p
     plt.close(fig)
 
     outfile = tmp_path / "kde.png"
-    assert bt.sct.pl.kde_plot(mini_adata, gene="g1", outfile=outfile) is None
+    assert bt.sct.pl.density(mini_adata, gene="g1", outfile=outfile) is None
     assert outfile.exists()
 
     with pytest.raises(ValueError, match="invalid argument values"):
-        bt.sct.pl.kde_plot(mini_adata, gene="g1", not_all=True)
+        bt.sct.pl.density(mini_adata, gene="g1", not_all=True)
 
     with pytest.raises(KeyError, match="key 'missing' not found in adata.obs"):
-        bt.sct.pl.kde_plot(mini_adata, gene="g1", obs="missing")
+        bt.sct.pl.density(mini_adata, gene="g1", obs="missing")
 
 
-def test_kde_plot_default_generated_and_listed_colormap_colors(
+def test_density_default_generated_and_listed_colormap_colors(
     mini_adata,
     monkeypatch,
 ):
-    fig, ax = bt.sct.pl.kde_plot(
+    fig, ax = bt.sct.pl.density(
         mini_adata,
         gene="g1",
         obs="cluster",
@@ -115,7 +115,7 @@ def test_kde_plot_default_generated_and_listed_colormap_colors(
         var=pd.DataFrame(index=["g1"]),
     )
 
-    fig, ax = bt.sct.pl.kde_plot(
+    fig, ax = bt.sct.pl.density(
         adata,
         gene="g1",
         obs="many_clusters",
@@ -127,7 +127,7 @@ def test_kde_plot_default_generated_and_listed_colormap_colors(
     plt.close(fig)
 
     mini_adata.obs["cluster"] = mini_adata.obs["cluster"].cat.remove_unused_categories()
-    fig, ax = bt.sct.pl.kde_plot(
+    fig, ax = bt.sct.pl.density(
         mini_adata,
         gene="g1",
         obs="cluster",
@@ -139,12 +139,12 @@ def test_kde_plot_default_generated_and_listed_colormap_colors(
     plt.close(fig)
 
 
-def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
+def test_cdf_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     fig, ax = plt.subplots()
     called = []
     mini_adata.layers["sparse_counts"] = csr_matrix(mini_adata.layers["counts"])
 
-    returned_fig, returned_ax = bt.sct.pl.ecdf_plot(
+    returned_fig, returned_ax = bt.sct.pl.cdf(
         mini_adata,
         gene="g1",
         layer="sparse_counts",
@@ -164,12 +164,12 @@ def test_ecdf_plot_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     plt.close(fig)
 
     outfile = tmp_path / "ecdf.png"
-    assert bt.sct.pl.ecdf_plot(mini_adata, gene="g1", outfile=outfile) is None
+    assert bt.sct.pl.cdf(mini_adata, gene="g1", outfile=outfile) is None
     assert outfile.exists()
 
 
-def test_ecdf_plot_uses_mapping_colors_for_groups(mini_adata):
-    fig, ax = bt.sct.pl.ecdf_plot(
+def test_cdf_uses_mapping_colors_for_groups(mini_adata):
+    fig, ax = bt.sct.pl.cdf(
         mini_adata,
         gene="g1",
         obs="cluster",
