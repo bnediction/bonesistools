@@ -9,6 +9,7 @@ from collections.abc import (
 )
 from typing import (
     Dict,
+    FrozenSet,
     MutableMapping,
     MutableSet,
     Optional,
@@ -416,7 +417,7 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         return None
 
     @property
-    def components(self) -> frozenset[str]:
+    def components(self) -> FrozenSet[str]:
         """
         Return explicitly specified hypercube components.
 
@@ -1021,7 +1022,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         self._hypercubes.discard(hypercube)
 
     @property
-    def components(self) -> frozenset[str]:
+    def components(self) -> FrozenSet[str]:
         """
         Return components appearing in at least one hypercube.
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from numbers import Number
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from ._boolean import PartialBoolean
 from ._typing import HypercubeLike, PartialBooleanLike
@@ -259,7 +259,7 @@ class BooleanPredecessorInference:
     def predecessor_votes(
         cell1: HypercubeLike,
         cell2: HypercubeLike,
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]],
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]],
     ) -> Counter[str]:
         """
         Return predecessor votes between two partial Boolean configurations.
@@ -276,7 +276,7 @@ class BooleanPredecessorInference:
         ----------
         cell1, cell2: HypercubeLike
             Partial Boolean configurations indexed by component name.
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]]
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]]
             Signed source-target interactions.
 
         Returns
@@ -325,7 +325,7 @@ class BooleanPredecessorInference:
     def predecessor(
         cell1: HypercubeLike,
         cell2: HypercubeLike,
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]],
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]],
     ) -> Optional[str]:
         """
         Infer the most supported predecessor relationship between two configurations.
@@ -334,7 +334,7 @@ class BooleanPredecessorInference:
         ----------
         cell1, cell2: HypercubeLike
             Partial Boolean configurations indexed by component name.
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]]
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]]
             Signed source-target interactions.
 
         Returns
@@ -365,7 +365,7 @@ class BooleanPredecessorInference:
     def predecessor_score(
         cell1: HypercubeLike,
         cell2: HypercubeLike,
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]],
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]],
     ) -> float:
         """
         Return a normalized predecessor score between two configurations.
@@ -380,7 +380,7 @@ class BooleanPredecessorInference:
         ----------
         cell1, cell2: HypercubeLike
             Partial Boolean configurations indexed by component name.
-        interactions: Iterable[tuple[str, str, Mapping[str, Any]]]
+        interactions: Iterable[Tuple[str, str, Mapping[str, Any]]]
             Signed source-target interactions.
 
         Returns

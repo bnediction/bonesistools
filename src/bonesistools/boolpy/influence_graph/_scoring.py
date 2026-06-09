@@ -6,9 +6,13 @@ from dataclasses import dataclass
 from itertools import product
 from typing import (
     Any,
+    Dict,
     Iterable,
+    List,
     Mapping,
+    Optional,
     Sequence,
+    Tuple,
 )
 
 import networkx as nx
@@ -52,7 +56,7 @@ class InteractionScore:
         return self.score / self.total_weight
 
 
-def _default_weights(max_depth: int) -> list[float]:
+def _default_weights(max_depth: int) -> List[float]:
     return [1 / (length**2) for length in range(1, max_depth + 1)]
 
 
@@ -74,7 +78,7 @@ def _edge_signs(
     graph: nx.Graph[Any],
     source: str,
     target: str,
-) -> list[int]:
+) -> List[int]:
     edge_data = graph.get_edge_data(source, target)
 
     if edge_data is None:
@@ -104,7 +108,7 @@ def _edge_signs(
 def _walk_signs(
     graph: nx.Graph[Any],
     walk: Sequence[str],
-) -> list[int]:
+) -> List[int]:
     edge_signs = [
         _edge_signs(graph, source, target) for source, target in zip(walk, walk[1:])
     ]
@@ -127,10 +131,10 @@ def _walk_signs(
 
 def interaction_scores_from_walks(
     graph: nx.Graph[Any],
-    genes: Iterable[str] | None = None,
+    genes: Optional[Iterable[str]] = None,
     max_depth: int = 3,
-    weights: Sequence[float] | None = None,
-) -> dict[str, dict[str, InteractionScore]]:
+    weights: Optional[Sequence[float]] = None,
+) -> Dict[str, Dict[str, InteractionScore]]:
     """
     Estimate signed interaction scores from bounded directed walks.
 
@@ -173,8 +177,10 @@ def interaction_scores_from_walks(
     genes = list(graph.nodes if genes is None else genes)
     gene_set = set(genes)
 
-    scores: dict[str, dict[str, InteractionScore]] = {gene: {} for gene in genes}
-    accumulators: dict[str, dict[str, dict[str, float]]] = {gene: {} for gene in genes}
+    scores: Dict[str, Dict[str, InteractionScore]] = {gene: {} for gene in genes}
+    accumulators: Dict[str, Dict[str, Dict[str, float]]] = {
+        gene: {} for gene in genes
+    }
 
     for source in genes:
         if source not in graph:
@@ -230,11 +236,11 @@ def _passes_threshold(
 
 def infer_signed_interactions(
     scores: Mapping[str, Mapping[str, InteractionScore]],
-    genes: Iterable[str] | None = None,
+    genes: Optional[Iterable[str]] = None,
     minimum_path_number: int = 1,
     threshold: float = 0.75,
     allow_bidirectional: bool = False,
-) -> list[tuple[str, str, dict[str, int]]]:
+) -> List[Tuple[str, str, Dict[str, int]]]:
     """
     Infer signed directed interactions from normalized interaction scores.
 
@@ -307,13 +313,13 @@ def infer_signed_interactions(
 
 def infer_signed_interactions_from_walks(
     graph: nx.Graph[Any],
-    genes: Iterable[str] | None = None,
+    genes: Optional[Iterable[str]] = None,
     max_depth: int = 3,
-    weights: Sequence[float] | None = None,
+    weights: Optional[Sequence[float]] = None,
     minimum_path_number: int = 1,
     threshold: float = 0.75,
     allow_bidirectional: bool = False,
-) -> list[tuple[str, str, dict[str, int]]]:
+) -> List[Tuple[str, str, Dict[str, int]]]:
     """
     Infer signed interactions directly from bounded directed walks.
 

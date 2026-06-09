@@ -566,7 +566,7 @@ def embedding_plot(
     use_rep: str,
     colors: Optional[Colors] = None,
     n_components: int = 2,
-    title: Optional[Union[str, dict[str, Any]]] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
     add_labels: bool = False,
     add_graph: bool = False,
     add_labels_to_graph: bool = False,

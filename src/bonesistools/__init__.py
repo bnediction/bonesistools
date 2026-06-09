@@ -25,6 +25,7 @@ import sys as _sys
 import warnings as _warnings
 from types import ModuleType as _ModuleType
 from typing import TYPE_CHECKING as _TYPE_CHECKING
+from typing import List as _List
 
 from . import boolpy as bpy
 from . import databases as dbs
@@ -83,5 +84,5 @@ def __getattr__(name: str) -> _ModuleType:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__() -> list[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))

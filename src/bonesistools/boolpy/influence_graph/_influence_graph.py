@@ -8,12 +8,15 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
     FrozenSet,
     Iterable,
+    List,
     Mapping,
     MutableMapping,
     NoReturn,
     Optional,
+    Set,
     Tuple,
     Union,
     cast,
@@ -63,6 +66,8 @@ class InfluenceGraph(_MultiDiGraphBase):
     nodes.
     """
 
+    __slots__ = ()
+
     def __init__(
         self,
         graph: Optional[Union[nx.DiGraph[Any], nx.MultiDiGraph[Any]]] = None,
@@ -92,8 +97,6 @@ class InfluenceGraph(_MultiDiGraphBase):
             self._replace_with_graph(self._plain_graph(graph))
         else:
             self._validate_graph()
-
-    __slots__ = ()
 
     def __str__(self) -> str:
         """
@@ -432,7 +435,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def strongly_connected_components(
         self,
         include_singleton_selfloops: bool = True,
-    ) -> list[set[str]]:
+    ) -> List[Set[str]]:
         """
         Return strongly connected components involved in feedback structures.
 
@@ -490,7 +493,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def feedback_nodes(
         self,
         include_singleton_selfloops: bool = True,
-    ) -> set[str]:
+    ) -> Set[str]:
         """
         Return nodes belonging to feedback-relevant strongly connected components.
 
@@ -519,7 +522,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         return nodes
 
-    def regulators(self) -> list[Any]:
+    def regulators(self) -> List[Any]:
         """
         Return regulator-only nodes.
 
@@ -556,7 +559,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             if self.out_degree(node) > 0 and self.in_degree(node) == 0
         ]
 
-    def targets(self) -> list[Any]:
+    def targets(self) -> List[Any]:
         """
         Return terminal target nodes.
 
@@ -598,7 +601,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         include_successors: bool = True,
         exclude_feedback_nodes: bool = True,
         min_size: int = 2,
-    ) -> dict[StructuralSignature, set[str]]:
+    ) -> Dict[StructuralSignature, Set[str]]:
         """
         Return families of structurally equivalent nodes.
 
@@ -915,7 +918,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def autoregulations(
         self,
         sign: Optional[CircuitSign] = None,
-    ) -> list[tuple[str, int]]:
+    ) -> List[Tuple[str, int]]:
         """
         Return signed autoregulations.
 
@@ -1098,7 +1101,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         direction: Direction = "both",
         sccs: Optional[Iterable[Iterable[str]]] = None,
         sign: Optional[int] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """
         Return shortest paths between markers and feedback SCCs.
 
@@ -1274,7 +1277,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def circuits(
         self,
         sign: Optional[CircuitSign] = None,
-    ) -> list[tuple[list[str], int]]:
+    ) -> List[Tuple[List[str], int]]:
         """
         Return signed feedback circuits.
 
@@ -1359,7 +1362,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         return circuits
 
-    def positive_circuits(self) -> list[list[str]]:
+    def positive_circuits(self) -> List[List[str]]:
         """
         Return positive feedback circuits.
 
@@ -1371,7 +1374,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         return [cycle for cycle, _ in self.circuits(sign=1)]
 
-    def negative_circuits(self) -> list[list[str]]:
+    def negative_circuits(self) -> List[List[str]]:
         """
         Return negative feedback circuits.
 
@@ -1744,14 +1747,14 @@ class InfluenceGraph(_MultiDiGraphBase):
             self.add_edge(source, target, sign=sign, **data)
 
     @staticmethod
-    def _cycle_edges(cycle: list[str]) -> list[tuple[str, str]]:
+    def _cycle_edges(cycle: List[str]) -> List[Tuple[str, str]]:
         """
         Return ordered directed edges from a cycle node list.
         """
 
         return list(zip(cycle, cycle[1:] + cycle[:1]))
 
-    def _edge_signs(self, source: str, target: str) -> list[int]:
+    def _edge_signs(self, source: str, target: str) -> List[int]:
         """
         Return normalized signs for all edges between two nodes.
         """
@@ -2261,7 +2264,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def autoregulations(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         sign: Optional[CircuitSign] = None,
-    ) -> list[tuple[str, int, float]]:
+    ) -> List[Tuple[str, int, float]]:
         """
         Return autoregulations with their sign and occurrence frequency.
 
@@ -2375,7 +2378,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         min_size: int = 2,
         bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
         protect_feedback_nodes: Optional[bool] = None,
-    ) -> dict[tuple[Any, ...], set[str]]:
+    ) -> Dict[Tuple[Any, ...], Set[str]]:
         """
         Group structurally equivalent nodes using signed frequency-aware edges.
 

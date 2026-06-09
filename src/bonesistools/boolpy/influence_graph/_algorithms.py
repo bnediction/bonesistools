@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, List
 
 import networkx as nx
 
@@ -11,7 +11,7 @@ def walks_from(
     graph: nx.Graph[Any],
     source: str,
     max_depth: int = 3,
-) -> list[list[str]]:
+) -> List[List[str]]:
     """
     Return directed walks starting from a source node up to a maximum depth.
 
@@ -63,7 +63,7 @@ def walks_from(
 
     def explore(
         node: str,
-        path: list[str],
+        path: List[str],
         remaining_depth: int,
     ) -> None:
 

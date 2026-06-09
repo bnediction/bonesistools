@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterator,
     Mapping,
     Optional,
@@ -87,7 +88,7 @@ def kde_plot(
     clip: bool = False,
     colors: Optional[Colors] = None,
     show_legend: bool = True,
-    title: Optional[Union[str, dict[str, Any]]] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
     default_parameters: Optional[Callable[[], None]] = None,
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,

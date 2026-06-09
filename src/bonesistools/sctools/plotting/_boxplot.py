@@ -173,7 +173,7 @@ def boxplot(
     sym: Optional[str] = None,
     patch_artist: Optional[bool] = None,
     vert: Optional[bool] = None,
-    title: Optional[Union[str, dict[str, Any]]] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
     sort: Optional[Literal["ascending", "descending"]] = None,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,

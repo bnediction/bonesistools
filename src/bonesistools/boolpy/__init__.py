@@ -23,6 +23,9 @@ from __future__ import annotations
 import sys as _sys
 import warnings as _warnings
 from types import ModuleType as _ModuleType
+from typing import Dict as _Dict
+from typing import List as _List
+from typing import Tuple as _Tuple
 from typing import cast as _cast
 
 from . import boolean_algebra as ba
@@ -36,14 +39,14 @@ _sys.modules.update(
     {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig", "pl"]}
 )
 
-_MODULES: dict[str, _ModuleType] = {
+_MODULES: _Dict[str, _ModuleType] = {
     "ba": ba,
     "bn": bn,
     "ig": ig,
     "pl": pl,
 }
 
-_DEPRECATED: dict[str, tuple[str, str]] = {
+_DEPRECATED: _Dict[str, _Tuple[str, str]] = {
     "PartialBoolean": ("ba", "PartialBoolean"),
     "BooleanNetworkEnsemble": ("bn", "BooleanNetworkEnsemble"),
     "Hypercube": ("ba", "Hypercube"),
@@ -73,5 +76,5 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__() -> list[str]:
+def __dir__() -> _List[str]:
     return sorted(set(globals()) | set(__all__))
