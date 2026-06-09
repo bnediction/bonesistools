@@ -10,7 +10,7 @@ utilities for signed regulatory networks.
 from typing import List as _List
 
 from ._algorithms import walks_from
-from ._influence_graph import InfluenceGraph
+from ._influence_graph import AggregatedInfluenceGraph, InfluenceGraph
 from ._parser import read_influence_graph
 from ._scoring import (
     InteractionScore,
@@ -22,6 +22,7 @@ from ._scoring import (
 __all__ = [
     "read_influence_graph",
     "walks_from",
+    "AggregatedInfluenceGraph",
     "InfluenceGraph",
     "InteractionScore",
     "infer_signed_interactions",

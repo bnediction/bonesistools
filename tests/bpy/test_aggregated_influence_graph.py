@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
+import sys
+from types import ModuleType
+
 import networkx as nx
 import pytest
 
 from bonesistools.boolpy.boolean_network import BooleanNetwork, BooleanNetworkEnsemble
-from bonesistools.boolpy.influence_graph._influence_graph import (
+from bonesistools.boolpy.influence_graph import (
     AggregatedInfluenceGraph,
     InfluenceGraph,
 )
@@ -73,6 +76,12 @@ def test_doc_example_constructor_edge_frequency_and_autoregulations():
 
     assert graph.edge_frequency("A", "B") == 0.75
     assert graph.autoregulations() == []
+
+
+def test_aggregated_influence_graph_is_public():
+    from bonesistools import bpy
+
+    assert bpy.ig.AggregatedInfluenceGraph is AggregatedInfluenceGraph
 
 
 def test_doc_example_copy():
@@ -572,3 +581,77 @@ def test_to_pydot_supports_collapse_modes():
         ("TF", "g1|g2", "0.75", "normal"),
         ("g1|g2", "out", "0.5", "tee"),
     ]
+
+
+def test_show_supports_collapse_modes(monkeypatch):
+    calls = {}
+
+    class FakeDot:
+        def create_svg(self):
+            return b'<svg width="100pt" height="200pt"></svg>'
+
+    def fake_to_pydot(
+        self,
+        collapse=None,
+        bins=(0.0, 0.25, 0.5, 0.75, 1.0),
+        protect_feedback_nodes=True,
+        include_singleton_selfloops=True,
+        min_frequency=0.0,
+        show_edge_labels=True,
+        edge_style=None,
+        program="dot",
+        **kwargs,
+    ):
+        calls["to_pydot"] = {
+            "collapse": collapse,
+            "bins": bins,
+            "protect_feedback_nodes": protect_feedback_nodes,
+            "include_singleton_selfloops": include_singleton_selfloops,
+            "min_frequency": min_frequency,
+            "show_edge_labels": show_edge_labels,
+            "edge_style": edge_style,
+            "program": program,
+            "kwargs": kwargs,
+        }
+        return FakeDot()
+
+    class FakeSVG:
+        def __init__(self, svg):
+            self.svg = svg
+
+    def fake_display(svg):
+        calls["display"] = svg
+
+    display_module = ModuleType("IPython.display")
+    display_module.SVG = FakeSVG
+    display_module.display = fake_display
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setattr(AggregatedInfluenceGraph, "to_pydot", fake_to_pydot)
+
+    graph = _collapse_graph()
+    graph.show(
+        collapse="family",
+        bins=(0.0, 0.5, 1.0),
+        protect_feedback_nodes=False,
+        include_singleton_selfloops=False,
+        min_frequency=0.5,
+        show_edge_labels=False,
+        edge_style=False,
+        program="neato",
+        width="640px",
+        rankdir="LR",
+    )
+
+    assert calls["to_pydot"] == {
+        "collapse": "family",
+        "bins": (0.0, 0.5, 1.0),
+        "protect_feedback_nodes": False,
+        "include_singleton_selfloops": False,
+        "min_frequency": 0.5,
+        "show_edge_labels": False,
+        "edge_style": False,
+        "program": "neato",
+        "kwargs": {"rankdir": "LR"},
+    }
+    assert isinstance(calls["display"], FakeSVG)
+    assert calls["display"].svg == '<svg width="640px"></svg>'

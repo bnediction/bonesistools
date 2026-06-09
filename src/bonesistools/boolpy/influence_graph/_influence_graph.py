@@ -24,6 +24,7 @@ import networkx as nx
 from ..._compat import Literal
 from ..plotting._graphviz import _networkx_to_graphviz
 from ..plotting._styles import ratio_edge_style
+from ..plotting._svg import SvgLength, scale_svg
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -1645,6 +1646,8 @@ class InfluenceGraph(_MultiDiGraphBase):
         self,
         program: str = "dot",
         edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        width: Optional[SvgLength] = None,
+        height: Optional[SvgLength] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -1659,6 +1662,10 @@ class InfluenceGraph(_MultiDiGraphBase):
             Graphviz layout program used for rendering.
         edge_style: Callable, optional
             Optional callable used to update edge attributes before rendering.
+        width: str or int or float, optional
+            Display width assigned to the rendered SVG.
+        height: str or int or float, optional
+            Display height assigned to the rendered SVG.
         **kwargs: Any
             Keyword arguments passed to the underlying pydot graph through
             `dot.set(key, value)`.
@@ -1683,7 +1690,7 @@ class InfluenceGraph(_MultiDiGraphBase):
                 **kwargs,
             ),
         )
-        svg = dot.create_svg().decode()
+        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
 
         display(SVG(svg))
 
@@ -2577,9 +2584,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
             sign = self._normalize_sign(data["sign"])
             key = (collapsed_source, collapsed_target, sign)
-            edge_frequencies.setdefault(key, []).append(
-                data["count"] / self.total
-            )
+            edge_frequencies.setdefault(key, []).append(data["count"] / self.total)
 
         for (source, target, sign), frequencies in edge_frequencies.items():
             frequency = sum(frequencies) / len(frequencies)
@@ -2912,6 +2917,133 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             dot.set(key, value)
 
         return dot
+
+    # Aggregated rendering exposes collapse/frequency controls.
+    def show(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        collapse: Optional[CollapseMode] = None,
+        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        protect_feedback_nodes: bool = True,
+        include_singleton_selfloops: bool = True,
+        min_frequency: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        program: str = "dot",
+        width: Optional[SvgLength] = None,
+        height: Optional[SvgLength] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Display the aggregated influence graph in a Jupyter/IPython environment.
+
+        The graph is rendered through Graphviz using the `to_pydot()` method and
+        displayed as an SVG image. Optional collapse modes allow rendering the
+        exact graph, the family-collapsed graph, the feedback-induced graph, or
+        the full collapsed graph.
+
+        Examples
+        --------
+        Display the exact aggregated graph:
+
+        >>> graph = AggregatedInfluenceGraph(total=4)
+        >>> graph.add_edge("A", "B", sign=1, count=3)
+        0
+        >>> graph.show(width="700px")  # doctest: +SKIP
+
+        Display a family-collapsed graph:
+
+        >>> graph.show(collapse="family", width=900)  # doctest: +SKIP
+
+        Display only feedback influences:
+
+        >>> graph.show(collapse="feedback")  # doctest: +SKIP
+
+        Parameters
+        ----------
+        collapse: {None, "family", "feedback", "both"} (default: None)
+            Optional graph transformation applied before rendering.
+            If None, render the exact aggregated graph and display edge counts.
+            If `"family"`, render `family_collapsed_graph()` and display edge
+            frequencies.
+            If `"feedback"`, render the feedback-induced graph and display edge
+            frequencies.
+            If `"both"`, render `collapsed_graph()` and display edge
+            frequencies.
+        bins: Iterable of float
+            Ordered bin boundaries used by collapsed structural families.
+        protect_feedback_nodes: bool (default: True)
+            Whether feedback nodes are protected from family collapse when
+            `collapse="family"`.
+        include_singleton_selfloops: bool (default: True)
+            Whether singleton self-loop SCCs are retained when using
+            `collapse="feedback"` or `collapse="both"`.
+        min_frequency: float (default: 0.0)
+            Minimum edge frequency required for display.
+        show_edge_labels: bool (default: True)
+            Whether to display counts or frequencies as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to frequency. If True, use
+            `ratio_edge_style`. If False or None, no frequency style is applied.
+        program: str (default: "dot")
+            Graphviz layout program used for rendering.
+        width: str or int or float, optional
+            Display width assigned to the rendered SVG root. Integers and floats
+            are passed as raw SVG length values; strings can include CSS units,
+            for example `"900px"` or `"80%"`.
+        height: str or int or float, optional
+            Display height assigned to the rendered SVG root. Integers and
+            floats are passed as raw SVG length values; strings can include CSS
+            units.
+        **kwargs: Any
+            Keyword arguments passed to the underlying pydot graph through
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        None
+            The SVG is displayed in the current IPython/Jupyter output cell.
+
+        Raises
+        ------
+        RuntimeError
+            If IPython is not available.
+        ValueError
+            If `collapse` is invalid or `min_frequency` is outside [0, 1].
+
+        Notes
+        -----
+        `width` and `height` only affect notebook display by rewriting the root
+        SVG attributes after Graphviz rendering. They do not change the graph
+        layout computed by Graphviz.
+        """
+
+        try:
+            from IPython.display import SVG, display
+
+        except ImportError:
+            raise RuntimeError("show() requires an IPython/Jupyter environment.")
+
+        dot = cast(
+            Any,
+            self.to_pydot(
+                collapse=collapse,
+                bins=bins,
+                protect_feedback_nodes=protect_feedback_nodes,
+                include_singleton_selfloops=include_singleton_selfloops,
+                min_frequency=min_frequency,
+                show_edge_labels=show_edge_labels,
+                edge_style=edge_style,
+                program=program,
+                **kwargs,
+            ),
+        )
+        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
+
+        display(SVG(svg))
 
     def validate_counts(self) -> None:
         """

@@ -74,8 +74,7 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
         )
 
     assert not any(
-        "Variable names are not unique" in str(warning.message)
-        for warning in records
+        "Variable names are not unique" in str(warning.message) for warning in records
     )
     assert set(merged.var_names) == {"g1", "g2"}
     assert merged.var.loc["g1", "tag"] == "preferred"
@@ -106,8 +105,7 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
         )
 
     assert not any(
-        "Variable names are not unique" in str(warning.message)
-        for warning in records
+        "Variable names are not unique" in str(warning.message) for warning in records
     )
     assert merged_without_column.var_names.tolist() == ["g1"]
     assert "copy_var_names" not in merged_without_column.var

@@ -218,6 +218,22 @@ def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
     plt.close(fig)
 
 
+def test_embedding_plot_continuous_accepts_colormap_name(mini_adata):
+    mini_adata.obs["score"] = mini_adata.obs["score"].astype(float)
+
+    fig, ax = bt.sct.pl.embedding_plot(
+        mini_adata,
+        obs="score",
+        use_rep="X_pca",
+        colors="gnuplot",
+    )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    assert len(fig.axes) == 2
+    plt.close(fig)
+
+
 def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
     mini_adata,
     monkeypatch,

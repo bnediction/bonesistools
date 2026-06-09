@@ -38,7 +38,14 @@ from ._colors import (
     lightgray,
 )
 
-Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
+Colors = Union[
+    str,
+    Sequence[object],
+    Iterator[object],
+    Colormap,
+    Mapping[object, object],
+]
+ContinuousColors = Union[str, Colormap]
 
 
 def __figure_from_axes(ax: Axes) -> Figure:
@@ -57,6 +64,20 @@ def __colormap_colors(colors: Colors) -> Sequence[object]:
         return cast(Sequence[object], colors.colors)
 
     return cast(Sequence[object], colors)
+
+
+def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
+    if colors is None:
+        return plt.get_cmap("autumn_r")
+    if isinstance(colors, str):
+        return plt.get_cmap(colors)
+    if isinstance(colors, Colormap):
+        return colors
+
+    raise TypeError(
+        "unsupported colors for continuous observations: "
+        "expected a matplotlib colormap or colormap name"
+    )
 
 
 def __normalize_color(color: object) -> object:
@@ -317,13 +338,13 @@ def __scatterplot_continuous(
     scdata: ScData,  # type: ignore
     obs: str,
     use_rep: str,
-    colors: Optional[Colormap] = None,
+    colors: Optional[ContinuousColors] = None,
     n_components: int = 2,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
 
-    cmap = colors if colors is not None else plt.get_cmap("autumn_r")
+    cmap = __continuous_colormap(colors)
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
     if "facecolor" in kwargs["nan"] and "color" not in kwargs["nan"]:
@@ -543,7 +564,7 @@ def embedding_plot(
     scdata: ScData,  # type: ignore
     obs: str,
     use_rep: str,
-    colors: Optional[Colormap] = None,
+    colors: Optional[Colors] = None,
     n_components: int = 2,
     title: Optional[Union[str, dict[str, Any]]] = None,
     add_labels: bool = False,
@@ -646,7 +667,13 @@ def embedding_plot(
 
     if pd.api.types.is_float_dtype(scdata.obs[obs]):
         fig, ax = __scatterplot_continuous(
-            scdata, obs, use_rep, colors, component_number, ax=ax, **kwargs
+            scdata,
+            obs,
+            use_rep,
+            cast(Optional[ContinuousColors], colors),
+            component_number,
+            ax=ax,
+            **kwargs,
         )
     elif (
         pd.api.types.is_integer_dtype(scdata.obs[obs])

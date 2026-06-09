@@ -93,9 +93,7 @@ def test_gene_synonyms_contains_and_find(mouse_genesyn):
     assert mouse_genesyn.contains("bad-id", identifier_type="MGI") == [False]
     assert mouse_genesyn.find() == []
     assert mouse_genesyn.find("Tp53", "not-a-gene", "Myc") == ["Tp53", "Myc"]
-    assert mouse_genesyn.find("22059", "bad-id", identifier_type="gene_id") == [
-        "22059"
-    ]
+    assert mouse_genesyn.find("22059", "bad-id", identifier_type="gene_id") == ["22059"]
     assert mouse_genesyn.find("bad-id", identifier_type="MGI") == []
 
     with pytest.raises(

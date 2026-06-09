@@ -2,6 +2,9 @@
 
 #!/usr/bin/env python
 
+import sys
+from types import ModuleType
+
 import pytest
 
 import bonesistools as bt
@@ -232,6 +235,75 @@ def test_boolean_network_ensemble_to_pydot_with_edge_labels(bnet_ensemble):
 
     assert "3" in labels
     assert "1" in labels
+
+
+def test_boolean_network_ensemble_show(monkeypatch, bnet_ensemble):
+    calls = {}
+
+    class FakeDot:
+        def create_svg(self):
+            return b'<svg width="100pt" height="200pt"></svg>'
+
+    def fake_to_pydot(
+        self,
+        remove_isolated_nodes=False,
+        node_style=None,
+        min_ratio=0.0,
+        show_edge_labels=True,
+        edge_style=None,
+        program="dot",
+        **kwargs,
+    ):
+        calls["to_pydot"] = {
+            "remove_isolated_nodes": remove_isolated_nodes,
+            "node_style": node_style,
+            "min_ratio": min_ratio,
+            "show_edge_labels": show_edge_labels,
+            "edge_style": edge_style,
+            "program": program,
+            "kwargs": kwargs,
+        }
+        return FakeDot()
+
+    class FakeSVG:
+        def __init__(self, svg):
+            self.svg = svg
+
+    def fake_display(svg):
+        calls["display"] = svg
+
+    display_module = ModuleType("IPython.display")
+    display_module.SVG = FakeSVG
+    display_module.display = fake_display
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setattr(
+        bt.bpy.bn.BooleanNetworkEnsemble,
+        "to_pydot",
+        fake_to_pydot,
+    )
+
+    bnet_ensemble.show(
+        remove_isolated_nodes=True,
+        node_style="count",
+        min_ratio=0.5,
+        show_edge_labels=False,
+        edge_style=False,
+        program="neato",
+        height="480px",
+        rankdir="LR",
+    )
+
+    assert calls["to_pydot"] == {
+        "remove_isolated_nodes": True,
+        "node_style": "count",
+        "min_ratio": 0.5,
+        "show_edge_labels": False,
+        "edge_style": False,
+        "program": "neato",
+        "kwargs": {"rankdir": "LR"},
+    }
+    assert isinstance(calls["display"], FakeSVG)
+    assert calls["display"].svg == '<svg height="480px"></svg>'
 
 
 def test_ensemble_allows_external_regulators_unchecked():

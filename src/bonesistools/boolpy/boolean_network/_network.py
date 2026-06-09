@@ -48,6 +48,7 @@ from ..plotting import (
     stability_node_style,
 )
 from ..plotting._graphviz import _networkx_to_graphviz
+from ..plotting._svg import SvgLength, scale_svg
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 if TYPE_CHECKING:
@@ -1001,6 +1002,76 @@ class BooleanNetwork(Dict[str, Expression]):
             program=program, edge_style=edge_style, **kwargs
         )
 
+    def show(
+        self,
+        program: str = "dot",
+        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        width: Optional[SvgLength] = None,
+        height: Optional[SvgLength] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Display the Boolean network in a Jupyter/IPython environment.
+
+        The influence graph induced by the Boolean network is rendered through
+        Graphviz using the `to_pydot()` method and displayed as an SVG image.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
+        >>> bn.show(width="700px")  # doctest: +SKIP
+
+        Parameters
+        ----------
+        program: str (default: "dot")
+            Graphviz layout program used for rendering.
+        edge_style: Callable, optional
+            Optional callable used to update edge attributes before rendering.
+        width: str or int or float, optional
+            Display width assigned to the rendered SVG root. Strings can include
+            CSS units, for example `"700px"` or `"80%"`.
+        height: str or int or float, optional
+            Display height assigned to the rendered SVG root. Strings can
+            include CSS units.
+        **kwargs: Any
+            Keyword arguments passed to the underlying pydot graph through
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        None
+            The SVG is displayed in the current IPython/Jupyter output cell.
+
+        Raises
+        ------
+        RuntimeError
+            If IPython is not available.
+
+        Notes
+        -----
+        `width` and `height` only affect notebook display by rewriting the root
+        SVG attributes after Graphviz rendering. They do not change the graph
+        layout computed by Graphviz.
+        """
+
+        try:
+            from IPython.display import SVG, display
+
+        except ImportError:
+            raise RuntimeError("show() requires an IPython/Jupyter environment.")
+
+        dot = cast(
+            Any,
+            self.to_pydot(
+                program=program,
+                edge_style=edge_style,
+                **kwargs,
+            ),
+        )
+        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
+
+        display(SVG(svg))
+
     def to_graphviz(
         self,
         program: str = "dot",
@@ -1943,6 +2014,108 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             dot.set(key, value)
 
         return dot
+
+    def show(
+        self,
+        remove_isolated_nodes: bool = False,
+        node_style: Union[
+            Literal["count", "stability"],
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        min_ratio: float = 0.0,
+        show_edge_labels: bool = True,
+        edge_style: Union[
+            Callable[[float], Mapping[str, Any]],
+            bool,
+            None,
+        ] = ratio_edge_style,
+        program: str = "dot",
+        width: Optional[SvgLength] = None,
+        height: Optional[SvgLength] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Display the Boolean network ensemble in a Jupyter/IPython environment.
+
+        The aggregated signed influence graph induced by the ensemble is
+        rendered through Graphviz using the `to_pydot()` method and displayed as
+        an SVG image.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
+        ... )
+        >>> ensemble.show(node_style="stability", width="900px")  # doctest: +SKIP
+
+        Parameters
+        ----------
+        remove_isolated_nodes: bool (default: False)
+            If True, remove components with no incoming or outgoing influence.
+        node_style: Literal["count", "stability"] or Callable or bool or None
+            Node styling strategy.
+        min_ratio: float (default: 0.0)
+            Minimum edge occurrence ratio required for an influence to be
+            displayed.
+        show_edge_labels: bool (default: True)
+            If True, display edge occurrence counts as edge labels.
+        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
+            Function used to style edges according to their occurrence ratio.
+            If True, use `ratio_edge_style`.
+        program: str (default: "dot")
+            Graphviz layout program used for rendering.
+        width: str or int or float, optional
+            Display width assigned to the rendered SVG root. Strings can include
+            CSS units, for example `"900px"` or `"80%"`.
+        height: str or int or float, optional
+            Display height assigned to the rendered SVG root. Strings can
+            include CSS units.
+        **kwargs: Any
+            Keyword arguments passed to the underlying pydot graph through
+            `dot.set(key, value)`.
+
+        Returns
+        -------
+        None
+            The SVG is displayed in the current IPython/Jupyter output cell.
+
+        Raises
+        ------
+        RuntimeError
+            If IPython is not available.
+        ValueError
+            If `min_ratio` is outside [0, 1].
+
+        Notes
+        -----
+        `width` and `height` only affect notebook display by rewriting the root
+        SVG attributes after Graphviz rendering. They do not change the graph
+        layout computed by Graphviz.
+        """
+
+        try:
+            from IPython.display import SVG, display
+
+        except ImportError:
+            raise RuntimeError("show() requires an IPython/Jupyter environment.")
+
+        dot = cast(
+            Any,
+            self.to_pydot(
+                remove_isolated_nodes=remove_isolated_nodes,
+                node_style=node_style,
+                min_ratio=min_ratio,
+                show_edge_labels=show_edge_labels,
+                edge_style=edge_style,
+                program=program,
+                **kwargs,
+            ),
+        )
+        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
+
+        display(SVG(svg))
 
     def _check_network(self, bn: BooleanNetworkLike) -> None:
         """

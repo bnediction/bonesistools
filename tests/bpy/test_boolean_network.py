@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import sys
+from types import ModuleType
+
 import pytest
 from boolean import BooleanAlgebra
 
@@ -536,3 +539,46 @@ def test_boolean_network_to_pydot():
 
     assert edges[("C", "A")].get_color() == "red2"
     assert edges[("C", "A")].get_arrowhead() == "tee"
+
+
+def test_boolean_network_show(monkeypatch):
+    calls = {}
+
+    class FakeDot:
+        def create_svg(self):
+            return b'<svg width="100pt" height="200pt"></svg>'
+
+    def fake_to_pydot(self, program="dot", edge_style=None, **kwargs):
+        calls["to_pydot"] = {
+            "program": program,
+            "edge_style": edge_style,
+            "kwargs": kwargs,
+        }
+        return FakeDot()
+
+    class FakeSVG:
+        def __init__(self, svg):
+            self.svg = svg
+
+    def fake_display(svg):
+        calls["display"] = svg
+
+    display_module = ModuleType("IPython.display")
+    display_module.SVG = FakeSVG
+    display_module.display = fake_display
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setattr(bt.bpy.bn.BooleanNetwork, "to_pydot", fake_to_pydot)
+
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
+
+    bn.show(
+        program="neato",
+        edge_style=lambda data: data,
+        width=600,
+        rankdir="LR",
+    )
+
+    assert calls["to_pydot"]["program"] == "neato"
+    assert calls["to_pydot"]["kwargs"] == {"rankdir": "LR"}
+    assert isinstance(calls["display"], FakeSVG)
+    assert calls["display"].svg == '<svg width="600"></svg>'

@@ -952,17 +952,13 @@ class GeneSynonyms:
         """
 
         if identifier_type == "name":
-            return [
-                gene.upper() in self.__upper_gene_names_mapping for gene in genes
-            ]
+            return [gene.upper() in self.__upper_gene_names_mapping for gene in genes]
 
         if identifier_type == "gene_id":
             return [gene in self.gene_aliases_mapping["gene_id"] for gene in genes]
 
         if identifier_type == "ensembl_id":
-            return [
-                gene in self.gene_aliases_mapping["ensembl_id"] for gene in genes
-            ]
+            return [gene in self.gene_aliases_mapping["ensembl_id"] for gene in genes]
 
         if identifier_type in self.databases:
             database_mapping = self.gene_aliases_mapping["databases"][identifier_type]

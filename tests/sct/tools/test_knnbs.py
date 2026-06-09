@@ -194,13 +194,9 @@ def test_knnbs_select_central_cells_recovers_nearest_single_cluster_cells():
 
 def test_knnbs_select_peripheral_cells_recovers_remote_cells():
     core_a = _grid_cloud(center=(-5.0, -5.0), radius=0.1, steps=4)
-    remote_a = _grid_cloud(center=(-6.0, -6.0), radius=0.04, steps=3)[
-        [0, 2, 4, 6, 8]
-    ]
+    remote_a = _grid_cloud(center=(-6.0, -6.0), radius=0.04, steps=3)[[0, 2, 4, 6, 8]]
     core_b = _grid_cloud(center=(5.0, 5.0), radius=0.1, steps=4)
-    remote_b = _grid_cloud(center=(6.0, 6.0), radius=0.04, steps=3)[
-        [0, 2, 4, 6, 8]
-    ]
+    remote_b = _grid_cloud(center=(6.0, 6.0), radius=0.04, steps=3)[[0, 2, 4, 6, 8]]
     cloud_a = np.vstack([core_a, remote_a])
     cloud_b = np.vstack([core_b, remote_b])
     names_a = [f"a_core_{i}" for i in range(len(core_a))] + [
