@@ -6,7 +6,7 @@ import json
 import re
 import sys
 from datetime import date
-from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union, cast
 from urllib.request import urlopen
 
 import pandas as pd
@@ -59,8 +59,7 @@ def resolve_interactions_archive(
 
     if version_label == "latest":
         return (
-            f"{OMNIPATH_ARCHIVE_URL}/"
-            f"{OMNIPATH_INTERACTIONS_PREFIX}latest.tsv.gz",
+            f"{OMNIPATH_ARCHIVE_URL}/" f"{OMNIPATH_INTERACTIONS_PREFIX}latest.tsv.gz",
             "latest",
         )
 
@@ -101,7 +100,7 @@ def load_interactions_version(
     if resource not in interactions:
         raise ValueError(f"resource column not found in OmniPath archive: {resource}")
 
-    interactions = interactions[_truthy(interactions[resource])]
+    interactions = cast(pd.DataFrame, interactions[_truthy(interactions[resource])])
 
     if resource == "dorothea" and flavor == "legacy":
         interactions, needs_translation = _filter_organism_interactions(
@@ -170,7 +169,7 @@ def _format_signed_interactions(
 
     stimulation = _truthy(interactions[stimulation_column])
     inhibition = _truthy(interactions[inhibition_column])
-    interactions = interactions[stimulation ^ inhibition].copy()
+    interactions = cast(pd.DataFrame, interactions[stimulation ^ inhibition]).copy()
     stimulation = stimulation.loc[interactions.index]
 
     result = pd.DataFrame(
@@ -199,7 +198,10 @@ def _format_dorothea(
     )
 
     if levels is not None:
-        interactions = interactions[interactions["dorothea_level"].isin(levels)]
+        interactions = cast(
+            pd.DataFrame,
+            interactions[interactions["dorothea_level"].isin(levels)],
+        )
 
     stimulation = _truthy(interactions["is_stimulation"])
     inhibition = _truthy(interactions["is_inhibition"])
@@ -235,7 +237,10 @@ def _format_dorothea(
 
 
 def _deduplicate_dorothea(dorothea: pd.DataFrame) -> pd.DataFrame:
-    dorothea = dorothea[dorothea["source"] != dorothea["target"]]
+    dorothea = cast(
+        pd.DataFrame,
+        dorothea[dorothea["source"] != dorothea["target"]],
+    )
     return (
         dorothea.drop_duplicates()
         .drop_duplicates(subset=["source", "target"])
@@ -267,10 +272,10 @@ def _filter_organism_interactions(
     target_mask = (tax_source == target_tax_id) & (tax_target == target_tax_id)
 
     if target_mask.any():
-        return interactions[target_mask], False
+        return cast(pd.DataFrame, interactions[target_mask]), False
 
     human_mask = (tax_source == "9606") & (tax_target == "9606")
-    return interactions[human_mask], target_organism != "human"
+    return cast(pd.DataFrame, interactions[human_mask]), target_organism != "human"
 
 
 def _filter_human_interactions(
@@ -284,7 +289,7 @@ def _filter_human_interactions(
     tax_source = interactions["ncbi_tax_id_source"].astype(str)
     tax_target = interactions["ncbi_tax_id_target"].astype(str)
     human_mask = (tax_source == "9606") & (tax_target == "9606")
-    return interactions[human_mask], target_organism != "human"
+    return cast(pd.DataFrame, interactions[human_mask]), target_organism != "human"
 
 
 def _filter_dataset_evidences(
@@ -302,7 +307,7 @@ def _filter_dataset_evidences(
     evidence_rows = [_flatten_evidences(evidences) for evidences in filtered_evidences]
     keep = [bool(evidences) for evidences in evidence_rows]
 
-    interactions = interactions.loc[keep].copy()
+    interactions = cast(pd.DataFrame, interactions.loc[keep]).copy()
     filtered_evidences = [
         evidences for evidences, keep_row in zip(filtered_evidences, keep) if keep_row
     ]
@@ -356,9 +361,7 @@ def _filter_evidences(evidences: Any, dataset: str) -> Any:
 
     if isinstance(evidences, list):
         return [
-            evidence
-            for evidence in evidences
-            if evidence.get("dataset") == dataset
+            evidence for evidence in evidences if evidence.get("dataset") == dataset
         ]
 
     return evidences
@@ -380,9 +383,7 @@ def _flatten_evidences(evidences: Any) -> List[dict]:
 
     if isinstance(evidences, list):
         return [
-            evidence
-            for value in evidences
-            for evidence in _flatten_evidences(value)
+            evidence for value in evidences for evidence in _flatten_evidences(value)
         ]
 
     return []

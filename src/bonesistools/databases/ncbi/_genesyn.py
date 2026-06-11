@@ -898,9 +898,15 @@ class GeneSynonyms:
             )
 
         self.organism = organism
+        resolved_version: GeneInfoVersion
         if version is None:
-            version = getattr(self, "version", "current")
-        self.version = self.__normalize_gene_info_version(version)
+            resolved_version = cast(
+                GeneInfoVersion,
+                getattr(self, "version", "current"),
+            )
+        else:
+            resolved_version = version
+        self.version = self.__normalize_gene_info_version(resolved_version)
         self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
         self.__download_gene_info()

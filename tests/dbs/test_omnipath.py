@@ -66,8 +66,7 @@ def test_resolve_interactions_archive_reports_available_dates(monkeypatch):
         error.value
     )
     assert (
-        "available date ranges: "
-        "2023-01-01..2023-05-01, 2023-05-02..2024-01-01"
+        "available date ranges: " "2023-01-01..2023-05-01, 2023-05-02..2024-01-01"
     ) in str(error.value)
 
 
@@ -133,9 +132,7 @@ def test_load_interactions_version_filters_signed_resource_and_levels(monkeypatc
         organism="human",
     )
 
-    assert collectri[["source", "target", "sign", "version"]].to_dict(
-        "records"
-    ) == [
+    assert collectri[["source", "target", "sign", "version"]].to_dict("records") == [
         {
             "source": "TfD",
             "target": "GeneD",
@@ -292,9 +289,7 @@ def test_load_interactions_version_uses_archived_mouse_dorothea(monkeypatch):
         flavor="legacy",
     )
 
-    assert result[["source", "target", "sign", "confidence"]].to_dict(
-        "records"
-    ) == [
+    assert result[["source", "target", "sign", "confidence"]].to_dict("records") == [
         {"source": "TfA", "target": "GeneA", "sign": 1, "confidence": "A"},
     ]
 
@@ -309,14 +304,14 @@ def test_load_interactions_version_deduplicates_dorothea_edges(monkeypatch):
         _archive,
         "_read_interactions_archive",
         lambda url: pd.DataFrame(
-                {
-                    "source_genesymbol": ["TfA", "TfA", "TfA"],
-                    "target_genesymbol": ["GeneA", "GeneA", "GeneA"],
-                    "dorothea": ["True", "True", "True"],
-                    "is_stimulation": ["True", "True", "False"],
-                    "is_inhibition": ["False", "False", "True"],
-                    "consensus_stimulation": ["True", "True", "False"],
-                    "consensus_inhibition": ["False", "False", "True"],
+            {
+                "source_genesymbol": ["TfA", "TfA", "TfA"],
+                "target_genesymbol": ["GeneA", "GeneA", "GeneA"],
+                "dorothea": ["True", "True", "True"],
+                "is_stimulation": ["True", "True", "False"],
+                "is_inhibition": ["False", "False", "True"],
+                "consensus_stimulation": ["True", "True", "False"],
+                "consensus_inhibition": ["False", "False", "True"],
                 "dorothea_level": ["A", "A", "A"],
                 "ncbi_tax_id_source": ["9606", "9606", "9606"],
                 "ncbi_tax_id_target": ["9606", "9606", "9606"],

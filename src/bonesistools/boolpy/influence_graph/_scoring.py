@@ -178,9 +178,7 @@ def interaction_scores_from_walks(
     gene_set = set(genes)
 
     scores: Dict[str, Dict[str, InteractionScore]] = {gene: {} for gene in genes}
-    accumulators: Dict[str, Dict[str, Dict[str, float]]] = {
-        gene: {} for gene in genes
-    }
+    accumulators: Dict[str, Dict[str, Dict[str, float]]] = {gene: {} for gene in genes}
 
     for source in genes:
         if source not in graph:

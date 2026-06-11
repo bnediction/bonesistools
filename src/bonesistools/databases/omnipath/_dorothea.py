@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, cast
 
 import networkx as nx
 import pandas as pd
@@ -94,6 +94,12 @@ def dorothea(
             f"expected {str} or {int} but received {type(organism)}"
         )
 
+    if genesyn is not None and not isinstance(genesyn, GeneSynonyms):
+        raise TypeError(
+            f"unsupported argument type for 'genesyn': "
+            f"expected {GeneSynonyms} but received {type(genesyn)}"
+        )
+
     flavor = _resolve_dorothea_flavor(flavor=flavor, wrapper=wrapper)
     _warn_deprecated_reload(reload)
     _warn_ignored_kwargs(kwargs)
@@ -140,19 +146,13 @@ def dorothea(
     if genesyn is None:
         return grn
 
-    if isinstance(genesyn, GeneSynonyms):
-        genesyn(
-            grn,
-            input_identifier_type="name",
-            output_identifier_type=gene_identifier_type,
-            copy=False,
-        )
-        return grn
-
-    raise TypeError(
-        f"unsupported argument type for 'genesyn': "
-        f"expected {GeneSynonyms} but received {type(genesyn)}"
+    genesyn(
+        grn,
+        input_identifier_type="name",
+        output_identifier_type=gene_identifier_type,
+        copy=False,
     )
+    return grn
 
 
 def _load_latest_dorothea(
@@ -177,23 +177,30 @@ def _load_latest_modern_dorothea(
         + "&fields=dorothea_level&license=academic"
     )
     dorothea_db = pd.read_csv(url, sep="\t", low_memory=False)
-    dorothea_db = dorothea_db[
-        [
-            "source_genesymbol",
-            "target_genesymbol",
-            "is_stimulation",
-            "is_inhibition",
-            "consensus_stimulation",
-            "dorothea_level",
-        ]
-    ]
-    dorothea_db = dorothea_db[
-        ~dorothea_db.duplicated(
-            ["source_genesymbol", "dorothea_level", "target_genesymbol"]
-        )
-    ].copy()
+    dorothea_db = cast(
+        pd.DataFrame,
+        dorothea_db[
+            [
+                "source_genesymbol",
+                "target_genesymbol",
+                "is_stimulation",
+                "is_inhibition",
+                "consensus_stimulation",
+                "dorothea_level",
+            ]
+        ],
+    )
+    dorothea_db = cast(
+        pd.DataFrame,
+        dorothea_db[
+            ~dorothea_db.duplicated(
+                subset=["source_genesymbol", "dorothea_level", "target_genesymbol"]
+            )
+        ],
+    ).copy()
+    dorothea_level = cast(pd.Series, dorothea_db["dorothea_level"])
     dorothea_db["dorothea_level"] = (
-        dorothea_db["dorothea_level"].astype(str).str.split(";").str[0]
+        dorothea_level.astype(str).str.split(";").str[0]
     )
 
     stimulation = _truthy(dorothea_db["is_stimulation"])
@@ -223,12 +230,20 @@ def _load_latest_modern_dorothea(
             "confidence": dorothea_db["dorothea_level"],
         }
     ).sort_values("confidence")
-    dorothea_db = dorothea_db[dorothea_db["confidence"].isin(levels)]
+    dorothea_db = cast(
+        pd.DataFrame,
+        dorothea_db[dorothea_db["confidence"].isin(levels)],
+    )
 
     if organism_name != "human":
-        dorothea_db = _translate_hcop(dorothea_db, organism_name)
+        dorothea_db = _translate_hcop(cast(pd.DataFrame, dorothea_db), organism_name)
 
-    return dorothea_db.drop_duplicates(["source", "target"]).reset_index(drop=True)
+    return cast(
+        pd.DataFrame,
+        dorothea_db.drop_duplicates(subset=["source", "target"]).reset_index(
+            drop=True
+        ),
+    )
 
 
 def _load_latest_legacy_dorothea(
