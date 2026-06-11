@@ -46,23 +46,155 @@ from ._typing import (
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 GeneInfoVersion = Union[Literal["bundled", "latest"], str, Path]
 
-ORGANISMS = Literal["mouse", "human", "escherichia coli"]
+ORGANISMS = Literal[
+    "all archaea bacteria",
+    "all data",
+    "all fungi",
+    "all invertebrates",
+    "all mammalia",
+    "all non mammalian vertebrates",
+    "all plants",
+    "all protozoa",
+    "all viruses",
+    "anopheles gambiae",
+    "arabidopsis thaliana",
+    "archaea",
+    "ascomycota",
+    "bacteria",
+    "bos taurus",
+    "caenorhabditis elegans",
+    "canis familiaris",
+    "chlamydomonas reinhardtii",
+    "danio rerio",
+    "drosophila melanogaster",
+    "escherichia coli",
+    "escherichia coli str. k 12 substr. mg1655",
+    "gallus gallus",
+    "homo sapiens",
+    "human",
+    "microsporidia",
+    "mouse",
+    "mus musculus",
+    "organelles",
+    "oryza sativa",
+    "pan troglodytes",
+    "penicillium rubens",
+    "plasmids",
+    "plasmodium falciparum",
+    "pseudomonas aeruginosa pao1",
+    "rattus norvegicus",
+    "retroviridae",
+    "saccharomyces cerevisiae",
+    "sus scrofa",
+    "xenopus laevis",
+    "xenopus tropicalis",
+    "zea mays",
+]
+
+NCBI_GENE_INFO_FTP = "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO"
+
+NCBI_GENE_INFO_SOURCES = {
+    "all archaea bacteria": (
+        "Archaea_Bacteria",
+        "All_Archaea_Bacteria.gene_info.gz",
+    ),
+    "all data": ("", "All_Data.gene_info.gz"),
+    "all fungi": ("Fungi", "All_Fungi.gene_info.gz"),
+    "all invertebrates": ("Invertebrates", "All_Invertebrates.gene_info.gz"),
+    "all mammalia": ("Mammalia", "All_Mammalia.gene_info.gz"),
+    "all non mammalian vertebrates": (
+        "Non-mammalian_vertebrates",
+        "All_Non-mammalian_vertebrates.gene_info.gz",
+    ),
+    "all plants": ("Plants", "All_Plants.gene_info.gz"),
+    "all protozoa": ("Protozoa", "All_Protozoa.gene_info.gz"),
+    "all viruses": ("Viruses", "All_Viruses.gene_info.gz"),
+    "anopheles gambiae": ("Invertebrates", "Anopheles_gambiae.gene_info.gz"),
+    "arabidopsis thaliana": ("Plants", "Arabidopsis_thaliana.gene_info.gz"),
+    "archaea": ("Archaea_Bacteria", "Archaea.gene_info.gz"),
+    "ascomycota": ("Fungi", "Ascomycota.gene_info.gz"),
+    "bacteria": ("Archaea_Bacteria", "Bacteria.gene_info.gz"),
+    "bos taurus": ("Mammalia", "Bos_taurus.gene_info.gz"),
+    "caenorhabditis elegans": (
+        "Invertebrates",
+        "Caenorhabditis_elegans.gene_info.gz",
+    ),
+    "canis familiaris": ("Mammalia", "Canis_familiaris.gene_info.gz"),
+    "chlamydomonas reinhardtii": (
+        "Plants",
+        "Chlamydomonas_reinhardtii.gene_info.gz",
+    ),
+    "danio rerio": ("Non-mammalian_vertebrates", "Danio_rerio.gene_info.gz"),
+    "drosophila melanogaster": (
+        "Invertebrates",
+        "Drosophila_melanogaster.gene_info.gz",
+    ),
+    "escherichia coli": (
+        "Archaea_Bacteria",
+        "Escherichia_coli_str._K-12_substr._MG1655.gene_info.gz",
+    ),
+    "escherichia coli str. k 12 substr. mg1655": (
+        "Archaea_Bacteria",
+        "Escherichia_coli_str._K-12_substr._MG1655.gene_info.gz",
+    ),
+    "gallus gallus": ("Non-mammalian_vertebrates", "Gallus_gallus.gene_info.gz"),
+    "homo sapiens": ("Mammalia", "Homo_sapiens.gene_info.gz"),
+    "human": ("Mammalia", "Homo_sapiens.gene_info.gz"),
+    "microsporidia": ("Fungi", "Microsporidia.gene_info.gz"),
+    "mouse": ("Mammalia", "Mus_musculus.gene_info.gz"),
+    "mus musculus": ("Mammalia", "Mus_musculus.gene_info.gz"),
+    "organelles": ("", "Organelles.gene_info.gz"),
+    "oryza sativa": ("Plants", "Oryza_sativa.gene_info.gz"),
+    "pan troglodytes": ("Mammalia", "Pan_troglodytes.gene_info.gz"),
+    "penicillium rubens": ("Fungi", "Penicillium_rubens.gene_info.gz"),
+    "plasmids": ("", "Plasmids.gene_info.gz"),
+    "plasmodium falciparum": ("Protozoa", "Plasmodium_falciparum.gene_info.gz"),
+    "pseudomonas aeruginosa pao1": (
+        "Archaea_Bacteria",
+        "Pseudomonas_aeruginosa_PAO1.gene_info.gz",
+    ),
+    "rattus norvegicus": ("Mammalia", "Rattus_norvegicus.gene_info.gz"),
+    "retroviridae": ("Viruses", "Retroviridae.gene_info.gz"),
+    "saccharomyces cerevisiae": ("Fungi", "Saccharomyces_cerevisiae.gene_info.gz"),
+    "sus scrofa": ("Mammalia", "Sus_scrofa.gene_info.gz"),
+    "xenopus laevis": (
+        "Non-mammalian_vertebrates",
+        "Xenopus_laevis.gene_info.gz",
+    ),
+    "xenopus tropicalis": (
+        "Non-mammalian_vertebrates",
+        "Xenopus_tropicalis.gene_info.gz",
+    ),
+    "zea mays": ("Plants", "Zea_mays.gene_info.gz"),
+}
 
 FTP_GENE_INFO = {
-    "mouse": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Mus_musculus.gene_info.gz",
-    "human": "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz",
-    "escherichia coli": (
-        "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Archaea_Bacteria/"
-        "Escherichia_coli_str._K-12_substr._MG1655.gene_info.gz"
-    ),
+    organism: (
+        f"{NCBI_GENE_INFO_FTP}/{directory}/{filename}"
+        if directory
+        else f"{NCBI_GENE_INFO_FTP}/{filename}"
+    )
+    for organism, (directory, filename) in NCBI_GENE_INFO_SOURCES.items()
 }
 
 NCBI_DIR = Path(__file__).resolve().parent / "data" / "gi"
 
+NCBI_GENE_INFO_CACHE_NAMES = {
+    "escherichia coli": "escherichia_coli_gene_info.tsv.gz",
+    "escherichia coli str. k 12 substr. mg1655": "escherichia_coli_gene_info.tsv.gz",
+    "homo sapiens": "homo_sapiens_gene_info.tsv.gz",
+    "human": "homo_sapiens_gene_info.tsv.gz",
+    "mouse": "mus_musculus_gene_info.tsv.gz",
+    "mus musculus": "mus_musculus_gene_info.tsv.gz",
+}
+
 NCBI_GENE_INFO_FILES = {
-    "mouse": NCBI_DIR / "mus_musculus_gene_info.tsv.gz",
-    "human": NCBI_DIR / "homo_sapiens_gene_info.tsv.gz",
-    "escherichia coli": NCBI_DIR / "escherichia_coli_gene_info.tsv.gz",
+    organism: NCBI_DIR
+    / NCBI_GENE_INFO_CACHE_NAMES.get(
+        organism,
+        f"{re.sub(r'[^a-z0-9]+', '_', organism).strip('_')}_gene_info.tsv.gz",
+    )
+    for organism in NCBI_GENE_INFO_SOURCES
 }
 
 NCBI_GENE_INFO_VERSION_DIR = NCBI_DIR / "versions"
@@ -187,8 +319,9 @@ class GeneSynonyms:
     Parameters
     ----------
     organism: str (default: "mouse")
-        Common name of the organism of interest. Supported organisms are
-        `"mouse"`, `"human"` and `"escherichia coli"`.
+        Common name of the organism of interest. Supported organisms match the
+        NCBI gene_info files listed in `FTP_GENE_INFO`. Common aliases such as
+        `"mouse"`, `"human"` and `"escherichia coli"` are accepted.
     version: "bundled", "latest", str path or Path (default: "bundled")
         NCBI gene_info version to load.
 

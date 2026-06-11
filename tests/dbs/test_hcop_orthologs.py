@@ -60,7 +60,7 @@ def test_hcop_orthologs_rejects_invalid_table(monkeypatch):
 
 
 def test_hcop_orthologs_loads_bundled_snapshot(tmp_path, monkeypatch):
-    bundled_file = tmp_path / "human_mouse_hcop_fifteen_column.txt"
+    bundled_file = tmp_path / "human_mouse_hcop.tsv"
     bundled_file.write_text(
         "human_symbol\tmouse_symbol\tsupport\n" "A\tA_mouse\tEnsembl,HGNC,MGI\n",
         encoding="utf-8",

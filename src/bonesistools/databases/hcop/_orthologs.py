@@ -1043,6 +1043,8 @@ class Orthologs:
     def _resolve_hcop_table_source(output_organism: str, version: str) -> str:
         if version == "bundled":
             bundled_files = [
+                HCOP_DIR / f"human_{output_organism}_hcop.tsv.gz",
+                HCOP_DIR / f"human_{output_organism}_hcop.tsv",
                 HCOP_DIR / f"human_{output_organism}_hcop_fifteen_column.txt.gz",
                 HCOP_DIR / f"human_{output_organism}_hcop_fifteen_column.txt",
             ]
