@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from datetime import date
+from pathlib import Path
 from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union, cast
 from urllib.request import urlopen
 
 import pandas as pd
 
 from ..._compat import Literal
+from ..hcop import orthologs as hcop_orthologs
 
 OmnipathDateString = str
 OmnipathVersion = Union[Literal["latest"], OmnipathDateString, date]
 DorotheaFlavor = Literal["modern", "legacy"]
+HcopVersion = Union[Literal["bundled", "latest"], str, Path]
 
 OMNIPATH_ARCHIVE_URL = "https://archive.omnipathdb.org"
 OMNIPATH_INTERACTIONS_PREFIX = "omnipath_webservice_interactions__"
@@ -99,14 +101,15 @@ def load_interactions_version(
     organism: Union[str, int],
     levels: Optional[Sequence[str]] = None,
     flavor: DorotheaFlavor = "modern",
+    hcop_version: HcopVersion = "latest",
 ) -> pd.DataFrame:
     """
     Load a signed regulatory resource from an OmniPath interactions version.
 
     When the archive contains interactions for the requested organism, those
     records are used directly. Otherwise, supported non-human organisms are
-    translated from human records with decoupler's HCOP-based `op.translate`
-    helper.
+    translated from human records with bonesistools' HCOP translator using
+    decoupler-compatible `one_to_many=5` expansion.
     """
 
     _validate_dorothea_flavor(flavor)
@@ -156,7 +159,7 @@ def load_interactions_version(
         )
 
     if needs_translation:
-        result = _translate_hcop(result, target_organism)
+        result = _translate_hcop(result, target_organism, hcop_version=hcop_version)
 
     if resource == "dorothea":
         return _deduplicate_dorothea(result)
@@ -557,25 +560,20 @@ def _tax_id(organism: str) -> str:
     }[organism]
 
 
-def _translate_hcop(net: pd.DataFrame, target_organism: str) -> pd.DataFrame:
-    import decoupler as _dc  # type: ignore
-
-    dc = getattr(sys.modules.get("decoupler"), "op", None)
-    dc = dc or getattr(_dc, "op", None)
-
-    if dc is None or not hasattr(dc, "translate"):
-        raise AttributeError(
-            "OmniPath archive translation requires decoupler.op.translate "
-            "with HCOP support"
-        )
-
-    translated = dc.translate(
+def _translate_hcop(
+    net: pd.DataFrame,
+    target_organism: str,
+    hcop_version: HcopVersion = "latest",
+) -> pd.DataFrame:
+    translated = hcop_orthologs(
+        target_organism=target_organism,
+        version=hcop_version,
+    ).translate_df(
         net,
         columns=["source", "target"],
-        target_organism=target_organism,
+        one_to_many=5,
     )
-
-    return translated
+    return cast(pd.DataFrame, translated)
 
 
 def _truthy(values: Any) -> pd.Series:

@@ -110,12 +110,15 @@ Submodules:
   - DoRothEA transcription factor interactions
   - CollecTRI regulatory interaction networks
 
+- HCOP: `bt.dbs.hcop`
+  - orthology mappings
+
 Example:
 
 ```python
 genesyn = bt.dbs.ncbi.GeneSynonyms()
 
-grn = bt.dbs.omnipath.load_collectri_grn(
+grn = bt.dbs.omnipath.collectri(
     organism="mouse",
     genesyn=genesyn,
 )

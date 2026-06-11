@@ -1,19 +1,10 @@
 #!/usr/bin/env python
 
-import sys
-from types import SimpleNamespace
-
 import pandas as pd
 import pytest
 
 from bonesistools.boolpy.influence_graph import InfluenceGraph
 from bonesistools.databases.omnipath import _archive, _collectri, _dorothea
-
-
-def _install_fake_decoupler(monkeypatch, **members):
-    fake_decoupler = SimpleNamespace(**members)
-    monkeypatch.setitem(sys.modules, "decoupler", fake_decoupler)
-    return fake_decoupler
 
 
 def test_resolve_interactions_archive_supports_latest_and_dates(monkeypatch):
@@ -193,14 +184,19 @@ def test_load_interactions_version_translates_non_human_organisms(monkeypatch):
 
     calls = []
 
-    def translate(net, **kwargs):
-        calls.append((net.copy(), kwargs))
-        translated = net.copy()
-        translated["source"] = ["TfB_mouse"]
-        translated["target"] = ["GeneB_mouse"]
-        return translated
+    class FakeOrthologs:
+        def translate_df(self, net, **kwargs):
+            calls.append((net.copy(), kwargs))
+            translated = net.copy()
+            translated["source"] = ["TfB_mouse"]
+            translated["target"] = ["GeneB_mouse"]
+            return translated
 
-    _install_fake_decoupler(monkeypatch, op=SimpleNamespace(translate=translate))
+    def orthologs(**kwargs):
+        calls.append(kwargs)
+        return FakeOrthologs()
+
+    monkeypatch.setattr(_archive, "hcop_orthologs", orthologs)
 
     result = _archive.load_interactions_version(
         "dorothea",
@@ -209,12 +205,78 @@ def test_load_interactions_version_translates_non_human_organisms(monkeypatch):
         levels=["B"],
     )
 
-    assert calls[0][1] == {
-        "columns": ["source", "target"],
+    assert calls[0] == {
         "target_organism": "mouse",
+        "version": "latest",
+    }
+    assert calls[1][1] == {
+        "columns": ["source", "target"],
+        "one_to_many": 5,
     }
     assert result[["source", "target", "sign"]].to_dict("records") == [
         {"source": "TfB_mouse", "target": "GeneB_mouse", "sign": -1}
+    ]
+
+
+def test_load_interactions_version_uses_requested_hcop_version(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "resolve_interactions_archive",
+        lambda version: ("archive.tsv", "20230601"),
+    )
+    monkeypatch.setattr(
+        _archive,
+        "_read_interactions_archive",
+        lambda url: pd.DataFrame(
+            {
+                "source_genesymbol": ["TfA"],
+                "target_genesymbol": ["GeneA"],
+                "dorothea": ["True"],
+                "is_stimulation": ["True"],
+                "is_inhibition": ["False"],
+                "consensus_stimulation": ["True"],
+                "consensus_inhibition": ["False"],
+                "dorothea_level": ["A"],
+                "ncbi_tax_id_source": ["9606"],
+                "ncbi_tax_id_target": ["9606"],
+            }
+        ),
+    )
+
+    calls = []
+
+    class FakeOrthologs:
+        def translate_df(self, net, **kwargs):
+            calls.append((net.copy(), kwargs))
+            translated = net.copy()
+            translated["source"] = ["TfA_mouse"]
+            translated["target"] = ["GeneA_mouse"]
+            return translated
+
+    def orthologs(**kwargs):
+        calls.append(kwargs)
+        return FakeOrthologs()
+
+    monkeypatch.setattr(_archive, "hcop_orthologs", orthologs)
+
+    result = _archive.load_interactions_version(
+        "dorothea",
+        version="2023-06-01",
+        organism="mouse",
+        levels=["A"],
+        hcop_version="bundled",
+    )
+
+    assert calls[0] == {
+        "target_organism": "mouse",
+        "version": "bundled",
+    }
+    assert calls[1][1] == {
+        "columns": ["source", "target"],
+        "one_to_many": 5,
+    }
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA_mouse", "target": "GeneA_mouse", "sign": 1}
     ]
 
 
@@ -296,12 +358,11 @@ def test_load_interactions_version_uses_archived_mouse_dorothea(monkeypatch):
             }
         ),
     )
-    _install_fake_decoupler(
-        monkeypatch,
-        op=SimpleNamespace(
-            translate=lambda *args, **kwargs: pytest.fail(
-                "mouse archive rows should not be translated"
-            )
+    monkeypatch.setattr(
+        _archive,
+        "hcop_orthologs",
+        lambda *args, **kwargs: pytest.fail(
+            "mouse archive rows should not be translated"
         ),
     )
 
@@ -358,8 +419,15 @@ def test_load_interactions_version_deduplicates_dorothea_edges(monkeypatch):
 def test_dorothea_uses_omnipath_archive_version(monkeypatch):
     calls = []
 
-    def load_version(resource, version, organism, levels=None, flavor="modern"):
-        calls.append((resource, version, organism, levels, flavor))
+    def load_version(
+        resource,
+        version,
+        organism,
+        levels=None,
+        flavor="modern",
+        hcop_version="latest",
+    ):
+        calls.append((resource, version, organism, levels, flavor, hcop_version))
         return pd.DataFrame(
             {
                 "source": ["TfA", "TfB"],
@@ -376,9 +444,10 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
         organism=9606,
         levels=["B"],
         version="2024-01-01",
+        hcop_version="bundled",
     )
 
-    assert calls == [("dorothea", "2024-01-01", 9606, ["B"], "modern")]
+    assert calls == [("dorothea", "2024-01-01", 9606, ["B"], "modern", "bundled")]
     assert isinstance(grn, InfluenceGraph)
     assert list(grn.edges(data=True)) == [
         (
@@ -392,8 +461,15 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
 def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
     calls = []
 
-    def load_version(resource, version, organism, levels=None, flavor="modern"):
-        calls.append((resource, version, organism, levels, flavor))
+    def load_version(
+        resource,
+        version,
+        organism,
+        levels=None,
+        flavor="modern",
+        hcop_version="latest",
+    ):
+        calls.append((resource, version, organism, levels, flavor, hcop_version))
         return pd.DataFrame(
             {
                 "source": ["TfA"],
@@ -412,9 +488,9 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
         _dorothea.dorothea(version="2024-01-01", wrapper="op")
 
     assert calls == [
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy"),
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy"),
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "modern"),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy", "latest"),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy", "latest"),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "modern", "latest"),
     ]
 
 

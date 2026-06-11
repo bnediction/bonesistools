@@ -67,7 +67,6 @@ keywords = [
 
 [project.optional-dependencies]
 all = [
-    "decoupler>=2.0.0",
     "graphviz>=0.20",
     "mudata>=0.3.1",
     "multiprocess>=0.70.18",
@@ -76,7 +75,6 @@ all = [
     "seaborn>=0.11",
     "mpbn>=4.1",
 ]
-decoupler = [ "decoupler>=2.0.0" ]
 graphviz = [ "graphviz>=0.20" ]
 mudata = [ "mudata>=0.3.1" ]
 mpbn = [ "mpbn>=4.1" ]
@@ -87,12 +85,16 @@ ignore-vcs = true
 include = [
     "*.py",
     "src/bonesistools/py.typed",
+    "src/bonesistools/databases/hcop/data/hcop/bundled/*.txt.gz",
     "src/bonesistools/databases/ncbi/data/gi/*.tsv",
     "src/bonesistools/sctools/datasets/*.h5ad",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = [ "src/bonesistools" ]
+artifacts = [
+    "src/bonesistools/databases/hcop/data/hcop/bundled/*.txt.gz",
+]
 
 [project.urls]
 Repository = "https://github.com/bnediction/bonesistools"

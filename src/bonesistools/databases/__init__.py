@@ -10,15 +10,18 @@ Current sub-packages
 --------------------
 ncbi
     Gene nomenclature and synonym handling utilities.
+hcop
+    HCOP orthology translation utilities.
 omnipath
     Access to regulatory and interaction prior knowledge databases.
 """
 
 from typing import List as _List
 
-from . import ncbi, omnipath
+from . import hcop, ncbi, omnipath
 
 __all__ = [
+    "hcop",
     "ncbi",
     "omnipath",
 ]

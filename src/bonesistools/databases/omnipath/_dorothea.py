@@ -13,6 +13,7 @@ from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms, OutputIdentifierType
 from ._archive import (
     DorotheaFlavor,
+    HcopVersion,
     OmnipathVersion,
     _deduplicate_dorothea,
     _filter_dataset_evidences,
@@ -35,6 +36,7 @@ def dorothea(
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
     version: OmnipathVersion = "latest",
+    hcop_version: HcopVersion = "latest",
     flavor: Optional[DorotheaFlavor] = None,
     wrapper: Optional[DorotheaWrapper] = None,
     reload: Optional[bool] = None,
@@ -48,8 +50,8 @@ def dorothea(
     organism: str or int (default: "mouse")
         Organism of interest. Dated OmniPath archives support human, mouse and
         rat. If a dated archive lacks records for the requested organism,
-        non-human networks are translated from human interactions with
-        decoupler's HCOP-based `op.translate` helper.
+        non-human networks are translated from human interactions with the
+        bonesistools HCOP translator using decoupler-compatible expansion.
     levels: list of str, optional
         DoRothEA confidence levels to keep. If None, use `["A", "B", "C"]`.
     genesyn: GeneSynonyms, optional
@@ -61,6 +63,11 @@ def dorothea(
         interactions endpoint with decoupler-compatible post-processing; dates
         load archived OmniPath interaction dumps. Use `dorothea.versions()` to
         inspect available version labels.
+    hcop_version: "latest", "bundled" or pathlib.Path (default: "latest")
+        HCOP version used to translate human interactions to non-human
+        organisms when required. `"latest"` downloads the current HGNC HCOP
+        file. `"bundled"` uses the HCOP snapshots distributed with
+        bonesistools. Paths resolve to custom HCOP-like files.
     flavor: {"modern", "legacy"}, optional
         DoRothEA construction flavor. If None, use `"modern"`.
         If `"modern"`, reproduce the current `decoupler.op.dorothea`
@@ -102,14 +109,60 @@ def dorothea(
             f"expected {GeneSynonyms} but received {type(genesyn)}"
         )
 
-    flavor = _resolve_dorothea_flavor(flavor=flavor, wrapper=wrapper)
-    _warn_deprecated_reload(reload)
-    _warn_ignored_kwargs(kwargs)
+    if wrapper is not None:
+        if wrapper == "op":
+            wrapper_flavor: DorotheaFlavor = "modern"
+        elif wrapper == "get":
+            wrapper_flavor = "legacy"
+        else:
+            raise ValueError(
+                "invalid argument value for 'wrapper': expected 'op' or "
+                f"'get', but received {wrapper!r}"
+            )
 
-    if _is_latest_version(version):
+        if flavor is not None and flavor != wrapper_flavor:
+            raise ValueError(
+                "conflicting DoRothEA construction arguments: "
+                f"flavor={flavor!r} and wrapper={wrapper!r}"
+            )
+
+        warnings.warn(
+            "`wrapper` is deprecated and will be removed in a future version; "
+            "use `flavor='modern'` instead of `wrapper='op'` and "
+            "`flavor='legacy'` instead of `wrapper='get'`.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        flavor = wrapper_flavor
+
+    if flavor is None:
+        flavor = "modern"
+    elif flavor not in ["modern", "legacy"]:
+        raise ValueError(
+            "invalid argument value for 'flavor': expected 'modern' or "
+            f"'legacy', but received {flavor!r}"
+        )
+
+    if reload is not None:
+        warnings.warn(
+            "`reload` is deprecated and ignored; DoRothEA versions are controlled "
+            "with `version`.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+    if kwargs:
+        warnings.warn(
+            "additional DoRothEA wrapper keyword arguments are deprecated and "
+            f"ignored: {', '.join(sorted(kwargs))}",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+    if isinstance(version, str) and version.strip().lower() in ["", "latest"]:
         dorothea_db = _load_latest_dorothea(
             organism=organism,
             levels=levels,
+            hcop_version=hcop_version,
             flavor=flavor,
         )
     else:
@@ -119,6 +172,7 @@ def dorothea(
             organism=organism,
             levels=levels,
             flavor=flavor,
+            hcop_version=hcop_version,
         )
 
     if "confidence" in dorothea_db:
@@ -178,17 +232,23 @@ setattr(dorothea, "versions", _dorothea_versions)
 def _load_latest_dorothea(
     organism: Union[str, int],
     levels: List[str],
+    hcop_version: HcopVersion,
     flavor: DorotheaFlavor,
 ) -> pd.DataFrame:
     if flavor == "legacy":
         return _load_latest_legacy_dorothea(organism=organism, levels=levels)
 
-    return _load_latest_modern_dorothea(organism=organism, levels=levels)
+    return _load_latest_modern_dorothea(
+        organism=organism,
+        levels=levels,
+        hcop_version=hcop_version,
+    )
 
 
 def _load_latest_modern_dorothea(
     organism: Union[str, int],
     levels: List[str],
+    hcop_version: HcopVersion,
 ) -> pd.DataFrame:
     organism_name = _normalize_organism(organism)
     url = (
@@ -219,9 +279,7 @@ def _load_latest_modern_dorothea(
         ],
     ).copy()
     dorothea_level = cast(pd.Series, dorothea_db["dorothea_level"])
-    dorothea_db["dorothea_level"] = (
-        dorothea_level.astype(str).str.split(";").str[0]
-    )
+    dorothea_db["dorothea_level"] = dorothea_level.astype(str).str.split(";").str[0]
 
     stimulation = _truthy(dorothea_db["is_stimulation"])
     inhibition = _truthy(dorothea_db["is_inhibition"])
@@ -256,13 +314,15 @@ def _load_latest_modern_dorothea(
     )
 
     if organism_name != "human":
-        dorothea_db = _translate_hcop(cast(pd.DataFrame, dorothea_db), organism_name)
+        dorothea_db = _translate_hcop(
+            cast(pd.DataFrame, dorothea_db),
+            organism_name,
+            hcop_version=hcop_version,
+        )
 
     return cast(
         pd.DataFrame,
-        dorothea_db.drop_duplicates(subset=["source", "target"]).reset_index(
-            drop=True
-        ),
+        dorothea_db.drop_duplicates(subset=["source", "target"]).reset_index(drop=True),
     )
 
 
@@ -291,79 +351,6 @@ def _load_latest_legacy_dorothea(
         levels=levels,
     )
     return _deduplicate_dorothea(dorothea_db)
-
-
-def _is_latest_version(version: OmnipathVersion) -> bool:
-    return isinstance(version, str) and version.strip().lower() in ["", "latest"]
-
-
-def _resolve_dorothea_flavor(
-    flavor: Optional[DorotheaFlavor],
-    wrapper: Optional[DorotheaWrapper],
-) -> DorotheaFlavor:
-    if wrapper is not None:
-        wrapper_flavor = _flavor_from_wrapper(wrapper)
-        if flavor is not None and flavor != wrapper_flavor:
-            raise ValueError(
-                "conflicting DoRothEA construction arguments: "
-                f"flavor={flavor!r} and wrapper={wrapper!r}"
-            )
-
-        warnings.warn(
-            "`wrapper` is deprecated and will be removed in a future version; "
-            "use `flavor='modern'` instead of `wrapper='op'` and "
-            "`flavor='legacy'` instead of `wrapper='get'`.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        flavor = wrapper_flavor
-
-    if flavor is None:
-        return "modern"
-
-    if flavor not in ["modern", "legacy"]:
-        raise ValueError(
-            "invalid argument value for 'flavor': expected 'modern' or "
-            f"'legacy', but received {flavor!r}"
-        )
-
-    return flavor
-
-
-def _flavor_from_wrapper(wrapper: str) -> DorotheaFlavor:
-    if wrapper == "op":
-        return "modern"
-    if wrapper == "get":
-        return "legacy"
-
-    raise ValueError(
-        "invalid argument value for 'wrapper': expected 'op' or "
-        f"'get', but received {wrapper!r}"
-    )
-
-
-def _warn_deprecated_reload(reload: Optional[bool]) -> None:
-    if reload is None:
-        return
-
-    warnings.warn(
-        "`reload` is deprecated and ignored; DoRothEA versions are controlled "
-        "with `version`.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-
-def _warn_ignored_kwargs(kwargs: dict[str, Any]) -> None:
-    if not kwargs:
-        return
-
-    warnings.warn(
-        "additional DoRothEA wrapper keyword arguments are deprecated and "
-        f"ignored: {', '.join(sorted(kwargs))}",
-        DeprecationWarning,
-        stacklevel=3,
-    )
 
 
 def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:

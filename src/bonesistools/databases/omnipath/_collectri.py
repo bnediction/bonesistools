@@ -33,8 +33,8 @@ def collectri(
     organism: str or int (default: "mouse")
         Organism of interest. Archived OmniPath versions support human, mouse
         and rat. If a dated archive lacks records for the requested organism,
-        non-human networks are translated from human interactions with
-        decoupler's HCOP-based `op.translate` helper.
+        non-human networks are translated from human interactions with the
+        bonesistools HCOP translator using decoupler-compatible expansion.
     split_complexes: bool (default: False)
         Whether to split regulatory complexes into subunits.
     remove_pmid: bool (default: False)

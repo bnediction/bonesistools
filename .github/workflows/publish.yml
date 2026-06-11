@@ -33,6 +33,7 @@ jobs:
         run: |
           unzip -l dist/*.whl | grep "bonesistools/sctools/datasets/nestorowa_hvg.h5ad"
           unzip -l dist/*.whl | grep "bonesistools/databases/ncbi/data/gi/"
+          unzip -l dist/*.whl | grep "bonesistools/databases/hcop/data/hcop/bundled/human_mouse_hcop_fifteen_column.txt.gz"
 
       - name: Test built wheel
         run: |
