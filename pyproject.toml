@@ -85,15 +85,16 @@ ignore-vcs = true
 include = [
     "*.py",
     "src/bonesistools/py.typed",
-    "src/bonesistools/databases/hcop/data/hcop/bundled/*.txt.gz",
-    "src/bonesistools/databases/ncbi/data/gi/*.tsv",
+    "src/bonesistools/databases/hcop/data/*.txt.gz",
+    "src/bonesistools/databases/ncbi/data/gi/*.tsv.gz",
     "src/bonesistools/sctools/datasets/*.h5ad",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = [ "src/bonesistools" ]
 artifacts = [
-    "src/bonesistools/databases/hcop/data/hcop/bundled/*.txt.gz",
+    "src/bonesistools/databases/hcop/data/*.txt.gz",
+    "src/bonesistools/databases/ncbi/data/gi/*.tsv.gz",
 ]
 
 [project.urls]

@@ -10,15 +10,9 @@ across heterogeneous biological resources.
 
 from typing import List as _List
 
-from ._genesyn import (
-    GeneSynonyms,
-    InputIdentifierType,
-    OutputIdentifierType,
-)
+from ._genesyn import GeneSynonyms
 
 __all__ = [
-    "InputIdentifierType",
-    "OutputIdentifierType",
     "GeneSynonyms",
 ]
 

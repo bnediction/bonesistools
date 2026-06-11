@@ -4,10 +4,8 @@ from typing import Union
 
 from anndata import AnnData
 
-from ...databases.ncbi import (
-    GeneSynonyms,
-    InputIdentifierType,
-)
+from ...databases.ncbi import GeneSynonyms
+from ...databases.ncbi._typing import InputIdentifierType
 from .._typing import (
     Axis,
     anndata_checker,

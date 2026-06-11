@@ -9,7 +9,8 @@ import networkx as nx
 import pandas as pd
 
 from ...boolpy.influence_graph import InfluenceGraph
-from ..ncbi import GeneSynonyms, OutputIdentifierType
+from ..ncbi import GeneSynonyms
+from ..ncbi._typing import OutputIdentifierType
 from ._archive import (
     OmnipathVersion,
     list_interactions_versions,

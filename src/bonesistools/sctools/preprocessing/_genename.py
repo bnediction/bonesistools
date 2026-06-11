@@ -10,12 +10,12 @@ from anndata import AnnData
 from pandas import DataFrame
 from scipy.sparse import csr_matrix
 
-from ...databases.ncbi import (
-    GeneSynonyms,
+from ...databases.ncbi import GeneSynonyms
+from ...databases.ncbi._genesyn import support_legacy_gene_synonyms_args
+from ...databases.ncbi._typing import (
     InputIdentifierType,
     OutputIdentifierType,
 )
-from ...databases.ncbi._genesyn import support_legacy_gene_synonyms_args
 from .._typing import (
     Axis,
     ScData,

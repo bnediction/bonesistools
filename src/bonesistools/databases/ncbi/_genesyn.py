@@ -22,7 +22,9 @@ import copy
 import ctypes
 import inspect
 import re
+import shlex
 import subprocess
+import tempfile
 import warnings
 from collections import namedtuple
 from collections.abc import Mapping as MappingInstance
@@ -42,7 +44,7 @@ from ._typing import (
 )
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
-GeneInfoVersion = Union[str, Path]
+GeneInfoVersion = Union[Literal["bundled", "latest"], str, Path]
 
 ORGANISMS = Literal["mouse", "human", "escherichia coli"]
 
@@ -58,9 +60,9 @@ FTP_GENE_INFO = {
 NCBI_DIR = Path(__file__).resolve().parent / "data" / "gi"
 
 NCBI_GENE_INFO_FILES = {
-    "mouse": NCBI_DIR / "mus_musculus_gene_info.tsv",
-    "human": NCBI_DIR / "homo_sapiens_gene_info.tsv",
-    "escherichia coli": NCBI_DIR / "escherichia_coli_gene_info.tsv",
+    "mouse": NCBI_DIR / "mus_musculus_gene_info.tsv.gz",
+    "human": NCBI_DIR / "homo_sapiens_gene_info.tsv.gz",
+    "escherichia coli": NCBI_DIR / "escherichia_coli_gene_info.tsv.gz",
 }
 
 NCBI_GENE_INFO_VERSION_DIR = NCBI_DIR / "versions"
@@ -187,10 +189,10 @@ class GeneSynonyms:
     organism: str (default: "mouse")
         Common name of the organism of interest. Supported organisms are
         `"mouse"`, `"human"` and `"escherichia coli"`.
-    version: str or Path (default: "current")
+    version: "bundled", "latest", str path or Path (default: "bundled")
         NCBI gene_info version to load.
 
-        If `"current"`, use the local organism-specific gene_info file if
+        If `"bundled"`, use the local organism-specific gene_info file if
         available; if it is missing, download the latest NCBI gene_info file
         before building mappings.
 
@@ -231,7 +233,7 @@ class GeneSynonyms:
     def __init__(
         self,
         organism: str = "mouse",
-        version: GeneInfoVersion = "current",
+        version: GeneInfoVersion = "bundled",
         show_warnings: bool = False,
     ) -> None:
 
@@ -603,6 +605,17 @@ class GeneSynonyms:
             )
             output_alias = gene if output_alias is None else output_alias
             aliases_mapping[gene] = output_alias
+
+        from ...boolpy.influence_graph import InfluenceGraph
+
+        if type(graph) is InfluenceGraph:
+            converted_graph = graph.copy()
+            converted_graph.relabel(aliases_mapping)
+            if copy is True:
+                return converted_graph
+            graph._replace_with_graph(converted_graph)
+            return None
+
         if copy is True:
             return nx.relabel_nodes(graph, mapping=aliases_mapping, copy=True)
         else:
@@ -863,9 +876,8 @@ class GeneSynonyms:
         organism: str, optional
             Common name of the organism to load. If None, reload the current
             organism.
-        version: str or Path, optional
-            NCBI gene_info version to load. If None, keep the current
-            version.
+        version: "bundled", "latest", str path or Path, optional
+            NCBI gene_info version to load. If None, keep the current version.
         show_warnings: bool (default: False)
             If True, warn when a requested gene identifier has no
             correspondence.
@@ -902,7 +914,7 @@ class GeneSynonyms:
         if version is None:
             resolved_version = cast(
                 GeneInfoVersion,
-                getattr(self, "version", "current"),
+                getattr(self, "version", "bundled"),
             )
         else:
             resolved_version = version
@@ -1278,8 +1290,8 @@ class GeneSynonyms:
 
         version = version.strip()
 
-        if version in ["current", "bundled", ""]:
-            return "current"
+        if version in ["bundled", ""]:
+            return "bundled"
 
         if version == "latest":
             return "latest"
@@ -1293,17 +1305,31 @@ class GeneSynonyms:
     def __resolve_gene_info_file(self, version: str) -> Path:
         bundled_file = NCBI_GENE_INFO_FILES[self.organism]
 
-        if version in ["current", "latest"]:
+        if version == "bundled":
             return bundled_file
+
+        if version == "latest":
+            latest_file = tempfile.NamedTemporaryFile(
+                prefix=f"{self.__gene_info_base_name(bundled_file)}_",
+                suffix=".tsv",
+                delete=False,
+            )
+            latest_path = Path(latest_file.name)
+            latest_file.close()
+            self.__unlink_if_exists(latest_path)
+            return latest_path
 
         version_path = Path(version)
         if version_path.exists():
             return version_path
 
         if re.fullmatch(r"[0-9]{8}", version):
+            base_name = self.__gene_info_base_name(bundled_file)
             dated_candidates = [
                 NCBI_GENE_INFO_VERSION_DIR / version / bundled_file.name,
-                NCBI_DIR / f"{bundled_file.stem}_{version}{bundled_file.suffix}",
+                NCBI_GENE_INFO_VERSION_DIR / version / f"{base_name}.tsv",
+                NCBI_DIR / f"{base_name}_{version}.tsv.gz",
+                NCBI_DIR / f"{base_name}_{version}.tsv",
             ]
             for candidate in dated_candidates:
                 if candidate.exists():
@@ -1319,22 +1345,72 @@ class GeneSynonyms:
 
     def __download_gene_info(self) -> None:
 
-        if self.version == "current" and self.ncbi_file.exists():
+        if self.version == "bundled" and self.ncbi_file.exists():
             return
 
-        if self.version not in ["current", "latest"]:
+        if self.version == "bundled":
+            full_file = self.__make_temporary_gene_info_file()
+            try:
+                self.__download_full_gene_info(full_file)
+                self.__write_bundled_gene_info_file(full_file, self.ncbi_file)
+            finally:
+                self.__unlink_if_exists(full_file)
+                self.__unlink_if_exists(Path(f"{full_file}.gz"))
             return
+
+        if self.version == "latest":
+            try:
+                self.__download_full_gene_info(self.ncbi_file)
+            except RuntimeError:
+                self.__unlink_if_exists(self.ncbi_file)
+                self.__unlink_if_exists(Path(f"{self.ncbi_file}.gz"))
+                raise
+            return
+
+    def __download_full_gene_info(self, outfile: Path) -> None:
+        gzip_outfile = Path(f"{outfile}.gz")
+        url = FTP_GENE_INFO[self.organism]
 
         cmd = (
-            f"wget --quiet --show-progress -O {self.ncbi_file}.gz "
-            f"{FTP_GENE_INFO[self.organism]} && "
-            f"gunzip --quiet --force {self.ncbi_file}.gz"
+            f"wget --quiet --show-progress -O {shlex.quote(str(gzip_outfile))} "
+            f"{shlex.quote(url)} && "
+            f"gunzip --quiet --force {shlex.quote(str(gzip_outfile))}"
         )
 
         try:
             subprocess.run(cmd, shell=True, check=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError("failed to download NCBI gene_info file") from e
+
+    def __write_bundled_gene_info_file(self, infile: Path, outfile: Path) -> None:
+        outfile.parent.mkdir(parents=True, exist_ok=True)
+        temporary_outfile = Path(f"{outfile}.tmp")
+
+        awk_script = (
+            'BEGIN {OFS="\\t"; print "gene_id", "official_name", "ncbi_name", '
+            '"synonyms", "dbXrefs", "gene_type"} '
+            'NR>1 {print $2, $11, $3, $5, $6, $10}'
+        )
+        if str(outfile).endswith(".gz"):
+            cmd = (
+                f"{self.__read_gene_info_command(infile)} | "
+                f"awk -F'\\t' '{awk_script}' | gzip -c > "
+                f"{shlex.quote(str(temporary_outfile))}"
+            )
+        else:
+            cmd = (
+                f"{self.__read_gene_info_command(infile)} | "
+                f"awk -F'\\t' '{awk_script}' > "
+                f"{shlex.quote(str(temporary_outfile))}"
+            )
+
+        try:
+            subprocess.run(cmd, shell=True, check=True)
+            temporary_outfile.replace(outfile)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError("failed to reduce NCBI gene_info file") from e
+        finally:
+            self.__unlink_if_exists(temporary_outfile)
 
     def __parse_ncbi_gene_info(self, gi_file: Path) -> Dict[str, Any]:
         """
@@ -1355,8 +1431,15 @@ class GeneSynonyms:
 
         # Output columns:
         # gene_id | official_name | ncbi_name | synonyms | dbXrefs | gene_type
-        awk_script = 'NR>1 {print $2 "\t" $11 "\t" $3 "\t" $5 "\t" $6 "\t" $10}'
-        cmd = f"awk -F'\t' '{awk_script}' {gi_file} > {gi_file_cut}"
+        if self.version == "bundled":
+            awk_script = 'NR>1 {print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6}'
+        else:
+            awk_script = 'NR>1 {print $2 "\t" $11 "\t" $3 "\t" $5 "\t" $6 "\t" $10}'
+
+        cmd = (
+            f"{self.__read_gene_info_command(gi_file)} | "
+            f"awk -F'\\t' '{awk_script}' > {shlex.quote(str(gi_file_cut))}"
+        )
         try:
             subprocess.run(cmd, shell=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -1492,7 +1575,12 @@ class GeneSynonyms:
 
     def __initialize_mappings(self, show_warnings: bool) -> None:
         self.show_warnings = show_warnings
-        self.gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
+        try:
+            self.gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
+        finally:
+            if self.version == "latest":
+                self.__unlink_if_exists(self.ncbi_file)
+                self.__unlink_if_exists(Path(f"{self.ncbi_file}.gz"))
 
         self.__upper_gene_names_mapping = {
             key.upper(): value
@@ -1507,7 +1595,6 @@ class GeneSynonyms:
             "ensembl_id",
             *self.databases,
         )
-
         self.valid_output_identifier_types = (
             "official_name",
             "ncbi_name",
@@ -1561,3 +1648,32 @@ class GeneSynonyms:
                 f"'{self.__class__.__name__}' object has no attribute "
                 f"'get_{output_identifier_type}'"
             )
+
+    @staticmethod
+    def __gene_info_base_name(gene_info_file: Path) -> str:
+        name = gene_info_file.name
+        if name.endswith(".tsv.gz"):
+            return name[:-7]
+        if name.endswith(".tsv"):
+            return name[:-4]
+        return gene_info_file.stem
+
+    @staticmethod
+    def __make_temporary_gene_info_file() -> Path:
+        temporary_file = tempfile.NamedTemporaryFile(suffix=".tsv", delete=False)
+        temporary_file.close()
+        return Path(temporary_file.name)
+
+    @staticmethod
+    def __read_gene_info_command(gene_info_file: Path) -> str:
+        quoted_file = shlex.quote(str(gene_info_file))
+        if str(gene_info_file).endswith(".gz"):
+            return f"gzip -dc {quoted_file}"
+        return f"cat {quoted_file}"
+
+    @staticmethod
+    def __unlink_if_exists(path: Path) -> None:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass

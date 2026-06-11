@@ -60,15 +60,13 @@ def test_hcop_orthologs_rejects_invalid_table(monkeypatch):
 
 
 def test_hcop_orthologs_loads_bundled_snapshot(tmp_path, monkeypatch):
-    bundled_dir = tmp_path / "bundled"
-    bundled_dir.mkdir(parents=True)
-    bundled_file = bundled_dir / "human_mouse_hcop_fifteen_column.txt"
+    bundled_file = tmp_path / "human_mouse_hcop_fifteen_column.txt"
     bundled_file.write_text(
         "human_symbol\tmouse_symbol\tsupport\n" "A\tA_mouse\tEnsembl,HGNC,MGI\n",
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(_hcop_orthologs, "HCOP_BUNDLED_DIR", bundled_dir)
+    monkeypatch.setattr(_hcop_orthologs, "HCOP_DIR", tmp_path)
 
     orthologs = hcop.orthologs(target_organism="mouse")
 
@@ -99,7 +97,7 @@ def test_hcop_orthologs_missing_version_lists_versions():
 
 
 def test_hcop_orthologs_missing_bundled_file_fails_clearly(tmp_path, monkeypatch):
-    monkeypatch.setattr(_hcop_orthologs, "HCOP_BUNDLED_DIR", tmp_path)
+    monkeypatch.setattr(_hcop_orthologs, "HCOP_DIR", tmp_path)
     with pytest.raises(
         FileNotFoundError,
         match="bundled HCOP file not found",

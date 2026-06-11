@@ -197,6 +197,51 @@ def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
     assert list(mouse_genesyn(("Tp53", "unknown"))) == ["Trp53", "unknown"]
 
 
+def test_gene_synonyms_convert_influence_graph_preserves_opposite_signs(
+    mouse_genesyn,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        _genesyn.GeneSynonyms,
+        "_GeneSynonyms__conversion_function",
+        lambda *args, **kwargs: (lambda gene, **_kwargs: {"c": "b"}.get(gene, gene)),
+    )
+
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("a", "b", sign=1)
+    graph.add_edge("a", "c", sign=-1)
+
+    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+
+    assert sorted((s, t, d["sign"]) for s, t, d in graph.edges(data=True)) == [
+        ("a", "b", -1),
+        ("a", "b", 1),
+    ]
+
+
+def test_gene_synonyms_convert_influence_graph_ignores_duplicate_edges_after_relabel(
+    mouse_genesyn,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        _genesyn.GeneSynonyms,
+        "_GeneSynonyms__conversion_function",
+        lambda *args, **kwargs: (lambda gene, **_kwargs: {"c": "b"}.get(gene, gene)),
+    )
+
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("a", "b", sign=1)
+    graph.add_edge("a", "c", sign=1)
+    graph.add_edge("c", "d", sign=1)
+
+    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+
+    assert sorted((s, t, d["sign"]) for s, t, d in graph.edges(data=True)) == [
+        ("a", "b", 1),
+        ("b", "d", 1),
+    ]
+
+
 def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     assert mouse_genesyn.standardize_sequence(["Tp53", "NF-kappaB"]) == [
         "Trp53",
@@ -297,16 +342,16 @@ def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch)
     )
 
     assert genesyn.organism == "mouse"
-    assert genesyn.version == "current"
+    assert genesyn.version == "bundled"
     assert genesyn.show_warnings is False
-    assert genesyn.ncbi_file.name == "mus_musculus_gene_info.tsv"
+    assert genesyn.ncbi_file.name == "mus_musculus_gene_info.tsv.gz"
     assert calls == [
-        ("download", "current", "mus_musculus_gene_info.tsv"),
+        ("download", "bundled", "mus_musculus_gene_info.tsv.gz"),
         ("initialize", False),
     ]
 
 
-def test_gene_synonyms_supports_current_latest_and_local_dated_versions(
+def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
     monkeypatch,
     tmp_path,
 ):
@@ -348,20 +393,21 @@ def test_gene_synonyms_supports_current_latest_and_local_dated_versions(
         fake_initialize,
     )
 
-    current = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="current")
+    bundled = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="bundled")
     latest = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="latest")
     dated = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="2024-01-01")
 
-    assert current.version == "current"
-    assert current.ncbi_file == bundled_file
+    assert bundled.version == "bundled"
+    assert bundled.ncbi_file == bundled_file
     assert latest.version == "latest"
-    assert latest.ncbi_file == bundled_file
+    assert latest.ncbi_file != bundled_file
     assert dated.version == "20240101"
     assert dated.ncbi_file == version_file
-    assert calls == [
-        ("download", "current", bundled_file),
-        ("initialize", False),
-        ("download", "latest", bundled_file),
+    assert calls[0] == ("download", "bundled", bundled_file)
+    assert calls[1] == ("initialize", False)
+    assert calls[2][0:2] == ("download", "latest")
+    assert calls[2][2] != bundled_file
+    assert calls[3:] == [
         ("initialize", False),
         ("download", "20240101", version_file),
         ("initialize", False),

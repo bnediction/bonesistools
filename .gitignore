@@ -63,6 +63,7 @@ Thumbs.db
 /temp/
 *.tmp
 *.bak
+*.bak.tsv
 
 # Generated figures / graph exports
 *.dot

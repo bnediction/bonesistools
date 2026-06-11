@@ -245,10 +245,10 @@ def test_boolean_network_rename_validates_inputs_and_collisions():
     with pytest.raises(ValueError, match="already exists"):
         bn.rename("A", "B")
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'old_name'"):
+    with pytest.raises(TypeError, match="unsupported argument type for 'old'"):
         bn.rename(1, "Y")
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'new_name'"):
+    with pytest.raises(TypeError, match="unsupported argument type for 'new'"):
         bn.rename("A", 1)
 
 
@@ -260,6 +260,55 @@ def test_boolean_network_rename_validates_candidate_before_mutating():
         bn.rename("A", "X")
 
     assert bn.rules == rules
+
+
+def test_boolean_network_rename_accepts_named_old_new_arguments():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
+
+    bn.rename(old="A", new="X")
+
+    assert bn.rules == {"X": "B", "B": "1"}
+
+
+def test_boolean_network_relabel_renames_several_components_and_ignores_missing():
+    bn = bt.bpy.bn.BooleanNetwork({"Trp53": "Sox2", "Sox2": 1})
+
+    assert bn.relabel({"Trp53": "TP53", "Sox2": "SOX2", "missing": "X"}) is None
+
+    assert bn.rules == {"TP53": "SOX2", "SOX2": "1"}
+
+
+def test_boolean_network_relabel_supports_atomic_swaps():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    bn.relabel({"A": "B", "B": "A"})
+
+    assert bn.rules == {"B": "A", "A": "B"}
+
+
+def test_boolean_network_relabel_rejects_component_merges_without_mutating():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
+    rules = bn.rules.copy()
+
+    with pytest.raises(ValueError, match="merge Boolean network components"):
+        bn.relabel({"A": "B"})
+
+    assert bn.rules == rules
+
+
+def test_boolean_network_relabel_validates_mapping():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'mapping'"):
+        bn.relabel([("A", "X")])
+
+    with pytest.raises(TypeError, match="unsupported mapping key type"):
+        bn.relabel({1: "X"})
+
+    with pytest.raises(TypeError, match="unsupported mapping value type"):
+        bn.relabel({"A": 1})
+
+    assert bn.rules == {"A": "B", "B": "1"}
 
 
 def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):

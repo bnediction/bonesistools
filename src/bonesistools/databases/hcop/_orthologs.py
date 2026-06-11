@@ -30,8 +30,7 @@ if TYPE_CHECKING:
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 HcopVersion = Union[Literal["bundled", "latest"], str, Path]
-HCOP_DIR = Path(__file__).resolve().parent / "data" / "hcop"
-HCOP_BUNDLED_DIR = HCOP_DIR / "bundled"
+HCOP_DIR = Path(__file__).resolve().parent / "data"
 
 
 class Orthologs:
@@ -58,10 +57,10 @@ class Orthologs:
     min_evidence: int or float (default: 3)
         Minimum number of HCOP support sources required for each retained
         mapping.
-    version: "bundled", "latest" or pathlib.Path (default: "bundled")
+    version: "bundled", "latest", str path or Path (default: "bundled")
         HCOP version to load. `"bundled"` loads the HCOP snapshot distributed
         with bonesistools. `"latest"` loads the current public HCOP file.
-        Paths resolve directly to user-provided HCOP tables.
+        File paths resolve directly to user-provided HCOP tables.
     table: pandas.DataFrame, optional
         Preloaded HCOP-like table with columns `human_symbol`,
         `target_symbol`, `support` and `evidence`. If None, the table is
@@ -604,7 +603,7 @@ class Orthologs:
             Target organism. If None, keep the current target organism.
         min_evidence: int or float, optional
             Minimum HCOP support threshold. If None, keep the current threshold.
-        version: "bundled", "latest" or pathlib.Path, optional
+        version: "bundled", "latest", str path or Path, optional
             HCOP version to load. If None, keep the current version.
         table: pandas.DataFrame, optional
             Preloaded HCOP-like table. If None, reload mappings from HCOP.
@@ -766,7 +765,7 @@ class Orthologs:
             Minimum number of HCOP support sources required for a mapping.
             The support count is computed from the comma-separated `support`
             column.
-        version: "bundled", "latest" or pathlib.Path (default: "bundled")
+        version: "bundled", "latest", str path or Path (default: "bundled")
             HCOP version to load.
 
             If `"bundled"`, load the HCOP snapshot distributed with
@@ -806,6 +805,8 @@ class Orthologs:
 
         hcop = Orthologs._read_hcop_table(output_organism, version=version_label)
         target_column = Orthologs._target_symbol_column(output_organism)
+        if target_column not in hcop and "target_symbol" in hcop:
+            target_column = "target_symbol"
         required_columns = ["human_symbol", target_column, "support"]
         missing_columns = [column for column in required_columns if column not in hcop]
         if missing_columns:
@@ -1042,9 +1043,8 @@ class Orthologs:
     def _resolve_hcop_table_source(output_organism: str, version: str) -> str:
         if version == "bundled":
             bundled_files = [
-                HCOP_BUNDLED_DIR
-                / f"human_{output_organism}_hcop_fifteen_column.txt.gz",
-                HCOP_BUNDLED_DIR / f"human_{output_organism}_hcop_fifteen_column.txt",
+                HCOP_DIR / f"human_{output_organism}_hcop_fifteen_column.txt.gz",
+                HCOP_DIR / f"human_{output_organism}_hcop_fifteen_column.txt",
             ]
             for bundled_file in bundled_files:
                 if bundled_file.exists():
@@ -1117,7 +1117,7 @@ def orthologs(
     min_evidence: int or float (default: 3)
         Minimum number of HCOP support sources required for each retained
         mapping.
-    version: "bundled", "latest" or pathlib.Path (default: "bundled")
+    version: "bundled", "latest", str path or Path (default: "bundled")
         HCOP version to load. `"bundled"` loads the snapshot distributed with
         bonesistools, `"latest"` loads the current public HCOP file, and paths
         resolve to custom HCOP-like files.

@@ -102,6 +102,7 @@ def load_interactions_version(
     levels: Optional[Sequence[str]] = None,
     flavor: DorotheaFlavor = "modern",
     hcop_version: HcopVersion = "latest",
+    compatibility: bool = False,
 ) -> pd.DataFrame:
     """
     Load a signed regulatory resource from an OmniPath interactions version.
@@ -162,7 +163,7 @@ def load_interactions_version(
         result = _translate_hcop(result, target_organism, hcop_version=hcop_version)
 
     if resource == "dorothea":
-        return _deduplicate_dorothea(result)
+        return _deduplicate_dorothea(result, compatibility=compatibility)
 
     return (
         result.drop_duplicates()
@@ -257,14 +258,26 @@ def _format_dorothea(
     return result
 
 
-def _deduplicate_dorothea(dorothea: pd.DataFrame) -> pd.DataFrame:
+def _deduplicate_dorothea(
+    dorothea: pd.DataFrame,
+    compatibility: bool = False,
+) -> pd.DataFrame:
     dorothea = cast(
         pd.DataFrame,
         dorothea[dorothea["source"] != dorothea["target"]],
     )
+    duplicate_subset = (
+        ["source", "target"]
+        if compatibility
+        else [
+            "source",
+            "target",
+            "sign",
+        ]
+    )
     return (
         dorothea.drop_duplicates()
-        .drop_duplicates(subset=["source", "target"])
+        .drop_duplicates(subset=duplicate_subset)
         .reset_index(drop=True)
     )
 

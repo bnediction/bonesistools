@@ -10,7 +10,8 @@ import pandas as pd
 
 from ..._compat import Literal
 from ...boolpy.influence_graph import InfluenceGraph
-from ..ncbi import GeneSynonyms, OutputIdentifierType
+from ..ncbi import GeneSynonyms
+from ..ncbi._typing import OutputIdentifierType
 from ._archive import (
     DorotheaFlavor,
     HcopVersion,
@@ -37,6 +38,7 @@ def dorothea(
     gene_identifier_type: OutputIdentifierType = "official_name",
     version: OmnipathVersion = "latest",
     hcop_version: HcopVersion = "latest",
+    compatibility: bool = False,
     flavor: Optional[DorotheaFlavor] = None,
     wrapper: Optional[DorotheaWrapper] = None,
     reload: Optional[bool] = None,
@@ -63,11 +65,15 @@ def dorothea(
         interactions endpoint with decoupler-compatible post-processing; dates
         load archived OmniPath interaction dumps. Use `dorothea.versions()` to
         inspect available version labels.
-    hcop_version: "latest", "bundled" or pathlib.Path (default: "latest")
+    hcop_version: "latest", "bundled", str path or Path (default: "latest")
         HCOP version used to translate human interactions to non-human
         organisms when required. `"latest"` downloads the current HGNC HCOP
         file. `"bundled"` uses the HCOP snapshots distributed with
         bonesistools. Paths resolve to custom HCOP-like files.
+    compatibility: bool (default: False)
+        If True, reproduce decoupler's source-target deduplication after
+        orthology translation. If False, sign-conflicting interactions are
+        preserved as distinct signed influences.
     flavor: {"modern", "legacy"}, optional
         DoRothEA construction flavor. If None, use `"modern"`.
         If `"modern"`, reproduce the current `decoupler.op.dorothea`
@@ -107,6 +113,11 @@ def dorothea(
         raise TypeError(
             f"unsupported argument type for 'genesyn': "
             f"expected {GeneSynonyms} but received {type(genesyn)}"
+        )
+    if not isinstance(compatibility, bool):
+        raise TypeError(
+            f"unsupported argument type for 'compatibility': "
+            f"expected {bool} but received {type(compatibility)}"
         )
 
     if wrapper is not None:
@@ -164,6 +175,7 @@ def dorothea(
             levels=levels,
             hcop_version=hcop_version,
             flavor=flavor,
+            compatibility=compatibility,
         )
     else:
         dorothea_db = load_interactions_version(
@@ -173,6 +185,7 @@ def dorothea(
             levels=levels,
             flavor=flavor,
             hcop_version=hcop_version,
+            compatibility=compatibility,
         )
 
     if "confidence" in dorothea_db:
@@ -234,14 +247,20 @@ def _load_latest_dorothea(
     levels: List[str],
     hcop_version: HcopVersion,
     flavor: DorotheaFlavor,
+    compatibility: bool = False,
 ) -> pd.DataFrame:
     if flavor == "legacy":
-        return _load_latest_legacy_dorothea(organism=organism, levels=levels)
+        return _load_latest_legacy_dorothea(
+            organism=organism,
+            levels=levels,
+            compatibility=compatibility,
+        )
 
     return _load_latest_modern_dorothea(
         organism=organism,
         levels=levels,
         hcop_version=hcop_version,
+        compatibility=compatibility,
     )
 
 
@@ -249,6 +268,7 @@ def _load_latest_modern_dorothea(
     organism: Union[str, int],
     levels: List[str],
     hcop_version: HcopVersion,
+    compatibility: bool = False,
 ) -> pd.DataFrame:
     organism_name = _normalize_organism(organism)
     url = (
@@ -274,7 +294,14 @@ def _load_latest_modern_dorothea(
         pd.DataFrame,
         dorothea_db[
             ~dorothea_db.duplicated(
-                subset=["source_genesymbol", "dorothea_level", "target_genesymbol"]
+                subset=[
+                    "source_genesymbol",
+                    "dorothea_level",
+                    "target_genesymbol",
+                    "is_stimulation",
+                    "is_inhibition",
+                    "consensus_stimulation",
+                ]
             )
         ],
     ).copy()
@@ -320,15 +347,25 @@ def _load_latest_modern_dorothea(
             hcop_version=hcop_version,
         )
 
+    duplicate_subset = (
+        ["source", "target"]
+        if compatibility
+        else [
+            "source",
+            "target",
+            "sign",
+        ]
+    )
     return cast(
         pd.DataFrame,
-        dorothea_db.drop_duplicates(subset=["source", "target"]).reset_index(drop=True),
+        dorothea_db.drop_duplicates(subset=duplicate_subset).reset_index(drop=True),
     )
 
 
 def _load_latest_legacy_dorothea(
     organism: Union[str, int],
     levels: List[str],
+    compatibility: bool = False,
 ) -> pd.DataFrame:
     organism_name = _normalize_organism(organism)
     url = (
@@ -350,7 +387,7 @@ def _load_latest_legacy_dorothea(
         version_label="latest",
         levels=levels,
     )
-    return _deduplicate_dorothea(dorothea_db)
+    return _deduplicate_dorothea(dorothea_db, compatibility=compatibility)
 
 
 def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:

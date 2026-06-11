@@ -525,12 +525,12 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return rule_to_string(self[component])
 
-    def rename(self, old_name: str, new_name: str) -> None:
+    def rename(self, old: str, new: str) -> None:
         """
         Rename a Boolean network component and update all rule references.
 
-        The component key is replaced by `new_name`, and every occurrence of
-        `old_name` in Boolean rules is rewritten to `new_name`. Rule
+        The component key is replaced by `new`, and every occurrence of `old`
+        in Boolean rules is rewritten to `new`. Rule
         rewriting is performed without simplification so that renaming does not
         otherwise alter rule structure.
 
@@ -549,59 +549,115 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        old_name: str
+        old: str
             Component to rename.
-        new_name: str
+        new: str
             New component name.
 
         Raises
         ------
         TypeError
-            If `old_name` or `new_name` is not a string.
+            If `old` or `new` is not a string.
         KeyError
-            If `old_name` is not defined in the Boolean network.
+            If `old` is not defined in the Boolean network.
         ValueError
-            If `new_name` already exists or if the renamed Boolean network
+            If `new` already exists or if the renamed Boolean network
             references undefined components.
         """
 
-        if not isinstance(old_name, str):
+        if not isinstance(old, str):
             raise TypeError(
-                f"unsupported argument type for 'old_name': "
-                f"expected {str} but received {type(old_name)}"
+                f"unsupported argument type for 'old': "
+                f"expected {str} but received {type(old)}"
             )
 
-        if not isinstance(new_name, str):
+        if not isinstance(new, str):
             raise TypeError(
-                f"unsupported argument type for 'new_name': "
-                f"expected {str} but received {type(new_name)}"
+                f"unsupported argument type for 'new': "
+                f"expected {str} but received {type(new)}"
             )
 
-        if new_name == old_name:
+        if new == old:
             return None
 
-        if old_name not in self:
-            raise KeyError(f"component {old_name!r} not found")
+        if old not in self:
+            raise KeyError(f"component {old!r} not found")
 
-        if new_name in self:
+        if new in self:
             raise ValueError(
-                f"invalid argument value for 'new_name': "
-                f"component {new_name!r} already exists"
+                f"invalid argument value for 'new': component {new!r} already exists"
             )
 
-        old_symbol = self.ba.Symbol(old_name)
-        new_symbol = self.ba.Symbol(new_name)
+        self.relabel({old: new})
+
+    def relabel(self, mapping: Mapping[str, str]) -> None:
+        """
+        Relabel several Boolean network components in one operation.
+
+        Components absent from the network are ignored. Rule references to
+        relabeled components are updated without simplification so that
+        relabeling does not otherwise alter rule structure.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"Trp53": "Sox2", "Sox2": 1})
+        >>> bn.relabel({"Trp53": "TP53", "Sox2": "SOX2"})
+        >>> bn.rules
+        {'TP53': 'SOX2', 'SOX2': '1'}
+
+        Parameters
+        ----------
+        mapping: Mapping[str, str]
+            Component rename mapping.
+
+        Raises
+        ------
+        TypeError
+            If `mapping` is not a mapping from strings to strings.
+        ValueError
+            If relabeling would merge two Boolean network components or if the
+            relabeled Boolean network references undefined components.
+        """
+
+        if not isinstance(mapping, MappingABC):
+            raise TypeError(
+                f"unsupported argument type for 'mapping': "
+                f"expected {Mapping} but received {type(mapping)}"
+            )
+
+        for old, new in mapping.items():
+            if not isinstance(old, str):
+                raise TypeError(
+                    "unsupported mapping key type: "
+                    f"expected {str} but received {type(old)}"
+                )
+            if not isinstance(new, str):
+                raise TypeError(
+                    "unsupported mapping value type: "
+                    f"expected {str} but received {type(new)}"
+                )
+
+        active_mapping = {
+            old: new for old, new in mapping.items() if old in self and old != new
+        }
+        if not active_mapping:
+            return None
+
+        renamed_components = [
+            active_mapping.get(component, component) for component in self
+        ]
+        if len(set(renamed_components)) != len(renamed_components):
+            raise ValueError("relabeling would merge Boolean network components")
+
+        substitutions = {
+            self.ba.Symbol(old): self.ba.Symbol(new)
+            for old, new in active_mapping.items()
+        }
 
         renamed_rules = {}
-
         for current_component, rule in self.items():
-            renamed_component = (
-                new_name if current_component == old_name else current_component
-            )
-            renamed_rules[renamed_component] = rule.subs(
-                {old_symbol: new_symbol},
-                simplify=False,
-            )
+            renamed_component = active_mapping.get(current_component, current_component)
+            renamed_rules[renamed_component] = rule.subs(substitutions, simplify=False)
 
         renamed_network = type(self)(renamed_rules, ba=self.ba, check=True)
 

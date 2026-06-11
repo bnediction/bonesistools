@@ -7,7 +7,7 @@ import pandas as pd
 from anndata import AnnData
 from scipy import io, sparse
 
-PathLike = Union[str, Path]
+PathInput = Union[str, Path]
 
 
 def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
@@ -23,7 +23,7 @@ def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
     return cast(Any, X)
 
 
-def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+def to_csv(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData matrix to a CSV file.
 
@@ -45,7 +45,7 @@ def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
     pd.DataFrame(X).to_csv(path_or_buf=filename, sep=",")
 
 
-def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+def to_mtx(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData matrix to a Matrix Market file.
 
@@ -67,7 +67,7 @@ def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
     io.mmwrite(filename, X)
 
 
-def to_npz(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
+def to_npz(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData sparse matrix to a NumPy `.npz` file.
 
@@ -91,7 +91,7 @@ def to_npz(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
 
 def to_csv_or_mtx(
     adata: AnnData,
-    filename: PathLike,
+    filename: PathInput,
     layer: Optional[str] = None,
 ) -> None:
     """
@@ -121,7 +121,7 @@ def to_csv_or_mtx(
 
 def to_csv_or_npz(
     adata: AnnData,
-    filename: PathLike,
+    filename: PathInput,
     layer: Optional[str] = None,
 ) -> None:
     """

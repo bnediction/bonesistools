@@ -161,6 +161,116 @@ def test_update_is_transactional_and_views_are_disabled():
         ig.add_weighted_edges_from([("A", "B", 1.0)])
 
 
+def test_influence_graph_rename_merges_nodes_and_duplicate_edges():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("A", "C", sign=1)
+    graph.add_edge("C", "D", sign=1)
+
+    assert graph.rename("C", "B") is None
+
+    assert _edge_signs(graph) == [("A", "B", 1), ("B", "D", 1)]
+
+
+def test_influence_graph_rename_preserves_opposite_signs():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("A", "C", sign=-1)
+
+    graph.rename("C", "B")
+
+    assert _edge_signs(graph) == [("A", "B", -1), ("A", "B", 1)]
+
+
+def test_influence_graph_rename_validates_inputs():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+
+    assert graph.rename("A", "A") is None
+
+    with pytest.raises(KeyError, match="node 'missing' not found"):
+        graph.rename("missing", "C")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'old'"):
+        graph.rename(1, "C")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'new'"):
+        graph.rename("A", 1)
+
+    assert _edge_signs(graph) == [("A", "B", 1)]
+
+
+def test_influence_graph_rename_accepts_named_old_new_arguments():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+
+    graph.rename(old="A", new="X")
+
+    assert _edge_signs(graph) == [("X", "B", 1)]
+
+
+def test_influence_graph_relabel_renames_several_nodes_and_ignores_missing():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_node("Trp53", family="tf")
+    graph.add_node("Sox2", family="stem")
+    graph.add_edge("Trp53", "Sox2", sign=1, evidence="curated")
+
+    assert graph.relabel({"Trp53": "TP53", "Sox2": "SOX2", "missing": "X"}) is None
+
+    assert _edge_signs(graph) == [("TP53", "SOX2", 1)]
+    assert graph.nodes["TP53"]["family"] == "tf"
+    assert graph.nodes["SOX2"]["family"] == "stem"
+    assert graph["TP53"]["SOX2"][0]["evidence"] == "curated"
+
+
+def test_influence_graph_relabel_merges_nodes_and_duplicate_edges():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("A", "C", sign=1)
+    graph.add_edge("C", "D", sign=1)
+
+    graph.relabel({"C": "B"})
+
+    assert _edge_signs(graph) == [("A", "B", 1), ("B", "D", 1)]
+
+
+def test_influence_graph_relabel_collapses_duplicates_from_multiple_mappings():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("X", "Y", sign=1)
+    graph.add_edge("Y", "D", sign=1)
+
+    graph.relabel({"X": "A", "Y": "B"})
+
+    assert _edge_signs(graph) == [("A", "B", 1), ("B", "D", 1)]
+
+
+def test_influence_graph_relabel_preserves_opposite_signs_after_merge():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("A", "C", sign=-1)
+
+    graph.relabel({"C": "B"})
+
+    assert _edge_signs(graph) == [("A", "B", -1), ("A", "B", 1)]
+
+
+def test_influence_graph_relabel_validates_mapping():
+    graph = bt.bpy.ig.InfluenceGraph()
+    graph.add_edge("A", "B", sign=1)
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'mapping'"):
+        graph.relabel([("A", "X")])
+
+    with pytest.raises(TypeError, match="unsupported mapping key type"):
+        graph.relabel({1: "X"})
+
+    with pytest.raises(TypeError, match="unsupported mapping value type"):
+        graph.relabel({"A": 1})
+
+    assert _edge_signs(graph) == [("A", "B", 1)]
+
+
 def test_scc_feedback_regulators_and_targets():
     ig = bt.bpy.ig.InfluenceGraph()
     ig.add_edges_from(

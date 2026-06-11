@@ -413,6 +413,98 @@ def test_load_interactions_version_deduplicates_dorothea_edges(monkeypatch):
 
     assert result[["source", "target", "sign"]].to_dict("records") == [
         {"source": "TfA", "target": "GeneA", "sign": 1},
+        {"source": "TfA", "target": "GeneA", "sign": -1},
+    ]
+
+
+def test_deduplicate_dorothea_keeps_opposite_signs():
+    dorothea = pd.DataFrame(
+        {
+            "source": ["TfA", "TfA", "TfA"],
+            "target": ["GeneA", "GeneA", "GeneA"],
+            "sign": [1, 1, -1],
+            "confidence": ["A", "A", "A"],
+        }
+    )
+
+    result = _archive._deduplicate_dorothea(dorothea)
+
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA", "target": "GeneA", "sign": 1},
+        {"source": "TfA", "target": "GeneA", "sign": -1},
+    ]
+
+
+def test_deduplicate_dorothea_can_reproduce_decoupler_compatibility():
+    dorothea = pd.DataFrame(
+        {
+            "source": ["TfA", "TfA", "TfA"],
+            "target": ["GeneA", "GeneA", "GeneA"],
+            "sign": [1, 1, -1],
+            "confidence": ["A", "A", "A"],
+        }
+    )
+
+    result = _archive._deduplicate_dorothea(dorothea, compatibility=True)
+
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA", "target": "GeneA", "sign": 1}
+    ]
+
+
+def test_latest_modern_dorothea_keeps_opposite_signs(monkeypatch):
+    monkeypatch.setattr(
+        _dorothea.pd,
+        "read_csv",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source_genesymbol": ["TfA", "TfA", "TfA"],
+                "target_genesymbol": ["GeneA", "GeneA", "GeneA"],
+                "is_stimulation": ["True", "True", "False"],
+                "is_inhibition": ["False", "False", "True"],
+                "consensus_stimulation": ["True", "True", "False"],
+                "dorothea_level": ["A", "A", "A"],
+            }
+        ),
+    )
+
+    result = _dorothea._load_latest_modern_dorothea(
+        organism="human",
+        levels=["A"],
+        hcop_version="bundled",
+    )
+
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA", "target": "GeneA", "sign": 1},
+        {"source": "TfA", "target": "GeneA", "sign": -1},
+    ]
+
+
+def test_latest_modern_dorothea_can_reproduce_decoupler_compatibility(monkeypatch):
+    monkeypatch.setattr(
+        _dorothea.pd,
+        "read_csv",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source_genesymbol": ["TfA", "TfA", "TfA"],
+                "target_genesymbol": ["GeneA", "GeneA", "GeneA"],
+                "is_stimulation": ["True", "True", "False"],
+                "is_inhibition": ["False", "False", "True"],
+                "consensus_stimulation": ["True", "True", "False"],
+                "dorothea_level": ["A", "A", "A"],
+            }
+        ),
+    )
+
+    result = _dorothea._load_latest_modern_dorothea(
+        organism="human",
+        levels=["A"],
+        hcop_version="bundled",
+        compatibility=True,
+    )
+
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA", "target": "GeneA", "sign": 1}
     ]
 
 
@@ -426,8 +518,11 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
         levels=None,
         flavor="modern",
         hcop_version="latest",
+        compatibility=False,
     ):
-        calls.append((resource, version, organism, levels, flavor, hcop_version))
+        calls.append(
+            (resource, version, organism, levels, flavor, hcop_version, compatibility)
+        )
         return pd.DataFrame(
             {
                 "source": ["TfA", "TfB"],
@@ -447,7 +542,9 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
         hcop_version="bundled",
     )
 
-    assert calls == [("dorothea", "2024-01-01", 9606, ["B"], "modern", "bundled")]
+    assert calls == [
+        ("dorothea", "2024-01-01", 9606, ["B"], "modern", "bundled", False)
+    ]
     assert isinstance(grn, InfluenceGraph)
     assert list(grn.edges(data=True)) == [
         (
@@ -468,8 +565,11 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
         levels=None,
         flavor="modern",
         hcop_version="latest",
+        compatibility=False,
     ):
-        calls.append((resource, version, organism, levels, flavor, hcop_version))
+        calls.append(
+            (resource, version, organism, levels, flavor, hcop_version, compatibility)
+        )
         return pd.DataFrame(
             {
                 "source": ["TfA"],
@@ -488,9 +588,33 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
         _dorothea.dorothea(version="2024-01-01", wrapper="op")
 
     assert calls == [
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy", "latest"),
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy", "latest"),
-        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "modern", "latest"),
+        (
+            "dorothea",
+            "2024-01-01",
+            "mouse",
+            ["A", "B", "C"],
+            "legacy",
+            "latest",
+            False,
+        ),
+        (
+            "dorothea",
+            "2024-01-01",
+            "mouse",
+            ["A", "B", "C"],
+            "legacy",
+            "latest",
+            False,
+        ),
+        (
+            "dorothea",
+            "2024-01-01",
+            "mouse",
+            ["A", "B", "C"],
+            "modern",
+            "latest",
+            False,
+        ),
     ]
 
 
@@ -583,6 +707,12 @@ def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
         _dorothea.dorothea(genesyn=object(), version="latest")
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported argument type for 'compatibility'",
+    ):
+        _dorothea.dorothea(compatibility="yes")
 
     with pytest.raises(ValueError, match="invalid argument value for 'flavor'"):
         _dorothea.dorothea(flavor="old")

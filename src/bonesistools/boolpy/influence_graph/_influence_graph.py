@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping as MappingInstance
 from itertools import product
 from typing import (
     TYPE_CHECKING,
@@ -431,6 +432,137 @@ class InfluenceGraph(_MultiDiGraphBase):
         candidate = type(self)(candidate)
 
         self._replace_with_graph(candidate)
+
+    def rename(self, old: str, new: str) -> None:
+        """
+        Rename a node and merge signed edges created by the rename.
+
+        The operation is transactional. If `old` is renamed to an existing
+        node, both nodes are fused. Signed edges that become exact duplicates
+        after the rename are collapsed, while opposite signs are preserved as
+        distinct influences.
+
+        Examples
+        --------
+        >>> graph = InfluenceGraph()
+        >>> graph.add_edge("A", "B", sign=1)
+        >>> graph.add_edge("A", "C", sign=1)
+        >>> graph.add_edge("C", "D", sign=1)
+        >>> graph.rename("C", "B")
+        >>> sorted(graph.edges(data="sign"))
+        [('A', 'B', 1), ('B', 'D', 1)]
+
+        Parameters
+        ----------
+        old: str
+            Node to rename.
+        new: str
+            New node name.
+
+        Raises
+        ------
+        TypeError
+            If `old` or `new` is not a string.
+        KeyError
+            If `old` is not present in the graph.
+        """
+
+        if not isinstance(old, str):
+            raise TypeError(
+                f"unsupported argument type for 'old': "
+                f"expected {str} but received {type(old)}"
+            )
+
+        if not isinstance(new, str):
+            raise TypeError(
+                f"unsupported argument type for 'new': "
+                f"expected {str} but received {type(new)}"
+            )
+
+        if old == new:
+            return None
+
+        if old not in self:
+            raise KeyError(f"node {old!r} not found")
+
+        self.relabel({old: new})
+
+    def relabel(self, mapping: Mapping[str, str]) -> None:
+        """
+        Relabel several nodes in one operation.
+
+        Nodes absent from the graph are ignored. If relabeling fuses nodes,
+        signed edges that become exact duplicates are collapsed, while opposite
+        signs are preserved as distinct influences.
+
+        Examples
+        --------
+        >>> graph = InfluenceGraph()
+        >>> graph.add_edge("Trp53", "Sox2", sign=1)
+        >>> graph.relabel({"Trp53": "TP53", "Sox2": "SOX2"})
+        >>> sorted(graph.edges(data="sign"))
+        [('TP53', 'SOX2', 1)]
+
+        Parameters
+        ----------
+        mapping: Mapping[str, str]
+            Node rename mapping.
+
+        Raises
+        ------
+        TypeError
+            If `mapping` is not a mapping from strings to strings.
+        """
+
+        if not isinstance(mapping, MappingInstance):
+            raise TypeError(
+                f"unsupported argument type for 'mapping': "
+                f"expected {Mapping} but received {type(mapping)}"
+            )
+
+        for old, new in mapping.items():
+            if not isinstance(old, str):
+                raise TypeError(
+                    "unsupported mapping key type: "
+                    f"expected {str} but received {type(old)}"
+                )
+            if not isinstance(new, str):
+                raise TypeError(
+                    "unsupported mapping value type: "
+                    f"expected {str} but received {type(new)}"
+                )
+
+        active_mapping = {
+            old: new for old, new in mapping.items() if old in self and old != new
+        }
+        if not active_mapping:
+            return None
+
+        plain_graph = self._plain_graph(self)
+        relabeled_graph = nx.relabel_nodes(
+            plain_graph,
+            mapping=active_mapping,
+            copy=True,
+        )
+
+        relabeled = self.copy()
+        relabeled.clear()
+        relabeled.graph.update(relabeled_graph.graph)
+
+        for node, data in relabeled_graph.nodes(data=True):
+            relabeled.add_node(node, **data.copy())
+
+        for source, target, data in relabeled_graph.edges(data=True):
+            edge_data = data.copy()
+            sign = edge_data.pop("sign")
+
+            try:
+                relabeled.add_edge(source, target, sign=sign, **edge_data)
+            except ValueError as error:
+                if "duplicated edge sign" not in str(error):
+                    raise
+
+        self._replace_with_graph(relabeled)
 
     def strongly_connected_components(
         self,

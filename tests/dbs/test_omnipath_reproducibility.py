@@ -41,6 +41,7 @@ def test_dorothea_current_mouse_level_a_signature_is_reproducible():
         version="latest",
         flavor="modern",
         hcop_version="bundled",
+        compatibility=True,
     )
 
     assert _signature_hash(graph) == _expected_hash(MODERN_REFERENCE)
@@ -57,6 +58,7 @@ def test_dorothea_legacy_mouse_level_a_signature_is_reproducible():
         version="2025-08-13",
         flavor="legacy",
         hcop_version="bundled",
+        compatibility=True,
     )
 
     assert _signature_hash(graph) == _expected_hash(LEGACY_REFERENCE)
