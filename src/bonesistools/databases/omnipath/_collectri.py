@@ -2,51 +2,51 @@
 
 from __future__ import annotations
 
-from typing import (
-    Any,
-    Optional,
-    Union,
-    cast,
-)
+import warnings
+from typing import Any, Optional, Union
 
 import networkx as nx
 import pandas as pd
 
+from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms, OutputIdentifierType
+from ._archive import OmnipathVersion, load_interactions_version
 
 
-def load_collectri_grn(
+def collectri(
     organism: Union[str, int] = "mouse",
     split_complexes: bool = False,
     remove_pmid: bool = False,
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
-    **kwargs: Any,
-) -> nx.MultiDiGraph[Any]:
+    version: OmnipathVersion = "latest",
+) -> InfluenceGraph:
     """
-    Load a signed regulatory network derived from the CollecTRI database [1].
+    Load a CollecTRI signed regulatory network from OmniPath archives.
 
     Parameters
     ----------
     organism: str or int (default: "mouse")
-        Organism of interest. Accepted values depend on the selected decoupler
-        wrapper.
+        Organism of interest. Archived OmniPath versions support human, mouse
+        and rat. If a dated archive lacks records for the requested organism,
+        non-human networks are translated from human interactions with
+        decoupler's HCOP-based `op.translate` helper.
     split_complexes: bool (default: False)
         Whether to split regulatory complexes into subunits.
     remove_pmid: bool (default: False)
-        Whether to remove the PMID edge attribute returned by decoupler.
+        Whether to remove publication-reference edge attributes.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
     gene_identifier_type: OutputIdentifierType (default: "official_name")
         Output gene identifier type used when `genesyn` is provided.
-    **kwargs: Any
-        Keyword arguments passed to the selected decoupler CollecTRI wrapper.
+    version: str or date (default: "latest")
+        OmniPath resource version to load. Accepted values are `"latest"` or a
+        date such as `"2024-01-01"`.
 
     Returns
     -------
-    nx.MultiDiGraph
-        Signed regulatory network. Edges contain the attributes returned by
-        decoupler, with `weight` renamed to `sign` and converted to -1 or 1.
+    InfluenceGraph
+        Signed regulatory network.
 
     Raises
     ------
@@ -58,8 +58,8 @@ def load_collectri_grn(
     ----------
     [1] Müller-Dott et al. (2023). Expanding the coverage of regulons
     from high-confidence prior knowledge for accurate estimation of
-    transcription factor activities.
-    Nucleic Acids Research, 51(20), 10934-10949 (https://doi.org/10.1093/nar/gkad841)
+    transcription factor activities. Nucleic Acids Research, 51(20),
+    10934-10949 (https://doi.org/10.1093/nar/gkad841)
     """
 
     if not isinstance(organism, (str, int)):
@@ -78,23 +78,14 @@ def load_collectri_grn(
             f"expected {bool} but received {type(remove_pmid)}"
         )
 
-    import decoupler as _dc  # type: ignore
+    collectri_db = load_interactions_version(
+        "collectri",
+        version=version,
+        organism=organism,
+    )
 
-    dc = cast(Any, _dc)
-
-    try:
-        collectri_db = dc.get_collectri(
-            organism=organism,
-            split_complexes=split_complexes,
-            **kwargs,
-        )
-    except AttributeError:
-        collectri_db = dc.op.collectri(
-            organism=organism,
-            remove_complexes=split_complexes,
-            **kwargs,
-        )
-    collectri_db = collectri_db.rename(columns={"weight": "sign"})
+    if "weight" in collectri_db:
+        collectri_db = collectri_db.rename(columns={"weight": "sign"})
     if remove_pmid:
         reference_columns = [
             column
@@ -117,16 +108,20 @@ def load_collectri_grn(
         )
     collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
-    grn = nx.from_pandas_edgelist(
-        df=collectri_db,
-        source="source",
-        target="target",
-        edge_attr=True,
-        create_using=nx.MultiDiGraph,
+    grn = InfluenceGraph(
+        nx.from_pandas_edgelist(
+            df=collectri_db,
+            source="source",
+            target="target",
+            edge_attr=True,
+            create_using=nx.MultiDiGraph,
+        )
     )
+
     if genesyn is None:
         return grn
-    elif isinstance(genesyn, GeneSynonyms):
+
+    if isinstance(genesyn, GeneSynonyms):
         genesyn(
             grn,
             input_identifier_type="name",
@@ -134,8 +129,23 @@ def load_collectri_grn(
             copy=False,
         )
         return grn
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'genesyn': "
-            f"expected {GeneSynonyms} but received {type(genesyn)}"
-        )
+
+    raise TypeError(
+        f"unsupported argument type for 'genesyn': "
+        f"expected {GeneSynonyms} but received {type(genesyn)}"
+    )
+
+
+def load_collectri_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
+    """
+    Deprecated alias for `collectri`.
+    """
+
+    warnings.warn(
+        "`load_collectri_grn` is deprecated and will be removed in a future "
+        "version; use `collectri` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return collectri(*args, **kwargs)

@@ -3,135 +3,86 @@
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
-from typing import (
-    Any,
-    List,
-    Optional,
-    Union,
-    cast,
-)
+from typing import Any, List, Optional, Union
 
 import networkx as nx
 import pandas as pd
 
 from ..._compat import Literal
+from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms, OutputIdentifierType
+from ._archive import (
+    DorotheaFlavor,
+    OmnipathVersion,
+    _deduplicate_dorothea,
+    _filter_dataset_evidences,
+    _format_dorothea,
+    _normalize_organism,
+    _tax_id,
+    _translate_hcop,
+    _truthy,
+    load_interactions_version,
+)
 
+OMNIPATH_INTERACTIONS_URL = "https://omnipathdb.org/interactions/?genesymbols=1&"
 DorotheaWrapper = Literal["op", "get"]
 
-GET_DOROTHEA_DECOUPLER_REQUIREMENT = "decoupler<2.0.0"
-OP_DOROTHEA_DECOUPLER_REQUIREMENT = "decoupler>=2.0.0"
 
-
-def _get_decoupler_version(decoupler_module: Any) -> str:
-    return getattr(decoupler_module, "__version__", "unknown")
-
-
-def _raise_missing_dorothea_wrapper(
-    wrapper: DorotheaWrapper,
-    decoupler_module: Any,
-) -> None:
-    decoupler_version = _get_decoupler_version(decoupler_module)
-
-    if wrapper == "get":
-        raise AttributeError(
-            "`decoupler.get_dorothea` is not available in the installed "
-            f"decoupler version ({decoupler_version}). `wrapper='get'` "
-            f"requires {GET_DOROTHEA_DECOUPLER_REQUIREMENT}, or an existing "
-            "local cache file generated with a compatible decoupler version."
-        )
-
-    raise AttributeError(
-        "`decoupler.op.dorothea` is not available in the installed decoupler "
-        f"version ({decoupler_version}). `wrapper='op'` requires "
-        f"{OP_DOROTHEA_DECOUPLER_REQUIREMENT}, or an existing local cache "
-        "file generated with a compatible decoupler version."
-    )
-
-
-def load_dorothea_grn(
+def dorothea(
     organism: Union[str, int] = "mouse",
     levels: Optional[List[str]] = None,
     genesyn: Optional[GeneSynonyms] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
-    wrapper: DorotheaWrapper = "op",
-    reload: bool = False,
+    version: OmnipathVersion = "latest",
+    flavor: Optional[DorotheaFlavor] = None,
+    wrapper: Optional[DorotheaWrapper] = None,
+    reload: Optional[bool] = None,
     **kwargs: Any,
-) -> nx.MultiDiGraph[Any]:
+) -> InfluenceGraph:
     """
-    Load a transcriptional regulatory network derived from DoRothEA.
-
-    The DoRothEA resource is retrieved through `decoupler` and converted into a
-    signed NetworkX MultiDiGraph. Two decoupler wrappers can be used because
-    current and historical decoupler APIs may expose different DoRothEA
-    retrieval functions.
-
-    By default, this function uses `decoupler.op.dorothea`, which corresponds
-    to the current OmniPath-oriented decoupler interface. The alternative
-    `decoupler.get_dorothea` wrapper can be selected explicitly for
-    compatibility with historical analyses or environments.
-
-    Retrieved resources are cached locally in an `.cache` directory next to
-    this module. The complete selected decoupler resource is cached per wrapper
-    and organism, then filtered locally according to `levels`.
+    Load a DoRothEA signed regulatory network from OmniPath.
 
     Parameters
     ----------
     organism: str or int (default: "mouse")
-        Organism of interest. Accepted values depend on the selected decoupler
-        wrapper.
+        Organism of interest. Dated OmniPath archives support human, mouse and
+        rat. If a dated archive lacks records for the requested organism,
+        non-human networks are translated from human interactions with
+        decoupler's HCOP-based `op.translate` helper.
     levels: list of str, optional
-        DoRothEA confidence levels to retrieve. Valid levels are typically
-        `"A"`, `"B"`, `"C"` and `"D"` for `decoupler.op.dorothea`; accepted
-        values may differ for `decoupler.get_dorothea` and older decoupler
-        versions. If None, use `["A", "B", "C"]`. The cache itself stores the
-        complete selected decoupler resource; `levels` only filters the returned
-        graph. With `wrapper="get"`, confidence levels are not passed to
-        decoupler because the legacy wrapper is not level-parameterized; in
-        practice this resource may contain only confidence level `"A"`.
+        DoRothEA confidence levels to keep. If None, use `["A", "B", "C"]`.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
     gene_identifier_type: OutputIdentifierType (default: "official_name")
         Output gene identifier type used when `genesyn` is provided.
-    wrapper: {"op", "get"} (default: "op")
-        Decoupler wrapper used to retrieve DoRothEA.
-
-        If `"op"`, use `decoupler.op.dorothea`.
-
-        If `"get"`, use `decoupler.get_dorothea`.
-
-        No automatic fallback is performed between wrappers, because the two
-        wrappers may retrieve different resources or apply different
-        preprocessing pipelines.
-    reload: bool (default: False)
-        If True, ignore the local cache and retrieve the resource again through
-        decoupler.
+    version: str or date (default: "latest")
+        OmniPath resource version to load. `"latest"` uses the current OmniPath
+        interactions endpoint with decoupler-compatible post-processing; dates
+        such as `"2024-01-01"` load archived OmniPath interaction dumps.
+    flavor: {"modern", "legacy"}, optional
+        DoRothEA construction flavor. If None, use `"modern"`.
+        If `"modern"`, reproduce the current `decoupler.op.dorothea`
+        construction.
+        If `"legacy"`, reproduce the historical `decoupler.get_dorothea`
+        construction.
+    wrapper: {"op", "get"}, optional
+        Deprecated alias for `flavor`. `wrapper="op"` maps to
+        `flavor="modern"` and `wrapper="get"` maps to `flavor="legacy"`.
+    reload: bool, optional
+        Deprecated and ignored. Kept for compatibility with older calls.
     **kwargs: Any
-        Keyword arguments passed to the selected decoupler DoRothEA wrapper.
+        Deprecated and ignored. Kept for compatibility with older decoupler
+        wrapper arguments.
 
     Returns
     -------
-    nx.MultiDiGraph
-        Signed regulatory network. Edges contain the attributes returned by
-        decoupler, with `weight` renamed to `sign` and converted to -1 or 1.
+    InfluenceGraph
+        Signed regulatory network.
 
     Raises
     ------
     TypeError
         If `organism` or `genesyn` has an unsupported type.
-    ValueError
-        If `wrapper` is not `"op"` or `"get"`.
-    AttributeError
-        If the selected decoupler wrapper is not available in the installed
-        decoupler version. `wrapper="op"` requires decoupler>=2.0.0 when no
-        cache is available, while `wrapper="get"` requires decoupler<2.0.0
-        when no cache is available.
-    Warns
-    -----
-    UserWarning
-        If `wrapper="get"` is used with requested confidence levels other than
-        `"A"`.
     """
 
     if levels is None:
@@ -143,69 +94,47 @@ def load_dorothea_grn(
             f"expected {str} or {int} but received {type(organism)}"
         )
 
-    if wrapper not in ["op", "get"]:
-        raise ValueError(
-            f"invalid argument value for 'wrapper': "
-            f"expected 'op' or 'get' but received {wrapper!r}"
+    flavor = _resolve_dorothea_flavor(flavor=flavor, wrapper=wrapper)
+    _warn_deprecated_reload(reload)
+    _warn_ignored_kwargs(kwargs)
+
+    if _is_latest_version(version):
+        dorothea_db = _load_latest_dorothea(
+            organism=organism,
+            levels=levels,
+            flavor=flavor,
         )
-
-    if wrapper == "get" and any(level != "A" for level in levels):
-        warnings.warn(
-            "`wrapper='get'` uses the legacy `decoupler.get_dorothea` resource, "
-            "which is not downloaded by confidence level and may only contain "
-            "level 'A'; requested levels are applied only as a local filter.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    cache_dir = Path(__file__).resolve().parent / ".cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    cache_file = cache_dir / f"dorothea_{wrapper}_{organism}_complete.csv"
-
-    if cache_file.exists() and not reload:
-        dorothea_db = pd.read_csv(cache_file)
-
     else:
-        import decoupler as _dc  # type: ignore
+        dorothea_db = load_interactions_version(
+            "dorothea",
+            version=version,
+            organism=organism,
+            levels=levels,
+            flavor=flavor,
+        )
 
-        dc = cast(Any, _dc)
-
-        if wrapper == "op":
-            if not hasattr(dc, "op") or not hasattr(dc.op, "dorothea"):
-                _raise_missing_dorothea_wrapper(wrapper, dc)
-
-            dorothea_db = dc.op.dorothea(
-                organism=organism,
-                levels=["A", "B", "C", "D"],
-                **kwargs,
-            )
-
-        else:
-            if not hasattr(dc, "get_dorothea"):
-                _raise_missing_dorothea_wrapper(wrapper, dc)
-
-            dorothea_db = dc.get_dorothea(
-                organism=organism,
-                **kwargs,
-            )
-
-        dorothea_db.to_csv(cache_file, index=False)
-
-    dorothea_columns = list(dorothea_db.columns)
-    dorothea_db = pd.DataFrame.from_records(
-        (row for row in dorothea_db.to_dict("records") if row["confidence"] in levels),
-        columns=dorothea_columns,
-    )
-    dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
+    if "confidence" in dorothea_db:
+        dorothea_columns = list(dorothea_db.columns)
+        dorothea_db = pd.DataFrame.from_records(
+            (
+                row
+                for row in dorothea_db.to_dict("records")
+                if row["confidence"] in levels
+            ),
+            columns=dorothea_columns,
+        )
+    if "weight" in dorothea_db:
+        dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
     dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
 
-    grn = nx.from_pandas_edgelist(
-        df=dorothea_db,
-        source="source",
-        target="target",
-        edge_attr=True,
-        create_using=nx.MultiDiGraph,
+    grn = InfluenceGraph(
+        nx.from_pandas_edgelist(
+            df=dorothea_db,
+            source="source",
+            target="target",
+            edge_attr=True,
+            create_using=nx.MultiDiGraph,
+        )
     )
 
     if genesyn is None:
@@ -224,3 +153,194 @@ def load_dorothea_grn(
         f"unsupported argument type for 'genesyn': "
         f"expected {GeneSynonyms} but received {type(genesyn)}"
     )
+
+
+def _load_latest_dorothea(
+    organism: Union[str, int],
+    levels: List[str],
+    flavor: DorotheaFlavor,
+) -> pd.DataFrame:
+    if flavor == "legacy":
+        return _load_latest_legacy_dorothea(organism=organism, levels=levels)
+
+    return _load_latest_modern_dorothea(organism=organism, levels=levels)
+
+
+def _load_latest_modern_dorothea(
+    organism: Union[str, int],
+    levels: List[str],
+) -> pd.DataFrame:
+    organism_name = _normalize_organism(organism)
+    url = (
+        OMNIPATH_INTERACTIONS_URL
+        + f"datasets=dorothea&dorothea_levels={','.join(levels)}"
+        + "&fields=dorothea_level&license=academic"
+    )
+    dorothea_db = pd.read_csv(url, sep="\t", low_memory=False)
+    dorothea_db = dorothea_db[
+        [
+            "source_genesymbol",
+            "target_genesymbol",
+            "is_stimulation",
+            "is_inhibition",
+            "consensus_stimulation",
+            "dorothea_level",
+        ]
+    ]
+    dorothea_db = dorothea_db[
+        ~dorothea_db.duplicated(
+            ["source_genesymbol", "dorothea_level", "target_genesymbol"]
+        )
+    ].copy()
+    dorothea_db["dorothea_level"] = (
+        dorothea_db["dorothea_level"].astype(str).str.split(";").str[0]
+    )
+
+    stimulation = _truthy(dorothea_db["is_stimulation"])
+    inhibition = _truthy(dorothea_db["is_inhibition"])
+    consensus_stimulation = _truthy(dorothea_db["consensus_stimulation"])
+
+    signs = []
+    for is_stimulation, is_inhibition, is_consensus_stimulation in zip(
+        stimulation,
+        inhibition,
+        consensus_stimulation,
+    ):
+        if is_stimulation and is_inhibition:
+            signs.append(1 if is_consensus_stimulation else -1)
+        elif is_stimulation:
+            signs.append(1)
+        elif is_inhibition:
+            signs.append(-1)
+        else:
+            signs.append(1)
+
+    dorothea_db = pd.DataFrame(
+        {
+            "source": dorothea_db["source_genesymbol"],
+            "target": dorothea_db["target_genesymbol"],
+            "sign": signs,
+            "confidence": dorothea_db["dorothea_level"],
+        }
+    ).sort_values("confidence")
+    dorothea_db = dorothea_db[dorothea_db["confidence"].isin(levels)]
+
+    if organism_name != "human":
+        dorothea_db = _translate_hcop(dorothea_db, organism_name)
+
+    return dorothea_db.drop_duplicates(["source", "target"]).reset_index(drop=True)
+
+
+def _load_latest_legacy_dorothea(
+    organism: Union[str, int],
+    levels: List[str],
+) -> pd.DataFrame:
+    organism_name = _normalize_organism(organism)
+    url = (
+        "https://omnipathdb.org/interactions?"
+        "datasets=dorothea"
+        "&dorothea_levels=A,B,C,D"
+        "&fields=curation_effort,dorothea_level,evidences,extra_attrs,"
+        "references,sources"
+        "&format=tsv"
+        "&genesymbols=1"
+        f"&organisms={_tax_id(organism_name)}"
+    )
+    dorothea_db = pd.read_csv(url, sep="\t", low_memory=False)
+    dorothea_db = _filter_dataset_evidences(dorothea_db, dataset="dorothea")
+    dorothea_db = _format_dorothea(
+        dorothea_db,
+        source_column="source_genesymbol",
+        target_column="target_genesymbol",
+        version_label="latest",
+        levels=levels,
+    )
+    return _deduplicate_dorothea(dorothea_db)
+
+
+def _is_latest_version(version: OmnipathVersion) -> bool:
+    return isinstance(version, str) and version.strip().lower() in ["", "latest"]
+
+
+def _resolve_dorothea_flavor(
+    flavor: Optional[DorotheaFlavor],
+    wrapper: Optional[DorotheaWrapper],
+) -> DorotheaFlavor:
+    if wrapper is not None:
+        wrapper_flavor = _flavor_from_wrapper(wrapper)
+        if flavor is not None and flavor != wrapper_flavor:
+            raise ValueError(
+                "conflicting DoRothEA construction arguments: "
+                f"flavor={flavor!r} and wrapper={wrapper!r}"
+            )
+
+        warnings.warn(
+            "`wrapper` is deprecated and will be removed in a future version; "
+            "use `flavor='modern'` instead of `wrapper='op'` and "
+            "`flavor='legacy'` instead of `wrapper='get'`.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        flavor = wrapper_flavor
+
+    if flavor is None:
+        return "modern"
+
+    if flavor not in ["modern", "legacy"]:
+        raise ValueError(
+            "invalid argument value for 'flavor': expected 'modern' or "
+            f"'legacy', but received {flavor!r}"
+        )
+
+    return flavor
+
+
+def _flavor_from_wrapper(wrapper: str) -> DorotheaFlavor:
+    if wrapper == "op":
+        return "modern"
+    if wrapper == "get":
+        return "legacy"
+
+    raise ValueError(
+        "invalid argument value for 'wrapper': expected 'op' or "
+        f"'get', but received {wrapper!r}"
+    )
+
+
+def _warn_deprecated_reload(reload: Optional[bool]) -> None:
+    if reload is None:
+        return
+
+    warnings.warn(
+        "`reload` is deprecated and ignored; DoRothEA versions are controlled "
+        "with `version`.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def _warn_ignored_kwargs(kwargs: dict[str, Any]) -> None:
+    if not kwargs:
+        return
+
+    warnings.warn(
+        "additional DoRothEA wrapper keyword arguments are deprecated and "
+        f"ignored: {', '.join(sorted(kwargs))}",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
+    """
+    Deprecated alias for `dorothea`.
+    """
+
+    warnings.warn(
+        "`load_dorothea_grn` is deprecated and will be removed in a future "
+        "version; use `dorothea` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return dorothea(*args, **kwargs)

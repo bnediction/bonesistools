@@ -10,10 +10,12 @@ from OmniPath-related resources such as CollecTRI and DoRothEA.
 
 from typing import List as _List
 
-from ._collectri import load_collectri_grn
-from ._dorothea import load_dorothea_grn
+from ._collectri import collectri, load_collectri_grn
+from ._dorothea import dorothea, load_dorothea_grn
 
 __all__ = [
+    "collectri",
+    "dorothea",
     "load_collectri_grn",
     "load_dorothea_grn",
 ]

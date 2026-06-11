@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
+from bonesistools.databases.ncbi import _genesyn
 
 GENE_IDS = [
     "20375",
@@ -269,8 +270,8 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
 def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch):
     calls = []
 
-    def fake_download(genesyn, force_download=False):
-        calls.append(("download", force_download))
+    def fake_download(genesyn):
+        calls.append(("download", genesyn.version, genesyn.ncbi_file.name))
 
     def fake_initialize(genesyn, show_warnings):
         calls.append(("initialize", show_warnings))
@@ -292,15 +293,79 @@ def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch)
     genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
     genesyn.reset(
         organism="mouse",
-        force_download=False,
         show_warnings=False,
     )
 
     assert genesyn.organism == "mouse"
-    assert genesyn.force_download is False
+    assert genesyn.version == "current"
     assert genesyn.show_warnings is False
     assert genesyn.ncbi_file.name == "mus_musculus_gene_info.tsv"
-    assert calls == [("download", False), ("initialize", False)]
+    assert calls == [
+        ("download", "current", "mus_musculus_gene_info.tsv"),
+        ("initialize", False),
+    ]
+
+
+def test_gene_synonyms_supports_current_latest_and_local_dated_versions(
+    monkeypatch,
+    tmp_path,
+):
+    calls = []
+    data_dir = tmp_path / "gi"
+    version_dir = data_dir / "versions" / "20240101"
+    version_dir.mkdir(parents=True)
+
+    bundled_file = data_dir / "mus_musculus_gene_info.tsv"
+    version_file = version_dir / "mus_musculus_gene_info.tsv"
+    bundled_file.write_text("bundled\n")
+    version_file.write_text("version\n")
+
+    monkeypatch.setattr(_genesyn, "NCBI_DIR", data_dir)
+    monkeypatch.setattr(_genesyn, "NCBI_GENE_INFO_VERSION_DIR", data_dir / "versions")
+    monkeypatch.setattr(
+        _genesyn,
+        "NCBI_GENE_INFO_FILES",
+        {"mouse": bundled_file},
+    )
+
+    def fake_download(genesyn):
+        calls.append(("download", genesyn.version, genesyn.ncbi_file))
+
+    def fake_initialize(genesyn, show_warnings):
+        calls.append(("initialize", show_warnings))
+        genesyn.show_warnings = show_warnings
+        genesyn.gene_aliases_mapping = {"databases": {}}
+        genesyn.databases = set()
+
+    monkeypatch.setattr(
+        bt.dbs.ncbi.GeneSynonyms,
+        "_GeneSynonyms__download_gene_info",
+        fake_download,
+    )
+    monkeypatch.setattr(
+        bt.dbs.ncbi.GeneSynonyms,
+        "_GeneSynonyms__initialize_mappings",
+        fake_initialize,
+    )
+
+    current = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="current")
+    latest = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="latest")
+    dated = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="2024-01-01")
+
+    assert current.version == "current"
+    assert current.ncbi_file == bundled_file
+    assert latest.version == "latest"
+    assert latest.ncbi_file == bundled_file
+    assert dated.version == "20240101"
+    assert dated.ncbi_file == version_file
+    assert calls == [
+        ("download", "current", bundled_file),
+        ("initialize", False),
+        ("download", "latest", bundled_file),
+        ("initialize", False),
+        ("download", "20240101", version_file),
+        ("initialize", False),
+    ]
 
 
 def test_gene_synonyms_validation_errors_and_missing_warnings(
@@ -310,25 +375,18 @@ def test_gene_synonyms_validation_errors_and_missing_warnings(
         bt.dbs.ncbi.GeneSynonyms(organism="rat")
 
     with pytest.raises(
-        TypeError, match="unsupported argument type for 'force_download'"
-    ):
-        bt.dbs.ncbi.GeneSynonyms(force_download="no")
-
-    with pytest.raises(
         TypeError, match="unsupported argument type for 'show_warnings'"
     ):
         bt.dbs.ncbi.GeneSynonyms(show_warnings="yes")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'version'"):
+        bt.dbs.ncbi.GeneSynonyms(version=object())
 
     genesyn = mouse_genesyn
     monkeypatch.setattr(genesyn, "show_warnings", True)
 
     with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
         genesyn.reset(organism="rat")
-
-    with pytest.raises(
-        TypeError, match="unsupported argument type for 'force_download'"
-    ):
-        genesyn.reset(force_download="no")
 
     with pytest.raises(
         TypeError, match="unsupported argument type for 'show_warnings'"

@@ -22,6 +22,7 @@ from ._simple import (
     filter_obs,
     filter_var,
     merge,
+    sort_anndata,
 )
 from ._transfer import (
     transfer_layer,
@@ -33,6 +34,7 @@ __all__ = [
     "filter_obs",
     "filter_var",
     "merge",
+    "sort_anndata",
     "transfer_layer",
     "transfer_obs_sti",
     "transfer_obs_its",

@@ -15,12 +15,12 @@ def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
 
 
 def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
-    x = _get_matrix(adata, layer)
+    X = _get_matrix(adata, layer)
 
-    if sparse.issparse(x):
-        return cast(Any, x).toarray()
+    if sparse.issparse(X):
+        return cast(Any, X).toarray()
 
-    return cast(Any, x)
+    return cast(Any, X)
 
 
 def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
@@ -41,8 +41,8 @@ def to_csv(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
     if not filename.endswith(".csv"):
         filename = Path(f"{filename}.csv")
 
-    x = _get_dense_matrix(adata, layer)
-    pd.DataFrame(x).to_csv(path_or_buf=filename, sep=",")
+    X = _get_dense_matrix(adata, layer)
+    pd.DataFrame(X).to_csv(path_or_buf=filename, sep=",")
 
 
 def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
@@ -63,8 +63,8 @@ def to_mtx(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
     if not filename.endswith(".mtx"):
         filename = Path(f"{filename}.mtx")
 
-    x = _get_matrix(adata, layer)
-    io.mmwrite(filename, x)
+    X = _get_matrix(adata, layer)
+    io.mmwrite(filename, X)
 
 
 def to_npz(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> None:
@@ -85,8 +85,8 @@ def to_npz(adata: AnnData, filename: PathLike, layer: Optional[str] = None) -> N
     if not filename.endswith(".npz"):
         filename = Path(f"{filename}.npz")
 
-    x = _get_matrix(adata, layer)
-    sparse.save_npz(filename, x)
+    X = _get_matrix(adata, layer)
+    sparse.save_npz(filename, X)
 
 
 def to_csv_or_mtx(

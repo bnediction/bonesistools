@@ -42,6 +42,7 @@ from ._typing import (
 )
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
+GeneInfoVersion = Union[str, Path]
 
 ORGANISMS = Literal["mouse", "human", "escherichia coli"]
 
@@ -61,6 +62,8 @@ NCBI_GENE_INFO_FILES = {
     "human": NCBI_DIR / "homo_sapiens_gene_info.tsv",
     "escherichia coli": NCBI_DIR / "escherichia_coli_gene_info.tsv",
 }
+
+NCBI_GENE_INFO_VERSION_DIR = NCBI_DIR / "versions"
 
 GENE_TYPE_PRIORITY = {
     "protein-coding": 100,
@@ -184,8 +187,21 @@ class GeneSynonyms:
     organism: str (default: "mouse")
         Common name of the organism of interest. Supported organisms are
         `"mouse"`, `"human"` and `"escherichia coli"`.
-    force_download: bool (default: False)
-        If True, download the NCBI gene_info resource before building mappings.
+    version: str or Path (default: "current")
+        NCBI gene_info version to load.
+
+        If `"current"`, use the local organism-specific gene_info file if
+        available; if it is missing, download the latest NCBI gene_info file
+        before building mappings.
+
+        If `"latest"`, download the latest NCBI gene_info file before building
+        mappings.
+
+        If a date such as `"2024-01-01"` or `"20240101"` is provided, load the
+        matching local version from `data/gi/versions/<date>/` or
+        `data/gi/<organism>_gene_info_<date>.tsv`.
+
+        If a path is provided, load that gene_info file directly.
     show_warnings: bool (default: False)
         If True, warn when a requested gene identifier has no correspondence.
 
@@ -202,8 +218,7 @@ class GeneSynonyms:
     Raises
     ------
     TypeError
-        If `force_download`, `show_warnings` or converted data has an
-        unsupported type.
+        If `show_warnings` or converted data has an unsupported type.
     ValueError
         If `organism`, identifier types, database names or axis values are
         unsupported.
@@ -216,7 +231,7 @@ class GeneSynonyms:
     def __init__(
         self,
         organism: str = "mouse",
-        force_download: bool = False,
+        version: GeneInfoVersion = "current",
         show_warnings: bool = False,
     ) -> None:
 
@@ -228,12 +243,6 @@ class GeneSynonyms:
                 f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
             )
 
-        if not isinstance(force_download, bool):
-            raise TypeError(
-                f"unsupported argument type for 'force_download': "
-                f"expected {bool} but received {type(force_download)}"
-            )
-
         if not isinstance(show_warnings, bool):
             raise TypeError(
                 f"unsupported argument type for 'show_warnings': "
@@ -241,10 +250,10 @@ class GeneSynonyms:
             )
 
         self.organism = organism
-        self.ncbi_file = NCBI_GENE_INFO_FILES[self.organism]
-        self.force_download = force_download
+        self.version = self.__normalize_gene_info_version(version)
+        self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
-        self.__download_gene_info(force_download=force_download)
+        self.__download_gene_info()
         self.__initialize_mappings(show_warnings=show_warnings)
 
     def __call__(
@@ -843,7 +852,7 @@ class GeneSynonyms:
     def reset(
         self,
         organism: Optional[str] = None,
-        force_download: bool = False,
+        version: Optional[GeneInfoVersion] = None,
         show_warnings: bool = False,
     ) -> None:
         """
@@ -854,9 +863,9 @@ class GeneSynonyms:
         organism: str, optional
             Common name of the organism to load. If None, reload the current
             organism.
-        force_download: bool (default: False)
-            If True, download the NCBI gene_info resource before rebuilding
-            mappings.
+        version: str or Path, optional
+            NCBI gene_info version to load. If None, keep the current
+            version.
         show_warnings: bool (default: False)
             If True, warn when a requested gene identifier has no
             correspondence.
@@ -864,7 +873,7 @@ class GeneSynonyms:
         Raises
         ------
         TypeError
-            If `force_download` or `show_warnings` is not Boolean.
+            If `show_warnings` is not Boolean.
         ValueError
             If `organism` is unsupported.
         RuntimeError
@@ -882,12 +891,6 @@ class GeneSynonyms:
                 f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
             )
 
-        if not isinstance(force_download, bool):
-            raise TypeError(
-                f"unsupported argument type for 'force_download': "
-                f"expected {bool} but received {type(force_download)}"
-            )
-
         if not isinstance(show_warnings, bool):
             raise TypeError(
                 f"unsupported argument type for 'show_warnings': "
@@ -895,10 +898,12 @@ class GeneSynonyms:
             )
 
         self.organism = organism
-        self.ncbi_file = NCBI_GENE_INFO_FILES[self.organism]
-        self.force_download = force_download
+        if version is None:
+            version = getattr(self, "version", "current")
+        self.version = self.__normalize_gene_info_version(version)
+        self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
-        self.__download_gene_info(force_download=force_download)
+        self.__download_gene_info()
         self.__initialize_mappings(show_warnings=show_warnings)
 
     def get_mapping(self):
@@ -1255,15 +1260,69 @@ class GeneSynonyms:
                 )
             return None
 
-    def __download_gene_info(self, force_download: bool = False) -> None:
+    def __normalize_gene_info_version(self, version: GeneInfoVersion) -> str:
+        if not isinstance(version, (str, Path)):
+            raise TypeError(
+                f"unsupported argument type for 'version': "
+                f"expected {str} or {Path} but received {type(version)}"
+            )
 
-        if not force_download:
+        if isinstance(version, Path):
+            return str(version)
+
+        version = version.strip()
+
+        if version in ["current", "bundled", ""]:
+            return "current"
+
+        if version == "latest":
+            return "latest"
+
+        date_match = re.fullmatch(r"([0-9]{4})-?([0-9]{2})-?([0-9]{2})", version)
+        if date_match:
+            return "".join(date_match.groups())
+
+        return version
+
+    def __resolve_gene_info_file(self, version: str) -> Path:
+        bundled_file = NCBI_GENE_INFO_FILES[self.organism]
+
+        if version in ["current", "latest"]:
+            return bundled_file
+
+        version_path = Path(version)
+        if version_path.exists():
+            return version_path
+
+        if re.fullmatch(r"[0-9]{8}", version):
+            dated_candidates = [
+                NCBI_GENE_INFO_VERSION_DIR / version / bundled_file.name,
+                NCBI_DIR / f"{bundled_file.stem}_{version}{bundled_file.suffix}",
+            ]
+            for candidate in dated_candidates:
+                if candidate.exists():
+                    return candidate
+
+            candidates = ", ".join(str(candidate) for candidate in dated_candidates)
+            raise FileNotFoundError(
+                f"NCBI gene_info version not found for {self.organism!r} "
+                f"at {version}: expected one of {candidates}"
+            )
+
+        raise FileNotFoundError(f"NCBI gene_info version file not found: {version}")
+
+    def __download_gene_info(self) -> None:
+
+        if self.version == "current" and self.ncbi_file.exists():
+            return
+
+        if self.version not in ["current", "latest"]:
             return
 
         cmd = (
-            f"wget --quiet --show-progress -cO {self.ncbi_file}.gz "
+            f"wget --quiet --show-progress -O {self.ncbi_file}.gz "
             f"{FTP_GENE_INFO[self.organism]} && "
-            f"gunzip --quiet {self.ncbi_file}.gz"
+            f"gunzip --quiet --force {self.ncbi_file}.gz"
         )
 
         try:

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
@@ -32,7 +31,7 @@ def test_embedding_plot_with_test_representation():
         figwidth=6,
         s=2,
         alpha=1,
-        add_legend=True,
+        show_legend=True,
         lgd_params={
             "title": "clusters",
             "ncol": 1,
@@ -88,32 +87,20 @@ def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
     plt.close(fig)
 
 
-def test_embedding_plot_discrete_handles_nan_mapping_labels_and_graph(mini_adata):
+def test_embedding_plot_discrete_handles_nan_mapping_and_labels(mini_adata):
     mini_adata.obs["label_with_nan"] = mini_adata.obs["cluster"].astype(object)
     mini_adata.obs.loc["c4", "label_with_nan"] = np.nan
     mini_adata.obs["label_with_nan"] = mini_adata.obs["label_with_nan"].astype(
         "category"
     )
 
-    epg = nx.Graph()
-    epg.add_node("n1", pos=np.array([0.0, 0.0]))
-    epg.add_node("n2", pos=np.array([2.0, 2.0]))
-    flat_tree = nx.Graph()
-    flat_tree.add_node("n1", pos=np.array([0.0, 0.0]), label="N1")
-    flat_tree.add_node("n2", pos=np.array([2.0, 2.0]), label="N2")
-    flat_tree.add_edge("n1", "n2", nodes=["n1", "n2"])
-    mini_adata.uns["epg"] = epg
-    mini_adata.uns["flat_tree"] = flat_tree
-
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="label_with_nan",
         use_rep="X_pca",
         colors={"A": [1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0]},
-        add_legend=True,
-        add_labels=True,
-        add_graph=True,
-        add_labels_to_graph=True,
+        show_legend=True,
+        show_labels=True,
         automatic_resize=True,
         text={"fontsize": 8},
     )
@@ -121,8 +108,7 @@ def test_embedding_plot_discrete_handles_nan_mapping_labels_and_graph(mini_adata
     assert isinstance(fig, Figure)
     assert isinstance(ax, Axes)
     assert ax.get_legend() is not None
-    assert {text.get_text() for text in ax.texts}.issuperset({"A", "B", "N1", "N2"})
-    assert len(ax.lines) >= 1
+    assert {text.get_text() for text in ax.texts} == {"A", "B"}
     plt.close(fig)
 
 
@@ -199,7 +185,7 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
             "A": np.array([1.0, 0.0, 0.0, 1.0]),
             "B": np.array([0.0, 0.0, 1.0, 1.0]),
         },
-        add_legend=True,
+        show_legend=True,
         legend_params={"loc": "upper left"},
         tick_params={"labelsize": 6},
         title="discrete 3d",
@@ -263,7 +249,7 @@ def test_embedding_plot_continuous_accepts_colormap_name(mini_adata):
     plt.close(fig)
 
 
-def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
+def test_embedding_plot_discrete_3d_default_colors_legend_and_labels(
     mini_adata,
     monkeypatch,
 ):
@@ -278,39 +264,25 @@ def test_embedding_plot_discrete_3d_default_colors_legend_labels_and_graph(
         categories=categories,
     )
 
-    epg = nx.Graph()
-    epg.add_node("n1", pos=np.array([0.0, 0.0, 0.0]))
-    epg.add_node("n2", pos=np.array([2.0, 2.0, 1.0]))
-    flat_tree = nx.Graph()
-    flat_tree.add_node("n1", pos=np.array([0.0, 0.0, 0.0]), label="N1")
-    flat_tree.add_node("n2", pos=np.array([2.0, 2.0, 1.0]), label="N2")
-    flat_tree.add_edge("n1", "n2", nodes=["n1", "n2"])
-    mini_adata.uns["epg"] = epg
-    mini_adata.uns["flat_tree"] = flat_tree
-
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="many_categories",
         use_rep="X_pca",
         n_components=3,
-        add_legend=True,
-        add_labels=True,
-        add_graph=True,
-        add_labels_to_graph=True,
+        show_legend=True,
+        show_labels=True,
         background_visible=False,
         lgd_params={"title": "groups"},
-        graph={"linewidth": 5},
-        graph_z_offset=0.2,
     )
 
     assert ax.name == "3d"
     assert ax.get_legend() is not None
-    assert {text.get_text() for text in ax.texts}.issuperset(
-        {"cat0", "cat1", "cat2", "cat3", "N1", "N2"}
-    )
-    assert len(ax.lines) >= 1
-    assert ax.lines[0].get_linewidth() == 5
-    assert np.allclose(ax.lines[0].get_data_3d()[2], np.array([0.2, 1.2]))
+    assert {text.get_text() for text in ax.texts} == {
+        "cat0",
+        "cat1",
+        "cat2",
+        "cat3",
+    }
     plt.close(fig)
 
 
@@ -326,8 +298,8 @@ def test_embedding_plot_discrete_listed_colormap_skips_unused_category(mini_adat
             obs="cluster_with_unused",
             use_rep="X_pca",
             colors=ListedColormap(["red", "blue", "green"]),
-            add_legend=True,
-            add_labels=True,
+            show_legend=True,
+            show_labels=True,
             text={"verticalalignment": "bottom"},
         )
 

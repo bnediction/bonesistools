@@ -27,7 +27,7 @@ def test_composition_plots_expected_proportions(mini_adata):
         "G2": "tab:purple",
     }
 
-    fig, ax, table = bt.sct.pl.composition(
+    fig, ax = bt.sct.pl.composition(
         mini_adata,
         obs="kind",
         groupby="state",
@@ -35,18 +35,10 @@ def test_composition_plots_expected_proportions(mini_adata):
         obs_order=["alpha", "beta"],
     )
 
-    expected = pd.DataFrame(
-        {
-            "alpha": [0.5, 1.0],
-            "beta": [0.5, 0.0],
-        },
-        index=pd.Index(["G0", "G1"], name="state"),
-        columns=pd.Index(["alpha", "beta"], name="kind"),
-    )
-
     assert isinstance(fig, Figure)
     assert isinstance(ax, Axes)
-    pd.testing.assert_frame_equal(table, expected)
+    assert [patch.get_height() for patch in ax.containers[0].patches] == [0.5, 1.0]
+    assert [patch.get_height() for patch in ax.containers[1].patches] == [0.5, 0.0]
     assert ax.get_ylim() == (0.0, 1.0)
     assert ax.get_legend() is not None
     assert ax.get_xticklabels()[0].get_color() == "tab:green"
@@ -55,7 +47,7 @@ def test_composition_plots_expected_proportions(mini_adata):
 
 
 def test_composition_can_plot_counts_without_legend(mini_adata):
-    fig, ax, table = bt.sct.pl.composition(
+    fig, ax = bt.sct.pl.composition(
         mini_adata,
         obs="batch",
         groupby="cluster",
@@ -64,22 +56,14 @@ def test_composition_can_plot_counts_without_legend(mini_adata):
         colors={"b1": "red", "b2": "blue"},
     )
 
-    expected = pd.DataFrame(
-        {
-            "b1": [1, 1],
-            "b2": [1, 1],
-        },
-        index=pd.Index(["A", "B"], name="cluster"),
-        columns=pd.Index(["b1", "b2"], name="batch"),
-    )
-
-    pd.testing.assert_frame_equal(table, expected)
+    assert [patch.get_height() for patch in ax.containers[0].patches] == [1, 1]
+    assert [patch.get_height() for patch in ax.containers[1].patches] == [1, 1]
     assert ax.get_legend() is None
     plt.close(fig)
 
 
 def test_composition_horizontal_orientation(mini_adata):
-    fig, ax, table = bt.sct.pl.composition(
+    fig, ax = bt.sct.pl.composition(
         mini_adata,
         obs="batch",
         groupby="cluster",
@@ -89,7 +73,7 @@ def test_composition_horizontal_orientation(mini_adata):
         group_colors={"A": "tab:red", "B": "tab:blue"},
     )
 
-    assert table.loc["A", "b1"] == 0.5
+    assert ax.containers[0].patches[0].get_width() == 0.5
     assert ax.get_xlabel() == "proportion"
     assert ax.get_ylabel() == "cluster"
     assert ax.get_xlim() == (0.0, 1.0)
@@ -107,26 +91,24 @@ def test_composition_uses_embedding_like_color_fallback(mini_adata, monkeypatch)
 
     monkeypatch.setattr(_barplot, "generate_colormap", fake_colormap)
 
-    fig, ax, table = bt.sct.pl.composition(
+    fig, ax = bt.sct.pl.composition(
         mini_adata,
         obs="batch",
         groupby="cluster",
     )
 
-    assert list(table.columns) == ["b1", "b2"]
     assert len(ax.containers) == 2
     plt.close(fig)
 
 
 def test_composition_accepts_colormap_name(mini_adata):
-    fig, ax, table = bt.sct.pl.composition(
+    fig, ax = bt.sct.pl.composition(
         mini_adata,
         obs="batch",
         groupby="cluster",
         colors="tab20",
     )
 
-    assert list(table.columns) == ["b1", "b2"]
     assert len(ax.containers) == 2
     plt.close(fig)
 

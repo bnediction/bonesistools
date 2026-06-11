@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Union, cast
 
+import numpy as np
 from anndata import AnnData
 from pandas import DataFrame
 
@@ -12,6 +13,56 @@ from .._typing import (
     Suffixes,
     anndata_checker,
 )
+
+
+@anndata_checker
+def sort_anndata(
+    adata: AnnData,
+    on: str = "both",
+    copy: bool = False,
+) -> Union[AnnData, None]:
+    """
+    Sort observations and/or variables by their AnnData index names.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    on: {"obs", "var", "both"} (default: "both")
+        Axis to sort. If `"obs"`, sort observations by `adata.obs_names`. If
+        `"var"`, sort variables by `adata.var_names`. If `"both"`, sort both
+        axes.
+    copy: bool (default: False)
+        Return a copy instead of modifying `adata`.
+
+    Returns
+    -------
+    AnnData or None
+        Sorted AnnData object if `copy=True`; otherwise None.
+
+    Raises
+    ------
+    ValueError
+        If `on` is not `"obs"`, `"var"` or `"both"`.
+    """
+
+    adata = adata.copy() if copy else adata
+
+    if on not in {"obs", "var", "both"}:
+        raise ValueError(
+            f"invalid argument value for 'on': "
+            f"expected 'obs', 'var' or 'both' but received {on!r}"
+        )
+
+    if on in {"obs", "both"}:
+        obs_order = np.argsort(adata.obs_names.to_numpy(), kind="stable")
+        adata._inplace_subset_obs(obs_order)
+
+    if on in {"var", "both"}:
+        var_order = np.argsort(adata.var_names.to_numpy(), kind="stable")
+        adata._inplace_subset_var(var_order)
+
+    return adata if copy else None
 
 
 @anndata_checker

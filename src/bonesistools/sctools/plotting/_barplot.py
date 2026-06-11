@@ -150,7 +150,7 @@ def composition(
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
-) -> Optional[Tuple[Figure, Axes, pd.DataFrame]]:
+) -> Optional[Tuple[Figure, Axes]]:
     """
     Draw a stacked barplot of observation composition across groups.
 
@@ -197,7 +197,7 @@ def composition(
     Returns
     -------
     tuple or None
-        Figure, axes and plotted table if `outfile` is None; otherwise None.
+        Figure and axes if `outfile` is None; otherwise None.
 
     Raises
     ------
@@ -335,4 +335,4 @@ def composition(
         plt.close(fig)
         return None
 
-    return fig, ax, table
+    return fig, ax

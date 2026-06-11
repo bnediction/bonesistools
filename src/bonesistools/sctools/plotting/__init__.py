@@ -24,7 +24,7 @@ from ._colors import (
 )
 from ._density import cdf, density, ecdf_plot, kde_plot
 from ._figure import set_default_axis, set_default_params
-from ._graphplot import draw_paga
+from ._graph import add_graph, draw_paga, paga, trajectory
 from ._scatterplot import embedding, embedding_plot
 
 __all__ = [
@@ -34,6 +34,9 @@ __all__ = [
     "composition",
     "density",
     "cdf",
+    "trajectory",
+    "add_graph",
+    "paga",
     "draw_paga",
     "kde_plot",
     "ecdf_plot",

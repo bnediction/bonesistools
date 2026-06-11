@@ -18,22 +18,18 @@ from typing import (
 )
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 import pandas as pd
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 from matplotlib.ticker import FormatStrFormatter
-from mpl_toolkits.mplot3d import art3d
 
 from .._typing import ScData, anndata_or_mudata_checker
 from ..tools import barycenters
 from ..tools._utils import choose_representation
 from ._colors import (
     QUALITATIVE_COLORS,
-    black,
     generate_colormap,
     gray,
     lightgray,
@@ -55,6 +51,53 @@ Colors = Union[
     Mapping[object, object],
 ]
 ContinuousColors = Union[str, Colormap]
+
+
+def __deprecated_bool_kwarg(
+    kwargs: Dict[str, Any],
+    old_name: str,
+    new_name: str,
+    new_value: bool,
+    default_value: bool,
+) -> bool:
+    if old_name not in kwargs:
+        return new_value
+
+    old_value = kwargs.pop(old_name)
+
+    warnings.warn(
+        f"'{old_name}' is deprecated and will be removed in a future version; "
+        f"use '{new_name}' instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+    if new_value != default_value:
+        raise TypeError(
+            f"invalid argument combination: use either '{old_name}' "
+            f"or '{new_name}', not both"
+        )
+
+    return cast(bool, old_value)
+
+
+def __deprecated_graph_kwarg(
+    kwargs: Dict[str, Any],
+    old_name: str,
+    target: str,
+) -> bool:
+    if old_name not in kwargs:
+        return False
+
+    old_value = kwargs.pop(old_name)
+    warnings.warn(
+        f"`{old_name}` is deprecated and will be removed in 2.0.0; "
+        f"use `{target}` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    return cast(bool, old_value)
 
 
 def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
@@ -154,14 +197,10 @@ def __scatterplot_discrete(
     use_rep: str,
     colors: Optional[Colors] = None,
     n_components: int = 2,
+    show_legend: bool = False,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
-
-    if "add_legend" in kwargs:
-        add_legend = kwargs["add_legend"]
-    else:
-        add_legend = False
 
     categories = set(scdata.obs[obs].unique()) & set(
         scdata.obs[obs].astype("category").cat.categories
@@ -282,7 +321,7 @@ def __scatterplot_discrete(
                 label=_cluster,
             )
 
-    if add_legend:
+    if show_legend:
         box = ax.get_position()
         ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
         if "legend_params" in kwargs:
@@ -420,7 +459,7 @@ def __scatterplot_continuous(
     return fig, ax
 
 
-def __add_labels(
+def __draw_labels(
     scdata: ScData,  # type: ignore
     obs: str,
     use_rep: str,
@@ -457,88 +496,6 @@ def __add_labels(
             ax3d.text(x=value[0], y=value[1], z=value[2], s=label, **kwargs)
 
 
-def __graph_to_plot(
-    scdata: ScData,  # type: ignore
-    ax: Optional[Axes] = None,
-    dim: int = 2,
-    z_offset: float = 0.0,
-    **kwargs: Any,
-) -> None:
-
-    if ax is None:
-        ax = plt.gca()
-
-    epg = scdata.uns["epg"]
-    flat_tree = scdata.uns["flat_tree"]
-    epg_node_pos = nx.get_node_attributes(epg, "pos")
-
-    traces = set()
-    for node in flat_tree:
-        for trace in flat_tree.adj[node].values():
-            traces.add(tuple(trace["nodes"]))
-
-    edge_curves = list()
-    for trace in traces:
-        _edge_curve = list()
-        for node in trace:
-            _edge_curve.append(np.array([epg_node_pos[node]]))
-        edge_curves.append(np.concatenate(_edge_curve))
-
-    for edge_curve in edge_curves:
-        if dim == 2:
-            x, y = edge_curve[:, 0], edge_curve[:, 1]
-            line = Line2D(
-                xdata=x,
-                ydata=y,
-                color=cast(Any, black),
-                **kwargs,
-            )
-        elif dim == 3:
-            x, y, z = edge_curve[:, 0], edge_curve[:, 1], edge_curve[:, 2] + z_offset
-            line = art3d.Line3D(xs=x, ys=y, zs=z, color=black, **kwargs)
-        else:
-            raise ValueError(
-                f"invalid argument value for 'dim': "
-                f"expected 2 or 3 but received {dim!r}"
-            )
-
-        ax.add_line(line)
-
-
-def __add_labels_to_graph(
-    scdata: ScData,  # type: ignore
-    ax: Optional[Axes] = None,
-    dim: int = 2,
-    **kwargs: Any,
-) -> None:
-
-    if ax is None:
-        ax = plt.gca()
-
-    flat_tree = scdata.uns["flat_tree"]
-    flat_tree_node_label = nx.get_node_attributes(flat_tree, "label")
-    flat_tree_node_pos = nx.get_node_attributes(flat_tree, "pos")
-
-    if dim == 2:
-        for node in flat_tree.nodes:
-            ax.text(
-                x=flat_tree_node_pos[node][0],
-                y=flat_tree_node_pos[node][1],
-                s=flat_tree_node_label[node],
-                **kwargs,
-            )
-    elif dim == 3:
-        ax3d = cast(Any, ax)
-        for node in flat_tree.nodes:
-            ax3d.text(
-                x=flat_tree_node_pos[node][0],
-                y=flat_tree_node_pos[node][1],
-                z=flat_tree_node_pos[node][2],
-                s=flat_tree_node_label[node],
-                **kwargs,
-            )
-
-
 @anndata_or_mudata_checker
 def embedding(
     scdata: ScData,  # type: ignore
@@ -547,9 +504,8 @@ def embedding(
     colors: Optional[Colors] = None,
     n_components: int = 2,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    add_labels: bool = False,
-    add_graph: bool = False,
-    add_labels_to_graph: bool = False,
+    show_legend: bool = True,
+    show_labels: bool = False,
     automatic_resize: bool = False,
     default_parameters: Optional[Callable[[], None]] = None,
     outfile: Optional[Path] = None,
@@ -573,13 +529,10 @@ def embedding(
         Number of plotted dimensions.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    add_labels: bool (default: False)
-        Add labels retrieved from `scdata.obs[obs]` to the embedding.
-    add_graph: bool (default: False)
-        Draw the elastic principal graph stored in `scdata.uns["epg"]`.
-        This is useful for STREAM outputs [1].
-    add_labels_to_graph: bool (default: False)
-        Add node labels from the elastic principal graph.
+    show_legend: bool (default: True)
+        Draw the legend when `scdata.obs[obs]` contains discrete values.
+    show_labels: bool (default: False)
+        Draw labels retrieved from `scdata.obs[obs]` on the embedding.
     automatic_resize: bool (default: False)
         Resize figure to accommodate large legends.
     default_parameters: Callable (optional, default: None)
@@ -595,9 +548,7 @@ def embedding(
         - zlabel[str]: set the label for the z-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
           formatter on x-, y- and z-axis
-        - add_legend[bool]: when .obs['obs'] are discrete values, specify
-          whether to draw legend
-        - lgd_params[dict]: when add_legend is True, modify legend following
+        - lgd_params[dict]: when show_legend is True, modify legend following
           the syntax of matplotlib.pyplot.legend
         - tick_params[dict]: change the appearance of ticks, tick labels, and
           gridlines following the syntax of matplotlib.axes.Axes.tick_params
@@ -612,8 +563,6 @@ def embedding(
           matplotlib.axes.Axes.tick_params
         - text[dict]: change the appearance of text in figure following the
           syntax of matplotlib.text
-        - graph[dict]: change the appearance of elastic principal graph lines
-        - graph_z_offset[float]: vertical offset applied to graph lines in 3D
         - background_visible[bool]: specify if background color is visible or
           not in case of 3D plotting
 
@@ -629,12 +578,6 @@ def embedding(
         If `n_components` is not 2 or 3.
     TypeError
         If `title` is neither a string nor a dictionary.
-
-    References
-    ----------
-    [1] Chen et al. (2019). Single-cell trajectories reconstruction,
-    exploration and mapping of omics data with STREAM. Nature communications,
-    10(1), 1903 (https://www.nature.com/articles/s41467-019-09670-4)
     """
 
     if n_components not in [2, 3]:
@@ -644,6 +587,30 @@ def embedding(
         )
 
     component_number = n_components
+    show_legend = __deprecated_bool_kwarg(
+        kwargs,
+        "add_legend",
+        "show_legend",
+        show_legend,
+        True,
+    )
+    show_labels = __deprecated_bool_kwarg(
+        kwargs,
+        "add_labels",
+        "show_labels",
+        show_labels,
+        False,
+    )
+    draw_deprecated_graph = __deprecated_graph_kwarg(
+        kwargs,
+        "add_graph",
+        "bt.sct.pl.trajectory(..., graph_key=...)",
+    )
+    draw_deprecated_graph_labels = __deprecated_graph_kwarg(
+        kwargs,
+        "add_labels_to_graph",
+        "bt.sct.pl.trajectory(..., show_labels=...)",
+    )
 
     if pd.api.types.is_float_dtype(scdata.obs[obs]):
         fig, ax = __scatterplot_continuous(
@@ -662,37 +629,40 @@ def embedding(
         or isinstance(scdata.obs[obs].dtype, pd.CategoricalDtype)
     ):
         fig, ax = __scatterplot_discrete(
-            scdata, obs, use_rep, colors, component_number, ax=ax, **kwargs
+            scdata,
+            obs,
+            use_rep,
+            colors,
+            component_number,
+            ax=ax,
+            show_legend=show_legend,
+            **kwargs,
         )
     else:
         raise TypeError(
             f"unsupported dtype for observation {obs!r}: " f"{scdata.obs[obs].dtype!r}"
         )
 
-    if add_labels:
+    if show_labels:
         _kwargs = {} if "text" not in kwargs else kwargs["text"]
-        __add_labels(
+        __draw_labels(
             scdata, obs=obs, use_rep=use_rep, ax=ax, dim=component_number, **_kwargs
         )
 
-    if add_graph:
+    if draw_deprecated_graph or draw_deprecated_graph_labels:
+        from ._graph import add_graph
+
         _kwargs = {"linewidth": 2.5, "zorder": 10}
         _kwargs.update({} if "graph" not in kwargs else kwargs["graph"])
-        __graph_to_plot(
+        add_graph(
             scdata,
             ax=ax,
-            dim=component_number,
+            n_components=component_number,
+            show_labels=draw_deprecated_graph_labels,
             z_offset=kwargs["graph_z_offset"] if "graph_z_offset" in kwargs else 0.0,
+            label_kwargs=kwargs["text"] if "text" in kwargs else None,
             **_kwargs,
         )
-
-    if add_labels_to_graph:
-        _kwargs = (
-            {"verticalalignment": "bottom" if add_graph else "center"}
-            if "text" not in kwargs
-            else kwargs["text"]
-        )
-        __add_labels_to_graph(scdata, ax=ax, dim=component_number, **_kwargs)
 
     if automatic_resize:
         fig.tight_layout(pad=1.2, rect=(0, 0, 0.84, 1))

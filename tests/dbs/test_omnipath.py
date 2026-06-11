@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from bonesistools.databases.omnipath import _collectri, _dorothea
+from bonesistools.boolpy.influence_graph import InfluenceGraph
+from bonesistools.databases.omnipath import _archive, _collectri, _dorothea
 
 
 def _install_fake_decoupler(monkeypatch, **members):
@@ -15,282 +16,390 @@ def _install_fake_decoupler(monkeypatch, **members):
     return fake_decoupler
 
 
-def test_load_dorothea_grn_uses_op_wrapper_and_builds_signed_graph(
-    monkeypatch, tmp_path
-):
-    calls = []
+def test_resolve_interactions_archive_supports_latest_and_dates(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "_list_interactions_archives",
+        lambda: [
+            ("20230101", "20230501", "omnipath_webservice_interactions__a.tsv.xz"),
+            (
+                "20230502",
+                "20240101",
+                "omnipath_webservice_interactions__20230502-20240101.tsv.xz",
+            ),
+        ],
+    )
 
-    def dorothea(**kwargs):
-        calls.append(kwargs)
+    url, version = _archive.resolve_interactions_archive("latest")
+
+    assert version == "latest"
+    assert url.endswith("omnipath_webservice_interactions__latest.tsv.gz")
+
+    url, version = _archive.resolve_interactions_archive("2023-06-01")
+
+    assert version == "20230601"
+    assert url.endswith("omnipath_webservice_interactions__20230502-20240101.tsv.xz")
+
+
+def test_resolve_interactions_archive_reports_available_dates(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "_list_interactions_archives",
+        lambda: [
+            (
+                "20230101",
+                "20230501",
+                "omnipath_webservice_interactions__20230101-20230501.tsv.xz",
+            ),
+            (
+                "20230502",
+                "20240101",
+                "omnipath_webservice_interactions__20230502-20240101.tsv.xz",
+            ),
+        ],
+    )
+
+    with pytest.raises(ValueError) as error:
+        _archive.resolve_interactions_archive("2024-06-01")
+
+    assert "no OmniPath interactions archive found for version '20240601'" in str(
+        error.value
+    )
+    assert (
+        "available date ranges: "
+        "2023-01-01..2023-05-01, 2023-05-02..2024-01-01"
+    ) in str(error.value)
+
+
+def test_resolve_interactions_archive_rejects_current_and_default():
+    for version in ["current", "default"]:
+        with pytest.raises(ValueError, match="expected 'latest' or a date"):
+            _archive.resolve_interactions_archive(version)
+
+
+def test_load_interactions_version_filters_signed_resource_and_levels(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "resolve_interactions_archive",
+        lambda version: ("archive.tsv", "20230601"),
+    )
+
+    def read_archive(url):
         return pd.DataFrame(
             {
-                "source": ["Tf1", "Tf2", "Tf3"],
-                "target": ["Gene1", "Gene2", "Gene3"],
-                "weight": [-0.2, 0.7, 1.0],
-                "confidence": ["A", "B", "D"],
+                "source_genesymbol": ["TfA", "TfB", "TfC", "TfD"],
+                "target_genesymbol": ["GeneA", "GeneB", "GeneC", "GeneD"],
+                "dorothea": ["True", "True", "True", "False"],
+                "collectri": ["False", "False", "False", "True"],
+                "is_stimulation": ["True", "False", "True", "True"],
+                "is_inhibition": ["False", "True", "True", "False"],
+                "consensus_stimulation": ["True", "False", "True", "True"],
+                "consensus_inhibition": ["False", "True", "True", "False"],
+                "dorothea_level": ["A", "B", "B", "A"],
+                "ncbi_tax_id_source": ["9606", "9606", "9606", "9606"],
+                "ncbi_tax_id_target": ["9606", "9606", "9606", "9606"],
             }
         )
 
-    _install_fake_decoupler(monkeypatch, op=SimpleNamespace(dorothea=dorothea))
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
+    monkeypatch.setattr(_archive, "_read_interactions_archive", read_archive)
 
-    grn = _dorothea.load_dorothea_grn(
-        organism="mouse",
-        levels=["A", "B"],
-        wrapper="op",
-        reload=True,
-        license="academic",
+    dorothea = _archive.load_interactions_version(
+        "dorothea",
+        version="2023-06-01",
+        organism="human",
+        levels=["B"],
     )
 
-    assert calls == [
+    assert dorothea.to_dict("records") == [
         {
-            "organism": "mouse",
-            "levels": ["A", "B", "C", "D"],
-            "license": "academic",
-        }
-    ]
-    assert sorted(grn.edges(data=True)) == [
-        ("Tf1", "Gene1", {"confidence": "A", "sign": -1}),
-        ("Tf2", "Gene2", {"confidence": "B", "sign": 1}),
-    ]
-
-
-def test_load_dorothea_grn_reads_cache_without_importing_decoupler(
-    monkeypatch, tmp_path
-):
-    cache_dir = tmp_path / ".cache"
-    cache_dir.mkdir()
-    cache_file = cache_dir / "dorothea_op_mouse_complete.csv"
-    pd.DataFrame(
+            "source": "TfB",
+            "target": "GeneB",
+            "sign": -1,
+            "version": "20230601",
+            "confidence": "B",
+        },
         {
-            "source": ["TfA", "TfB"],
-            "target": ["GeneA", "GeneB"],
-            "weight": [1.0, -1.0],
-            "confidence": ["A", "B"],
-        }
-    ).to_csv(cache_file, index=False)
+            "source": "TfC",
+            "target": "GeneC",
+            "sign": 1,
+            "version": "20230601",
+            "confidence": "B",
+        },
+    ]
 
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
-    monkeypatch.delitem(sys.modules, "decoupler", raising=False)
-
-    grn = _dorothea.load_dorothea_grn(
-        organism="mouse",
-        levels=["A"],
-        wrapper="op",
+    collectri = _archive.load_interactions_version(
+        "collectri",
+        version="2023-06-01",
+        organism="human",
     )
 
-    assert list(grn.edges(data=True)) == [
-        ("TfA", "GeneA", {"confidence": "A", "sign": 1})
+    assert collectri[["source", "target", "sign", "version"]].to_dict(
+        "records"
+    ) == [
+        {
+            "source": "TfD",
+            "target": "GeneD",
+            "sign": 1,
+            "version": "20230601",
+        }
     ]
 
 
-def test_load_dorothea_grn_get_wrapper_warns_and_filters_locally(monkeypatch, tmp_path):
+def test_load_interactions_version_translates_non_human_organisms(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "resolve_interactions_archive",
+        lambda version: ("archive.tsv", "20230601"),
+    )
+    monkeypatch.setattr(
+        _archive,
+        "_read_interactions_archive",
+        lambda url: pd.DataFrame(
+            {
+                "source_genesymbol": ["TfB"],
+                "target_genesymbol": ["GeneB"],
+                "dorothea": ["True"],
+                "is_stimulation": ["False"],
+                "is_inhibition": ["True"],
+                "consensus_stimulation": ["False"],
+                "consensus_inhibition": ["True"],
+                "dorothea_level": ["B"],
+                "ncbi_tax_id_source": ["9606"],
+                "ncbi_tax_id_target": ["9606"],
+            }
+        ),
+    )
+
     calls = []
 
-    def get_dorothea(**kwargs):
-        calls.append(kwargs)
+    def translate(net, **kwargs):
+        calls.append((net.copy(), kwargs))
+        translated = net.copy()
+        translated["source"] = ["TfB_mouse"]
+        translated["target"] = ["GeneB_mouse"]
+        return translated
+
+    _install_fake_decoupler(monkeypatch, op=SimpleNamespace(translate=translate))
+
+    result = _archive.load_interactions_version(
+        "dorothea",
+        version="2023-06-01",
+        organism="mouse",
+        levels=["B"],
+    )
+
+    assert calls[0][1] == {
+        "columns": ["source", "target"],
+        "target_organism": "mouse",
+    }
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfB_mouse", "target": "GeneB_mouse", "sign": -1}
+    ]
+
+
+def test_load_interactions_version_uses_archived_mouse_dorothea(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "resolve_interactions_archive",
+        lambda version: ("archive.tsv", "20230601"),
+    )
+    monkeypatch.setattr(
+        _archive,
+        "_read_interactions_archive",
+        lambda url: pd.DataFrame(
+            {
+                "source_genesymbol": ["TfA", "TfB", "TfC", "TfD"],
+                "target_genesymbol": ["GeneA", "GeneB", "TfC", "GeneD"],
+                "dorothea": ["True", "True", "True", "True"],
+                "is_stimulation": ["False", "False", "False", "False"],
+                "is_inhibition": ["False", "False", "False", "False"],
+                "consensus_stimulation": ["False", "False", "False", "False"],
+                "consensus_inhibition": ["False", "False", "False", "False"],
+                "dorothea_level": ["A", "A", "A", "A"],
+                "evidences": [
+                    {
+                        "positive": [
+                            {
+                                "dataset": "dorothea",
+                                "resource": "DoRothEA",
+                                "references": ["1"],
+                                "via": None,
+                            }
+                        ],
+                        "negative": [],
+                        "directed": [],
+                        "undirected": [],
+                    },
+                    {
+                        "positive": [
+                            {
+                                "dataset": "collectri",
+                                "resource": "CollecTRI",
+                                "references": ["2"],
+                                "via": None,
+                            }
+                        ],
+                        "negative": [],
+                        "directed": [],
+                        "undirected": [],
+                    },
+                    {
+                        "positive": [
+                            {
+                                "dataset": "dorothea",
+                                "resource": "DoRothEA",
+                                "references": ["3"],
+                                "via": None,
+                            }
+                        ],
+                        "negative": [],
+                        "directed": [],
+                        "undirected": [],
+                    },
+                    {
+                        "positive": [
+                            {
+                                "dataset": "dorothea",
+                                "resource": "DoRothEA",
+                                "references": ["4"],
+                                "via": None,
+                            }
+                        ],
+                        "negative": [],
+                        "directed": [],
+                        "undirected": [],
+                    },
+                ],
+                "ncbi_tax_id_source": ["10090", "10090", "10090", "9606"],
+                "ncbi_tax_id_target": ["10090", "10090", "10090", "9606"],
+            }
+        ),
+    )
+    _install_fake_decoupler(
+        monkeypatch,
+        op=SimpleNamespace(
+            translate=lambda *args, **kwargs: pytest.fail(
+                "mouse archive rows should not be translated"
+            )
+        ),
+    )
+
+    result = _archive.load_interactions_version(
+        "dorothea",
+        version="2023-06-01",
+        organism="mouse",
+        levels=["A"],
+        flavor="legacy",
+    )
+
+    assert result[["source", "target", "sign", "confidence"]].to_dict(
+        "records"
+    ) == [
+        {"source": "TfA", "target": "GeneA", "sign": 1, "confidence": "A"},
+    ]
+
+
+def test_load_interactions_version_deduplicates_dorothea_edges(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "resolve_interactions_archive",
+        lambda version: ("archive.tsv", "20230601"),
+    )
+    monkeypatch.setattr(
+        _archive,
+        "_read_interactions_archive",
+        lambda url: pd.DataFrame(
+                {
+                    "source_genesymbol": ["TfA", "TfA", "TfA"],
+                    "target_genesymbol": ["GeneA", "GeneA", "GeneA"],
+                    "dorothea": ["True", "True", "True"],
+                    "is_stimulation": ["True", "True", "False"],
+                    "is_inhibition": ["False", "False", "True"],
+                    "consensus_stimulation": ["True", "True", "False"],
+                    "consensus_inhibition": ["False", "False", "True"],
+                "dorothea_level": ["A", "A", "A"],
+                "ncbi_tax_id_source": ["9606", "9606", "9606"],
+                "ncbi_tax_id_target": ["9606", "9606", "9606"],
+            }
+        ),
+    )
+
+    result = _archive.load_interactions_version(
+        "dorothea",
+        version="2023-06-01",
+        organism="human",
+        levels=["A"],
+    )
+
+    assert result[["source", "target", "sign"]].to_dict("records") == [
+        {"source": "TfA", "target": "GeneA", "sign": 1},
+    ]
+
+
+def test_dorothea_uses_omnipath_archive_version(monkeypatch):
+    calls = []
+
+    def load_version(resource, version, organism, levels=None, flavor="modern"):
+        calls.append((resource, version, organism, levels, flavor))
         return pd.DataFrame(
             {
                 "source": ["TfA", "TfB"],
                 "target": ["GeneA", "GeneB"],
-                "weight": [1.0, -1.0],
+                "sign": [1, -1],
                 "confidence": ["A", "B"],
+                "version": ["20240101", "20240101"],
             }
         )
 
-    _install_fake_decoupler(monkeypatch, get_dorothea=get_dorothea)
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
+    monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
 
-    with pytest.warns(UserWarning, match="legacy `decoupler.get_dorothea`"):
-        grn = _dorothea.load_dorothea_grn(
-            organism="mouse",
-            levels=["B"],
-            wrapper="get",
-            reload=True,
-        )
-
-    assert calls == [{"organism": "mouse"}]
-    assert list(grn.edges(data=True)) == [
-        ("TfB", "GeneB", {"confidence": "B", "sign": -1})
-    ]
-
-
-def test_load_dorothea_grn_get_wrapper_explains_missing_legacy_api(
-    monkeypatch, tmp_path
-):
-    _install_fake_decoupler(monkeypatch, __version__="2.1.6", op=SimpleNamespace())
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
-
-    with pytest.warns(UserWarning, match="legacy `decoupler.get_dorothea`"):
-        with pytest.raises(
-            AttributeError,
-            match=r"2\.1\.6.*requires decoupler<2\.0\.0",
-        ):
-            _dorothea.load_dorothea_grn(
-                organism="mouse",
-                wrapper="get",
-                reload=True,
-            )
-
-
-def test_load_dorothea_grn_op_wrapper_explains_missing_current_api(
-    monkeypatch, tmp_path
-):
-    _install_fake_decoupler(monkeypatch, __version__="1.9.2")
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
-
-    with pytest.raises(
-        AttributeError,
-        match=r"1\.9\.2.*requires decoupler>=2\.0\.0",
-    ):
-        _dorothea.load_dorothea_grn(
-            organism="mouse",
-            wrapper="op",
-            reload=True,
-        )
-
-
-def test_load_dorothea_grn_default_levels_and_genesyn(monkeypatch, tmp_path):
-    class FakeGeneSynonyms:
-        def __init__(self):
-            self.calls = []
-
-        def __call__(self, graph, **kwargs):
-            self.calls.append((graph, kwargs))
-
-    calls = []
-
-    def dorothea(**kwargs):
-        calls.append(kwargs)
-        return pd.DataFrame(
-            {
-                "source": ["TfA", "TfB", "TfC", "TfD"],
-                "target": ["GeneA", "GeneB", "GeneC", "GeneD"],
-                "weight": [1.0, -1.0, 1.0, -1.0],
-                "confidence": ["A", "B", "C", "D"],
-            }
-        )
-
-    genesyn = FakeGeneSynonyms()
-
-    _install_fake_decoupler(monkeypatch, op=SimpleNamespace(dorothea=dorothea))
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
-    monkeypatch.setattr(_dorothea, "GeneSynonyms", FakeGeneSynonyms)
-
-    grn = _dorothea.load_dorothea_grn(
+    grn = _dorothea.dorothea(
         organism=9606,
-        genesyn=genesyn,
-        gene_identifier_type="gene_id",
-        wrapper="op",
-        reload=True,
+        levels=["B"],
+        version="2024-01-01",
     )
 
-    assert calls == [{"organism": 9606, "levels": ["A", "B", "C", "D"]}]
-    assert sorted(grn.edges(data=True)) == [
-        ("TfA", "GeneA", {"confidence": "A", "sign": 1}),
-        ("TfB", "GeneB", {"confidence": "B", "sign": -1}),
-        ("TfC", "GeneC", {"confidence": "C", "sign": 1}),
-    ]
-    assert genesyn.calls == [
+    assert calls == [("dorothea", "2024-01-01", 9606, ["B"], "modern")]
+    assert isinstance(grn, InfluenceGraph)
+    assert list(grn.edges(data=True)) == [
         (
-            grn,
-            {
-                "input_identifier_type": "name",
-                "output_identifier_type": "gene_id",
-                "copy": False,
-            },
+            "TfB",
+            "GeneB",
+            {"confidence": "B", "sign": -1, "version": "20240101"},
         )
     ]
 
 
-def test_load_dorothea_grn_rejects_invalid_wrapper():
-    with pytest.raises(ValueError, match="invalid argument value for 'wrapper'"):
-        _dorothea.load_dorothea_grn(wrapper="legacy")
-
-
-def test_load_dorothea_grn_rejects_invalid_organism_and_genesyn(
-    monkeypatch,
-    tmp_path,
-):
-    with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
-        _dorothea.load_dorothea_grn(organism=object())
-
-    cache_dir = tmp_path / ".cache"
-    cache_dir.mkdir()
-    pd.DataFrame(
-        {
-            "source": ["TfA"],
-            "target": ["GeneA"],
-            "weight": [1.0],
-            "confidence": ["A"],
-        }
-    ).to_csv(cache_dir / "dorothea_op_mouse_complete.csv", index=False)
-
-    monkeypatch.setattr(_dorothea, "__file__", str(tmp_path / "_dorothea.py"))
-
-    with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _dorothea.load_dorothea_grn(genesyn=object())
-
-
-def test_load_collectri_grn_uses_op_wrapper_when_legacy_wrapper_is_missing(
-    monkeypatch,
-):
+def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
     calls = []
 
-    def get_collectri(**kwargs):
-        raise AttributeError("legacy wrapper is not available")
-
-    def collectri(**kwargs):
-        calls.append(kwargs)
+    def load_version(resource, version, organism, levels=None, flavor="modern"):
+        calls.append((resource, version, organism, levels, flavor))
         return pd.DataFrame(
             {
-                "source": ["Tf1", "Tf2"],
-                "target": ["Gene1", "Gene2"],
-                "weight": [-1.0, 1.0],
-                "PMID": ["1", "2"],
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+                "confidence": ["A"],
             }
         )
 
-    _install_fake_decoupler(
-        monkeypatch,
-        get_collectri=get_collectri,
-        op=SimpleNamespace(collectri=collectri),
-    )
+    monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
 
-    grn = _collectri.load_collectri_grn(
-        organism="mouse",
-        split_complexes=True,
-        remove_pmid=True,
-        license="academic",
-    )
+    _dorothea.dorothea(version="2024-01-01", flavor="legacy")
+    with pytest.warns(DeprecationWarning, match="`wrapper` is deprecated"):
+        _dorothea.dorothea(version="2024-01-01", wrapper="get")
+    with pytest.warns(DeprecationWarning, match="`wrapper` is deprecated"):
+        _dorothea.dorothea(version="2024-01-01", wrapper="op")
 
     assert calls == [
-        {
-            "organism": "mouse",
-            "remove_complexes": True,
-            "license": "academic",
-        }
-    ]
-    assert sorted(grn.edges(data=True)) == [
-        ("Tf1", "Gene1", {"sign": -1}),
-        ("Tf2", "Gene2", {"sign": 1}),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy"),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "legacy"),
+        ("dorothea", "2024-01-01", "mouse", ["A", "B", "C"], "modern"),
     ]
 
 
-def test_load_collectri_grn_rejects_invalid_boolean_arguments():
-    with pytest.raises(
-        TypeError, match="unsupported argument type for 'split_complexes'"
-    ):
-        _collectri.load_collectri_grn(split_complexes="yes")
-
-    with pytest.raises(TypeError, match="unsupported argument type for 'remove_pmid'"):
-        _collectri.load_collectri_grn(remove_pmid="yes")
-
-    with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
-        _collectri.load_collectri_grn(organism=object())
-
-
-def test_load_collectri_grn_uses_legacy_wrapper_and_genesyn(monkeypatch):
+def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
     class FakeGeneSynonyms:
         def __init__(self):
             self.calls = []
@@ -300,39 +409,32 @@ def test_load_collectri_grn_uses_legacy_wrapper_and_genesyn(monkeypatch):
 
     calls = []
 
-    def get_collectri(**kwargs):
-        calls.append(kwargs)
+    def load_version(resource, version, organism):
+        calls.append((resource, version, organism))
         return pd.DataFrame(
             {
-                "source": ["Tf1", "Tf2"],
-                "target": ["Gene1", "Gene2"],
-                "weight": [1.0, -1.0],
-                "references": ["ref1", "ref2"],
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+                "version": ["20240101"],
             }
         )
 
     genesyn = FakeGeneSynonyms()
-
-    _install_fake_decoupler(monkeypatch, get_collectri=get_collectri)
+    monkeypatch.setattr(_collectri, "load_interactions_version", load_version)
     monkeypatch.setattr(_collectri, "GeneSynonyms", FakeGeneSynonyms)
 
-    grn = _collectri.load_collectri_grn(
-        organism=9606,
+    grn = _collectri.collectri(
+        organism="mouse",
         genesyn=genesyn,
         gene_identifier_type="ensembl_id",
-        license="academic",
+        version="2024-01-01",
     )
 
-    assert calls == [
-        {
-            "organism": 9606,
-            "split_complexes": False,
-            "license": "academic",
-        }
-    ]
-    assert sorted(grn.edges(data=True)) == [
-        ("Tf1", "Gene1", {"references": "ref1", "sign": 1}),
-        ("Tf2", "Gene2", {"references": "ref2", "sign": -1}),
+    assert calls == [("collectri", "2024-01-01", "mouse")]
+    assert isinstance(grn, InfluenceGraph)
+    assert list(grn.edges(data=True)) == [
+        ("TfA", "GeneA", {"sign": 1, "version": "20240101"})
     ]
     assert genesyn.calls == [
         (
@@ -346,17 +448,74 @@ def test_load_collectri_grn_uses_legacy_wrapper_and_genesyn(monkeypatch):
     ]
 
 
-def test_load_collectri_grn_rejects_invalid_genesyn(monkeypatch):
-    def get_collectri(**kwargs):
-        return pd.DataFrame(
-            {
-                "source": ["Tf1"],
-                "target": ["Gene1"],
-                "weight": [1.0],
-            }
-        )
+def test_omnipath_deprecated_grn_aliases_warn(monkeypatch):
+    monkeypatch.setattr(
+        _dorothea,
+        "dorothea",
+        lambda *args, **kwargs: InfluenceGraph(),
+    )
+    monkeypatch.setattr(
+        _collectri,
+        "collectri",
+        lambda *args, **kwargs: InfluenceGraph(),
+    )
 
-    _install_fake_decoupler(monkeypatch, get_collectri=get_collectri)
+    with pytest.warns(DeprecationWarning, match="load_dorothea_grn"):
+        assert isinstance(_dorothea.load_dorothea_grn(), InfluenceGraph)
+
+    with pytest.warns(DeprecationWarning, match="load_collectri_grn"):
+        assert isinstance(_collectri.load_collectri_grn(), InfluenceGraph)
+
+
+def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
+    monkeypatch.setattr(
+        _dorothea,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {"source": ["Tf"], "target": ["Gene"], "sign": [1]}
+        ),
+    )
+    monkeypatch.setattr(
+        _collectri,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {"source": ["Tf"], "target": ["Gene"], "sign": [1]}
+        ),
+    )
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
+        _dorothea.dorothea(organism=object())
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _collectri.load_collectri_grn(genesyn=object())
+        _dorothea.dorothea(genesyn=object(), version="latest")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'flavor'"):
+        _dorothea.dorothea(flavor="old")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'wrapper'"):
+        _dorothea.dorothea(wrapper="legacy")
+
+    with pytest.raises(ValueError, match="conflicting DoRothEA"):
+        _dorothea.dorothea(flavor="legacy", wrapper="op")
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported argument type for 'split_complexes'",
+    ):
+        _collectri.collectri(split_complexes="yes")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'remove_pmid'"):
+        _collectri.collectri(remove_pmid="yes")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
+        _collectri.collectri(organism=object())
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
+        _collectri.collectri(genesyn=object(), version="latest")
+
+    with pytest.raises(ValueError, match="support human, mouse and rat"):
+        _archive.load_interactions_version(
+            "dorothea",
+            version="2023-06-01",
+            organism="zebrafish",
+        )
