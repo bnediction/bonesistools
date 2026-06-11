@@ -46,7 +46,7 @@ from ._utils import choose_representation
 
 @require_sklearn
 @anndata_or_mudata_checker
-def kneighbors_graph(
+def knn_graph(
     scdata: ScData,  # type: ignore
     n_neighbors: int,
     use_rep: Optional[str] = None,
@@ -107,24 +107,24 @@ def kneighbors_graph(
         **metric_kwargs,
     )
     try:
-        kneighbors_graph = nx.from_scipy_sparse_array(
+        graph = nx.from_scipy_sparse_array(
             weighted_adjacency_matrix,
             create_using=create_using,
             edge_attribute=edge_attr,
         )
     except AttributeError:
         from_scipy_sparse_matrix = getattr(nx, "from_scipy_sparse_matrix")
-        kneighbors_graph = from_scipy_sparse_matrix(
+        graph = from_scipy_sparse_matrix(
             weighted_adjacency_matrix,
             create_using=create_using,
             edge_attribute=edge_attr,
         )
 
     if index_or_name == "index":
-        return kneighbors_graph
+        return graph
     elif index_or_name == "name":
         return nx.relabel_nodes(
-            kneighbors_graph,
+            graph,
             dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)),
         )
     else:
@@ -134,7 +134,21 @@ def kneighbors_graph(
         )
 
 
-class Knnbs:
+def kneighbors_graph(*args: Any, **kwargs: Any) -> Graph[Any]:
+    """
+    Deprecated alias for `knn_graph`.
+    """
+
+    warnings.warn(
+        "`bt.sct.tl.kneighbors_graph` is deprecated; use "
+        "`bt.sct.tl.knn_graph` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return knn_graph(*args, **kwargs)
+
+
+class KNNSC:
     """
     K-nearest-neighbor-based subcluster detection.
 
@@ -165,7 +179,7 @@ class Knnbs:
     """
 
     if TYPE_CHECKING:
-        kneighbors_graph: Graph[Any]
+        knn_graph: Graph[Any]
         cluster_key: str
         obs: pd.Series
         shortest_path_lengths_df: pd.DataFrame
@@ -244,8 +258,8 @@ class Knnbs:
 
         Returns
         -------
-        str
-            String representation of the Knnbs configuration.
+            str
+            String representation of the KNNSC configuration.
         """
 
         return (
@@ -279,6 +293,28 @@ class Knnbs:
         )
         self.metric_kwargs = value
 
+    @property
+    def kneighbors_graph(self) -> Graph[Any]:
+        """
+        Deprecated alias for `knn_graph`.
+        """
+
+        warnings.warn(
+            "`kneighbors_graph` is deprecated; use `knn_graph` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.knn_graph
+
+    @kneighbors_graph.setter
+    def kneighbors_graph(self, value: Graph[Any]) -> None:
+        warnings.warn(
+            "`kneighbors_graph` is deprecated; use `knn_graph` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.knn_graph = value
+
     @require_sklearn
     def fit(
         self,
@@ -307,7 +343,7 @@ class Knnbs:
 
         Notes
         -----
-        The method updates the Knnbs object in place and adds the
+        The method updates the KNNSC object in place and adds the
         `shortest_path_lengths_df` attribute.
         """
 
@@ -333,7 +369,7 @@ class Knnbs:
             adata, use_rep=self.use_rep, n_components=self.n_components
         )
 
-        _kneighbors_graph = kneighbors_graph(
+        _knn_graph = knn_graph(
             adata,
             n_neighbors=self.n_neighbors,
             n_components=self.n_components,
@@ -355,20 +391,20 @@ class Knnbs:
                 metric=self.metric,
                 n_jobs=n_jobs,
             ).reshape(1, -1)
-            _kneighbors_graph.add_node(key)
+            _knn_graph.add_node(key)
             knn_indices = np.argpartition(distances, kth=self.n_neighbors, axis=1)[
                 :, : self.n_neighbors
             ].reshape(-1)
             distances = list(distances[0, knn_indices].reshape(-1))
             for obs_name, distance in zip(adata.obs.index.take(knn_indices), distances):
-                _kneighbors_graph.add_edge(key, obs_name, distance=distance)
+                _knn_graph.add_edge(key, obs_name, distance=distance)
 
-        if nx.number_connected_components(_kneighbors_graph) > 1:
+        if nx.number_connected_components(_knn_graph) > 1:
             warnings.warn(
-                "'kneighbors_graph' not weakly connected: add edges for "
+                "'knn_graph' not weakly connected: add edges for "
                 "joining connected components"
             )
-            scc = list(nx.connected_components(_kneighbors_graph))
+            scc = list(nx.connected_components(_knn_graph))
             scc = [list(cc - set(_barycenters.keys())) for cc in scc]
             for paired_scc in combinations(scc, 2):
                 adata_any = cast(Any, adata)
@@ -387,11 +423,11 @@ class Knnbs:
                     n_jobs=n_jobs,
                 )
                 i, j = np.unravel_index(np.argmin(dists), shape=dists.shape, order="C")
-                _kneighbors_graph.add_edge(
+                _knn_graph.add_edge(
                     paired_scc[0][i], paired_scc[1][j], distance=dists[i, j]
                 )
 
-        self.kneighbors_graph = _kneighbors_graph
+        self.knn_graph = _knn_graph
         self.cluster_key = cluster_key
         self.obs = cast(pd.Series, adata.obs[cluster_key])
         return None
@@ -411,7 +447,7 @@ class Knnbs:
 
         Notes
         -----
-        The method updates the Knnbs object in place and adds the
+        The method updates the KNNSC object in place and adds the
         `shortest_path_lengths_df` attribute.
         """
 
@@ -421,7 +457,7 @@ class Knnbs:
             distances = pd.Series(data=self.obs.index, index=self.obs.index)
             distances = distances.apply(
                 lambda x: nx.shortest_path_length(
-                    self.kneighbors_graph,
+                    self.knn_graph,
                     source=source,
                     target=x,
                     weight="distance",
@@ -769,6 +805,33 @@ class Knnbs:
             key=key,
             peripheral_clusters=subclusters_maximizing_distances,
             central_clusters=subclusters_minimizing_distances,
+        )
+
+
+class Knnbs(KNNSC):
+    """
+    Deprecated alias for `KNNSC`.
+    """
+
+    def __init__(
+        self,
+        n_neighbors: Union[int, float],
+        use_rep: str = "X_pca",
+        n_components: Optional[Union[int, float]] = None,
+        metric: Metric = "euclidean",
+        **metric_kwargs: Any,
+    ):
+        warnings.warn(
+            "`bt.sct.tl.Knnbs` is deprecated; use `bt.sct.tl.KNNSC` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(
+            n_neighbors=n_neighbors,
+            use_rep=use_rep,
+            n_components=n_components,
+            metric=metric,
+            **metric_kwargs,
         )
 
 

@@ -55,10 +55,10 @@ def _integrated_and_specific_adatas():
     return integrated, [ctrl, stim]
 
 
-def test_transfer_obs_sti_handles_colliding_cell_ids():
+def test_transfer_obs_to_integrated_handles_colliding_cell_ids():
     integrated, adatas = _integrated_and_specific_adatas()
 
-    result = bt.sct.pp.transfer_obs_sti(
+    result = bt.sct.pp.transfer_obs_to_integrated(
         integrated,
         adatas,
         obs=["local_score", "local_label"],
@@ -76,10 +76,10 @@ def test_transfer_obs_sti_handles_colliding_cell_ids():
     ]
 
 
-def test_transfer_obs_sti_copy_does_not_mutate_input():
+def test_transfer_obs_to_integrated_copy_does_not_mutate_input():
     integrated, adatas = _integrated_and_specific_adatas()
 
-    copied = bt.sct.pp.transfer_obs_sti(
+    copied = bt.sct.pp.transfer_obs_to_integrated(
         integrated,
         adatas,
         obs="local_score",
@@ -92,7 +92,7 @@ def test_transfer_obs_sti_copy_does_not_mutate_input():
     assert copied.obs["local_score"].tolist() == [1.0, 2.0, 10.0, 30.0]
 
 
-def test_transfer_obs_sti_keeps_unmatched_integrated_cells_as_missing():
+def test_transfer_obs_to_integrated_keeps_unmatched_integrated_cells_as_missing():
     ctrl = _adata_with_obs(
         ["cell1"],
         {"local_score": [1.0]},
@@ -108,7 +108,7 @@ def test_transfer_obs_sti_keeps_unmatched_integrated_cells_as_missing():
             {"condition": ["ctrl", "ctrl", "stim"]},
         )
 
-    bt.sct.pp.transfer_obs_sti(
+    bt.sct.pp.transfer_obs_to_integrated(
         integrated,
         [ctrl, stim],
         obs="local_score",
@@ -120,11 +120,11 @@ def test_transfer_obs_sti_keeps_unmatched_integrated_cells_as_missing():
     assert integrated.obs["local_score"].tolist()[2] == 10.0
 
 
-def test_transfer_obs_sti_supports_custom_condition_column():
+def test_transfer_obs_to_integrated_supports_custom_condition_column():
     integrated, adatas = _integrated_and_specific_adatas()
     integrated.obs = integrated.obs.rename(columns={"condition": "sample"})
 
-    bt.sct.pp.transfer_obs_sti(
+    bt.sct.pp.transfer_obs_to_integrated(
         integrated,
         adatas,
         obs="local_score",
@@ -136,10 +136,10 @@ def test_transfer_obs_sti_supports_custom_condition_column():
     assert integrated.obs["local_score"].tolist() == [1.0, 2.0, 10.0, 30.0]
 
 
-def test_transfer_obs_its_matches_conditions():
+def test_transfer_obs_to_specific_matches_conditions():
     integrated, adatas = _integrated_and_specific_adatas()
 
-    result = bt.sct.pp.transfer_obs_its(
+    result = bt.sct.pp.transfer_obs_to_specific(
         integrated,
         adatas,
         obs=["global_score", "global_label"],
@@ -160,10 +160,10 @@ def test_transfer_obs_its_matches_conditions():
     ]
 
 
-def test_transfer_obs_its_copy_does_not_mutate_inputs():
+def test_transfer_obs_to_specific_copy_does_not_mutate_inputs():
     integrated, adatas = _integrated_and_specific_adatas()
 
-    copied_adatas = bt.sct.pp.transfer_obs_its(
+    copied_adatas = bt.sct.pp.transfer_obs_to_specific(
         integrated,
         adatas,
         obs="global_score",
@@ -179,11 +179,11 @@ def test_transfer_obs_its_copy_does_not_mutate_inputs():
     ]
 
 
-def test_transfer_obs_its_keeps_unmatched_specific_cells_as_missing():
+def test_transfer_obs_to_specific_keeps_unmatched_specific_cells_as_missing():
     integrated, adatas = _integrated_and_specific_adatas()
     adatas[0] = _adata_with_obs(["cell1", "cell_missing"], {})
 
-    bt.sct.pp.transfer_obs_its(
+    bt.sct.pp.transfer_obs_to_specific(
         integrated,
         adatas,
         obs="global_score",
@@ -194,11 +194,11 @@ def test_transfer_obs_its_keeps_unmatched_specific_cells_as_missing():
     assert pd.isna(adatas[0].obs["global_score"].tolist()[1])
 
 
-def test_transfer_obs_its_supports_custom_condition_column():
+def test_transfer_obs_to_specific_supports_custom_condition_column():
     integrated, adatas = _integrated_and_specific_adatas()
     integrated.obs = integrated.obs.rename(columns={"condition": "sample"})
 
-    bt.sct.pp.transfer_obs_its(
+    bt.sct.pp.transfer_obs_to_specific(
         integrated,
         adatas,
         obs="global_score",
@@ -210,11 +210,11 @@ def test_transfer_obs_its_supports_custom_condition_column():
     assert adatas[1].obs["global_score"].tolist() == [201.0, 203.0]
 
 
-def test_transfer_obs_its_raises_when_condition_column_is_missing():
+def test_transfer_obs_to_specific_raises_when_condition_column_is_missing():
     integrated, adatas = _integrated_and_specific_adatas()
 
     with pytest.raises(KeyError):
-        bt.sct.pp.transfer_obs_its(
+        bt.sct.pp.transfer_obs_to_specific(
             integrated,
             adatas,
             obs="global_score",
@@ -223,11 +223,11 @@ def test_transfer_obs_its_raises_when_condition_column_is_missing():
         )
 
 
-def test_transfer_obs_sti_raises_when_requested_obs_column_is_missing():
+def test_transfer_obs_to_integrated_raises_when_requested_obs_column_is_missing():
     integrated, adatas = _integrated_and_specific_adatas()
 
     with pytest.raises(KeyError):
-        bt.sct.pp.transfer_obs_sti(
+        bt.sct.pp.transfer_obs_to_integrated(
             integrated,
             adatas,
             obs="missing",

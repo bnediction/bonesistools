@@ -57,7 +57,7 @@ class CopyableBooleanNetworkLike(dict):
 
 @pytest.fixture(scope="module")
 def mouse_genesyn():
-    return bt.dbs.ncbi.GeneSynonyms(organism="mouse")
+    return bt.dbs.ncbi.genesyn(organism="mouse")
 
 
 def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_names(mouse_genesyn):
@@ -393,9 +393,9 @@ def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
         fake_initialize,
     )
 
-    bundled = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="bundled")
-    latest = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="latest")
-    dated = bt.dbs.ncbi.GeneSynonyms(organism="mouse", version="2024-01-01")
+    bundled = bt.dbs.ncbi.genesyn(organism="mouse", version="bundled")
+    latest = bt.dbs.ncbi.genesyn(organism="mouse", version="latest")
+    dated = bt.dbs.ncbi.genesyn(organism="mouse", version="2024-01-01")
 
     assert bundled.version == "bundled"
     assert bundled.ncbi_file == bundled_file
@@ -418,15 +418,15 @@ def test_gene_synonyms_validation_errors_and_missing_warnings(
     mouse_genesyn, monkeypatch
 ):
     with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
-        bt.dbs.ncbi.GeneSynonyms(organism="rat")
+        bt.dbs.ncbi.genesyn(organism="rat")
 
     with pytest.raises(
         TypeError, match="unsupported argument type for 'show_warnings'"
     ):
-        bt.dbs.ncbi.GeneSynonyms(show_warnings="yes")
+        bt.dbs.ncbi.genesyn(show_warnings="yes")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'version'"):
-        bt.dbs.ncbi.GeneSynonyms(version=object())
+        bt.dbs.ncbi.genesyn(version=object())
 
     genesyn = mouse_genesyn
     monkeypatch.setattr(genesyn, "show_warnings", True)

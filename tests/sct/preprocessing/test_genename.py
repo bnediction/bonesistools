@@ -16,7 +16,7 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
     monkeypatch,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_genename, "GeneSynonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_genename, "create_gene_synonyms", fake_gene_synonyms_cls)
 
     adata = ad.AnnData(
         X=np.ones((2, 2)),
@@ -76,7 +76,7 @@ def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
     }
 
 
-def test_var_names_merge_duplicates_sums_counts_and_var_rows():
+def test_merge_duplicate_vars_sums_counts_and_var_rows():
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -92,7 +92,7 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
                     ]
                 )
             ),
-            obs=pd.DataFrame(index=["c1", "c2"]),
+            obs=pd.DataFrame({"batch": ["a", "b"]}, index=["c1", "c2"]),
             var=pd.DataFrame(
                 {
                     "symbol": ["alias", "g1", "x", "y"],
@@ -104,17 +104,15 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
 
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always")
-        merged = bt.sct.pp.var_names_merge_duplicates(
-            adata,
-            var_names_column="symbol",
-        )
+        merged = bt.sct.pp.merge_duplicate_vars(adata)
 
     assert not any(
         "Variable names are not unique" in str(warning.message) for warning in records
     )
     assert set(merged.var_names) == {"g1", "g2"}
-    assert merged.var.loc["g1", "tag"] == "preferred"
+    assert merged.var.loc["g1", "tag"] == "first"
     assert merged.var.loc["g2", "tag"] == "fallback"
+    assert merged.obs.equals(adata.obs)
     assert adata.var_names.tolist() == ["g1", "g1", "g2", "g2"]
 
     ordered = merged[:, ["g1", "g2"]]
@@ -137,7 +135,7 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
 
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always")
-        merged_without_column = bt.sct.pp.var_names_merge_duplicates(
+        merged_without_column = bt.sct.pp.merge_duplicate_vars(
             adata_without_column,
         )
 
@@ -149,7 +147,155 @@ def test_var_names_merge_duplicates_sums_counts_and_var_rows():
     assert merged_without_column.X.toarray().tolist() == [[3.0], [7.0]]
 
 
-def test_var_names_merge_duplicates_can_modify_in_place():
+def test_merge_duplicate_vars_can_build_consensus_var_rows():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.ones((1, 3)),
+            obs=pd.DataFrame(index=["c1"]),
+            var=pd.DataFrame(
+                {
+                    "symbol": ["Aars", "Aars1", "Myc"],
+                    "biotype": ["protein_coding", "protein_coding", "protein_coding"],
+                },
+                index=["Aars", "Aars", "Myc"],
+            ),
+        )
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata, keep="consensus")
+
+    assert merged.var_names.tolist() == ["Aars", "Myc"]
+    assert np.isnan(merged.var.loc["Aars", "symbol"])
+    assert merged.var.loc["Aars", "biotype"] == "protein_coding"
+    assert merged.var.loc["Myc", "symbol"] == "Myc"
+    assert merged.var.loc["Myc", "biotype"] == "protein_coding"
+
+
+def test_merge_duplicate_vars_sums_layers():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+            obs=pd.DataFrame(index=["c1", "c2"]),
+            var=pd.DataFrame(index=["g1", "g1", "g2"]),
+        )
+    adata.layers["dense"] = np.array([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]])
+    adata.layers["sparse"] = csr_matrix(
+        np.array([[100.0, 200.0, 300.0], [400.0, 500.0, 600.0]])
+    )
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata)
+
+    assert merged.X.tolist() == [[3.0, 3.0], [9.0, 6.0]]
+    assert merged.layers["dense"].tolist() == [[30.0, 30.0], [90.0, 60.0]]
+    assert merged.layers["sparse"].toarray().tolist() == [
+        [300.0, 300.0],
+        [900.0, 600.0],
+    ]
+
+
+def test_merge_duplicate_vars_merges_varm_with_nan_strategy():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.ones((1, 3)),
+            obs=pd.DataFrame(index=["c1"]),
+            var=pd.DataFrame(index=["g1", "g1", "g2"]),
+            varm={"scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])},
+        )
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata, varm="nan")
+
+    assert np.isnan(merged.varm["scores"][0]).all()
+    assert merged.varm["scores"][1].tolist() == [3.0, 30.0]
+
+
+def test_merge_duplicate_vars_merges_varm_with_first_strategy():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.ones((1, 3)),
+            obs=pd.DataFrame(index=["c1"]),
+            var=pd.DataFrame(
+                {"symbol": ["alias", "g1", "g2"]},
+                index=["g1", "g1", "g2"],
+            ),
+            varm={
+                "scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]),
+                "df_scores": pd.DataFrame(
+                    {"score": [1.0, 2.0, 3.0]},
+                    index=["g1", "g1", "g2"],
+                ),
+            },
+        )
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata, varm="first")
+
+    assert merged.varm["scores"].tolist() == [[1.0, 10.0], [3.0, 30.0]]
+    assert isinstance(merged.varm["df_scores"], pd.DataFrame)
+    assert merged.varm["df_scores"].index.tolist() == ["g1", "g2"]
+    assert merged.varm["df_scores"]["score"].tolist() == [1.0, 3.0]
+
+
+def test_merge_duplicate_vars_merges_varm_with_mean_strategy():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.ones((1, 3)),
+            obs=pd.DataFrame(index=["c1"]),
+            var=pd.DataFrame(index=["g1", "g1", "g2"]),
+            varm={"scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])},
+        )
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata, varm="mean")
+
+    assert merged.varm["scores"].tolist() == [[1.5, 15.0], [3.0, 30.0]]
+
+
+def test_merge_duplicate_vars_rejects_varp_by_default():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique",
+            category=UserWarning,
+        )
+        adata = ad.AnnData(
+            X=np.ones((1, 2)),
+            obs=pd.DataFrame(index=["c1"]),
+            var=pd.DataFrame(index=["g1", "g1"]),
+            varp={"correlation": np.ones((2, 2))},
+        )
+
+    with pytest.raises(NotImplementedError, match="does not merge `.varp`"):
+        bt.sct.pp.merge_duplicate_vars(adata)
+
+    merged = bt.sct.pp.merge_duplicate_vars(adata, varp="drop")
+
+    assert len(merged.varp) == 0
+    assert merged.X.tolist() == [[2.0]]
+
+
+def test_merge_duplicate_vars_can_modify_in_place():
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -165,13 +311,12 @@ def test_var_names_merge_duplicates_can_modify_in_place():
             ),
         )
 
-    result = bt.sct.pp.var_names_merge_duplicates(
+    result = bt.sct.pp.merge_duplicate_vars(
         adata,
-        var_names_column="symbol",
         copy=False,
     )
 
     assert result is None
     assert adata.var_names.tolist() == ["g1"]
-    assert adata.var.loc["g1", "tag"] == "preferred"
+    assert adata.var.loc["g1", "tag"] == "first"
     assert adata.X.toarray().tolist() == [[3.0], [7.0]]

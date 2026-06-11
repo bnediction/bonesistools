@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import networkx as nx
@@ -12,7 +13,7 @@ from .._typing import anndata_checker
 
 
 @anndata_checker
-def get_paga_graph(
+def extract_paga_graph(
     adata: AnnData,
     obs: str,
     use_rep: str,
@@ -20,7 +21,7 @@ def get_paga_graph(
     threshold: float = 0.01,
 ) -> nx.DiGraph[Any]:
     """
-    Get the partition-based graph abstraction (PAGA) graph stored in `adata`.
+    Extract the partition-based graph abstraction (PAGA) graph stored in `adata`.
 
     To compute the PAGA matrix, run `scanpy.tl.paga`. PAGA can also be
     computed using scVelo [1]. In this case, use
@@ -100,3 +101,17 @@ def get_paga_graph(
                 paga.add_edge(clusters[i], clusters[j])
 
     return paga
+
+
+def get_paga_graph(*args: Any, **kwargs: Any) -> nx.DiGraph[Any]:
+    """
+    Deprecated alias for `extract_paga_graph`.
+    """
+
+    warnings.warn(
+        "`bt.sct.tl.get_paga_graph` is deprecated; use "
+        "`bt.sct.tl.extract_paga_graph` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return extract_paga_graph(*args, **kwargs)

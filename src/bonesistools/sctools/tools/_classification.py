@@ -4,7 +4,7 @@ from typing import Union
 
 from anndata import AnnData
 
-from ...databases.ncbi import GeneSynonyms
+from ...databases.ncbi import genesyn as create_gene_synonyms
 from ...databases.ncbi._typing import InputIdentifierType
 from .._typing import (
     Axis,
@@ -53,7 +53,7 @@ def mitochondrial_genes(
 
     adata = adata.copy() if copy else adata
 
-    genesyn = GeneSynonyms()
+    genesyn = create_gene_synonyms()
     if axis in [0, "obs"]:
         axis = "obs"
         adata.obs[key] = False
@@ -120,7 +120,7 @@ def ribosomal_genes(
 
     adata = adata.copy() if copy else adata
 
-    genesyn = GeneSynonyms()
+    genesyn = create_gene_synonyms()
     if axis in [0, "obs"]:
         axis = "obs"
         adata.obs[key] = False

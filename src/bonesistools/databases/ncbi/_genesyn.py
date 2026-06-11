@@ -45,6 +45,7 @@ from ._typing import (
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 GeneInfoVersion = Union[Literal["bundled", "latest"], str, Path]
+_SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = False
 
 ORGANISMS = Literal[
     "all archaea bacteria",
@@ -306,14 +307,14 @@ class GeneSynonyms:
     --------
     Convert a list of gene identifiers through the callable interface:
 
-    >>> genesyn = GeneSynonyms(organism="mouse")
-    >>> genesyn(["Trp53", "Myc"])
+    >>> gene_synonyms = genesyn(organism="mouse")
+    >>> gene_synonyms(["Trp53", "Myc"])
     ['Trp53', 'Myc']
 
     Convert an interaction list while preserving edge attributes:
 
     >>> interactions = [("Trp53", "Myc", {"sign": 1})]
-    >>> genesyn(interactions)
+    >>> gene_synonyms(interactions)
     [('Trp53', 'Myc', {'sign': 1})]
 
     Parameters
@@ -369,6 +370,15 @@ class GeneSynonyms:
         version: GeneInfoVersion = "bundled",
         show_warnings: bool = False,
     ) -> None:
+
+        if not _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING:
+            warnings.warn(
+                "`bt.dbs.ncbi.GeneSynonyms()` is deprecated as a constructor "
+                "entry point and will be removed in 2.0.0; use "
+                "`bt.dbs.ncbi.genesyn()` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         organism = organism.lower().replace("-", " ")
 
@@ -1079,12 +1089,12 @@ class GeneSynonyms:
 
         Examples
         --------
-        >>> genesyn = GeneSynonyms(organism="mouse")
-        >>> genesyn.contains("Trp53")
+        >>> gene_synonyms = genesyn(organism="mouse")
+        >>> gene_synonyms.contains("Trp53")
         [True]
-        >>> genesyn.contains("Trp53", "not-a-gene")
+        >>> gene_synonyms.contains("Trp53", "not-a-gene")
         [True, False]
-        >>> genesyn.contains("22059", identifier_type="gene_id")
+        >>> gene_synonyms.contains("22059", identifier_type="gene_id")
         [True]
 
         Parameters
@@ -1136,10 +1146,10 @@ class GeneSynonyms:
 
         Examples
         --------
-        >>> genesyn = GeneSynonyms(organism="mouse")
-        >>> genesyn.find("Trp53", "not-a-gene", "Myc")
+        >>> gene_synonyms = genesyn(organism="mouse")
+        >>> gene_synonyms.find("Trp53", "not-a-gene", "Myc")
         ['Trp53', 'Myc']
-        >>> genesyn.find("22059", "bad-id", identifier_type="gene_id")
+        >>> gene_synonyms.find("22059", "bad-id", identifier_type="gene_id")
         ['22059']
 
         Parameters
@@ -1522,7 +1532,7 @@ class GeneSynonyms:
         awk_script = (
             'BEGIN {OFS="\\t"; print "gene_id", "official_name", "ncbi_name", '
             '"synonyms", "dbXrefs", "gene_type"} '
-            'NR>1 {print $2, $11, $3, $5, $6, $10}'
+            "NR>1 {print $2, $11, $3, $5, $6, $10}"
         )
         if str(outfile).endswith(".gz"):
             cmd = (
@@ -1810,3 +1820,41 @@ class GeneSynonyms:
             path.unlink()
         except FileNotFoundError:
             pass
+
+
+def genesyn(
+    organism: str = "mouse",
+    version: GeneInfoVersion = "bundled",
+    show_warnings: bool = False,
+) -> GeneSynonyms:
+    """
+    Create a GeneSynonyms converter.
+
+    Parameters
+    ----------
+    organism: str (default: "mouse")
+        Common name of the organism of interest.
+    version: "bundled", "latest", str path or Path (default: "bundled")
+        NCBI gene_info version to load.
+    show_warnings: bool (default: False)
+        If True, warn when a requested gene identifier has no correspondence.
+
+    Returns
+    -------
+    GeneSynonyms
+        Converter for gene identifier resolution, conversion and
+        standardisation.
+    """
+
+    global _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING
+
+    previous = _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING
+    _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = True
+    try:
+        return GeneSynonyms(
+            organism=organism,
+            version=version,
+            show_warnings=show_warnings,
+        )
+    finally:
+        _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = previous

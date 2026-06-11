@@ -9,8 +9,8 @@ import bonesistools as bt
 from bonesistools.sctools.tools import _classification
 
 
-def test_kneighbors_graph_can_use_observation_names(mini_adata):
-    graph = bt.sct.tl.kneighbors_graph(
+def test_knn_graph_can_use_observation_names(mini_adata):
+    graph = bt.sct.tl.knn_graph(
         mini_adata,
         n_neighbors=1,
         use_rep="X_pca",
@@ -32,7 +32,7 @@ def test_kneighbors_graph_can_use_observation_names(mini_adata):
         }
     )
 
-    index_graph = bt.sct.tl.kneighbors_graph(
+    index_graph = bt.sct.tl.knn_graph(
         mini_adata,
         n_neighbors=1,
         use_rep="X_pca",
@@ -43,9 +43,9 @@ def test_kneighbors_graph_can_use_observation_names(mini_adata):
     assert set(index_graph.nodes) == set(range(mini_adata.n_obs))
 
 
-def test_kneighbors_graph_rejects_invalid_node_label_mode(mini_adata):
+def test_knn_graph_rejects_invalid_node_label_mode(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'index_or_name'"):
-        bt.sct.tl.kneighbors_graph(
+        bt.sct.tl.knn_graph(
             mini_adata,
             n_neighbors=1,
             use_rep="X_pca",
@@ -93,13 +93,13 @@ def test_shared_neighbors_validates_source_graph_and_pruning(mini_adata):
         bt.sct.tl.shared_neighbors(mini_adata, prune_snn=-1)
 
 
-def test_get_paga_graph_builds_directed_cluster_graph(
+def test_extract_paga_graph_builds_directed_cluster_graph(
     mini_adata,
     expected_mini_cluster_barycenters,
 ):
     mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
 
-    graph = bt.sct.tl.get_paga_graph(
+    graph = bt.sct.tl.extract_paga_graph(
         mini_adata,
         obs="cluster",
         use_rep="X_pca",
@@ -113,7 +113,7 @@ def test_get_paga_graph_builds_directed_cluster_graph(
     assert np.allclose(graph.nodes["B"]["pos"], expected_mini_cluster_barycenters["B"])
 
     mini_adata.uns["connectivities"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
-    fallback_graph = bt.sct.tl.get_paga_graph(
+    fallback_graph = bt.sct.tl.extract_paga_graph(
         mini_adata,
         obs="cluster",
         use_rep="X_pca",
@@ -124,11 +124,11 @@ def test_get_paga_graph_builds_directed_cluster_graph(
     assert list(fallback_graph.edges) == [("B", "A")]
 
 
-def test_get_paga_graph_validates_threshold(mini_adata):
+def test_extract_paga_graph_validates_threshold(mini_adata):
     mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
 
     with pytest.raises(KeyError, match="key 'missing' not found in adata.uns"):
-        bt.sct.tl.get_paga_graph(
+        bt.sct.tl.extract_paga_graph(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
@@ -136,7 +136,7 @@ def test_get_paga_graph_validates_threshold(mini_adata):
         )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'threshold'"):
-        bt.sct.tl.get_paga_graph(
+        bt.sct.tl.extract_paga_graph(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
@@ -145,7 +145,7 @@ def test_get_paga_graph_validates_threshold(mini_adata):
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'threshold'"):
-        bt.sct.tl.get_paga_graph(
+        bt.sct.tl.extract_paga_graph(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
@@ -159,7 +159,7 @@ def test_mitochondrial_and_ribosomal_gene_classification(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "GeneSynonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
     mini_adata.var_names = ["mt-Co1", "Rps1", "Other"]
 
     bt.sct.tl.mitochondrial_genes(mini_adata, key="mt")

@@ -85,19 +85,19 @@ def _empty_var_smirnov_adata():
     )
 
 
-def test_choose_mtx_representation_selects_x_layer_and_raw(mini_adata):
+def test_choose_matrix_representation_selects_x_layer_and_raw(mini_adata):
     mini_adata.raw = mini_adata
 
-    x_copy = bt.sct.tl.choose_mtx_representation(mini_adata)
+    x_copy = bt.sct.tl.choose_matrix_representation(mini_adata)
 
     assert np.array_equal(x_copy, mini_adata.X)
     assert x_copy is not mini_adata.X
     assert np.array_equal(
-        bt.sct.tl.choose_mtx_representation(mini_adata, copy=False),
+        bt.sct.tl.choose_matrix_representation(mini_adata, copy=False),
         mini_adata.X,
     )
     assert np.array_equal(
-        bt.sct.tl.choose_mtx_representation(
+        bt.sct.tl.choose_matrix_representation(
             mini_adata,
             layer="counts",
             copy=False,
@@ -105,7 +105,7 @@ def test_choose_mtx_representation_selects_x_layer_and_raw(mini_adata):
         mini_adata.layers["counts"],
     )
     assert np.array_equal(
-        bt.sct.tl.choose_mtx_representation(
+        bt.sct.tl.choose_matrix_representation(
             mini_adata,
             use_raw=True,
             copy=False,
@@ -114,9 +114,9 @@ def test_choose_mtx_representation_selects_x_layer_and_raw(mini_adata):
     )
 
 
-def test_choose_mtx_representation_rejects_raw_and_layer(mini_adata):
+def test_choose_matrix_representation_rejects_raw_and_layer(mini_adata):
     with pytest.raises(ValueError, match="invalid argument combination"):
-        bt.sct.tl.choose_mtx_representation(
+        bt.sct.tl.choose_matrix_representation(
             mini_adata,
             use_raw=True,
             layer="counts",
@@ -319,10 +319,10 @@ def test_barycenters_requires_categorical_obs(mini_adata):
         bt.sct.tl.barycenters(mini_adata, obs="plain")
 
 
-def test_calculate_logfoldchanges_recovers_expected_deseq2_style_contrasts():
+def test_logfoldchanges_recovers_expected_deseq2_style_contrasts():
     adata = _toy_logfoldchange_adata()
 
-    result = bt.sct.tl.calculate_logfoldchanges(
+    result = bt.sct.tl.logfoldchanges(
         adata,
         groupby="cluster",
     )
@@ -342,10 +342,10 @@ def test_calculate_logfoldchanges_recovers_expected_deseq2_style_contrasts():
     )
 
 
-def test_calculate_logfoldchanges_rebalances_cluster_means():
+def test_logfoldchanges_rebalances_cluster_means():
     adata = _toy_rebalanced_logfoldchange_adata()
 
-    result = bt.sct.tl.calculate_logfoldchanges(
+    result = bt.sct.tl.logfoldchanges(
         adata,
         groupby="cluster",
         cluster_rebalancing=True,
@@ -363,8 +363,8 @@ def test_calculate_logfoldchanges_rebalances_cluster_means():
     )
 
 
-def test_calculate_logfoldchanges_returns_empty_table_without_groups():
-    result = bt.sct.tl.calculate_logfoldchanges(
+def test_logfoldchanges_returns_empty_table_without_groups():
+    result = bt.sct.tl.logfoldchanges(
         _empty_group_logfoldchange_adata(),
         groupby="cluster",
     )
@@ -373,10 +373,10 @@ def test_calculate_logfoldchanges_returns_empty_table_without_groups():
     assert result.columns.tolist() == ["group", "names", "logfoldchanges"]
 
 
-def test_calculate_logfoldchanges_filtering_keeps_expected_positive_ratios():
+def test_logfoldchanges_filtering_keeps_expected_positive_ratios():
     adata = _toy_logfoldchange_adata()
 
-    filtered = bt.sct.tl.calculate_logfoldchanges(
+    filtered = bt.sct.tl.logfoldchanges(
         adata,
         groupby="cluster",
         filter_logfoldchanges=lambda values: values > 0,
@@ -391,12 +391,12 @@ def test_calculate_logfoldchanges_filtering_keeps_expected_positive_ratios():
     )
 
 
-def test_calculate_logfoldchanges_rejects_invalid_filter(mini_adata):
+def test_logfoldchanges_rejects_invalid_filter(mini_adata):
     with pytest.raises(
         TypeError,
         match="unsupported argument type for 'filter_logfoldchanges'",
     ):
-        bt.sct.tl.calculate_logfoldchanges(
+        bt.sct.tl.logfoldchanges(
             mini_adata,
             groupby="cluster",
             filter_logfoldchanges="not callable",

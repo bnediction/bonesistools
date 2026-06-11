@@ -49,7 +49,7 @@ Submodules:
 
 - plotting: `bt.sct.pl`
   - embedding, density, composition and graph visualizations
-  - boxplot utilities
+  - distribution utilities
 
 - datasets: `bt.sct.datasets`
   - packaged reference datasets
@@ -116,7 +116,7 @@ Submodules:
 Example:
 
 ```python
-genesyn = bt.dbs.ncbi.GeneSynonyms()
+genesyn = bt.dbs.ncbi.genesyn()
 
 grn = bt.dbs.omnipath.collectri(
     organism="mouse",

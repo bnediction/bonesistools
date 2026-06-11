@@ -10,10 +10,11 @@ across heterogeneous biological resources.
 
 from typing import List as _List
 
-from ._genesyn import GeneSynonyms
+from ._genesyn import GeneSynonyms, genesyn
 
 __all__ = [
     "GeneSynonyms",
+    "genesyn",
 ]
 
 

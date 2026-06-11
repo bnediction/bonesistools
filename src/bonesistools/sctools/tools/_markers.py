@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence as Seq
 from typing import (
     Any,
@@ -27,7 +28,7 @@ _Alternatives = Literal["two-sided", "less", "greater"]
 
 
 @anndata_checker
-def calculate_logfoldchanges(
+def logfoldchanges(
     adata: AnnData,
     groupby: str,
     layer: Optional[str] = None,
@@ -136,6 +137,20 @@ def calculate_logfoldchanges(
             ]
 
     return logfoldchanges_df.reset_index(drop=True)
+
+
+def calculate_logfoldchanges(*args: Any, **kwargs: Any) -> pd.DataFrame:
+    """
+    Deprecated alias for `logfoldchanges`.
+    """
+
+    warnings.warn(
+        "`bt.sct.tl.calculate_logfoldchanges` is deprecated; use "
+        "`bt.sct.tl.logfoldchanges` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return logfoldchanges(*args, **kwargs)
 
 
 def hypergeometric_test(

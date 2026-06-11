@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping as MappingABC
 from pathlib import Path
 from typing import (
@@ -151,7 +152,7 @@ def __add_points(
 
 
 @anndata_or_mudata_checker
-def boxplot(
+def distribution(
     scdata: ScData,  # type: ignore
     obs: str,
     groupby: Optional[str] = None,
@@ -179,7 +180,7 @@ def boxplot(
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]:
     """
-    Draw a boxplot for an observation-level variable.
+    Draw a distribution plot for an observation-level variable.
 
     Parameters
     ----------
@@ -498,3 +499,16 @@ def boxplot(
         return None
     else:
         return fig, ax, bps
+
+
+def boxplot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]:
+    """
+    Deprecated alias for `distribution`.
+    """
+
+    warnings.warn(
+        "`bt.sct.pl.boxplot` is deprecated; use " "`bt.sct.pl.distribution` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return distribution(*args, **kwargs)

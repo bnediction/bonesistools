@@ -28,13 +28,13 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import art3d
 
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
-from ..tools import get_paga_graph
+from ..tools import extract_paga_graph
 from ._colors import black
 from ._scatterplot import Colors, embedding
 
 
 @anndata_or_mudata_checker
-def add_graph(
+def graph_overlay(
     scdata: ScData,  # type: ignore
     graph_key: str = "epg",
     ax: Optional[Axes] = None,
@@ -271,7 +271,7 @@ def trajectory(
     )
     fig, drawn_ax = cast(Tuple[Figure, Axes], result)
 
-    add_graph(
+    graph_overlay(
         scdata,
         graph_key=graph_key,
         ax=drawn_ax,
@@ -350,7 +350,7 @@ def paga(
     if ax is None:
         ax = plt.gca()
 
-    paga_graph = get_paga_graph(
+    paga_graph = extract_paga_graph(
         adata=adata, obs=obs, use_rep=use_rep, edges=edges, threshold=threshold
     )
     barycenters = {
@@ -383,6 +383,20 @@ def paga(
         return None
 
     return ax
+
+
+def add_graph(*args: Any, **kwargs: Any) -> Axes:
+    """
+    Deprecated alias for `graph_overlay`.
+    """
+
+    warnings.warn(
+        "`bt.sct.pl.add_graph` is deprecated; use "
+        "`bt.sct.pl.graph_overlay` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return graph_overlay(*args, **kwargs)
 
 
 def draw_paga(*args: Any, **kwargs: Any) -> Union[Axes, None]:

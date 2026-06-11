@@ -13,21 +13,26 @@ from typing import Any as _Any
 from typing import List as _List
 
 from ..tools import regress_out as _regress_out
+from ._duplicates import (
+    merge_duplicate_vars,
+    var_names_merge_duplicates,
+)
 from ._genename import (
     convert_gene_identifiers,
     standardize_gene_identifiers,
-    var_names_merge_duplicates,
 )
 from ._simple import (
     filter_obs,
     filter_var,
-    merge,
     sort_anndata,
 )
 from ._transfer import (
+    merge,
     transfer_layer,
     transfer_obs_its,
     transfer_obs_sti,
+    transfer_obs_to_integrated,
+    transfer_obs_to_specific,
 )
 
 __all__ = [
@@ -36,10 +41,13 @@ __all__ = [
     "merge",
     "sort_anndata",
     "transfer_layer",
+    "transfer_obs_to_integrated",
+    "transfer_obs_to_specific",
     "transfer_obs_sti",
     "transfer_obs_its",
     "convert_gene_identifiers",
     "standardize_gene_identifiers",
+    "merge_duplicate_vars",
     "var_names_merge_duplicates",
     "regress_out",
 ]

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import warnings
 from typing import Any, Optional, cast
 
 from anndata import AnnData
@@ -13,7 +14,7 @@ from .._typing import (
 
 
 @anndata_checker
-def choose_mtx_representation(
+def choose_matrix_representation(
     adata: AnnData,
     use_raw: bool = False,
     layer: Optional[str] = None,
@@ -63,6 +64,20 @@ def choose_mtx_representation(
         return cast(ndarray, matrix.copy())
     else:
         return cast(ndarray, matrix)
+
+
+def choose_mtx_representation(*args: Any, **kwargs: Any) -> ndarray:
+    """
+    Deprecated alias for `choose_matrix_representation`.
+    """
+
+    warnings.warn(
+        "`bt.sct.tl.choose_mtx_representation` is deprecated; use "
+        "`bt.sct.tl.choose_matrix_representation` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return choose_matrix_representation(*args, **kwargs)
 
 
 @anndata_or_mudata_checker

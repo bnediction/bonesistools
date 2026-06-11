@@ -53,13 +53,13 @@ def _make_two_cluster_adata(cloud_a, cloud_b, names_a, names_b):
     return adata, coordinates, obs_names
 
 
-def test_kneighbors_graph_returns_graph_with_named_nodes():
+def test_knn_graph_returns_graph_with_named_nodes():
 
     adata = ADATA.copy()
 
     adata.obsm["X_test"] = adata.X[:, :5].copy()
 
-    graph = bt.sct.tl.kneighbors_graph(
+    graph = bt.sct.tl.knn_graph(
         adata,
         n_neighbors=5,
         use_rep="X_test",
@@ -79,7 +79,7 @@ def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
     adata.obsm["X_test"] = adata.X[:, :5].copy()
     adata.obs["cluster"] = adata.obs["clusters"].astype("category")
 
-    knnbs = bt.sct.tl.Knnbs(
+    knnbs = bt.sct.tl.KNNSC(
         n_neighbors=5,
         use_rep="X_test",
         n_components=5,
@@ -97,10 +97,10 @@ def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
     with pytest.warns(DeprecationWarning, match="knnbs"):
         subclusters = knnbs.knnbs(size=5, key="knnbs")
 
-    assert hasattr(knnbs, "kneighbors_graph")
+    assert hasattr(knnbs, "knn_graph")
     assert hasattr(knnbs, "shortest_path_lengths_df")
 
-    assert isinstance(knnbs.kneighbors_graph, nx.Graph)
+    assert isinstance(knnbs.knn_graph, nx.Graph)
     assert isinstance(knnbs.shortest_path_lengths_df, pd.DataFrame)
     assert isinstance(subclusters, pd.Series)
 
@@ -122,7 +122,7 @@ def test_knnbs_fit_reconnects_disconnected_neighbor_graph():
         names_b=[f"b{i}" for i in range(len(cloud_b))],
     )
 
-    estimator = bt.sct.tl.Knnbs(n_neighbors=20, use_rep="X_toy")
+    estimator = bt.sct.tl.KNNSC(n_neighbors=20, use_rep="X_toy")
 
     with pytest.warns(UserWarning, match="not weakly connected"):
         estimator.fit(adata, cluster_key="cluster", n_jobs=1)
@@ -131,7 +131,7 @@ def test_knnbs_fit_reconnects_disconnected_neighbor_graph():
     cell_clusters = adata.obs["cluster"].to_dict()
     bridge_distances = [
         data["distance"]
-        for source, target, data in estimator.kneighbors_graph.edges(data=True)
+        for source, target, data in estimator.knn_graph.edges(data=True)
         if (
             source in cell_nodes
             and target in cell_nodes
@@ -139,7 +139,7 @@ def test_knnbs_fit_reconnects_disconnected_neighbor_graph():
         )
     ]
 
-    assert nx.is_connected(estimator.kneighbors_graph)
+    assert nx.is_connected(estimator.knn_graph)
     assert len(bridge_distances) == 1
     assert min(bridge_distances) > 13.0
 
@@ -180,7 +180,7 @@ def test_knnbs_select_central_cells_recovers_nearest_single_cluster_cells():
         ),
     )
     adata.obsm["X_toy"] = coordinates
-    estimator = bt.sct.tl.Knnbs(n_neighbors=10, use_rep="X_toy")
+    estimator = bt.sct.tl.KNNSC(n_neighbors=10, use_rep="X_toy")
 
     estimator.fit(adata, cluster_key="cluster", n_jobs=1)
 
@@ -211,7 +211,7 @@ def test_knnbs_select_peripheral_cells_recovers_remote_cells():
         names_a=names_a,
         names_b=names_b,
     )
-    estimator = bt.sct.tl.Knnbs(n_neighbors=16, use_rep="X_toy")
+    estimator = bt.sct.tl.KNNSC(n_neighbors=16, use_rep="X_toy")
 
     with pytest.warns(UserWarning, match="not weakly connected"):
         estimator.fit(adata, cluster_key="cluster", n_jobs=1)
@@ -229,36 +229,36 @@ def test_knnbs_select_peripheral_cells_recovers_remote_cells():
 
 def test_knnbs_validates_init_and_fit_arguments_and_repr(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'n_neighbors'"):
-        bt.sct.tl.Knnbs(n_neighbors=0)
+        bt.sct.tl.KNNSC(n_neighbors=0)
 
     with pytest.raises(ValueError, match="expected integer"):
-        bt.sct.tl.Knnbs(n_neighbors=1.5)
+        bt.sct.tl.KNNSC(n_neighbors=1.5)
 
     with pytest.raises(TypeError, match="unsupported argument type for 'n_neighbors'"):
-        bt.sct.tl.Knnbs(n_neighbors="5")
+        bt.sct.tl.KNNSC(n_neighbors="5")
 
     with pytest.raises(ValueError, match="invalid argument value for 'n_components'"):
-        bt.sct.tl.Knnbs(n_neighbors=5, n_components=0)
+        bt.sct.tl.KNNSC(n_neighbors=5, n_components=0)
 
     with pytest.raises(ValueError, match="expected integer"):
-        bt.sct.tl.Knnbs(n_neighbors=5, n_components=1.2)
+        bt.sct.tl.KNNSC(n_neighbors=5, n_components=1.2)
 
     with pytest.raises(TypeError, match="unsupported argument type for 'n_components'"):
-        bt.sct.tl.Knnbs(n_neighbors=5, n_components="2")
+        bt.sct.tl.KNNSC(n_neighbors=5, n_components="2")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'use_rep'"):
-        bt.sct.tl.Knnbs(n_neighbors=5, use_rep=None)
+        bt.sct.tl.KNNSC(n_neighbors=5, use_rep=None)
 
     with pytest.raises(ValueError, match="invalid argument value for 'metric'"):
-        bt.sct.tl.Knnbs(n_neighbors=5, metric="not-a-metric")
+        bt.sct.tl.KNNSC(n_neighbors=5, metric="not-a-metric")
 
-    estimator = bt.sct.tl.Knnbs(
+    estimator = bt.sct.tl.KNNSC(
         n_neighbors=5.0,
         n_components=2.0,
         metric="cosine",
     )
 
-    assert "Knnbs(n_neighbors=5" in repr(estimator)
+    assert "KNNSC(n_neighbors=5" in repr(estimator)
 
     with pytest.warns(DeprecationWarning, match="metric_kwds"):
         assert estimator.metric_kwds == {}
@@ -275,7 +275,7 @@ def test_knnbs_validates_init_and_fit_arguments_and_repr(mini_adata):
 
 
 def test_knnbs_deprecated_selection_modes_and_overlap_error():
-    knnbs = bt.sct.tl.Knnbs(n_neighbors=1)
+    knnbs = bt.sct.tl.KNNSC(n_neighbors=1)
     _set_manual_shortest_path_lengths(knnbs)
 
     with pytest.warns(DeprecationWarning, match="find_closest"):
@@ -314,7 +314,7 @@ def test_knnbs_deprecated_selection_modes_and_overlap_error():
 
 
 def test_knnbs_new_api_names_are_available():
-    estimator = bt.sct.tl.Knnbs(
+    estimator = bt.sct.tl.KNNSC(
         n_neighbors=1,
     )
     _set_manual_shortest_path_lengths(estimator)

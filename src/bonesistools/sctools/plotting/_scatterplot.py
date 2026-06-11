@@ -650,11 +650,11 @@ def embedding(
         )
 
     if draw_deprecated_graph or draw_deprecated_graph_labels:
-        from ._graph import add_graph
+        from ._graph import graph_overlay
 
         _kwargs = {"linewidth": 2.5, "zorder": 10}
         _kwargs.update({} if "graph" not in kwargs else kwargs["graph"])
-        add_graph(
+        graph_overlay(
             scdata,
             ax=ax,
             n_components=component_number,

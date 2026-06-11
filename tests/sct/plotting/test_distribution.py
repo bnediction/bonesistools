@@ -11,16 +11,16 @@ from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 
 import bonesistools as bt
-from bonesistools.sctools.plotting import _boxplot
+from bonesistools.sctools.plotting import _distribution
 
 ADATA = bt.sct.datasets.nestorowa()
 
 
-def test_boxplot_without_hue():
+def test_distribution_without_hue():
     adata = ADATA.copy()
     adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
 
-    fig, ax, bps = bt.sct.pl.boxplot(
+    fig, ax, bps = bt.sct.pl.distribution(
         adata,
         obs="n_counts",
         groupby="label",
@@ -38,14 +38,14 @@ def test_boxplot_without_hue():
     plt.close(fig)
 
 
-def test_boxplot_with_hue():
+def test_distribution_with_hue():
     adata = ADATA.copy()
     adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
     adata.obs["condition"] = "condition2"
     adata.obs.iloc[:1000, adata.obs.columns.get_loc("condition")] = "condition1"
     adata.obs["condition"] = adata.obs["condition"].astype("category")
 
-    fig, _, bps = bt.sct.pl.boxplot(
+    fig, _, bps = bt.sct.pl.distribution(
         adata,
         obs="n_counts",
         groupby="label",
@@ -62,12 +62,12 @@ def test_boxplot_with_hue():
     plt.close(fig)
 
 
-def test_boxplot_invalid_sort():
+def test_distribution_invalid_sort():
     adata = ADATA.copy()
     adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
 
     with pytest.raises(ValueError):
-        bt.sct.pl.boxplot(
+        bt.sct.pl.distribution(
             adata,
             obs="n_counts",
             groupby="label",
@@ -75,14 +75,14 @@ def test_boxplot_invalid_sort():
         )
 
 
-def test_boxplot_outfile(tmp_path):
+def test_distribution_outfile(tmp_path):
     mpl.rcParams["text.usetex"] = False
 
     adata = ADATA.copy()
     adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
-    outfile = tmp_path / "boxplot.png"
+    outfile = tmp_path / "distribution.png"
 
-    result = bt.sct.pl.boxplot(
+    result = bt.sct.pl.distribution(
         adata,
         obs="n_counts",
         groupby="label",
@@ -93,8 +93,8 @@ def test_boxplot_outfile(tmp_path):
     assert outfile.exists()
 
 
-def test_boxplot_without_groupby_and_validation_errors(mini_adata):
-    fig, ax, bps = bt.sct.pl.boxplot(
+def test_distribution_without_groupby_and_validation_errors(mini_adata):
+    fig, ax, bps = bt.sct.pl.distribution(
         mini_adata,
         obs="score",
         title={"label": "score"},
@@ -110,17 +110,17 @@ def test_boxplot_without_groupby_and_validation_errors(mini_adata):
     plt.close(fig)
 
     with pytest.raises(ValueError, match="invalid argument values"):
-        bt.sct.pl.boxplot(mini_adata, obs="score", hue="cluster")
+        bt.sct.pl.distribution(mini_adata, obs="score", hue="cluster")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'title'"):
-        bt.sct.pl.boxplot(mini_adata, obs="score", title=object())
+        bt.sct.pl.distribution(mini_adata, obs="score", title=object())
 
 
-def test_boxplot_with_hue_custom_colors_and_hidden_medians(mini_adata):
+def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
     mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
     mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
 
-    fig, ax, bps = bt.sct.pl.boxplot(
+    fig, ax, bps = bt.sct.pl.distribution(
         mini_adata,
         obs="score",
         groupby="cluster",
@@ -140,11 +140,11 @@ def test_boxplot_with_hue_custom_colors_and_hidden_medians(mini_adata):
     plt.close(fig)
 
 
-def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
+def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
     mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
 
-    fig, ax, bps = bt.sct.pl.boxplot(
+    fig, ax, bps = bt.sct.pl.distribution(
         mini_adata,
         obs="score",
         groupby="cluster",
@@ -159,7 +159,11 @@ def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     assert ax.get_legend() is not None
     plt.close(fig)
 
-    monkeypatch.setattr(_boxplot, "QUALITATIVE_COLORS", _boxplot.QUALITATIVE_COLORS[:1])
+    monkeypatch.setattr(
+        _distribution,
+        "QUALITATIVE_COLORS",
+        _distribution.QUALITATIVE_COLORS[:1],
+    )
     hue_adata = ad.AnnData(
         X=np.ones((8, 1)),
         obs=pd.DataFrame(
@@ -177,7 +181,7 @@ def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     box_colors = ListedColormap(["red", "green", "blue", "purple"])
     point_colors = ListedColormap(["pink", "lightgreen", "lightblue", "plum"])
 
-    fig, _, bps = bt.sct.pl.boxplot(
+    fig, _, bps = bt.sct.pl.distribution(
         hue_adata,
         obs="score",
         groupby="group",
@@ -190,7 +194,7 @@ def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     assert set(bps) == {"h1", "h2", "h3", "h4"}
     plt.close(fig)
 
-    fig, _, bps = bt.sct.pl.boxplot(
+    fig, _, bps = bt.sct.pl.distribution(
         hue_adata,
         obs="score",
         groupby="group",
@@ -201,7 +205,7 @@ def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     assert set(bps) == {"h1", "h2", "h3", "h4"}
     plt.close(fig)
 
-    fig, _, bps = bt.sct.pl.boxplot(
+    fig, _, bps = bt.sct.pl.distribution(
         hue_adata,
         obs="score",
         groupby="group",
@@ -213,18 +217,18 @@ def test_boxplot_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch):
     plt.close(fig)
 
 
-def test_boxplot_position_and_point_helper_validation():
+def test_distribution_position_and_point_helper_validation():
     with pytest.raises(ValueError, match="groups' and 'hues'"):
-        _boxplot.__get_box_positions(widths=0.5, hues=(2, 0.1))
+        _distribution.__get_box_positions(widths=0.5, hues=(2, 0.1))
 
     with pytest.raises(ValueError, match="2-length tuple"):
-        _boxplot.__get_box_positions(widths=0.5, groups=(1, 2, 3))
+        _distribution.__get_box_positions(widths=0.5, groups=(1, 2, 3))
 
     with pytest.raises(ValueError, match="expected None or 2-length tuple"):
-        _boxplot.__get_box_positions(widths=0.5, groups="bad")
+        _distribution.__get_box_positions(widths=0.5, groups="bad")
 
     with pytest.raises(ValueError, match="2-length tuple"):
-        _boxplot.__get_box_positions(widths=0.5, groups=(1, 0.2), hues=(1, 2, 3))
+        _distribution.__get_box_positions(widths=0.5, groups=(1, 0.2), hues=(1, 2, 3))
 
     with pytest.raises(ValueError, match="expected None or 2-length tuple"):
-        _boxplot.__get_box_positions(widths=0.5, groups=(1, 0.2), hues="bad")
+        _distribution.__get_box_positions(widths=0.5, groups=(1, 0.2), hues="bad")
