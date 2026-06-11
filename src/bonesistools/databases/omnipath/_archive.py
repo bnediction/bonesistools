@@ -75,6 +75,24 @@ def resolve_interactions_archive(
     )
 
 
+def list_interactions_versions() -> List[str]:
+    """
+    List available OmniPath interaction versions without loading interactions.
+
+    Returns
+    -------
+    list of str
+        Accepted version labels. `"latest"` denotes the current OmniPath
+        endpoint. Date ranges denote archived web-service snapshots; any date
+        within one of these ranges can be passed as `version`.
+    """
+
+    return ["latest"] + [
+        _format_archive_interval(start, end)
+        for start, end, _filename in _list_interactions_archives()
+    ]
+
+
 def load_interactions_version(
     resource: str,
     version: OmnipathVersion,
@@ -458,10 +476,15 @@ def _format_archive_ranges(archives: Sequence[Tuple[str, str, str]]) -> str:
     if not archives:
         return "none"
 
-    return ", ".join(
-        f"{_format_archive_date(start)}..{_format_archive_date(end)}"
-        for start, end, _filename in archives
-    )
+    return ", ".join(_format_archive_interval(start, end) for start, end, _ in archives)
+
+
+def _format_archive_interval(start: str, end: str) -> str:
+    start_label = _format_archive_date(start)
+    end_label = _format_archive_date(end)
+    if start_label == end_label:
+        return start_label
+    return f"{start_label}..{end_label}"
 
 
 def _format_archive_date(version_label: str) -> str:

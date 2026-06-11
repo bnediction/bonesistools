@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 import networkx as nx
 import pandas as pd
 
 from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms, OutputIdentifierType
-from ._archive import OmnipathVersion, load_interactions_version
+from ._archive import (
+    OmnipathVersion,
+    list_interactions_versions,
+    load_interactions_version,
+)
 
 
 def collectri(
@@ -40,8 +44,9 @@ def collectri(
     gene_identifier_type: OutputIdentifierType (default: "official_name")
         Output gene identifier type used when `genesyn` is provided.
     version: str or date (default: "latest")
-        OmniPath resource version to load. Accepted values are `"latest"` or a
-        date such as `"2024-01-01"`.
+        OmniPath resource version to load. `"latest"` uses the current OmniPath
+        interactions endpoint; dates load archived OmniPath interaction dumps.
+        Use `collectri.versions()` to inspect available version labels.
 
     Returns
     -------
@@ -134,6 +139,24 @@ def collectri(
         f"unsupported argument type for 'genesyn': "
         f"expected {GeneSynonyms} but received {type(genesyn)}"
     )
+
+
+def _collectri_versions() -> List[str]:
+    """
+    List available CollecTRI versions without loading the CollecTRI network.
+
+    Returns
+    -------
+    list of str
+        Accepted version labels. `"latest"` denotes the current OmniPath
+        endpoint. Date ranges denote archived web-service snapshots; any date
+        within one of these ranges can be passed as `version`.
+    """
+
+    return list_interactions_versions()
+
+
+setattr(collectri, "versions", _collectri_versions)
 
 
 def load_collectri_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:

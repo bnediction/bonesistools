@@ -76,6 +76,30 @@ def test_resolve_interactions_archive_rejects_current_and_default():
             _archive.resolve_interactions_archive(version)
 
 
+def test_dorothea_versions_lists_available_archive_ranges(monkeypatch):
+    monkeypatch.setattr(
+        _archive,
+        "_list_interactions_archives",
+        lambda: [
+            (
+                "20230101",
+                "20230501",
+                "omnipath_webservice_interactions__20230101-20230501.tsv.xz",
+            ),
+            (
+                "20230502",
+                "20230502",
+                "omnipath_webservice_interactions__20230502-20230502.tsv.xz",
+            ),
+        ],
+    )
+
+    expected = ["latest", "2023-01-01..2023-05-01", "2023-05-02"]
+
+    assert getattr(_dorothea.dorothea, "versions")() == expected
+    assert getattr(_collectri.collectri, "versions")() == expected
+
+
 def test_load_interactions_version_filters_signed_resource_and_levels(monkeypatch):
     monkeypatch.setattr(
         _archive,

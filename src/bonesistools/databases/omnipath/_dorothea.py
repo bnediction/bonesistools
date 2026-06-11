@@ -21,6 +21,7 @@ from ._archive import (
     _tax_id,
     _translate_hcop,
     _truthy,
+    list_interactions_versions,
     load_interactions_version,
 )
 
@@ -58,7 +59,8 @@ def dorothea(
     version: str or date (default: "latest")
         OmniPath resource version to load. `"latest"` uses the current OmniPath
         interactions endpoint with decoupler-compatible post-processing; dates
-        such as `"2024-01-01"` load archived OmniPath interaction dumps.
+        load archived OmniPath interaction dumps. Use `dorothea.versions()` to
+        inspect available version labels.
     flavor: {"modern", "legacy"}, optional
         DoRothEA construction flavor. If None, use `"modern"`.
         If `"modern"`, reproduce the current `decoupler.op.dorothea`
@@ -153,6 +155,24 @@ def dorothea(
         copy=False,
     )
     return grn
+
+
+def _dorothea_versions() -> List[str]:
+    """
+    List available DoRothEA versions without loading the DoRothEA network.
+
+    Returns
+    -------
+    list of str
+        Accepted version labels. `"latest"` denotes the current OmniPath
+        endpoint. Date ranges denote archived web-service snapshots; any date
+        within one of these ranges can be passed as `version`.
+    """
+
+    return list_interactions_versions()
+
+
+setattr(dorothea, "versions", _dorothea_versions)
 
 
 def _load_latest_dorothea(
