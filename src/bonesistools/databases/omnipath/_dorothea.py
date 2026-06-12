@@ -138,10 +138,10 @@ def dorothea(
             )
 
         warnings.warn(
-            "`wrapper` is deprecated and will be removed in a future version; "
+            "`wrapper` is deprecated and will be removed in 2.0.0; "
             "use `flavor='modern'` instead of `wrapper='op'` and "
             "`flavor='legacy'` instead of `wrapper='get'`.",
-            DeprecationWarning,
+            FutureWarning,
             stacklevel=3,
         )
         flavor = wrapper_flavor
@@ -156,16 +156,16 @@ def dorothea(
 
     if reload is not None:
         warnings.warn(
-            "`reload` is deprecated and ignored; DoRothEA versions are controlled "
-            "with `version`.",
-            DeprecationWarning,
+            "`reload` is deprecated and will be removed in 2.0.0; DoRothEA "
+            "versions are controlled with `version`.",
+            FutureWarning,
             stacklevel=3,
         )
     if kwargs:
         warnings.warn(
             "additional DoRothEA wrapper keyword arguments are deprecated and "
-            f"ignored: {', '.join(sorted(kwargs))}",
-            DeprecationWarning,
+            f"will be removed in 2.0.0; ignored: {', '.join(sorted(kwargs))}",
+            FutureWarning,
             stacklevel=3,
         )
 
@@ -396,9 +396,9 @@ def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
     """
 
     warnings.warn(
-        "`load_dorothea_grn` is deprecated and will be removed in a future "
-        "version; use `dorothea` instead.",
-        DeprecationWarning,
+        "`load_dorothea_grn` is deprecated and will be removed in 2.0.0; "
+        "use `dorothea` instead.",
+        FutureWarning,
         stacklevel=2,
     )
 

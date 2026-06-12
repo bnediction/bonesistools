@@ -109,9 +109,10 @@ def get_paga_graph(*args: Any, **kwargs: Any) -> nx.DiGraph[Any]:
     """
 
     warnings.warn(
-        "`bt.sct.tl.get_paga_graph` is deprecated; use "
+        "`bt.sct.tl.get_paga_graph` is deprecated and will be removed in "
+        "2.0.0; use "
         "`bt.sct.tl.extract_paga_graph` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return extract_paga_graph(*args, **kwargs)

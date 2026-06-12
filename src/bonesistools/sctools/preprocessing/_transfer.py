@@ -336,9 +336,10 @@ def transfer_obs_sti(*args: Any, **kwargs: Any) -> Union[AnnData, None]:
     """
 
     warnings.warn(
-        "`bt.sct.pp.transfer_obs_sti` is deprecated; use "
+        "`bt.sct.pp.transfer_obs_sti` is deprecated and will be removed in "
+        "2.0.0; use "
         "`bt.sct.pp.transfer_obs_to_integrated` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return transfer_obs_to_integrated(*args, **kwargs)
@@ -350,9 +351,10 @@ def transfer_obs_its(*args: Any, **kwargs: Any) -> Union[AnnDataList, None]:
     """
 
     warnings.warn(
-        "`bt.sct.pp.transfer_obs_its` is deprecated; use "
+        "`bt.sct.pp.transfer_obs_its` is deprecated and will be removed in "
+        "2.0.0; use "
         "`bt.sct.pp.transfer_obs_to_specific` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return transfer_obs_to_specific(*args, **kwargs)

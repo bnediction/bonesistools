@@ -356,8 +356,9 @@ def kde_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     """
 
     warnings.warn(
-        "`kde_plot()` is deprecated; use `density()` instead.",
-        DeprecationWarning,
+        "`kde_plot()` is deprecated and will be removed in 2.0.0; use "
+        "`density()` instead.",
+        FutureWarning,
         stacklevel=2,
     )
 
@@ -373,8 +374,9 @@ def ecdf_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     """
 
     warnings.warn(
-        "`ecdf_plot()` is deprecated; use `cdf()` instead.",
-        DeprecationWarning,
+        "`ecdf_plot()` is deprecated and will be removed in 2.0.0; use "
+        "`cdf()` instead.",
+        FutureWarning,
         stacklevel=2,
     )
 

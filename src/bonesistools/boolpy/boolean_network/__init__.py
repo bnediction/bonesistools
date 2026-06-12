@@ -39,9 +39,9 @@ def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
     import warnings
 
     warnings.warn(
-        "`bt.bpy.bn.bn_to_pydot` is deprecated; use "
+        "`bt.bpy.bn.bn_to_pydot` is deprecated and will be removed in 2.0.0; use "
         "`bt.bpy.bn.BooleanNetwork(bn).to_pydot()` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
 

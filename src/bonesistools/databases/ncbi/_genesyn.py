@@ -267,7 +267,7 @@ def support_legacy_gene_synonyms_args(func):
                 continue
 
             warnings.warn(
-                f"'{old_name}' is deprecated and will be removed in a future version; "
+                f"'{old_name}' is deprecated and will be removed in 2.0.0; "
                 f"use '{new_name}' instead.",
                 FutureWarning,
                 stacklevel=2,
@@ -376,7 +376,7 @@ class GeneSynonyms:
                 "`bt.dbs.ncbi.GeneSynonyms()` is deprecated as a constructor "
                 "entry point and will be removed in 2.0.0; use "
                 "`bt.dbs.ncbi.genesyn()` instead.",
-                DeprecationWarning,
+                FutureWarning,
                 stacklevel=2,
             )
 

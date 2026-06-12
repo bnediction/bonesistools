@@ -67,7 +67,7 @@ _sys.modules.update(
 def __getattr__(name: str) -> _ModuleType:
     if name == "grn":
         message = (
-            "`bt.grn` is deprecated and will be removed in a future release; "
+            "`bt.grn` is deprecated and will be removed in 2.0.0; "
             "use `bt.bpy.ig` instead."
         )
         _warnings.warn(

@@ -72,9 +72,10 @@ def choose_mtx_representation(*args: Any, **kwargs: Any) -> ndarray:
     """
 
     warnings.warn(
-        "`bt.sct.tl.choose_mtx_representation` is deprecated; use "
+        "`bt.sct.tl.choose_mtx_representation` is deprecated and will be "
+        "removed in 2.0.0; use "
         "`bt.sct.tl.choose_matrix_representation` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return choose_matrix_representation(*args, **kwargs)

@@ -62,9 +62,9 @@ def regress_out(*args: _Any, **kwargs: _Any) -> _Any:
     """
 
     _warnings.warn(
-        "`bt.sct.pp.regress_out` is deprecated; use "
+        "`bt.sct.pp.regress_out` is deprecated and will be removed in 2.0.0; use "
         "`bt.sct.tl.regress_out` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return _regress_out(*args, **kwargs)

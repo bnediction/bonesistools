@@ -157,16 +157,17 @@ def var_names_merge_duplicates(
     """
 
     warnings.warn(
-        "`bt.sct.pp.var_names_merge_duplicates` is deprecated; use "
+        "`bt.sct.pp.var_names_merge_duplicates` is deprecated and will be "
+        "removed in 2.0.0; use "
         "`bt.sct.pp.merge_duplicate_vars` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     if var_names_column is not None:
         warnings.warn(
-            "`var_names_column` is deprecated and ignored; use `keep` to "
-            "control `.var` merging.",
-            DeprecationWarning,
+            "`var_names_column` is deprecated and will be removed in 2.0.0; "
+            "use `keep` to control `.var` merging.",
+            FutureWarning,
             stacklevel=2,
         )
     return merge_duplicate_vars(

@@ -974,8 +974,8 @@ class InfluenceGraph(_MultiDiGraphBase):
         if type(self) is InfluenceGraph:
             warnings.warn(
                 "family_compressed_graph(...) is deprecated and will be removed in "
-                "a future release; use family_collapsed_graph(...) instead",
-                DeprecationWarning,
+                "2.0.0; use family_collapsed_graph(...) instead",
+                FutureWarning,
                 stacklevel=2,
             )
 
@@ -1655,9 +1655,9 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         if type(self) is InfluenceGraph:
             warnings.warn(
-                "compressed_graph(...) is deprecated and will be removed in a "
-                "future release; use collapsed_graph(...) instead",
-                DeprecationWarning,
+                "compressed_graph(...) is deprecated and will be removed in "
+                "2.0.0; use collapsed_graph(...) instead",
+                FutureWarning,
                 stacklevel=2,
             )
 

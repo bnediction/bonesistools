@@ -507,8 +507,9 @@ def boxplot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes, BoxplotRe
     """
 
     warnings.warn(
-        "`bt.sct.pl.boxplot` is deprecated; use " "`bt.sct.pl.distribution` instead.",
-        DeprecationWarning,
+        "`bt.sct.pl.boxplot` is deprecated and will be removed in 2.0.0; "
+        "use `bt.sct.pl.distribution` instead.",
+        FutureWarning,
         stacklevel=2,
     )
     return distribution(*args, **kwargs)

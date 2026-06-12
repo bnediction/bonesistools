@@ -88,13 +88,13 @@ def test_knnbs_fits_and_returns_subclusters_with_deprecated_api():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
 
-        with pytest.warns(DeprecationWarning, match="obs"):
+        with pytest.warns(FutureWarning, match="obs"):
             knnbs.fit(adata, obs="cluster", n_jobs=1)
 
-    with pytest.warns(DeprecationWarning, match="shortest_path_lengths"):
+    with pytest.warns(FutureWarning, match="shortest_path_lengths"):
         knnbs.shortest_path_lengths(n_jobs=1)
 
-    with pytest.warns(DeprecationWarning, match="knnbs"):
+    with pytest.warns(FutureWarning, match="knnbs"):
         subclusters = knnbs.knnbs(size=5, key="knnbs")
 
     assert hasattr(knnbs, "knn_graph")
@@ -142,6 +142,85 @@ def test_knnbs_fit_reconnects_disconnected_neighbor_graph():
     assert nx.is_connected(estimator.knn_graph)
     assert len(bridge_distances) == 1
     assert min(bridge_distances) > 13.0
+
+
+def test_knnsc_fit_uses_minimum_cluster_size_for_barycenter_sources():
+    coordinates = np.array(
+        [
+            [0.0, 0.0],
+            [0.1, 0.0],
+            [0.2, 0.0],
+            [1.0, 0.0],
+            [1.1, 0.0],
+            [2.0, 0.0],
+        ]
+    )
+    adata = ad.AnnData(
+        X=np.zeros((coordinates.shape[0], 1)),
+        obs=pd.DataFrame(
+            {
+                "cluster": pd.Categorical(
+                    ["A", "A", "A", "B", "B", "C"],
+                    categories=["A", "B", "C"],
+                )
+            },
+            index=[f"cell_{i}" for i in range(coordinates.shape[0])],
+        ),
+    )
+    adata.obsm["X_toy"] = coordinates
+    estimator = bt.sct.tl.KNNSC(n_neighbors=2, use_rep="X_toy")
+
+    estimator.fit(
+        adata,
+        cluster_key="cluster",
+        min_cluster_size=2,
+        n_jobs=1,
+    )
+    estimator.compute_shortest_path_lengths(n_jobs=1)
+
+    assert set(adata.obs_names) <= set(estimator.knn_graph.nodes)
+    assert "A" in estimator.knn_graph.nodes
+    assert "B" in estimator.knn_graph.nodes
+    assert "C" not in estimator.knn_graph.nodes
+    assert list(estimator.obs.cat.categories) == ["A", "B"]
+    assert pd.isna(estimator.obs.loc["cell_5"])
+    assert list(estimator.shortest_path_lengths_df.columns) == ["A", "B"]
+
+
+def test_knnsc_rejects_requested_clusters_below_minimum_size():
+    coordinates = np.array(
+        [
+            [0.0, 0.0],
+            [0.1, 0.0],
+            [0.2, 0.0],
+            [1.0, 0.0],
+        ]
+    )
+    adata = ad.AnnData(
+        X=np.zeros((coordinates.shape[0], 1)),
+        obs=pd.DataFrame(
+            {
+                "cluster": pd.Categorical(
+                    ["A", "A", "A", "B"],
+                    categories=["A", "B"],
+                )
+            },
+            index=[f"cell_{i}" for i in range(coordinates.shape[0])],
+        ),
+    )
+    adata.obsm["X_toy"] = coordinates
+    estimator = bt.sct.tl.KNNSC(n_neighbors=2, use_rep="X_toy")
+
+    estimator.fit(
+        adata,
+        cluster_key="cluster",
+        min_cluster_size=2,
+        n_jobs=1,
+    )
+    estimator.compute_shortest_path_lengths(n_jobs=1)
+
+    with pytest.raises(ValueError, match="B.*size=1.*min_cluster_size=2"):
+        estimator.predict(peripheral_clusters=["B"])
 
 
 def test_knnbs_select_central_cells_recovers_nearest_single_cluster_cells():
@@ -260,13 +339,13 @@ def test_knnbs_validates_init_and_fit_arguments_and_repr(mini_adata):
 
     assert "KNNSC(n_neighbors=5" in repr(estimator)
 
-    with pytest.warns(DeprecationWarning, match="metric_kwds"):
+    with pytest.warns(FutureWarning, match="metric_kwds"):
         assert estimator.metric_kwds == {}
-    with pytest.warns(DeprecationWarning, match="metric_kwds"):
+    with pytest.warns(FutureWarning, match="metric_kwds"):
         estimator.metric_kwds = {"p": 1}
     assert estimator.metric_kwargs == {"p": 1}
 
-    with pytest.warns(DeprecationWarning, match="obs"):
+    with pytest.warns(FutureWarning, match="obs"):
         with pytest.raises(TypeError, match="received both 'cluster_key'"):
             estimator.fit(mini_adata, cluster_key="cluster", obs="cluster")
 
@@ -278,14 +357,14 @@ def test_knnbs_deprecated_selection_modes_and_overlap_error():
     knnbs = bt.sct.tl.KNNSC(n_neighbors=1)
     _set_manual_shortest_path_lengths(knnbs)
 
-    with pytest.warns(DeprecationWarning, match="find_closest"):
+    with pytest.warns(FutureWarning, match="find_closest"):
         closest = knnbs.find_closest_cells_to_self_barycenter(size=1, key="closest")
-    with pytest.warns(DeprecationWarning, match="find_furthest"):
+    with pytest.warns(FutureWarning, match="find_furthest"):
         furthest = knnbs.find_furthest_cells_to_other_barycenters(
             size=1,
             key="furthest",
         )
-    with pytest.warns(DeprecationWarning, match="knnbs"):
+    with pytest.warns(FutureWarning, match="knnbs"):
         mixed = knnbs.knnbs(
             size=1,
             subclusters_maximizing_distances=["A"],
@@ -298,14 +377,14 @@ def test_knnbs_deprecated_selection_modes_and_overlap_error():
     assert furthest.dropna().to_dict() == {"c1": "A", "c3": "B"}
     assert mixed.dropna().to_dict() == {"c1": "A", "c3": "B"}
 
-    with pytest.warns(DeprecationWarning, match="find_closest"):
+    with pytest.warns(FutureWarning, match="find_closest"):
         all_from_a = knnbs.find_closest_cells_to_self_barycenter(
             size=5,
             clusters=["A"],
         )
     assert all_from_a.dropna().to_dict() == {"c1": "A", "c2": "A"}
 
-    with pytest.warns(DeprecationWarning, match="knnbs"):
+    with pytest.warns(FutureWarning, match="knnbs"):
         with pytest.raises(RuntimeError, match="not disjoint"):
             knnbs.knnbs(
                 subclusters_maximizing_distances=["A"],
@@ -348,6 +427,7 @@ def test_knnbs_new_api_names_are_available():
     assert mixed.dropna().to_dict() == {"c1": "A", "c3": "B"}
     assert peripheral_only.dropna().to_dict() == {"c1": "A"}
     assert central_only.dropna().to_dict() == {"c3": "B"}
+    assert list(central_only.cat.categories) == ["B"]
 
 
 def test_shared_neighbors_pruning_and_inplace_modes(

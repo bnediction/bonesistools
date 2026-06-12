@@ -391,9 +391,9 @@ def add_graph(*args: Any, **kwargs: Any) -> Axes:
     """
 
     warnings.warn(
-        "`bt.sct.pl.add_graph` is deprecated; use "
+        "`bt.sct.pl.add_graph` is deprecated and will be removed in 2.0.0; use "
         "`bt.sct.pl.graph_overlay` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return graph_overlay(*args, **kwargs)
@@ -408,8 +408,9 @@ def draw_paga(*args: Any, **kwargs: Any) -> Union[Axes, None]:
     """
 
     warnings.warn(
-        "`draw_paga()` is deprecated; use `paga()` instead.",
-        DeprecationWarning,
+        "`draw_paga()` is deprecated and will be removed in 2.0.0; use "
+        "`paga()` instead.",
+        FutureWarning,
         stacklevel=2,
     )
 

@@ -166,9 +166,9 @@ def load_collectri_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
     """
 
     warnings.warn(
-        "`load_collectri_grn` is deprecated and will be removed in a future "
-        "version; use `collectri` instead.",
-        DeprecationWarning,
+        "`load_collectri_grn` is deprecated and will be removed in 2.0.0; "
+        "use `collectri` instead.",
+        FutureWarning,
         stacklevel=2,
     )
 

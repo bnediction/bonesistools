@@ -62,6 +62,20 @@ def test_composition_can_plot_counts_without_legend(mini_adata):
     plt.close(fig)
 
 
+def test_composition_legend_uses_rcparams_fontsize(mini_adata):
+    with mpl.rc_context({"legend.fontsize": 7}):
+        fig, ax = bt.sct.pl.composition(
+            mini_adata,
+            obs="batch",
+            groupby="cluster",
+        )
+
+    legend = ax.get_legend()
+    assert legend is not None
+    assert [text.get_fontsize() for text in legend.get_texts()] == [7, 7]
+    plt.close(fig)
+
+
 def test_composition_horizontal_orientation(mini_adata):
     fig, ax = bt.sct.pl.composition(
         mini_adata,

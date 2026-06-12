@@ -91,7 +91,7 @@ def test_trajectory_missing_graph_key_raises_clear_key_error(mini_adata):
 def test_embedding_deprecated_graph_arguments_warn_and_route_overlay(mini_adata):
     _add_trajectory_graph(mini_adata)
 
-    with pytest.warns(DeprecationWarning, match="add_graph"):
+    with pytest.warns(FutureWarning, match="add_graph"):
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
@@ -102,7 +102,7 @@ def test_embedding_deprecated_graph_arguments_warn_and_route_overlay(mini_adata)
     assert len(ax.lines) == 1
     plt.close(fig)
 
-    with pytest.warns(DeprecationWarning, match="add_labels_to_graph"):
+    with pytest.warns(FutureWarning, match="add_labels_to_graph"):
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",

@@ -40,11 +40,12 @@ def set_default_params(tex: bool = True):
 
     mpl.rcParams.update(mpl.rcParamsDefault)
 
-    font = {"family": "normal", "weight": "normal", "size": 12}
+    font = {"weight": "normal", "size": 12}
     mpl.rc("font", **font)
 
     mpl.rcParams["text.usetex"] = tex
     mpl.rcParams["lines.linewidth"] = 1.5
+    mpl.rcParams["legend.fontsize"] = 12
 
     mpl.rc(
         "axes",

@@ -345,7 +345,7 @@ def test_structural_families_and_family_collapsed_graph_from_docstring():
         ("TF2", "g3|g4", -1),
     ]
 
-    with pytest.warns(DeprecationWarning, match="family_collapsed_graph"):
+    with pytest.warns(FutureWarning, match="family_collapsed_graph"):
         deprecated = ig.family_compressed_graph()
 
     assert sorted(deprecated.nodes()) == sorted(collapsed.nodes())
@@ -591,7 +591,7 @@ def test_feedback_induced_graph_and_collapsed_graph_from_docstring():
     assert isinstance(collapsed, bt.bpy.ig.InfluenceGraph)
     assert set(collapsed.nodes()) <= set(feedback.nodes())
 
-    with pytest.warns(DeprecationWarning, match="collapsed_graph"):
+    with pytest.warns(FutureWarning, match="collapsed_graph"):
         deprecated = ig.compressed_graph()
 
     assert sorted(deprecated.nodes()) == sorted(collapsed.nodes())

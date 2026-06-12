@@ -145,9 +145,10 @@ def calculate_logfoldchanges(*args: Any, **kwargs: Any) -> pd.DataFrame:
     """
 
     warnings.warn(
-        "`bt.sct.tl.calculate_logfoldchanges` is deprecated; use "
+        "`bt.sct.tl.calculate_logfoldchanges` is deprecated and will be "
+        "removed in 2.0.0; use "
         "`bt.sct.tl.logfoldchanges` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return logfoldchanges(*args, **kwargs)

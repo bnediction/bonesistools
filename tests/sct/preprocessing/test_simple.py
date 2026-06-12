@@ -87,7 +87,7 @@ def test_regress_out_removes_linear_covariate_and_preserves_copy():
 
 
 def test_preprocessing_regress_out_is_deprecated(mini_adata):
-    with pytest.warns(DeprecationWarning, match="bt.sct.pp.regress_out"):
+    with pytest.warns(FutureWarning, match="bt.sct.pp.regress_out"):
         bt.sct.pp.regress_out(mini_adata, keys="score")
 
 

@@ -66,9 +66,9 @@ def __deprecated_bool_kwarg(
     old_value = kwargs.pop(old_name)
 
     warnings.warn(
-        f"'{old_name}' is deprecated and will be removed in a future version; "
+        f"'{old_name}' is deprecated and will be removed in 2.0.0; "
         f"use '{new_name}' instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=3,
     )
 
@@ -93,7 +93,7 @@ def __deprecated_graph_kwarg(
     warnings.warn(
         f"`{old_name}` is deprecated and will be removed in 2.0.0; "
         f"use `{target}` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
 
@@ -697,9 +697,10 @@ def embedding_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     """
 
     warnings.warn(
-        "`bt.sct.pl.embedding_plot` is deprecated; use "
+        "`bt.sct.pl.embedding_plot` is deprecated and will be removed in "
+        "2.0.0; use "
         "`bt.sct.pl.embedding` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
 

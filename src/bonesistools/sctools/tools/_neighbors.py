@@ -140,9 +140,10 @@ def kneighbors_graph(*args: Any, **kwargs: Any) -> Graph[Any]:
     """
 
     warnings.warn(
-        "`bt.sct.tl.kneighbors_graph` is deprecated; use "
+        "`bt.sct.tl.kneighbors_graph` is deprecated and will be removed in "
+        "2.0.0; use "
         "`bt.sct.tl.knn_graph` instead.",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return knn_graph(*args, **kwargs)
@@ -183,6 +184,8 @@ class KNNSC:
         cluster_key: str
         obs: pd.Series
         shortest_path_lengths_df: pd.DataFrame
+        min_cluster_size: int
+        cluster_counts: pd.Series
 
     def __init__(
         self,
@@ -278,8 +281,9 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`metric_kwds` is deprecated; use `metric_kwargs` instead.",
-            DeprecationWarning,
+            "`metric_kwds` is deprecated and will be removed in 2.0.0; use "
+            "`metric_kwargs` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         return self.metric_kwargs
@@ -287,8 +291,9 @@ class KNNSC:
     @metric_kwds.setter
     def metric_kwds(self, value: Dict[str, Any]) -> None:
         warnings.warn(
-            "`metric_kwds` is deprecated; use `metric_kwargs` instead.",
-            DeprecationWarning,
+            "`metric_kwds` is deprecated and will be removed in 2.0.0; use "
+            "`metric_kwargs` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         self.metric_kwargs = value
@@ -300,8 +305,9 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`kneighbors_graph` is deprecated; use `knn_graph` instead.",
-            DeprecationWarning,
+            "`kneighbors_graph` is deprecated and will be removed in 2.0.0; use "
+            "`knn_graph` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         return self.knn_graph
@@ -309,8 +315,9 @@ class KNNSC:
     @kneighbors_graph.setter
     def kneighbors_graph(self, value: Graph[Any]) -> None:
         warnings.warn(
-            "`kneighbors_graph` is deprecated; use `knn_graph` instead.",
-            DeprecationWarning,
+            "`kneighbors_graph` is deprecated and will be removed in 2.0.0; use "
+            "`knn_graph` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         self.knn_graph = value
@@ -323,12 +330,15 @@ class KNNSC:
         n_jobs: int = 1,
         *,
         obs: Optional[str] = None,
+        min_cluster_size: Union[int, float] = 1,
     ) -> None:
         """
         Compute the k-nearest neighbors-based graph using an embedding space.
 
         The estimator parameters stored in the object are used for graph
-        construction.
+        construction. All cells are kept in the k-nearest-neighbor graph, but
+        only clusters containing at least `min_cluster_size` cells are used as
+        barycenter sources for shortest-path computations.
 
         Parameters
         ----------
@@ -340,6 +350,10 @@ class KNNSC:
             Number of allocated processors.
         obs: str, optional
             Deprecated alias for `cluster_key`.
+        min_cluster_size: int (default: 1)
+            Minimum number of cells required for a cluster to be used as a
+            barycenter source. Smaller clusters remain in the graph but are
+            ignored as candidate subclusters.
 
         Notes
         -----
@@ -351,8 +365,9 @@ class KNNSC:
 
         if obs is not None:
             warnings.warn(
-                "`obs` is deprecated; use `cluster_key` instead.",
-                DeprecationWarning,
+                "`obs` is deprecated and will be removed in 2.0.0; use "
+                "`cluster_key` instead.",
+                FutureWarning,
                 stacklevel=2,
             )
             if cluster_key is not None:
@@ -364,6 +379,43 @@ class KNNSC:
 
         if cluster_key is None:
             raise TypeError("missing required argument: 'cluster_key'")
+
+        if not isinstance(min_cluster_size, (int, float)):
+            raise TypeError(
+                f"unsupported argument type for 'min_cluster_size': "
+                f"expected {int} but received {type(min_cluster_size)}"
+            )
+
+        if min_cluster_size <= 0:
+            raise ValueError(
+                f"invalid argument value for 'min_cluster_size': "
+                f"expected non-null positive value but received {min_cluster_size!r}"
+            )
+
+        if isinstance(min_cluster_size, float) and not min_cluster_size.is_integer():
+            raise ValueError(
+                f"invalid argument value for 'min_cluster_size': "
+                f"expected integer but received {min_cluster_size!r}"
+            )
+
+        min_cluster_size = int(min_cluster_size)
+
+        raw_obs = cast(pd.Series, adata.obs[cluster_key])
+        if not hasattr(raw_obs, "cat"):
+            raise AttributeError(f"adata.obs[{cluster_key!r}] object has no attribute 'cat'")
+
+        cluster_counts = raw_obs.value_counts()
+        ineligible_categories = [
+            category
+            for category in raw_obs.cat.categories
+            if int(cluster_counts.get(category, 0)) < min_cluster_size
+        ]
+        candidate_obs = raw_obs.cat.remove_categories(ineligible_categories)
+        if len(candidate_obs.cat.categories) == 0:
+            raise ValueError(
+                "no clusters contain at least "
+                f"min_cluster_size={min_cluster_size} cells"
+            )
 
         representation = choose_representation(
             adata, use_rep=self.use_rep, n_components=self.n_components
@@ -380,9 +432,10 @@ class KNNSC:
             n_jobs=n_jobs,
         )
 
-        _barycenters = barycenters(
-            adata, obs=cluster_key, use_rep=self.use_rep, n_components=self.n_components
-        )
+        _barycenters = {
+            category: np.nanmean(representation[raw_obs == category], axis=0)
+            for category in candidate_obs.cat.categories
+        }
         for key, value in _barycenters.items():
             barycenter_coordinate = value.reshape(1, -1)
             distances = pairwise_distances(
@@ -429,7 +482,9 @@ class KNNSC:
 
         self.knn_graph = _knn_graph
         self.cluster_key = cluster_key
-        self.obs = cast(pd.Series, adata.obs[cluster_key])
+        self.min_cluster_size = min_cluster_size
+        self.cluster_counts = cluster_counts
+        self.obs = cast(pd.Series, candidate_obs)
         return None
 
     def compute_shortest_path_lengths(
@@ -512,9 +567,10 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`shortest_path_lengths` is deprecated; use "
+            "`shortest_path_lengths` is deprecated and will be removed in "
+            "2.0.0; use "
             "`compute_shortest_path_lengths` instead.",
-            DeprecationWarning,
+            FutureWarning,
             stacklevel=2,
         )
         return self.compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
@@ -549,6 +605,8 @@ class KNNSC:
             Iterable[str],
             self.obs.cat.categories if clusters is None else clusters,
         )
+        clusters_iterable = list(clusters_iterable)
+        self._validate_candidate_clusters(clusters_iterable, "clusters")
 
         subclusters_series = pd.Series(
             data=np.nan, index=self.obs.index, dtype="category", copy=True
@@ -602,9 +660,10 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`find_furthest_cells_to_other_barycenters` is deprecated; use "
+            "`find_furthest_cells_to_other_barycenters` is deprecated and will "
+            "be removed in 2.0.0; use "
             "`select_peripheral_cells` instead.",
-            DeprecationWarning,
+            FutureWarning,
             stacklevel=2,
         )
         return self.select_peripheral_cells(
@@ -643,6 +702,8 @@ class KNNSC:
             Iterable[str],
             self.obs.cat.categories if clusters is None else clusters,
         )
+        clusters_iterable = list(clusters_iterable)
+        self._validate_candidate_clusters(clusters_iterable, "clusters")
 
         subclusters_series = pd.Series(
             data=np.nan, index=self.obs.index, dtype="category", copy=True
@@ -688,9 +749,10 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`find_closest_cells_to_self_barycenter` is deprecated; use "
+            "`find_closest_cells_to_self_barycenter` is deprecated and will be "
+            "removed in 2.0.0; use "
             "`select_central_cells` instead.",
-            DeprecationWarning,
+            FutureWarning,
             stacklevel=2,
         )
         return self.select_central_cells(
@@ -751,6 +813,8 @@ class KNNSC:
             raise RuntimeError(
                 "'peripheral_clusters' and 'central_clusters' are not disjoint"
             )
+        self._validate_candidate_clusters(peripheral_cluster_set, "peripheral_clusters")
+        self._validate_candidate_clusters(central_cluster_set, "central_clusters")
 
         if peripheral_cluster_set:
             peripheral_subclusters = self.select_peripheral_cells(
@@ -780,6 +844,8 @@ class KNNSC:
             right=central_subclusters.to_frame(), left_index=True, right_index=True
         )
         subclusters = subcluster_candidates.bfill(axis=1).iloc[:, 0]
+        if hasattr(subclusters, "cat"):
+            subclusters = subclusters.cat.remove_unused_categories()
         subclusters.name = key
 
         return subclusters
@@ -796,8 +862,9 @@ class KNNSC:
         """
 
         warnings.warn(
-            "`knnbs` is deprecated; use `predict` instead.",
-            DeprecationWarning,
+            "`knnbs` is deprecated and will be removed in 2.0.0; use "
+            "`predict` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         return self.predict(
@@ -806,6 +873,38 @@ class KNNSC:
             peripheral_clusters=subclusters_maximizing_distances,
             central_clusters=subclusters_minimizing_distances,
         )
+
+    def _validate_candidate_clusters(
+        self,
+        clusters: Iterable[str],
+        argument: str,
+    ) -> None:
+        candidate_clusters = set(self.obs.cat.categories)
+        invalid_clusters = [
+            cluster for cluster in clusters if cluster not in candidate_clusters
+        ]
+        if not invalid_clusters:
+            return None
+
+        below_minimum = []
+        missing = []
+        for cluster in invalid_clusters:
+            if cluster in self.cluster_counts.index:
+                below_minimum.append(
+                    f"{cluster} "
+                    f"(size={int(self.cluster_counts[cluster])}, "
+                    f"min_cluster_size={self.min_cluster_size})"
+                )
+            else:
+                missing.append(str(cluster))
+
+        details = []
+        if below_minimum:
+            details.append("below minimum size: " + ", ".join(below_minimum))
+        if missing:
+            details.append("not found: " + ", ".join(missing))
+
+        raise ValueError(f"invalid cluster(s) in '{argument}': {'; '.join(details)}")
 
 
 class Knnbs(KNNSC):
@@ -822,8 +921,9 @@ class Knnbs(KNNSC):
         **metric_kwargs: Any,
     ):
         warnings.warn(
-            "`bt.sct.tl.Knnbs` is deprecated; use `bt.sct.tl.KNNSC` instead.",
-            DeprecationWarning,
+            "`bt.sct.tl.Knnbs` is deprecated and will be removed in 2.0.0; use "
+            "`bt.sct.tl.KNNSC` instead.",
+            FutureWarning,
             stacklevel=2,
         )
         super().__init__(

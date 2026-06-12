@@ -112,6 +112,21 @@ def test_embedding_plot_discrete_handles_nan_mapping_and_labels(mini_adata):
     plt.close(fig)
 
 
+def test_embedding_legend_uses_rcparams_fontsize(mini_adata):
+    with plt.rc_context({"legend.fontsize": 7}):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            use_rep="X_pca",
+            show_legend=True,
+        )
+
+    legend = ax.get_legend()
+    assert legend is not None
+    assert [text.get_fontsize() for text in legend.get_texts()] == [7, 7]
+    plt.close(fig)
+
+
 def test_embedding_discrete_uses_colors_from_uns(mini_adata):
     mini_adata.uns["cluster_color"] = {"A": "red", "B": "blue"}
 

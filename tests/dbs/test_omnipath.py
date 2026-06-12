@@ -582,9 +582,9 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
     monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
 
     _dorothea.dorothea(version="2024-01-01", flavor="legacy")
-    with pytest.warns(DeprecationWarning, match="`wrapper` is deprecated"):
+    with pytest.warns(FutureWarning, match="`wrapper` is deprecated"):
         _dorothea.dorothea(version="2024-01-01", wrapper="get")
-    with pytest.warns(DeprecationWarning, match="`wrapper` is deprecated"):
+    with pytest.warns(FutureWarning, match="`wrapper` is deprecated"):
         _dorothea.dorothea(version="2024-01-01", wrapper="op")
 
     assert calls == [
@@ -679,10 +679,10 @@ def test_omnipath_deprecated_grn_aliases_warn(monkeypatch):
         lambda *args, **kwargs: InfluenceGraph(),
     )
 
-    with pytest.warns(DeprecationWarning, match="load_dorothea_grn"):
+    with pytest.warns(FutureWarning, match="load_dorothea_grn"):
         assert isinstance(_dorothea.load_dorothea_grn(), InfluenceGraph)
 
-    with pytest.warns(DeprecationWarning, match="load_collectri_grn"):
+    with pytest.warns(FutureWarning, match="load_collectri_grn"):
         assert isinstance(_collectri.load_collectri_grn(), InfluenceGraph)
 
 

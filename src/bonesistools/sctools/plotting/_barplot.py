@@ -193,6 +193,22 @@ def composition(
         If specified, save the figure instead of returning it.
     ax: Axes, optional
         Existing axes used for drawing.
+    **kwargs: Any
+        Supplemental features for figure plotting:
+        - figheight[float]: specify the figure height
+        - figwidth[float]: specify the figure width
+        - xlabel[str]: set the label for the x-axis
+        - ylabel[str]: set the label for the y-axis
+        - xlim[tuple]: set x-axis limits with `Axes.set_xlim`
+        - ylim[tuple]: set y-axis limits with `Axes.set_ylim`
+        - labelsize[float]: set the tick-label size when `tick_params` is not
+          specified
+        - rotation[float]: rotate group tick labels
+        - tick_params[dict]: change the appearance of ticks, tick labels, and
+          gridlines following the syntax of matplotlib.axes.Axes.tick_params
+        - bar[dict]: keyword arguments passed to `DataFrame.plot`
+        - legend[dict]: when showlegend is True, modify legend following the
+          syntax of matplotlib.pyplot.legend
 
     Returns
     -------
@@ -320,10 +336,9 @@ def composition(
 
     if showlegend:
         legend_kwargs = {
-            "bbox_to_anchor": (1.0, 0.85),
-            "loc": "upper left",
+            "bbox_to_anchor": (1.0, 0.6),
+            "loc": "center left",
             "frameon": False,
-            "fontsize": 12,
         }
         legend_kwargs.update(kwargs["legend"] if "legend" in kwargs else {})
         ax.legend(**legend_kwargs)
