@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.colors import Colormap, ListedColormap
 
 from ..._compat import Literal
+from ..._validation import _as_literal, _as_positive_integer
 
 
 def rgb(color):
@@ -44,10 +45,6 @@ def rgb2hex(rgb):
     str
         Color in hexadecimal format.
 
-    Raises
-    ------
-    TypeError
-        If one of the RGB channels is not numeric.
     """
 
     r, g, b = rgb
@@ -194,6 +191,12 @@ def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
         If `color` is unknown or `color_type` is not `"rgb"` or `"hex"`.
     """
 
+    color_type = _as_literal(
+        color_type,
+        choices=("rgb", "hex"),
+        name="color_type",
+    )
+
     if color in [
         "black",
         "white",
@@ -233,13 +236,8 @@ def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
     ]:
         if color_type == "rgb":
             return eval(color)
-        elif color_type == "hex":
+        if color_type == "hex":
             return rgb2hex(eval(color))
-        else:
-            raise ValueError(
-                f"invalid argument value for 'color_type': "
-                f"expected 'rgb' or 'hex' but received {color_type!r}"
-            )
     else:
         raise ValueError(
             f"invalid argument value for 'color': color not found: {color!r}"
@@ -267,12 +265,6 @@ def generate_colormap(
     -------
     Return a ListedColormap.
 
-    Raises
-    ------
-    TypeError
-        If `cm` is not a matplotlib Colormap.
-    ValueError
-        If `color_number` or `shade_number` is not strictly positive.
     """
 
     if not isinstance(cm, Colormap):
@@ -281,12 +273,8 @@ def generate_colormap(
             f"expected {Colormap} but received {type(cm)}"
         )
 
-    if color_number <= 0:
-        raise ValueError(
-            f"invalid argument value for 'color_number': "
-            f"expected non-null positive value but received {color_number!r}"
-        )
-    elif color_number <= cm.N:
+    color_number = _as_positive_integer(color_number, "color_number")
+    if color_number <= cm.N:
         if isinstance(cm, ListedColormap):
             return ListedColormap(cast(Sequence[Any], cm.colors)[0:color_number])
 
@@ -294,11 +282,8 @@ def generate_colormap(
 
     if shade_number is None:
         shade_number = cm.N
-    elif shade_number <= 0:
-        raise ValueError(
-            f"invalid argument value for 'shade_number': "
-            f"expected non-null positive value but received {shade_number!r}"
-        )
+    else:
+        shade_number = _as_positive_integer(shade_number, "shade_number")
 
     color_number_with_multiply_of_shades = int(
         math.ceil(color_number / shade_number) * shade_number

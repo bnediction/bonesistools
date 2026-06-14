@@ -9,9 +9,11 @@ import networkx as nx
 import pandas as pd
 
 from ..._compat import Literal
+from ..._validation import _as_boolean
+from ..._warnings import _warn_deprecated
 from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms
-from ..ncbi._typing import OutputIdentifierType
+from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
 from ._archive import (
     DorotheaFlavor,
     HcopVersion,
@@ -34,7 +36,7 @@ DorotheaWrapper = Literal["op", "get"]
 def dorothea(
     organism: Union[str, int] = "mouse",
     levels: Optional[List[str]] = None,
-    genesyn: Optional[GeneSynonyms] = None,
+    genesyn: Optional[GeneSynonymsLike] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
     version: OmnipathVersion = "latest",
     hcop_version: HcopVersion = "latest",
@@ -94,10 +96,11 @@ def dorothea(
     InfluenceGraph
         Signed regulatory network.
 
-    Raises
-    ------
-    TypeError
-        If `organism` or `genesyn` has an unsupported type.
+    References
+    ----------
+    Garcia-Alonso et al. (2019). Benchmark and integration of resources for
+    the estimation of human transcription factor activities. Genome Research,
+    29(8), 1363.
     """
 
     if levels is None:
@@ -109,16 +112,7 @@ def dorothea(
             f"expected {str} or {int} but received {type(organism)}"
         )
 
-    if genesyn is not None and not isinstance(genesyn, GeneSynonyms):
-        raise TypeError(
-            f"unsupported argument type for 'genesyn': "
-            f"expected {GeneSynonyms} but received {type(genesyn)}"
-        )
-    if not isinstance(compatibility, bool):
-        raise TypeError(
-            f"unsupported argument type for 'compatibility': "
-            f"expected {bool} but received {type(compatibility)}"
-        )
+    compatibility = _as_boolean(compatibility, "compatibility")
 
     if wrapper is not None:
         if wrapper == "op":
@@ -214,6 +208,13 @@ def dorothea(
 
     if genesyn is None:
         return grn
+
+    if not callable(genesyn):
+        raise TypeError(
+            f"unsupported argument type for 'genesyn': "
+            f"expected {GeneSynonyms} or compatible callable "
+            f"but received {type(genesyn)}"
+        )
 
     genesyn(
         grn,
@@ -395,10 +396,9 @@ def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
     Deprecated alias for `dorothea`.
     """
 
-    warnings.warn(
-        "`load_dorothea_grn` is deprecated and will be removed in 2.0.0; "
-        "use `dorothea` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`load_dorothea_grn`",
+        replacement="`dorothea`",
         stacklevel=2,
     )
 

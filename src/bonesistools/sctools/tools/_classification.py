@@ -1,15 +1,48 @@
 #!/usr/bin/env python
 
-from typing import Union
+from typing import Optional, overload
 
 from anndata import AnnData
 
+from ..._compat import Literal
 from ...databases.ncbi import genesyn as create_gene_synonyms
 from ...databases.ncbi._typing import InputIdentifierType
 from .._typing import (
-    Axis,
+    AnnDataAxisWithInteger,
     anndata_checker,
 )
+from .._validation import _as_anndata_axis
+
+
+@overload
+def mitochondrial_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "mt",
+    axis: AnnDataAxisWithInteger = "var",
+    copy: Literal[False] = False,
+) -> None: ...
+
+
+@overload
+def mitochondrial_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "mt",
+    axis: AnnDataAxisWithInteger = "var",
+    *,
+    copy: Literal[True],
+) -> AnnData: ...
+
+
+@overload
+def mitochondrial_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "mt",
+    axis: AnnDataAxisWithInteger = "var",
+    copy: bool = False,
+) -> Optional[AnnData]: ...
 
 
 @anndata_checker
@@ -17,9 +50,9 @@ def mitochondrial_genes(
     adata: AnnData,  # type: ignore
     index_type: InputIdentifierType = "name",
     key: str = "mt",
-    axis: Axis = 1,
+    axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
-) -> Union[AnnData, None]:  # type: ignore
+) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding mitochondrial proteins.
 
@@ -34,37 +67,35 @@ def mitochondrial_genes(
         Input identifier type of the selected index.
     key: str (default: 'mt')
         Column name storing whether each gene encodes a mitochondrial protein.
-    axis: {0, 1, "obs", "var"} (default: 1)
-        If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
-        `adata.var`.
+    axis: {"obs", "var"} (default: "var")
+        If `"obs"`, annotate `adata.obs`. If `"var"`, annotate `adata.var`.
+        Deprecated values 0 and 1 are still accepted as aliases for `"obs"`
+        and `"var"`.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
     Returns
     -------
     AnnData or None
-        Annotated AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with mitochondrial gene
+        annotations added. Otherwise, updates `adata` in place and returns
+        None.
 
-    Raises
-    ------
-    ValueError
-        If `axis` is not 0, 1, `"obs"` or `"var"`.
+        Mitochondrial gene annotations are stored in:
+
+        - `adata.obs[key]`: Boolean annotation if `axis="obs"`;
+        - `adata.var[key]`: Boolean annotation if `axis="var"`.
+
     """
 
     adata = adata.copy() if copy else adata
 
     genesyn = create_gene_synonyms()
-    if axis in [0, "obs"]:
-        axis = "obs"
+    axis = _as_anndata_axis(axis, allow_integer=True)
+    if axis == "obs":
         adata.obs[key] = False
-    elif axis in [1, "var"]:
-        axis = "var"
+    elif axis == "var":
         adata.var[key] = False
-    else:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
-        )
 
     mt_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():
@@ -79,14 +110,45 @@ def mitochondrial_genes(
     return adata if copy else None
 
 
+@overload
+def ribosomal_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "rps",
+    axis: AnnDataAxisWithInteger = "var",
+    copy: Literal[False] = False,
+) -> None: ...
+
+
+@overload
+def ribosomal_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "rps",
+    axis: AnnDataAxisWithInteger = "var",
+    *,
+    copy: Literal[True],
+) -> AnnData: ...
+
+
+@overload
+def ribosomal_genes(
+    adata: AnnData,
+    index_type: InputIdentifierType = "name",
+    key: str = "rps",
+    axis: AnnDataAxisWithInteger = "var",
+    copy: bool = False,
+) -> Optional[AnnData]: ...
+
+
 @anndata_checker
 def ribosomal_genes(
     adata: AnnData,  # type: ignore
     index_type: InputIdentifierType = "name",
     key: str = "rps",
-    axis: Axis = 1,
+    axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
-) -> Union[AnnData, None]:  # type: ignore
+) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding ribosomal proteins.
 
@@ -101,37 +163,35 @@ def ribosomal_genes(
         Input identifier type of the selected index.
     key: str (default: 'rps')
         Column name storing whether each gene encodes a ribosomal protein.
-    axis: {0, 1, "obs", "var"} (default: 1)
-        If 0 or `"obs"`, annotate `adata.obs`. If 1 or `"var"`, annotate
-        `adata.var`.
+    axis: {"obs", "var"} (default: "var")
+        If `"obs"`, annotate `adata.obs`. If `"var"`, annotate `adata.var`.
+        Deprecated values 0 and 1 are still accepted as aliases for `"obs"`
+        and `"var"`.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
     Returns
     -------
     AnnData or None
-        Annotated AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with ribosomal gene
+        annotations added. Otherwise, updates `adata` in place and returns
+        None.
 
-    Raises
-    ------
-    ValueError
-        If `axis` is not 0, 1, `"obs"` or `"var"`.
+        Ribosomal gene annotations are stored in:
+
+        - `adata.obs[key]`: Boolean annotation if `axis="obs"`;
+        - `adata.var[key]`: Boolean annotation if `axis="var"`.
+
     """
 
     adata = adata.copy() if copy else adata
 
     genesyn = create_gene_synonyms()
-    if axis in [0, "obs"]:
-        axis = "obs"
+    axis = _as_anndata_axis(axis, allow_integer=True)
+    if axis == "obs":
         adata.obs[key] = False
-    elif axis in [1, "var"]:
-        axis = "var"
+    elif axis == "var":
         adata.var[key] = False
-    else:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
-        )
 
     rps_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():

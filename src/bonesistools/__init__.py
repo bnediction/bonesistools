@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import importlib as _importlib
 import sys as _sys
-import warnings as _warnings
 from types import ModuleType as _ModuleType
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import List as _List
@@ -30,6 +29,7 @@ from typing import List as _List
 from . import boolpy as bpy
 from . import databases as dbs
 from . import sctools as sct
+from ._warnings import _warn_deprecated
 
 if _TYPE_CHECKING:
     from . import grntools as grn
@@ -66,13 +66,9 @@ _sys.modules.update(
 
 def __getattr__(name: str) -> _ModuleType:
     if name == "grn":
-        message = (
-            "`bt.grn` is deprecated and will be removed in 2.0.0; "
-            "use `bt.bpy.ig` instead."
-        )
-        _warnings.warn(
-            message,
-            FutureWarning,
+        _warn_deprecated(
+            "`bt.grn`",
+            replacement="`bt.bpy.ig`",
             stacklevel=2,
         )
 

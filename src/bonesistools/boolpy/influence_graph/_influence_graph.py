@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Mapping as MappingInstance
 from itertools import product
 from typing import (
@@ -21,11 +20,18 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import networkx as nx
 
 from ..._compat import Literal
+from ..._validation import (
+    _as_non_negative_integer,
+    _as_positive_integer,
+    _as_probability,
+)
+from ..._warnings import _warn_deprecated
 from ..plotting._graphviz import _networkx_to_graphviz
 from ..plotting._styles import ratio_edge_style
 from ..plotting._svg import SvgLength, scale_svg
@@ -36,6 +42,7 @@ if TYPE_CHECKING:
     from ..boolean_network import BooleanNetwork, BooleanNetworkEnsemble
 
 CircuitSign = Literal[-1, 1]
+InfluenceSign = Literal[-1, 1, "+", "-", "positive", "negative"]
 Direction = Literal["upstream", "downstream", "both"]
 CollapseMode = Literal["family", "feedback", "both"]
 
@@ -175,7 +182,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         source: Any,
         target: Any,
         key: Any = None,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
         **attr: Any,
     ) -> int:
         """
@@ -972,10 +979,9 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         if type(self) is InfluenceGraph:
-            warnings.warn(
-                "family_compressed_graph(...) is deprecated and will be removed in "
-                "2.0.0; use family_collapsed_graph(...) instead",
-                FutureWarning,
+            _warn_deprecated(
+                "family_compressed_graph(...)",
+                replacement="family_collapsed_graph(...)",
                 stacklevel=2,
             )
 
@@ -1049,7 +1055,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def autoregulations(
         self,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> List[Tuple[str, int]]:
         """
         Return signed autoregulations.
@@ -1164,9 +1170,21 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         return sign
 
+    @overload
     def signed_path_string(
         self,
         *nodes: str,
+    ) -> str: ...
+
+    @overload
+    def signed_path_string(
+        self,
+        *nodes: Union[str, List[str], Tuple[str, ...]],
+    ) -> str: ...
+
+    def signed_path_string(
+        self,
+        *nodes: Union[str, List[str], Tuple[str, ...]],
     ) -> str:
         """
         Return a human-readable signed representation of a directed path.
@@ -1206,7 +1224,9 @@ class InfluenceGraph(_MultiDiGraphBase):
         path = nodes
 
         if len(nodes) == 1 and isinstance(nodes[0], (list, tuple)):
-            path = tuple(nodes[0])
+            path = cast(Tuple[str, ...], tuple(nodes[0]))
+        else:
+            path = cast(Tuple[str, ...], nodes)
 
         if len(path) < 2:
             raise ValueError("path must contain at least two nodes")
@@ -1408,7 +1428,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def circuits(
         self,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> List[Tuple[List[str], int]]:
         """
         Return signed feedback circuits.
@@ -1654,10 +1674,9 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         if type(self) is InfluenceGraph:
-            warnings.warn(
-                "compressed_graph(...) is deprecated and will be removed in "
-                "2.0.0; use collapsed_graph(...) instead",
-                FutureWarning,
+            _warn_deprecated(
+                "compressed_graph(...)",
+                replacement="collapsed_graph(...)",
                 stacklevel=2,
             )
 
@@ -2114,7 +2133,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         source: Any,
         target: Any,
         key: Any = None,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
         count: Optional[int] = None,
         **attr: Any,
     ) -> int:
@@ -2155,6 +2174,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             `InfluenceGraph.add_edge("A", "B", 1)`.
         count: int
             Number of source graphs in which the signed influence is observed.
+            Integer-valued floats such as `1.0` are accepted and normalized.
         **attr: Any
             Additional edge attributes.
 
@@ -2166,10 +2186,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Raises
         ------
         TypeError
-            If `count` is missing or is not an integer.
+            If `count` is missing or has an unsupported type.
         ValueError
-            If `sign` is invalid, if the signed edge already exists, or if
-            `count` is outside the valid range.
+            If `sign` is invalid, if the signed edge already exists, if
+            `count` is fractional, or if `count` is outside the valid range.
         """
 
         if sign is None:
@@ -2179,7 +2199,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         if count is None:
             raise TypeError("missing required argument: 'count'")
 
-        self._validate_count(source, target, count)
+        count = self._validate_count(source, target, count)
 
         return super().add_edge(
             source,
@@ -2305,7 +2325,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         self,
         source: str,
         target: str,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> int:
         """
         Return the occurrence count of an aggregated signed influence.
@@ -2353,7 +2373,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         self,
         source: str,
         target: str,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> float:
         """
         Return the occurrence frequency of an aggregated signed influence.
@@ -2395,7 +2415,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     # Aggregated autoregulations include frequencies by design.
     def autoregulations(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> List[Tuple[str, int, float]]:
         """
         Return autoregulations with their sign and occurrence frequency.
@@ -2449,7 +2469,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         source: str,
         target: str,
         bins: Iterable[float],
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> Tuple[float, float]:
         """
         Return the frequency interval containing an edge frequency.
@@ -3242,11 +3262,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Return a styled InfluenceGraph for pydot or graphviz rendering.
         """
 
-        if not 0 <= min_frequency <= 1:
-            raise ValueError(
-                f"invalid argument value for 'min_frequency': "
-                f"expected value between 0 and 1 but received {min_frequency!r}"
-            )
+        min_frequency = _as_probability(min_frequency, "min_frequency")
 
         if collapse is None:
             graph = InfluenceGraph(self._plain_graph(self))
@@ -3357,7 +3373,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         self,
         source: str,
         target: str,
-        sign: Optional[CircuitSign] = None,
+        sign: Optional[InfluenceSign] = None,
     ) -> MutableMapping[str, Any]:
         """
         Return one aggregated edge data mapping.
@@ -3414,7 +3430,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         target: Any,
         count: Any,
         total: Optional[int] = None,
-    ) -> None:
+    ) -> int:
         """
         Validate one aggregated edge count.
         """
@@ -3422,19 +3438,16 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         if total is None:
             total = self.total
 
-        if not isinstance(count, int) or isinstance(count, bool):
-            raise TypeError(
-                f"unsupported edge count type for edge "
-                f"{source!r} -> {target!r}: "
-                f"expected {int} but received {type(count)}"
-            )
+        count = _as_non_negative_integer(count, "count")
 
-        if count < 0 or count > total:
+        if count > total:
             raise ValueError(
                 f"invalid edge count for edge {source!r} -> {target!r}: "
                 f"expected value between 0 and {total} "
                 f"but received {count!r}"
             )
+
+        return count
 
     @staticmethod
     def _validate_total(total: Any) -> int:
@@ -3442,19 +3455,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Validate an aggregation total.
         """
 
-        if not isinstance(total, int) or isinstance(total, bool):
-            raise TypeError(
-                f"unsupported argument type for 'total': "
-                f"expected {int} but received {type(total)}"
-            )
-
-        if total <= 0:
-            raise ValueError(
-                f"invalid argument value for 'total': "
-                f"expected positive value but received {total!r}"
-            )
-
-        return total
+        return _as_positive_integer(total, "total")
 
     @classmethod
     def from_influence_graphs(

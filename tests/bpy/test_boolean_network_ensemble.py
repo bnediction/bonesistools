@@ -4,10 +4,19 @@
 
 import sys
 from types import ModuleType
+from typing import Any, cast
 
 import pytest
 
 import bonesistools as bt
+
+
+def _pydot_get(obj, method):
+    return getattr(cast(Any, obj), method)()
+
+
+def _pydot_get_string(obj, method):
+    return cast(str, _pydot_get(obj, method)).strip('"')
 
 
 @pytest.fixture
@@ -69,14 +78,14 @@ def test_boolean_network_ensemble_initialization_and_slice_mutation_errors():
         bt.bpy.bn.BooleanNetworkEnsemble(bns=[])
 
     with pytest.raises(TypeError, match="Boolean network-like"):
-        bt.bpy.bn.BooleanNetworkEnsemble(bns=[object()])
+        bt.bpy.bn.BooleanNetworkEnsemble(bns=[cast(Any, object())])
 
     ensemble = bt.bpy.bn.BooleanNetworkEnsemble(components=["A", "B"])
     assert len(ensemble) == 0
     assert ensemble.components == frozenset({"A", "B"})
-    assert ensemble.ba is ensemble._BooleanNetworkEnsemble__ba
+    assert ensemble.ba is getattr(ensemble, "_BooleanNetworkEnsemble__ba")
     with pytest.raises(AttributeError):
-        ensemble.ba = object()
+        setattr(ensemble, "ba", object())
 
     first = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
     second = bt.bpy.bn.BooleanNetwork({"A": 0, "B": "A"})
@@ -197,7 +206,10 @@ def test_boolean_network_ensemble_to_pydot(bnet_ensemble):
     )
 
     edges = {
-        (edge.get_source().strip('"'), edge.get_destination().strip('"'))
+        (
+            _pydot_get_string(edge, "get_source"),
+            _pydot_get_string(edge, "get_destination"),
+        )
         for edge in dot.get_edges()
     }
 
@@ -205,7 +217,7 @@ def test_boolean_network_ensemble_to_pydot(bnet_ensemble):
     assert ("C", "A") in edges
 
     for edge in dot.get_edges():
-        assert edge.get_label() is None
+        assert _pydot_get(edge, "get_label") is None
 
 
 def test_boolean_network_ensemble_to_pydot_styles_thresholds_and_options(bnet_ensemble):
@@ -221,9 +233,9 @@ def test_boolean_network_ensemble_to_pydot_styles_thresholds_and_options(bnet_en
         rankdir="LR",
     )
 
-    assert dot.get_rankdir() == "LR"
-    assert all(edge.get_style() is not None for edge in dot.get_edges())
-    assert all(node.get_shape() == "oval" for node in dot.get_nodes())
+    assert cast(Any, dot).get_rankdir() == "LR"
+    assert all(_pydot_get(edge, "get_style") is not None for edge in dot.get_edges())
+    assert all(_pydot_get(node, "get_shape") == "oval" for node in dot.get_nodes())
 
 
 def test_boolean_network_ensemble_to_pydot_with_edge_labels(bnet_ensemble):
@@ -231,7 +243,7 @@ def test_boolean_network_ensemble_to_pydot_with_edge_labels(bnet_ensemble):
 
     dot = bnet_ensemble.to_pydot(show_edge_labels=True)
 
-    labels = {edge.get_label().strip('"') for edge in dot.get_edges()}
+    labels = {_pydot_get_string(edge, "get_label") for edge in dot.get_edges()}
 
     assert "3" in labels
     assert "1" in labels
@@ -273,8 +285,8 @@ def test_boolean_network_ensemble_show(monkeypatch, bnet_ensemble):
         calls["display"] = svg
 
     display_module = ModuleType("IPython.display")
-    display_module.SVG = FakeSVG
-    display_module.display = fake_display
+    setattr(display_module, "SVG", FakeSVG)
+    setattr(display_module, "display", fake_display)
     monkeypatch.setitem(sys.modules, "IPython.display", display_module)
     monkeypatch.setattr(
         bt.bpy.bn.BooleanNetworkEnsemble,

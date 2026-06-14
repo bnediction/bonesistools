@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 
 import math
+from typing import Any, cast
 
 import networkx as nx
 import pytest
 
 import bonesistools as bt
 from bonesistools.boolpy.influence_graph import _parser
+
+
+def _edge_data(graph, source, target, key=0):
+    return cast(Any, graph[source][target])[key]
 
 
 def test_read_influence_graph_keeps_edge_attributes(tmp_path):
@@ -22,10 +27,10 @@ def test_read_influence_graph_keeps_edge_attributes(tmp_path):
 
     assert isinstance(graph, nx.MultiDiGraph)
     assert set(graph.nodes) == {"A", "B", "C"}
-    assert graph["A"]["B"][0]["sign"] == 1.0
-    assert graph["A"]["B"][0]["confidence"] == "high"
-    assert graph["B"]["C"][0]["sign"] == -1.0
-    assert math.isnan(graph["C"]["A"][0]["sign"])
+    assert _edge_data(graph, "A", "B")["sign"] == 1.0
+    assert _edge_data(graph, "A", "B")["confidence"] == "high"
+    assert _edge_data(graph, "B", "C")["sign"] == -1.0
+    assert math.isnan(_edge_data(graph, "C", "A")["sign"])
 
 
 def test_read_influence_graph_supports_custom_separator(tmp_path):
@@ -63,7 +68,7 @@ def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
     infile.write_text("source,target,sign\nA,B,1\n")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        bt.bpy.ig.read_influence_graph(infile, genesyn=object())
+        bt.bpy.ig.read_influence_graph(infile, genesyn=cast(Any, object()))
 
 
 def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
@@ -82,7 +87,7 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
 
     graph = bt.bpy.ig.read_influence_graph(
         infile,
-        genesyn=genesyn,
+        genesyn=cast(Any, genesyn),
         input_identifier_type="gene_id",
         output_identifier_type="ensembl_id",
     )

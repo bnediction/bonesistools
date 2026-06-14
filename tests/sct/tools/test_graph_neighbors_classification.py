@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import networkx as nx
 import numpy as np
 import pytest
@@ -7,6 +9,151 @@ from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.tools import _classification
+
+
+def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
+    mini_adata.uns.clear()
+    mini_adata.obsp.clear()
+    close_distance = np.sqrt(0.05)
+    medium_distance = np.sqrt(6.85)
+    far_distance = np.sqrt(8.0)
+    expected_distances = np.array(
+        [
+            [0.0, close_distance, far_distance, 0.0],
+            [close_distance, 0.0, medium_distance, 0.0],
+            [0.0, medium_distance, 0.0, close_distance],
+            [0.0, far_distance, close_distance, 0.0],
+        ]
+    )
+    expected_connectivities = (expected_distances > 0).astype(float)
+
+    result = bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        use_rep="X_pca",
+        n_rep_components=2,
+        metric="euclidean",
+        n_jobs=1,
+    )
+
+    assert result is None
+    assert mini_adata.uns["neighbors"]["distances_key"] == "distances"
+    assert mini_adata.uns["neighbors"]["connectivities_key"] == "connectivities"
+    assert mini_adata.uns["neighbors"]["params"] == {
+        "n_neighbors": 3,
+        "n_pcs": 2,
+        "use_rep": "X_pca",
+        "metric": "euclidean",
+        "method": "bonesistools",
+    }
+    assert np.allclose(
+        mini_adata.obsp["distances"].toarray(),
+        expected_distances,
+    )
+    assert np.array_equal(
+        mini_adata.obsp["connectivities"].toarray(),
+        expected_connectivities,
+    )
+
+
+def test_neighbors_custom_keys_and_copy(mini_adata):
+    copied = bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        use_rep="X_pca",
+        key_added="custom_neighbors",
+        distances_key="custom_distances",
+        connectivities_key="custom_connectivities",
+        copy=True,
+    )
+
+    assert "custom_neighbors" not in mini_adata.uns
+    assert "custom_distances" not in mini_adata.obsp
+    assert "custom_connectivities" not in mini_adata.obsp
+    assert copied is not None
+    assert copied.uns["custom_neighbors"]["distances_key"] == "custom_distances"
+    assert (
+        copied.uns["custom_neighbors"]["connectivities_key"] == "custom_connectivities"
+    )
+    assert copied.obsp["custom_distances"].shape == (copied.n_obs, copied.n_obs)
+    assert copied.obsp["custom_connectivities"].shape == (copied.n_obs, copied.n_obs)
+
+    derived = bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        use_rep="X_pca",
+        key_added="derived",
+        copy=True,
+    )
+    assert derived is not None
+    assert derived.uns["derived"]["distances_key"] == "derived_distances"
+    assert derived.uns["derived"]["connectivities_key"] == "derived_connectivities"
+
+
+def test_neighbors_can_feed_shared_neighbors(mini_adata):
+    mini_adata.uns.clear()
+    mini_adata.obsp.clear()
+    close_distance = np.sqrt(0.05)
+    far_distance = np.sqrt(8.0)
+    farther_distance = np.sqrt(9.25)
+    expected_snn_distances = np.array(
+        [
+            [0.0, close_distance, far_distance, farther_distance],
+            [close_distance, 0.0, 0.0, far_distance],
+            [far_distance, 0.0, 0.0, close_distance],
+            [farther_distance, far_distance, close_distance, 0.0],
+        ]
+    )
+    expected_snn_connectivities = (
+        np.array(
+            [
+                [0.0, 1.0, 1.0, 2.0],
+                [1.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 1.0],
+                [2.0, 1.0, 1.0, 0.0],
+            ]
+        )
+        / 3.0
+    )
+
+    bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        use_rep="X_pca",
+        n_rep_components=2,
+    )
+    bt.sct.tl.shared_neighbors(
+        mini_adata,
+        knn_key="neighbors",
+        snn_key="snn_from_neighbors",
+        prune_snn=0,
+    )
+
+    assert mini_adata.uns["snn_from_neighbors"]["params"]["knn_base"] == (
+        "scdata.uns['neighbors']"
+    )
+    assert np.allclose(
+        mini_adata.obsp["snn_from_neighbors_distances"].toarray(),
+        expected_snn_distances,
+    )
+    assert np.allclose(
+        mini_adata.obsp["snn_from_neighbors_connectivities"].toarray(),
+        expected_snn_connectivities,
+    )
+
+
+def test_neighbors_validates_arguments(mini_adata):
+    with pytest.raises(ValueError):
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=1)
+
+    with pytest.raises(ValueError):
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=mini_adata.n_obs + 1)
+
+    with pytest.raises(KeyError):
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=3, use_rep="missing")
+
+    with pytest.raises(ValueError):
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=3, metric=cast(Any, "bad"))
 
 
 def test_knn_graph_can_use_observation_names(mini_adata):
@@ -49,7 +196,7 @@ def test_knn_graph_rejects_invalid_node_label_mode(mini_adata):
             mini_adata,
             n_neighbors=1,
             use_rep="X_pca",
-            index_or_name="bad",
+            index_or_name=cast(Any, "bad"),
         )
 
 
@@ -135,16 +282,16 @@ def test_extract_paga_graph_validates_threshold(mini_adata):
             edges="missing",
         )
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'threshold'"):
+    with pytest.raises(TypeError):
         bt.sct.tl.extract_paga_graph(
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
             edges="paga_edges",
-            threshold=1,
+            threshold=cast(Any, "bad"),
         )
 
-    with pytest.raises(ValueError, match="invalid argument value for 'threshold'"):
+    with pytest.raises(ValueError):
         bt.sct.tl.extract_paga_graph(
             mini_adata,
             obs="cluster",
@@ -172,7 +319,8 @@ def test_mitochondrial_and_ribosomal_gene_classification(
     obs_adata.obs_names = ["mt-Co1", "Rps1", "Other1", "Other2"]
 
     bt.sct.tl.mitochondrial_genes(obs_adata, axis="obs", key="mt_obs")
-    bt.sct.tl.ribosomal_genes(obs_adata, axis=0, key="rps_obs")
+    with pytest.warns(FutureWarning):
+        bt.sct.tl.ribosomal_genes(obs_adata, axis=0, key="rps_obs")
 
     assert obs_adata.obs["mt_obs"].tolist() == [True, False, False, False]
     assert obs_adata.obs["rps_obs"].tolist() == [False, True, False, False]
@@ -180,7 +328,7 @@ def test_mitochondrial_and_ribosomal_gene_classification(
 
 def test_gene_classification_rejects_invalid_axis(mini_adata):
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.tl.mitochondrial_genes(mini_adata, axis="bad")
+        bt.sct.tl.mitochondrial_genes(mini_adata, axis=cast(Any, "bad"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.tl.ribosomal_genes(mini_adata, axis="bad")
+        bt.sct.tl.ribosomal_genes(mini_adata, axis=cast(Any, "bad"))

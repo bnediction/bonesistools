@@ -2,6 +2,7 @@
 
 import sys
 from types import ModuleType
+from typing import Any, cast
 
 import networkx as nx
 import pytest
@@ -25,6 +26,10 @@ def _rendered_edges(graph):
         (source, target, attrs["label"], attrs["arrowhead"])
         for source, target, attrs in graph.edges
     )
+
+
+def _pydot_get_string(obj, method):
+    return cast(str, getattr(cast(Any, obj), method)()).strip('"')
 
 
 def _single_edge_graph(total=4):
@@ -200,7 +205,7 @@ def test_doc_example_family_and_plain_collapsed_graphs():
     assert not isinstance(family_graph, AggregatedInfluenceGraph)
     assert sorted(family_graph.nodes()) == ["TF", "g1|g2", "out"]
     assert family_graph.nodes["g1|g2"]["members"] == {"g1", "g2"}
-    assert family_graph["TF"]["g1|g2"][0]["frequency"] == 0.75
+    assert cast(Any, family_graph["TF"]["g1|g2"])[0]["frequency"] == 0.75
 
 
 def test_family_collapsed_graph_uses_pipe_separator_by_default():
@@ -261,7 +266,7 @@ def test_doc_example_validate_counts_rejects_invalid_count():
         AggregatedInfluenceGraph(invalid, total=3)
 
 
-def test_validation_rejects_missing_sign_and_non_integer_count():
+def test_validation_accepts_integer_float_count_and_rejects_fractional_count():
     missing_sign = nx.MultiDiGraph()
     missing_sign.add_edge("A", "B", count=1)
 
@@ -270,8 +275,11 @@ def test_validation_rejects_missing_sign_and_non_integer_count():
 
     graph = AggregatedInfluenceGraph(total=2)
 
-    with pytest.raises(TypeError, match="unsupported edge count type"):
-        graph.add_edge("A", "B", sign=1, count=1.5)
+    graph.add_edge("A", "B", sign=1, count=cast(Any, 1.0))
+    assert cast(Any, graph["A"]["B"])[0]["count"] == 1
+
+    with pytest.raises(ValueError, match="expected integer"):
+        graph.add_edge("A", "B", sign=1, count=cast(Any, 1.5))
 
 
 def test_invariant_validation_detects_low_level_graph_mutations():
@@ -446,8 +454,8 @@ def test_copy_and_collapse_preserve_expected_types():
     assert copied.total == 4
     assert isinstance(collapsed, InfluenceGraph)
     assert sorted(collapsed.nodes()) == ["TF", "g1|g2", "out"]
-    assert collapsed["TF"]["g1|g2"][0]["frequency"] == 0.75
-    assert collapsed["g1|g2"]["out"][0]["frequency"] == 0.5
+    assert cast(Any, collapsed["TF"]["g1|g2"])[0]["frequency"] == 0.75
+    assert cast(Any, collapsed["g1|g2"]["out"])[0]["frequency"] == 0.5
 
 
 def test_from_boolean_networks_accepts_varargs_and_ensemble():
@@ -522,7 +530,7 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
     ]
 
     with pytest.raises(ValueError, match="unsupported collapse"):
-        graph.to_graphviz(collapse="bad")
+        graph.to_graphviz(collapse=cast(Any, "bad"))
 
     with pytest.raises(ValueError, match="min_frequency"):
         graph.to_graphviz(min_frequency=2)
@@ -554,13 +562,13 @@ def test_to_pydot_supports_collapse_modes():
     exact = graph.to_pydot(rankdir="LR")
     family = graph.to_pydot(collapse="family")
 
-    assert exact.get_rankdir() == "LR"
+    assert cast(Any, exact).get_rankdir() == "LR"
     assert sorted(
         (
-            edge.get_source().strip('"'),
-            edge.get_destination().strip('"'),
-            edge.get_label().strip('"'),
-            edge.get_arrowhead().strip('"'),
+            _pydot_get_string(edge, "get_source"),
+            _pydot_get_string(edge, "get_destination"),
+            _pydot_get_string(edge, "get_label"),
+            _pydot_get_string(edge, "get_arrowhead"),
         )
         for edge in exact.get_edges()
     ) == [
@@ -571,10 +579,10 @@ def test_to_pydot_supports_collapse_modes():
     ]
     assert sorted(
         (
-            edge.get_source().strip('"'),
-            edge.get_destination().strip('"'),
-            edge.get_label().strip('"'),
-            edge.get_arrowhead().strip('"'),
+            _pydot_get_string(edge, "get_source"),
+            _pydot_get_string(edge, "get_destination"),
+            _pydot_get_string(edge, "get_label"),
+            _pydot_get_string(edge, "get_arrowhead"),
         )
         for edge in family.get_edges()
     ) == [
@@ -623,8 +631,8 @@ def test_show_supports_collapse_modes(monkeypatch):
         calls["display"] = svg
 
     display_module = ModuleType("IPython.display")
-    display_module.SVG = FakeSVG
-    display_module.display = fake_display
+    setattr(display_module, "SVG", FakeSVG)
+    setattr(display_module, "display", fake_display)
     monkeypatch.setitem(sys.modules, "IPython.display", display_module)
     monkeypatch.setattr(AggregatedInfluenceGraph, "to_pydot", fake_to_pydot)
 

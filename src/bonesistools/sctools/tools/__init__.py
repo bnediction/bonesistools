@@ -12,6 +12,7 @@ from typing import List as _List
 
 from ._classification import mitochondrial_genes, ribosomal_genes
 from ._conversion import anndata_to_dataframe
+from ._embedding import embedding, pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
 from ._markers import (
     calculate_logfoldchanges,
@@ -25,6 +26,7 @@ from ._neighbors import (
     Knnbs,
     kneighbors_graph,
     knn_graph,
+    neighbors,
     shared_neighbors,
 )
 from ._regress import regress_out
@@ -49,7 +51,13 @@ __all__ = [
     "Knnbs",
     "knn_graph",
     "kneighbors_graph",
+    "neighbors",
     "shared_neighbors",
+    "embedding",
+    "pca",
+    "spectral",
+    "tsne",
+    "umap",
     "anndata_to_dataframe",
     "extract_paga_graph",
     "get_paga_graph",

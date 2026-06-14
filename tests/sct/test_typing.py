@@ -3,6 +3,7 @@
 import builtins
 import importlib
 import sys
+from importlib import util as importlib_util
 from pathlib import Path
 
 import numpy as np
@@ -22,18 +23,19 @@ def _load_typing_module(
     force_legacy_importlib=False,
     force_typing_literal_fallback=False,
 ):
-    spec = importlib.util.spec_from_file_location(module_name, _TYPING_PATH)
-    module = importlib.util.module_from_spec(spec)
+    spec = importlib_util.spec_from_file_location(module_name, _TYPING_PATH)
+    assert spec is not None
+    module = importlib_util.module_from_spec(spec)
 
     if force_no_mudata and not force_legacy_importlib:
-        find_spec = importlib.util.find_spec
+        find_spec = importlib_util.find_spec
 
         def find_spec_without_mudata(name, *args, **kwargs):
             if name == "mudata":
                 return None
             return find_spec(name, *args, **kwargs)
 
-        monkeypatch.setattr(importlib.util, "find_spec", find_spec_without_mudata)
+        monkeypatch.setattr(importlib_util, "find_spec", find_spec_without_mudata)
 
     if force_legacy_importlib:
         monkeypatch.setattr(importlib, "find_loader", lambda name: None, raising=False)
@@ -61,6 +63,7 @@ def _load_typing_module(
 
     sys.modules[module_name] = module
     try:
+        assert spec.loader is not None
         spec.loader.exec_module(module)
     finally:
         sys.modules.pop(module_name, None)

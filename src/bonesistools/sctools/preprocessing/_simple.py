@@ -7,16 +7,19 @@ from typing import Any, Callable, Union, cast
 import numpy as np
 from anndata import AnnData
 
+from ..._validation import _as_callable, _as_string
 from .._typing import (
+    AnnDataAxisWithBoth,
     anndata_checker,
 )
+from .._validation import _as_anndata_axis
 from ._transfer import merge as merge
 
 
 @anndata_checker
 def sort_anndata(
     adata: AnnData,
-    on: str = "both",
+    on: AnnDataAxisWithBoth = "both",
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
@@ -36,21 +39,19 @@ def sort_anndata(
     Returns
     -------
     AnnData or None
-        Sorted AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with axes reordered.
+        Otherwise, reorders `adata` in place and returns None.
 
-    Raises
-    ------
-    ValueError
-        If `on` is not `"obs"`, `"var"` or `"both"`.
+        Reordering is applied to:
+
+        - observations: if `on="obs"` or `on="both"`;
+        - variables: if `on="var"` or `on="both"`.
+
     """
 
     adata = adata.copy() if copy else adata
 
-    if on not in {"obs", "var", "both"}:
-        raise ValueError(
-            f"invalid argument value for 'on': "
-            f"expected 'obs', 'var' or 'both' but received {on!r}"
-        )
+    on = _as_anndata_axis(on, allow_both=True)
 
     if on in {"obs", "both"}:
         obs_order = np.argsort(adata.obs_names.to_numpy(), kind="stable")
@@ -67,7 +68,7 @@ def sort_anndata(
 def filter_obs(
     adata: AnnData,
     obs: str,
-    function: Callable[[object], object],
+    function: Callable[[Any], Any],
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
@@ -91,32 +92,19 @@ def filter_obs(
     Returns
     -------
     AnnData or None
-        Filtered AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with observations filtered.
+        Otherwise, subsets `adata` in place and returns None.
 
-    Raises
-    ------
-    KeyError
-        If `obs` is not found in `adata.obs`.
-    TypeError
-        If `obs` is not a string or `function` is not callable.
+        Filtering is applied to:
+
+        - observations: rows matching the Boolean mask.
+
     """
 
     adata = adata.copy() if copy else adata
 
-    if isinstance(obs, str):
-        if obs not in adata.obs:
-            raise KeyError(f"key '{obs}' not found in adata.obs")
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'obs': "
-            f"expected {str} but received {type(obs)}"
-        )
-
-    if not callable(function):
-        raise TypeError(
-            f"unsupported argument type for 'function': "
-            f"expected callable object but received {type(function)}"
-        )
+    obs = _as_string(obs, "obs")
+    function = _as_callable(function, "function")
 
     obs_subset = function(adata.obs[obs].values)
     adata._inplace_subset_obs(cast(Any, obs_subset))
@@ -128,7 +116,7 @@ def filter_obs(
 def filter_var(
     adata: AnnData,
     var: str,
-    function: Callable[[object], object],
+    function: Callable[[Any], Any],
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
@@ -152,32 +140,19 @@ def filter_var(
     Returns
     -------
     AnnData or None
-        Filtered AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with variables filtered.
+        Otherwise, subsets `adata` in place and returns None.
 
-    Raises
-    ------
-    KeyError
-        If `var` is not found in `adata.var`.
-    TypeError
-        If `var` is not a string or `function` is not callable.
+        Filtering is applied to:
+
+        - variables: columns matching the Boolean mask.
+
     """
 
     adata = adata.copy() if copy else adata
 
-    if isinstance(var, str):
-        if var not in adata.var:
-            raise KeyError(f"key '{var}' not found in adata.var")
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'var': "
-            f"expected {str} but received {type(var)}"
-        )
-
-    if not callable(function):
-        raise TypeError(
-            f"unsupported argument type for 'function': "
-            f"expected callable object but received {type(function)}"
-        )
+    var = _as_string(var, "var")
+    function = _as_callable(function, "function")
 
     var_subset = function(adata.var[var].values)
     adata._inplace_subset_var(cast(Any, var_subset))

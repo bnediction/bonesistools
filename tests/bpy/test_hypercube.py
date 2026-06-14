@@ -2,6 +2,7 @@
 
 import json
 from types import MappingProxyType
+from typing import Any, cast
 
 import pytest
 
@@ -96,7 +97,7 @@ def test_hypercube_invalid_values():
         bt.bpy.ba.Hypercube({"A": 2})
 
     with pytest.raises(ValueError):
-        bt.bpy.ba.Hypercube({"A": {"nested": 1}})
+        bt.bpy.ba.Hypercube({"A": cast(Any, {"nested": 1})})
 
     hc = bt.bpy.ba.Hypercube({"A": 0})
 
@@ -104,7 +105,7 @@ def test_hypercube_invalid_values():
         hc["B"] = 3
 
     with pytest.raises(TypeError):
-        hc.contains(object())
+        hc.contains(cast(Any, object()))
 
 
 def test_read_hypercube(tmp_path):
@@ -174,8 +175,8 @@ def test_read_hypercubes_from_csv_columns_and_rows(tmp_path):
         ",hc1,hc2\n" "A,0,1\n" "B,,0\n",
     )
 
-    by_columns = bt.bpy.ba.read_hypercubes(file, axis="columns")
-    by_rows = bt.bpy.ba.read_hypercubes(file, axis="rows")
+    by_columns = bt.bpy.ba.read_hypercubes(file, orientation="columns")
+    by_rows = bt.bpy.ba.read_hypercubes(file, orientation="rows")
 
     assert by_columns["hc1"] == {"A": 0, "B": "*"}
     assert by_columns["hc2"] == {"A": 1, "B": 0}
@@ -192,8 +193,9 @@ def test_read_hypercubes_from_tsv_and_rejects_invalid_inputs(tmp_path):
     hypercubes = bt.bpy.ba.read_hypercubes(tsv_file)
     assert hypercubes["hc1"] == {"A": 1}
 
-    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.bpy.ba.read_hypercubes(tsv_file, axis="diagonal")
+    with pytest.warns(FutureWarning):
+        with pytest.raises(ValueError):
+            bt.bpy.ba.read_hypercubes(tsv_file, axis=cast(Any, "diagonal"))
 
     unsupported_file = tmp_path / "hypercubes.txt"
     unsupported_file.write_text("A=1")

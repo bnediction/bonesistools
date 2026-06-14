@@ -17,6 +17,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import networkx as nx
@@ -81,8 +82,6 @@ class Orthologs:
 
     Raises
     ------
-    TypeError
-        If organism names or numeric parameters have unsupported types.
     ValueError
         If organisms are unsupported, `min_evidence` is not positive, or the
         HCOP table is invalid.
@@ -166,10 +165,6 @@ class Orthologs:
             Translated object. The exact type depends on `data` and the selected
             translation method.
 
-        Raises
-        ------
-        TypeError
-            If `data` has an unsupported type.
         """
 
         from ...boolpy.boolean_network._typing import is_boolean_network_like
@@ -342,6 +337,37 @@ class Orthologs:
 
         return translated_interactions
 
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        copy: Literal[True] = True,
+        one_to_many: Optional[Union[int, float]] = None,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        *,
+        copy: Literal[False],
+        one_to_many: Optional[Union[int, float]] = None,
+    ) -> None: ...
+
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        copy: bool = True,
+        one_to_many: Optional[Union[int, float]] = None,
+    ) -> Union[pd.DataFrame, None]: ...
+
     def translate_df(
         self,
         df: pd.DataFrame,
@@ -382,9 +408,6 @@ class Orthologs:
 
         Raises
         ------
-        TypeError
-            If `df`, `columns` or `one_to_many` have unsupported types, or if
-            `copy=False` is combined with `one_to_many`.
         ValueError
             If none of the requested columns are present in `df`.
         """
@@ -456,10 +479,6 @@ class Orthologs:
         networkx.Graph or None
             Translated graph if `copy=True`; otherwise None.
 
-        Raises
-        ------
-        TypeError
-            If `graph` has an unsupported type.
         """
 
         if not isinstance(graph, Graph):
@@ -517,9 +536,6 @@ class Orthologs:
 
         Raises
         ------
-        TypeError
-            If `bn` is not Boolean network-like, or in-place translation is not
-            supported by the input object.
         ValueError
             If `keep_if_missing=False` and a component has no ortholog.
         """
@@ -612,8 +628,6 @@ class Orthologs:
 
         Raises
         ------
-        TypeError
-            If organism names or numeric parameters have unsupported types.
         ValueError
             If organisms are unsupported, `min_evidence` is not positive, or
             the HCOP table is invalid.
@@ -786,8 +800,6 @@ class Orthologs:
 
         Raises
         ------
-        TypeError
-            If organism names or `min_evidence` have unsupported types.
         ValueError
             If an organism is unsupported, `min_evidence` is not positive,
             `version` is invalid, or the downloaded HCOP table is missing
@@ -1134,8 +1146,6 @@ def orthologs(
 
     Raises
     ------
-    TypeError
-        If `output_organism` or `min_evidence` have unsupported types.
     ValueError
         If `output_organism` is unsupported, `min_evidence` is not positive, or
         the HCOP table is invalid.

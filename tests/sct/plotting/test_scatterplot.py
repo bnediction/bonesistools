@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -7,6 +9,7 @@ import pytest
 from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap, to_rgba
 from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _scatterplot
@@ -19,7 +22,7 @@ ADATA = bt.sct.datasets.nestorowa()
 def test_embedding_plot_with_test_representation():
     adata = ADATA.copy()
 
-    adata.obsm["X_test"] = adata.X[:, :2].copy()
+    adata.obsm["X_test"] = np.asarray(cast(Any, adata.X))[:, :2].copy()
     adata.obs["cluster"] = adata.obs["clusters"].astype("category")
 
     fig, ax = bt.sct.pl.embedding(
@@ -80,6 +83,7 @@ def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
 
     assert isinstance(fig, Figure)
     assert ax.name == "3d"
+    ax = cast(Axes3D, ax)
     assert ax.get_title() == "continuous"
     assert ax.get_xlabel() == "x"
     assert ax.get_ylabel() == "y"
@@ -136,11 +140,20 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
         use_rep="X_pca",
     )
 
-    facecolors = [collection.get_facecolor()[0] for collection in ax.collections]
+    facecolors = [
+        np.asarray(collection.get_facecolor()[0], dtype=float)
+        for collection in ax.collections
+    ]
 
     assert len(facecolors) == 2
-    np.testing.assert_allclose(facecolors[0], to_rgba("red", alpha=0.3))
-    np.testing.assert_allclose(facecolors[1], to_rgba("blue", alpha=0.3))
+    np.testing.assert_allclose(
+        facecolors[0],
+        np.asarray(to_rgba("red", alpha=0.3), dtype=float),
+    )
+    np.testing.assert_allclose(
+        facecolors[1],
+        np.asarray(to_rgba("blue", alpha=0.3), dtype=float),
+    )
     plt.close(fig)
 
 
@@ -170,7 +183,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
             mini_adata,
             obs="cluster",
             use_rep="X_pca",
-            title=object(),
+            title=cast(Any, object()),
         )
 
     with pytest.raises(KeyError):

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import pandas as pd
 import pytest
 
@@ -147,7 +149,7 @@ def test_hcop_translate_rejects_invalid_arguments():
     )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'df'"):
-        orthologs.translate_df("not a dataframe")
+        orthologs.translate_df(cast(Any, "not a dataframe"))
 
     with pytest.raises(ValueError, match="output_organism"):
         hcop.orthologs(target_organism="frog")

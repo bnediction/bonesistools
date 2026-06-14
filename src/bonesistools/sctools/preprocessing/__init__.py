@@ -8,10 +8,10 @@ regressing out covariates, merging annotations and transferring data between
 related AnnData objects.
 """
 
-import warnings as _warnings
 from typing import Any as _Any
 from typing import List as _List
 
+from ..._warnings import _warn_deprecated
 from ..tools import regress_out as _regress_out
 from ._duplicates import (
     merge_duplicate_vars,
@@ -61,10 +61,9 @@ def regress_out(*args: _Any, **kwargs: _Any) -> _Any:
     instead.
     """
 
-    _warnings.warn(
-        "`bt.sct.pp.regress_out` is deprecated and will be removed in 2.0.0; use "
-        "`bt.sct.tl.regress_out` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pp.regress_out`",
+        replacement="`bt.sct.tl.regress_out`",
         stacklevel=2,
     )
     return _regress_out(*args, **kwargs)

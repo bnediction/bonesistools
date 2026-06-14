@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Union, overload
 
-from ...databases.ncbi import GeneSynonyms
+from ..._compat import Literal
 from ...databases.ncbi import genesyn as create_gene_synonyms
 from ...databases.ncbi._genesyn import support_legacy_gene_synonyms_args
 from ...databases.ncbi._typing import (
+    GeneSynonymsLike,
     InputIdentifierType,
     OutputIdentifierType,
 )
@@ -17,6 +18,43 @@ from .._typing import (
     anndata_checker,
     anndata_or_mudata_checker,
 )
+from .._validation import _as_anndata_axis
+
+
+@overload
+def convert_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    input_identifier_type: InputIdentifierType = "name",
+    output_identifier_type: OutputIdentifierType = "official_name",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: Literal[False] = False,
+) -> None:
+    ...
+
+
+@overload
+def convert_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    input_identifier_type: InputIdentifierType = "name",
+    output_identifier_type: OutputIdentifierType = "official_name",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: Literal[True] = True,
+) -> ScData:
+    ...
+
+
+@overload
+def convert_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    input_identifier_type: InputIdentifierType = "name",
+    output_identifier_type: OutputIdentifierType = "official_name",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: bool = False,
+) -> Union[ScData, None]:
+    ...
 
 
 @support_legacy_gene_synonyms_args
@@ -26,7 +64,7 @@ def convert_gene_identifiers(
     axis: Axis = "var",
     input_identifier_type: InputIdentifierType = "name",
     output_identifier_type: OutputIdentifierType = "official_name",
-    genesyn: Optional[GeneSynonyms] = None,
+    genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
     """
@@ -42,9 +80,10 @@ def convert_gene_identifiers(
         Unimodal or multimodal annotated data matrix.
         The stored gene identifiers are converted into the requested identifier
         type.
-    axis: {0, 1, "obs", "var"} (default: "var")
-        If 0 or `"obs"`, convert `scdata.obs.index`. If 1 or `"var"`,
-        convert `scdata.var.index`.
+    axis: {"obs", "var"} (default: "var")
+        If `"obs"`, convert `scdata.obs.index`. If `"var"`, convert
+        `scdata.var.index`. Deprecated values 0 and 1 are still accepted as
+        aliases for `"obs"` and `"var"`.
     input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
         (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
@@ -62,18 +101,21 @@ def convert_gene_identifiers(
     Returns
     -------
     AnnData, MuData or None
-        Converted object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `scdata` with gene identifiers
+        converted. Otherwise, updates `scdata` in place and returns None.
 
-    Raises
-    ------
-    ValueError
-        If `axis` is not 0, 1, `"obs"` or `"var"`.
+        Converted identifiers are stored in:
+
+        - `scdata.obs.index`: converted identifiers if `axis="obs"`;
+        - `scdata.var.index`: converted identifiers if `axis="var"`.
+
     """
 
     scdata = scdata.copy() if copy else scdata
     genesyn = create_gene_synonyms() if genesyn is None else genesyn
 
-    if axis in [0, "obs"]:
+    axis = _as_anndata_axis(axis, allow_integer=True)
+    if axis == "obs":
         genesyn(
             scdata.obs,
             axis="index",
@@ -81,7 +123,7 @@ def convert_gene_identifiers(
             output_identifier_type=output_identifier_type,
             copy=False,
         )
-    elif axis in [1, "var"]:
+    elif axis == "var":
         genesyn(
             scdata.var,
             axis="index",
@@ -89,13 +131,37 @@ def convert_gene_identifiers(
             output_identifier_type=output_identifier_type,
             copy=False,
         )
-    else:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
-        )
-
     return scdata if copy else None
+
+
+@overload
+def standardize_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: Literal[False] = False,
+) -> None:
+    ...
+
+
+@overload
+def standardize_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: Literal[True] = True,
+) -> ScData:
+    ...
+
+
+@overload
+def standardize_gene_identifiers(
+    scdata: ScData,
+    axis: Axis = "var",
+    genesyn: Optional[GeneSynonymsLike] = None,
+    copy: bool = False,
+) -> Union[ScData, None]:
+    ...
 
 
 @support_legacy_gene_synonyms_args
@@ -103,7 +169,7 @@ def convert_gene_identifiers(
 def standardize_gene_identifiers(
     scdata: ScData,  # type: ignore
     axis: Axis = "var",
-    genesyn: Optional[GeneSynonyms] = None,
+    genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
     """
@@ -118,9 +184,10 @@ def standardize_gene_identifiers(
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
         The stored gene names are standardized.
-    axis: {0, 1, "obs", "var"} (default: "var")
-        If 0 or `"obs"`, standardize `scdata.obs.index`. If 1 or `"var"`,
-        standardize `scdata.var.index`.
+    axis: {"obs", "var"} (default: "var")
+        If `"obs"`, standardize `scdata.obs.index`. If `"var"`, standardize
+        `scdata.var.index`. Deprecated values 0 and 1 are still accepted as
+        aliases for `"obs"` and `"var"`.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert gene identifiers. If None, create
         a default GeneSynonyms instance.
@@ -130,7 +197,13 @@ def standardize_gene_identifiers(
     Returns
     -------
     AnnData, MuData or None
-        Standardized object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `scdata` with gene identifiers
+        standardized. Otherwise, updates `scdata` in place and returns None.
+
+        Standardized identifiers are stored in:
+
+        - `scdata.obs.index`: standardized identifiers if `axis="obs"`;
+        - `scdata.var.index`: standardized identifiers if `axis="var"`.
     """
 
     return convert_gene_identifiers(

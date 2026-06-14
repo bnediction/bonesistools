@@ -87,7 +87,7 @@ def test_density_with_obs_layer_mapping_ax_outfile_and_errors(mini_adata, tmp_pa
     with pytest.raises(ValueError, match="invalid argument values"):
         bt.sct.pl.density(mini_adata, gene="g1", not_all=True)
 
-    with pytest.raises(KeyError, match="key 'missing' not found in adata.obs"):
+    with pytest.raises(KeyError):
         bt.sct.pl.density(mini_adata, gene="g1", obs="missing")
 
 

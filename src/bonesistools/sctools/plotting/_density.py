@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import (
     Any,
@@ -15,6 +14,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import matplotlib.pyplot as plt
@@ -27,6 +27,7 @@ from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
+from ..._warnings import _warn_deprecated
 from .._typing import anndata_checker
 from ._colors import (
     COLORS,
@@ -53,6 +54,62 @@ def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarra
         counts = cast(Any, counts).toarray()
 
     return np.asarray(counts).squeeze()
+
+
+@overload
+def density(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    not_all: bool = False,
+    clip: bool = False,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    default_parameters: Optional[Callable[[], None]] = None,
+    outfile: None = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]: ...
+
+
+@overload
+def density(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    not_all: bool = False,
+    clip: bool = False,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Path,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def density(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    not_all: bool = False,
+    clip: bool = False,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes]]: ...
 
 
 @anndata_checker
@@ -134,8 +191,6 @@ def density(
     )
 
     if obs:
-        if obs not in adata.obs:
-            raise KeyError(f"key {obs!r} not found in adata.obs")
         counts[obs] = adata.obs[obs]
         if not colors:
             cluster_number = len(adata.obs[obs].astype("category").cat.categories)
@@ -227,12 +282,59 @@ def density(
         return fig, ax
 
 
+@overload
 def cdf(
     adata: AnnData,
     gene: str,
     layer: Optional[str] = None,
     obs: Optional[str] = None,
-    colors=None,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    outfile: None = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]: ...
+
+
+@overload
+def cdf(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Path,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def cdf(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    colors: Optional[Colors] = None,
+    show_legend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes]]: ...
+
+
+def cdf(
+    adata: AnnData,
+    gene: str,
+    layer: Optional[str] = None,
+    obs: Optional[str] = None,
+    colors: Optional[Colors] = None,
     show_legend: bool = True,
     default_parameters: Optional[Callable[[], None]] = None,
     outfile: Optional[Path] = None,
@@ -286,21 +388,29 @@ def cdf(
 
     if obs:
         counts = pd.concat([counts, adata.obs[obs].astype("category")], axis=1)
-        if not colors:
-            colors = [
+        if colors is None:
+            color_values = [
                 gray,
                 *COLORS[1 : len(adata.obs[obs].astype("category").cat.categories) + 1],
             ]
         elif isinstance(colors, Mapping):
-            colors = [
+            color_values = [
                 gray,
                 *[
                     colors[cluster]
                     for cluster in adata.obs[obs].astype("category").cat.categories
                 ],
             ]
-    elif not colors:
-        colors = [blue]
+        elif isinstance(colors, Colormap):
+            color_values = [gray, *colormap_colors(colors)]
+        else:
+            color_values = list(colors)
+    elif colors is None:
+        color_values = [blue]
+    elif isinstance(colors, Colormap):
+        color_values = colormap_colors(colors)
+    else:
+        color_values = list(colors)
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -308,9 +418,9 @@ def cdf(
         fig = figure_from_axes(ax)
 
     x, y = _ecdf(counts["counting"])
-    ax.step(x, y, where="post", color=colors[0], label="all")
+    ax.step(x, y, where="post", color=color_values[0], label="all")
     if obs is not None:
-        for _cluster, _color in zip(counts[obs].cat.categories, colors[1:]):
+        for _cluster, _color in zip(counts[obs].cat.categories, color_values[1:]):
             _counts = counts.loc[counts[obs] == _cluster]["counting"]
             x, y = _ecdf(_counts)
             ax.step(x, y, where="post", color=_color, label=_cluster)
@@ -355,12 +465,7 @@ def kde_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     compatibility.
     """
 
-    warnings.warn(
-        "`kde_plot()` is deprecated and will be removed in 2.0.0; use "
-        "`density()` instead.",
-        FutureWarning,
-        stacklevel=2,
-    )
+    _warn_deprecated("`kde_plot()`", replacement="`density()`", stacklevel=2)
 
     return density(*args, **kwargs)
 
@@ -373,11 +478,6 @@ def ecdf_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     compatibility.
     """
 
-    warnings.warn(
-        "`ecdf_plot()` is deprecated and will be removed in 2.0.0; use "
-        "`cdf()` instead.",
-        FutureWarning,
-        stacklevel=2,
-    )
+    _warn_deprecated("`ecdf_plot()`", replacement="`cdf()`", stacklevel=2)
 
     return cdf(*args, **kwargs)

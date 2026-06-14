@@ -17,6 +17,7 @@ from typing import (
 
 import networkx as nx
 
+from ..._validation import _as_positive_integer, _as_probability
 from ._algorithms import walks_from
 
 
@@ -167,11 +168,7 @@ def interaction_scores_from_walks(
         is invalid.
     """
 
-    if max_depth < 1:
-        raise ValueError(
-            "invalid argument value for 'max_depth': "
-            f"expected a positive integer but received {max_depth!r}"
-        )
+    max_depth = _as_positive_integer(max_depth, "max_depth")
 
     weights = _default_weights(max_depth) if weights is None else weights
     genes = list(graph.nodes if genes is None else genes)
@@ -267,17 +264,12 @@ def infer_signed_interactions(
         [0, 1].
     """
 
-    if minimum_path_number < 1:
-        raise ValueError(
-            "invalid argument value for 'minimum_path_number': "
-            f"expected a positive integer but received {minimum_path_number!r}"
-        )
+    minimum_path_number = _as_positive_integer(
+        minimum_path_number,
+        "minimum_path_number",
+    )
 
-    if not 0 <= threshold <= 1:
-        raise ValueError(
-            "invalid argument value for 'threshold': "
-            f"expected a value in [0, 1] but received {threshold!r}"
-        )
+    threshold = _as_probability(threshold, "threshold")
 
     genes = list(scores if genes is None else genes)
     interactions = []

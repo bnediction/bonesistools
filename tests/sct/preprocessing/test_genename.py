@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import warnings
+from typing import Any, cast
 
 import anndata as ad
 import numpy as np
@@ -37,7 +38,14 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
     assert adata.obs_names.tolist() == ["NF-kappaB", "unknown"]
 
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.pp.convert_gene_identifiers(adata, axis="bad")
+        bt.sct.pp.convert_gene_identifiers(adata, axis=cast(Any, "bad"))
+
+
+def _dense_list(value: object) -> list:
+    matrix = cast(Any, value)
+    if hasattr(matrix, "toarray"):
+        matrix = matrix.toarray()
+    return np.asarray(matrix).tolist()
 
 
 def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
@@ -109,14 +117,15 @@ def test_merge_duplicate_vars_sums_counts_and_var_rows():
     assert not any(
         "Variable names are not unique" in str(warning.message) for warning in records
     )
+    var = cast(pd.DataFrame, merged.var)
     assert set(merged.var_names) == {"g1", "g2"}
-    assert merged.var.loc["g1", "tag"] == "first"
-    assert merged.var.loc["g2", "tag"] == "fallback"
-    assert merged.obs.equals(adata.obs)
+    assert var.loc["g1", "tag"] == "first"
+    assert var.loc["g2", "tag"] == "fallback"
+    assert cast(pd.DataFrame, merged.obs).equals(cast(pd.DataFrame, adata.obs))
     assert adata.var_names.tolist() == ["g1", "g1", "g2", "g2"]
 
     ordered = merged[:, ["g1", "g2"]]
-    assert ordered.X.toarray().tolist() == [[3.0, 7.0], [11.0, 15.0]]
+    assert _dense_list(ordered.X) == [[3.0, 7.0], [11.0, 15.0]]
 
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -144,7 +153,7 @@ def test_merge_duplicate_vars_sums_counts_and_var_rows():
     )
     assert merged_without_column.var_names.tolist() == ["g1"]
     assert "copy_var_names" not in merged_without_column.var
-    assert merged_without_column.X.toarray().tolist() == [[3.0], [7.0]]
+    assert _dense_list(merged_without_column.X) == [[3.0], [7.0]]
 
 
 def test_merge_duplicate_vars_can_build_consensus_var_rows():
@@ -168,11 +177,12 @@ def test_merge_duplicate_vars_can_build_consensus_var_rows():
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, keep="consensus")
 
+    var = cast(pd.DataFrame, merged.var)
     assert merged.var_names.tolist() == ["Aars", "Myc"]
-    assert np.isnan(merged.var.loc["Aars", "symbol"])
-    assert merged.var.loc["Aars", "biotype"] == "protein_coding"
-    assert merged.var.loc["Myc", "symbol"] == "Myc"
-    assert merged.var.loc["Myc", "biotype"] == "protein_coding"
+    assert pd.isna(var.loc["Aars", "symbol"])
+    assert var.loc["Aars", "biotype"] == "protein_coding"
+    assert var.loc["Myc", "symbol"] == "Myc"
+    assert var.loc["Myc", "biotype"] == "protein_coding"
 
 
 def test_merge_duplicate_vars_sums_layers():
@@ -194,9 +204,9 @@ def test_merge_duplicate_vars_sums_layers():
 
     merged = bt.sct.pp.merge_duplicate_vars(adata)
 
-    assert merged.X.tolist() == [[3.0, 3.0], [9.0, 6.0]]
-    assert merged.layers["dense"].tolist() == [[30.0, 30.0], [90.0, 60.0]]
-    assert merged.layers["sparse"].toarray().tolist() == [
+    assert _dense_list(merged.X) == [[3.0, 3.0], [9.0, 6.0]]
+    assert _dense_list(merged.layers["dense"]) == [[30.0, 30.0], [90.0, 60.0]]
+    assert _dense_list(merged.layers["sparse"]) == [
         [300.0, 300.0],
         [900.0, 600.0],
     ]
@@ -213,13 +223,15 @@ def test_merge_duplicate_vars_merges_varm_with_nan_strategy():
             X=np.ones((1, 3)),
             obs=pd.DataFrame(index=["c1"]),
             var=pd.DataFrame(index=["g1", "g1", "g2"]),
-            varm={"scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])},
+        )
+        adata.varm["scores"] = np.array(
+            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
         )
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="nan")
 
     assert np.isnan(merged.varm["scores"][0]).all()
-    assert merged.varm["scores"][1].tolist() == [3.0, 30.0]
+    assert _dense_list(merged.varm["scores"][1]) == [3.0, 30.0]
 
 
 def test_merge_duplicate_vars_merges_varm_with_first_strategy():
@@ -236,21 +248,22 @@ def test_merge_duplicate_vars_merges_varm_with_first_strategy():
                 {"symbol": ["alias", "g1", "g2"]},
                 index=["g1", "g1", "g2"],
             ),
-            varm={
-                "scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]),
-                "df_scores": pd.DataFrame(
-                    {"score": [1.0, 2.0, 3.0]},
-                    index=["g1", "g1", "g2"],
-                ),
-            },
+        )
+        adata.varm["scores"] = np.array(
+            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
+        )
+        adata.varm["df_scores"] = pd.DataFrame(
+            {"score": [1.0, 2.0, 3.0]},
+            index=["g1", "g1", "g2"],
         )
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="first")
 
-    assert merged.varm["scores"].tolist() == [[1.0, 10.0], [3.0, 30.0]]
-    assert isinstance(merged.varm["df_scores"], pd.DataFrame)
-    assert merged.varm["df_scores"].index.tolist() == ["g1", "g2"]
-    assert merged.varm["df_scores"]["score"].tolist() == [1.0, 3.0]
+    assert _dense_list(merged.varm["scores"]) == [[1.0, 10.0], [3.0, 30.0]]
+    df_scores = merged.varm["df_scores"]
+    assert isinstance(df_scores, pd.DataFrame)
+    assert df_scores.index.tolist() == ["g1", "g2"]
+    assert df_scores["score"].tolist() == [1.0, 3.0]
 
 
 def test_merge_duplicate_vars_merges_varm_with_mean_strategy():
@@ -264,12 +277,14 @@ def test_merge_duplicate_vars_merges_varm_with_mean_strategy():
             X=np.ones((1, 3)),
             obs=pd.DataFrame(index=["c1"]),
             var=pd.DataFrame(index=["g1", "g1", "g2"]),
-            varm={"scores": np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])},
+        )
+        adata.varm["scores"] = np.array(
+            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
         )
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="mean")
 
-    assert merged.varm["scores"].tolist() == [[1.5, 15.0], [3.0, 30.0]]
+    assert _dense_list(merged.varm["scores"]) == [[1.5, 15.0], [3.0, 30.0]]
 
 
 def test_merge_duplicate_vars_rejects_varp_by_default():
@@ -283,8 +298,8 @@ def test_merge_duplicate_vars_rejects_varp_by_default():
             X=np.ones((1, 2)),
             obs=pd.DataFrame(index=["c1"]),
             var=pd.DataFrame(index=["g1", "g1"]),
-            varp={"correlation": np.ones((2, 2))},
         )
+        adata.varp["correlation"] = np.ones((2, 2))
 
     with pytest.raises(NotImplementedError, match="does not merge `.varp`"):
         bt.sct.pp.merge_duplicate_vars(adata)
@@ -292,7 +307,7 @@ def test_merge_duplicate_vars_rejects_varp_by_default():
     merged = bt.sct.pp.merge_duplicate_vars(adata, varp="drop")
 
     assert len(merged.varp) == 0
-    assert merged.X.tolist() == [[2.0]]
+    assert _dense_list(merged.X) == [[2.0]]
 
 
 def test_merge_duplicate_vars_can_modify_in_place():
@@ -317,6 +332,7 @@ def test_merge_duplicate_vars_can_modify_in_place():
     )
 
     assert result is None
+    var = cast(pd.DataFrame, adata.var)
     assert adata.var_names.tolist() == ["g1"]
-    assert adata.var.loc["g1", "tag"] == "first"
-    assert adata.X.toarray().tolist() == [[3.0], [7.0]]
+    assert var.loc["g1", "tag"] == "first"
+    assert _dense_list(adata.X) == [[3.0], [7.0]]

@@ -16,9 +16,11 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     Type,
     Union,
     cast,
+    overload,
 )
 
 import networkx as nx
@@ -32,6 +34,14 @@ from scipy.sparse import (
 )
 
 from ..._compat import Literal, get_args
+from ..._validation import (
+    _as_literal,
+    _as_non_negative_integer,
+    _as_non_negative_number,
+    _as_positive_integer,
+    _as_string,
+)
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._dependencies import require_sklearn
 from .._typing import (
     AnnData,
@@ -40,21 +50,274 @@ from .._typing import (
     Shortest_Path_Method,
     anndata_or_mudata_checker,
 )
-from ._maths import barycenters
 from ._utils import choose_representation
+
+IndexOrName = Literal["index", "name"]
+
+
+def _kneighbors_distance_matrix(
+    scdata: ScData,
+    use_rep: Optional[str],
+    n_components: Optional[int],
+    n_neighbors: int,
+    metric: Metric,
+    n_jobs: int,
+) -> csr_matrix:
+    from sklearn import neighbors as sklearn_neighbors
+
+    X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
+    matrix = sklearn_neighbors.kneighbors_graph(
+        X=X,
+        n_neighbors=n_neighbors,
+        mode="distance",
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    return cast(csr_matrix, matrix)
+
+
+def _normalize_knnsc_configuration(
+    use_rep: Optional[str],
+    n_components: Optional[Union[int, float]],
+    n_neighbors: Optional[Union[int, float]],
+    metric: Optional[Metric],
+    metric_kwargs: Optional[Dict[str, Any]],
+) -> Tuple[str, Optional[int], int, Metric, Dict[str, Any]]:
+    if n_components is not None:
+        n_components = _as_positive_integer(n_components, "n_components")
+
+    resolved_use_rep = "X_pca" if use_rep is None else use_rep
+    resolved_use_rep = _as_string(resolved_use_rep, "use_rep")
+
+    if n_neighbors is None:
+        raise TypeError("missing required argument: 'n_neighbors'")
+
+    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
+
+    resolved_metric: Metric = "euclidean" if metric is None else metric
+    resolved_metric = _as_literal(
+        resolved_metric,
+        choices=get_args(Metric),
+        name="metric",
+    )
+
+    if metric_kwargs is None:
+        resolved_metric_kwargs: Dict[str, Any] = {}
+    elif isinstance(metric_kwargs, dict):
+        resolved_metric_kwargs = dict(metric_kwargs)
+    else:
+        raise TypeError(
+            f"unsupported argument type for 'metric_kwargs': "
+            f"expected {dict} but received {type(metric_kwargs)}"
+        )
+
+    return (
+        resolved_use_rep,
+        n_components,
+        n_neighbors,
+        resolved_metric,
+        resolved_metric_kwargs,
+    )
+
+
+@overload
+def neighbors(
+    scdata: ScData,
+    n_neighbors: int = 15,
+    use_rep: Optional[str] = "X_pca",
+    n_rep_components: Optional[int] = None,
+    metric: Metric = "euclidean",
+    key_added: str = "neighbors",
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    n_jobs: int = 1,
+    copy: Literal[False] = False,
+) -> None: ...
+
+
+@overload
+def neighbors(
+    scdata: ScData,
+    n_neighbors: int = 15,
+    use_rep: Optional[str] = "X_pca",
+    n_rep_components: Optional[int] = None,
+    metric: Metric = "euclidean",
+    key_added: str = "neighbors",
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    n_jobs: int = 1,
+    *,
+    copy: Literal[True],
+) -> ScData: ...
+
+
+@overload
+def neighbors(
+    scdata: ScData,
+    n_neighbors: int = 15,
+    use_rep: Optional[str] = "X_pca",
+    n_rep_components: Optional[int] = None,
+    metric: Metric = "euclidean",
+    key_added: str = "neighbors",
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    n_jobs: int = 1,
+    copy: bool = False,
+) -> Optional[ScData]: ...
+
+
+@require_sklearn
+@anndata_or_mudata_checker
+def neighbors(
+    scdata: ScData,  # type: ignore
+    n_neighbors: int = 15,
+    use_rep: Optional[str] = "X_pca",
+    n_rep_components: Optional[int] = None,
+    metric: Metric = "euclidean",
+    key_added: str = "neighbors",
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    n_jobs: int = 1,
+    copy: bool = False,
+) -> Optional[ScData]:  # type: ignore
+    """
+    Compute a k-nearest-neighbor graph of observations.
+
+    Parameters
+    ----------
+    scdata: AnnData or MuData
+        Unimodal or multimodal annotated data matrix.
+    n_neighbors: int (default: 15)
+        Number of nearest neighbors.
+    use_rep: str, optional (default: 'X_pca')
+        Representation key in `scdata.obsm`.
+    n_rep_components: int, optional
+        Number of representation dimensions to use. If None, use all
+        dimensions in `use_rep`.
+    metric: Metric (default: 'euclidean')
+        Metric used when calculating pairwise distances between observations.
+    key_added: str (default: 'neighbors')
+        Key used to store neighborhood graph metadata in `scdata.uns`.
+    distances_key: str, optional
+        Key used to store distances in `scdata.obsp`. Defaults to
+        `"distances"` when `key_added="neighbors"` and
+        `f"{key_added}_distances"` otherwise.
+    connectivities_key: str, optional
+        Key used to store connectivities in `scdata.obsp`. Defaults to
+        `"connectivities"` when `key_added="neighbors"` and
+        `f"{key_added}_connectivities"` otherwise.
+    n_jobs: int (default: 1)
+        Number of allocated processors.
+    copy: bool (default: False)
+        Return a copy instead of modifying `scdata`.
+
+    Examples
+    --------
+    >>> bt.sct.tl.neighbors(adata, use_rep="X_pca")
+
+    Returns
+    -------
+    ScData or None
+        If `copy=True`, returns a copy of `scdata` with neighborhood graph
+        results added. Otherwise, updates `scdata` in place and returns None.
+
+        Neighborhood graph results are stored in:
+
+        - `scdata.uns[key_added]`: neighborhood graph metadata;
+        - `scdata.obsp[distances_key]`: pairwise neighbor distances;
+        - `scdata.obsp[connectivities_key]`: neighborhood graph connectivities.
+    """
+
+    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
+    if n_neighbors < 2:
+        raise ValueError(
+            f"invalid argument value for 'n_neighbors': "
+            f"expected value >= 2 but received {n_neighbors!r}"
+        )
+    if n_neighbors > scdata.n_obs:
+        raise ValueError(
+            f"invalid argument value for 'n_neighbors': "
+            f"expected value <= number of observations "
+            f"({scdata.n_obs}) but received {n_neighbors!r}"
+        )
+
+    if n_rep_components is not None:
+        n_rep_components = _as_positive_integer(n_rep_components, "n_rep_components")
+
+    use_rep = "X_pca" if use_rep is None else _as_string(use_rep, "use_rep")
+    metric = _as_literal(
+        metric,
+        choices=get_args(Metric),
+        name="metric",
+    )
+    key_added = _as_string(key_added, "key_added")
+    if not isinstance(n_jobs, int):
+        raise TypeError(
+            f"unsupported argument type for 'n_jobs': "
+            f"expected {int} but received {type(n_jobs)}"
+        )
+
+    if distances_key is None:
+        distances_key = (
+            "distances" if key_added == "neighbors" else f"{key_added}_distances"
+        )
+    else:
+        distances_key = _as_string(distances_key, "distances_key")
+
+    if connectivities_key is None:
+        connectivities_key = (
+            "connectivities"
+            if key_added == "neighbors"
+            else f"{key_added}_connectivities"
+        )
+    else:
+        connectivities_key = _as_string(connectivities_key, "connectivities_key")
+
+    scdata = scdata.copy() if copy else scdata
+
+    distances = _kneighbors_distance_matrix(
+        scdata=scdata,
+        use_rep=use_rep,
+        n_components=n_rep_components,
+        n_neighbors=n_neighbors - 1,
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    connectivities = distances.copy()
+    connectivities.data = np.ones_like(connectivities.data)
+
+    scdata.obsp[distances_key] = distances
+    scdata.obsp[connectivities_key] = connectivities
+    scdata.uns[key_added] = {
+        "distances_key": distances_key,
+        "connectivities_key": connectivities_key,
+        "params": {
+            "n_neighbors": n_neighbors,
+            "n_pcs": (
+                n_rep_components
+                if n_rep_components is not None
+                else int(scdata.obsm[use_rep].shape[1])
+            ),
+            "use_rep": use_rep,
+            "metric": metric,
+            "method": "bonesistools",
+        },
+    }
+
+    return scdata if copy else None
 
 
 @require_sklearn
 @anndata_or_mudata_checker
 def knn_graph(
     scdata: ScData,  # type: ignore
-    n_neighbors: int,
     use_rep: Optional[str] = None,
     n_components: Optional[int] = None,
+    n_neighbors: Optional[int] = None,
     metric: Metric = "euclidean",
     create_using: Type[Any] = DiGraph,
     edge_attr: str = "distance",
-    index_or_name: Literal["index", "name"] = "index",
+    index_or_name: IndexOrName = "index",
     n_jobs: int = 1,
     **metric_kwargs: Any,
 ) -> Graph[Any]:
@@ -65,12 +328,12 @@ def knn_graph(
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    n_neighbors: int
-        Number of nearest neighbors.
     use_rep: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
+    n_neighbors: int
+        Number of nearest neighbors.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     create_using: Type (default: nx.DiGraph)
@@ -95,17 +358,30 @@ def knn_graph(
         If `index_or_name` is not `"index"` or `"name"`.
     """
 
-    from sklearn import neighbors
+    if n_neighbors is None:
+        raise TypeError("missing required argument: 'n_neighbors'")
 
-    X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
-    weighted_adjacency_matrix = neighbors.kneighbors_graph(
-        X=X,
-        n_neighbors=n_neighbors,
-        mode="distance",
-        metric=metric,
-        n_jobs=n_jobs,
-        **metric_kwargs,
-    )
+    if metric_kwargs:
+        from sklearn import neighbors as sklearn_neighbors
+
+        X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
+        weighted_adjacency_matrix = sklearn_neighbors.kneighbors_graph(
+            X=X,
+            n_neighbors=n_neighbors,
+            mode="distance",
+            metric=metric,
+            n_jobs=n_jobs,
+            **metric_kwargs,
+        )
+    else:
+        weighted_adjacency_matrix = _kneighbors_distance_matrix(
+            scdata=scdata,
+            use_rep=use_rep,
+            n_components=n_components,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            n_jobs=n_jobs,
+        )
     try:
         graph = nx.from_scipy_sparse_array(
             weighted_adjacency_matrix,
@@ -120,17 +396,18 @@ def knn_graph(
             edge_attribute=edge_attr,
         )
 
+    index_or_name = _as_literal(
+        index_or_name,
+        choices=("index", "name"),
+        name="index_or_name",
+    )
+
     if index_or_name == "index":
         return graph
-    elif index_or_name == "name":
+    if index_or_name == "name":
         return nx.relabel_nodes(
             graph,
             dict(zip(list(range(len(scdata.obs.index))), scdata.obs.index)),
-        )
-    else:
-        raise ValueError(
-            f"invalid argument value for 'index_or_name': "
-            f"expected 'index' or 'name' but received {index_or_name!r}"
         )
 
 
@@ -139,11 +416,9 @@ def kneighbors_graph(*args: Any, **kwargs: Any) -> Graph[Any]:
     Deprecated alias for `knn_graph`.
     """
 
-    warnings.warn(
-        "`bt.sct.tl.kneighbors_graph` is deprecated and will be removed in "
-        "2.0.0; use "
-        "`bt.sct.tl.knn_graph` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.tl.kneighbors_graph`",
+        replacement="`bt.sct.tl.knn_graph`",
         stacklevel=2,
     )
     return knn_graph(*args, **kwargs)
@@ -158,102 +433,68 @@ class KNNSC:
     distances to other clusters' barycenters or by minimizing distances to
     their own cluster barycenter.
 
-    Parameters
-    ----------
-    n_neighbors: int or float
-        Integer-valued number of nearest neighbors.
-    use_rep: str (default: "X_pca")
-        Representation key in `scdata.obsm`.
-    n_components: int or float, optional
-        Integer-valued number of dimensions to use. If None, use all dimensions.
-    metric: Metric (default: 'euclidean')
-        Metric used when calculating pairwise distances between observations.
-    **metric_kwargs: Any
-        Additional keyword arguments passed to the distance function.
-
-    Raises
-    ------
-    TypeError
-        If `n_neighbors`, `n_components` or `use_rep` has an unsupported type.
-    ValueError
-        If `n_neighbors`, `n_components` or `metric` has an unsupported value.
+    Configure and run the algorithm with `fit()`.
     """
 
     if TYPE_CHECKING:
-        knn_graph: Graph[Any]
-        cluster_key: str
-        obs: pd.Series
-        shortest_path_lengths_df: pd.DataFrame
-        min_cluster_size: int
-        cluster_counts: pd.Series
+        _knn_graph: Graph[Any]
+        _cluster_key: str
+        _obs: pd.Series
+        _shortest_path_lengths_df: pd.DataFrame
+        _min_cluster_size: int
+        _cluster_counts: pd.Series
+        _n_neighbors: int
+        _use_rep: str
+        _n_components: Optional[int]
+        _metric: Metric
+        _method: Shortest_Path_Method
 
     def __init__(
         self,
-        n_neighbors: Union[int, float],
-        use_rep: str = "X_pca",
+        use_rep: Optional[str] = None,
         n_components: Optional[Union[int, float]] = None,
-        metric: Metric = "euclidean",
+        n_neighbors: Optional[Union[int, float]] = None,
+        metric: Optional[Metric] = None,
         **metric_kwargs: Any,
     ):
+        self._deprecated_init_params: Dict[str, Any] = {}
+        self._metric_kwargs: Dict[str, Any] = {}
 
-        if not isinstance(n_neighbors, (int, float)):
-            raise TypeError(
-                f"unsupported argument type for 'n_neighbors': "
-                f"expected {int} but received {type(n_neighbors)}"
+        if (
+            n_neighbors is not None
+            or use_rep is not None
+            or n_components is not None
+            or metric is not None
+            or metric_kwargs
+        ):
+            warnings.warn(
+                "Passing KNNSC configuration parameters to `__init__` is "
+                "deprecated and will be removed in 2.0.0; pass them to "
+                "`KNNSC.fit(...)` instead.",
+                FutureWarning,
+                stacklevel=2,
             )
-
-        if n_neighbors <= 0:
-            raise ValueError(
-                f"invalid argument value for 'n_neighbors': "
-                f"expected non-null positive value but received {n_neighbors!r}"
+            (
+                resolved_use_rep,
+                resolved_n_components,
+                resolved_n_neighbors,
+                resolved_metric,
+                resolved_metric_kwargs,
+            ) = _normalize_knnsc_configuration(
+                use_rep=use_rep,
+                n_components=n_components,
+                n_neighbors=n_neighbors,
+                metric=metric,
+                metric_kwargs=metric_kwargs,
             )
-
-        if isinstance(n_neighbors, float) and not n_neighbors.is_integer():
-            raise ValueError(
-                f"invalid argument value for 'n_neighbors': "
-                f"expected integer but received {n_neighbors!r}"
-            )
-
-        if n_components is not None:
-            if not isinstance(n_components, (int, float)):
-                raise TypeError(
-                    f"unsupported argument type for 'n_components': "
-                    f"expected {int} but received {type(n_components)}"
-                )
-
-            if n_components <= 0:
-                raise ValueError(
-                    f"invalid argument value for 'n_components': "
-                    f"expected non-null positive value but received {n_components!r}"
-                )
-
-            if isinstance(n_components, float) and not n_components.is_integer():
-                raise ValueError(
-                    f"invalid argument value for 'n_components': "
-                    f"expected integer but received {n_components!r}"
-                )
-
-        if isinstance(use_rep, str):
-            self.use_rep = use_rep
-        else:
-            raise TypeError(
-                f"unsupported argument type for 'use_rep': "
-                f"expected {str} but received {type(use_rep)}"
-            )
-
-        if metric in get_args(Metric):
-            self.metric: Metric = metric
-        else:
-            raise ValueError(
-                f"invalid argument value for 'metric': "
-                f"expected one of {get_args(Metric)} but received {metric!r}"
-            )
-
-        self.n_neighbors: int = int(n_neighbors)
-        self.n_components: Optional[int] = (
-            None if n_components is None else int(n_components)
-        )
-        self.metric_kwargs: Dict[str, Any] = metric_kwargs
+            self._deprecated_init_params = {
+                "use_rep": resolved_use_rep,
+                "n_components": resolved_n_components,
+                "n_neighbors": resolved_n_neighbors,
+                "metric": resolved_metric,
+                "metric_kwargs": resolved_metric_kwargs,
+            }
+            self._metric_kwargs = resolved_metric_kwargs
 
     def __repr__(self) -> str:
         """
@@ -265,14 +506,152 @@ class KNNSC:
             String representation of the KNNSC configuration.
         """
 
+        if hasattr(self, "_cluster_key"):
+            fit_params = self.params_
+            return (
+                f"{self.__class__.__name__}("
+                f"cluster_key={fit_params['cluster_key']}, "
+                f"use_rep={fit_params['use_rep']}, "
+                f"n_components={fit_params['n_components']}, "
+                f"n_neighbors={fit_params['n_neighbors']}, "
+                f"metric={fit_params['metric']}, "
+                f"metric_kwargs={fit_params['metric_kwargs']}, "
+                f"min_cluster_size={fit_params['min_cluster_size']}, "
+                f"method={fit_params['method']})"
+            )
+
+        if not self._deprecated_init_params:
+            return f"{self.__class__.__name__}()"
+
         return (
             f"{self.__class__.__name__}("
-            f"n_neighbors={self.n_neighbors}, "
-            f"use_rep={self.use_rep}, "
-            f"n_components={self.n_components}, "
-            f"metric={self.metric}, "
-            f"metric_kwargs={self.metric_kwargs})"
+            f"use_rep={self._deprecated_init_params['use_rep']}, "
+            f"n_components={self._deprecated_init_params['n_components']}, "
+            f"n_neighbors={self._deprecated_init_params['n_neighbors']}, "
+            f"metric={self._deprecated_init_params['metric']}, "
+            f"metric_kwargs={self._deprecated_init_params['metric_kwargs']})"
         )
+
+    @property
+    def knn_graph(self) -> Graph[Any]:
+        """
+        Fitted k-nearest-neighbor graph.
+        """
+
+        return cast(Graph, self._require_fitted_attribute("_knn_graph"))
+
+    @property
+    def cluster_key(self) -> str:
+        """
+        Observation column used as cluster labels during fitting.
+        """
+
+        return cast(str, self._require_fitted_attribute("_cluster_key"))
+
+    @property
+    def min_cluster_size(self) -> int:
+        """
+        Minimum cluster size used during fitting.
+        """
+
+        return cast(int, self._require_fitted_attribute("_min_cluster_size"))
+
+    @property
+    def cluster_counts(self) -> pd.Series:
+        """
+        Cluster sizes observed during fitting.
+        """
+
+        return cast(pd.Series, self._require_fitted_attribute("_cluster_counts"))
+
+    @property
+    def obs(self) -> pd.Series:
+        """
+        Fitted cluster labels after removing ineligible categories.
+        """
+
+        return cast(pd.Series, self._require_fitted_attribute("_obs"))
+
+    @property
+    def shortest_path_lengths_df(self) -> pd.DataFrame:
+        """
+        Fitted shortest-path lengths between cells and barycenters.
+        """
+
+        return cast(
+            pd.DataFrame,
+            self._require_fitted_attribute("_shortest_path_lengths_df"),
+        )
+
+    @property
+    def n_neighbors(self) -> int:
+        """
+        Number of nearest neighbors used during fitting.
+        """
+
+        return cast(int, self._require_fitted_attribute("_n_neighbors"))
+
+    @property
+    def use_rep(self) -> str:
+        """
+        Representation key used during fitting.
+        """
+
+        return cast(str, self._require_fitted_attribute("_use_rep"))
+
+    @property
+    def n_components(self) -> Optional[int]:
+        """
+        Number of representation dimensions used during fitting.
+        """
+
+        return cast(Optional[int], self._require_fitted_attribute("_n_components"))
+
+    @property
+    def metric(self) -> Metric:
+        """
+        Distance metric used during fitting.
+        """
+
+        return cast(Metric, self._require_fitted_attribute("_metric"))
+
+    @property
+    def metric_kwargs(self) -> Dict[str, Any]:
+        """
+        Additional distance metric parameters used during fitting.
+        """
+
+        if hasattr(self, "_metric_kwargs"):
+            return self._metric_kwargs
+        return cast(
+            Dict[str, Any],
+            self._deprecated_init_params.get("metric_kwargs", {}),
+        )
+
+    @property
+    def method(self) -> Shortest_Path_Method:
+        """
+        Shortest-path algorithm used during fitting.
+        """
+
+        return cast(Shortest_Path_Method, self._require_fitted_attribute("_method"))
+
+    @property
+    def params_(self) -> Dict[str, Any]:
+        """
+        Fitted KNNSC configuration.
+        """
+
+        return {
+            "cluster_key": self.cluster_key,
+            "use_rep": self.use_rep,
+            "n_components": self.n_components,
+            "n_neighbors": self.n_neighbors,
+            "metric": self.metric,
+            "metric_kwargs": self.metric_kwargs,
+            "min_cluster_size": self.min_cluster_size,
+            "method": self.method,
+        }
 
     @property
     def metric_kwds(self) -> Dict[str, Any]:
@@ -280,23 +659,15 @@ class KNNSC:
         Deprecated alias for `metric_kwargs`.
         """
 
-        warnings.warn(
-            "`metric_kwds` is deprecated and will be removed in 2.0.0; use "
-            "`metric_kwargs` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
+        _warn_deprecated_argument("metric_kwds", "metric_kwargs", stacklevel=2)
         return self.metric_kwargs
 
     @metric_kwds.setter
     def metric_kwds(self, value: Dict[str, Any]) -> None:
-        warnings.warn(
-            "`metric_kwds` is deprecated and will be removed in 2.0.0; use "
-            "`metric_kwargs` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        self.metric_kwargs = value
+        _warn_deprecated_argument("metric_kwds", "metric_kwargs", stacklevel=2)
+        self._metric_kwargs = value
+        if self._deprecated_init_params:
+            self._deprecated_init_params["metric_kwargs"] = value
 
     @property
     def kneighbors_graph(self) -> Graph[Any]:
@@ -304,40 +675,45 @@ class KNNSC:
         Deprecated alias for `knn_graph`.
         """
 
-        warnings.warn(
-            "`kneighbors_graph` is deprecated and will be removed in 2.0.0; use "
-            "`knn_graph` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`kneighbors_graph`",
+            replacement="`knn_graph`",
             stacklevel=2,
         )
         return self.knn_graph
 
     @kneighbors_graph.setter
     def kneighbors_graph(self, value: Graph[Any]) -> None:
-        warnings.warn(
-            "`kneighbors_graph` is deprecated and will be removed in 2.0.0; use "
-            "`knn_graph` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`kneighbors_graph`",
+            replacement="`knn_graph`",
             stacklevel=2,
         )
-        self.knn_graph = value
+        self._knn_graph = value
 
     @require_sklearn
     def fit(
         self,
         adata: AnnData,
         cluster_key: Optional[str] = None,
+        use_rep: Optional[str] = None,
+        n_components: Optional[Union[int, float]] = None,
+        n_neighbors: Optional[Union[int, float]] = None,
+        metric: Optional[Metric] = None,
+        metric_kwargs: Optional[Dict[str, Any]] = None,
         n_jobs: int = 1,
+        method: Shortest_Path_Method = "dijkstra",
         *,
         obs: Optional[str] = None,
         min_cluster_size: Union[int, float] = 1,
     ) -> None:
         """
-        Compute the k-nearest neighbors-based graph using an embedding space.
+        Fit the KNNSC estimator using an embedding space.
 
-        The estimator parameters stored in the object are used for graph
-        construction. All cells are kept in the k-nearest-neighbor graph, but
-        only clusters containing at least `min_cluster_size` cells are used as
+        The method builds the k-nearest-neighbor graph, adds cluster
+        barycenters, connects graph components when necessary, then computes
+        `shortest_path_lengths_df`. All cells are kept in the graph, but only
+        clusters containing at least `min_cluster_size` cells are used as
         barycenter sources for shortest-path computations.
 
         Parameters
@@ -346,30 +722,38 @@ class KNNSC:
             Unimodal annotated data matrix.
         cluster_key: str
             Observation column in `adata.obs` defining clusters.
+        use_rep: str, optional (default: "X_pca")
+            Representation key in `adata.obsm`.
+        n_components: int or float, optional
+            Integer-valued number of dimensions to use. If None, use all dimensions.
+        n_neighbors: int or float
+            Integer-valued number of nearest neighbors.
+        metric: Metric (default: 'euclidean')
+            Metric used when calculating pairwise distances between observations.
+        metric_kwargs: dict, optional
+            Additional keyword arguments passed to the distance function.
         n_jobs: int (default: 1)
             Number of allocated processors.
+        method: 'dijkstra' | 'bellman-ford' (default: 'dijkstra')
+            Algorithm used to compute the shortest path lengths.
         obs: str, optional
             Deprecated alias for `cluster_key`.
         min_cluster_size: int (default: 1)
-            Minimum number of cells required for a cluster to be used as a
-            barycenter source. Smaller clusters remain in the graph but are
-            ignored as candidate subclusters.
+            Minimum number of cells required for a non-empty cluster to be used
+            as a barycenter source. Smaller clusters remain in the graph but
+            are ignored as candidate subclusters. A value of 0 disables
+            size-based filtering but still ignores empty categories.
 
         Notes
         -----
         The method updates the KNNSC object in place and adds the
-        `shortest_path_lengths_df` attribute.
+        `knn_graph` and `shortest_path_lengths_df` attributes.
         """
 
         from sklearn.metrics import pairwise_distances
 
         if obs is not None:
-            warnings.warn(
-                "`obs` is deprecated and will be removed in 2.0.0; use "
-                "`cluster_key` instead.",
-                FutureWarning,
-                stacklevel=2,
-            )
+            _warn_deprecated_argument("obs", "cluster_key", stacklevel=2)
             if cluster_key is not None:
                 raise TypeError(
                     "received both 'cluster_key' and deprecated 'obs'; "
@@ -380,56 +764,78 @@ class KNNSC:
         if cluster_key is None:
             raise TypeError("missing required argument: 'cluster_key'")
 
-        if not isinstance(min_cluster_size, (int, float)):
-            raise TypeError(
-                f"unsupported argument type for 'min_cluster_size': "
-                f"expected {int} but received {type(min_cluster_size)}"
+        init_params = self._deprecated_init_params
+        if n_neighbors is None and "n_neighbors" in init_params:
+            n_neighbors = cast(Union[int, float], init_params["n_neighbors"])
+        if use_rep is None:
+            use_rep = cast(Optional[str], init_params.get("use_rep"))
+        if n_components is None:
+            n_components = cast(
+                Optional[Union[int, float]], init_params.get("n_components")
+            )
+        if metric is None:
+            metric = cast(Optional[Metric], init_params.get("metric"))
+        if metric_kwargs is None:
+            metric_kwargs = cast(
+                Optional[Dict[str, Any]], init_params.get("metric_kwargs")
             )
 
-        if min_cluster_size <= 0:
-            raise ValueError(
-                f"invalid argument value for 'min_cluster_size': "
-                f"expected non-null positive value but received {min_cluster_size!r}"
-            )
+        (
+            resolved_use_rep,
+            resolved_n_components,
+            resolved_n_neighbors,
+            resolved_metric,
+            resolved_metric_kwargs,
+        ) = _normalize_knnsc_configuration(
+            use_rep=use_rep,
+            n_components=n_components,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            metric_kwargs=metric_kwargs,
+        )
 
-        if isinstance(min_cluster_size, float) and not min_cluster_size.is_integer():
-            raise ValueError(
-                f"invalid argument value for 'min_cluster_size': "
-                f"expected integer but received {min_cluster_size!r}"
-            )
-
-        min_cluster_size = int(min_cluster_size)
+        min_cluster_size = _as_non_negative_integer(
+            min_cluster_size,
+            "min_cluster_size",
+        )
 
         raw_obs = cast(pd.Series, adata.obs[cluster_key])
         if not hasattr(raw_obs, "cat"):
-            raise AttributeError(f"adata.obs[{cluster_key!r}] object has no attribute 'cat'")
+            raise AttributeError(
+                f"adata.obs[{cluster_key!r}] object has no attribute 'cat'"
+            )
 
-        cluster_counts = raw_obs.value_counts()
+        cluster_counts = cast(
+            pd.Series,
+            raw_obs.value_counts().reindex(raw_obs.cat.categories).fillna(0),
+        )
         ineligible_categories = [
             category
             for category in raw_obs.cat.categories
-            if int(cluster_counts.get(category, 0)) < min_cluster_size
+            if int(cluster_counts.loc[category]) == 0
+            or int(cluster_counts.loc[category]) < min_cluster_size
         ]
         candidate_obs = raw_obs.cat.remove_categories(ineligible_categories)
         if len(candidate_obs.cat.categories) == 0:
             raise ValueError(
-                "no clusters contain at least "
+                "no non-empty clusters contain at least "
                 f"min_cluster_size={min_cluster_size} cells"
             )
 
         representation = choose_representation(
-            adata, use_rep=self.use_rep, n_components=self.n_components
+            adata, use_rep=resolved_use_rep, n_components=resolved_n_components
         )
 
         _knn_graph = knn_graph(
             adata,
-            n_neighbors=self.n_neighbors,
-            n_components=self.n_components,
-            use_rep=self.use_rep,
-            metric=self.metric,
+            use_rep=resolved_use_rep,
+            n_components=resolved_n_components,
+            n_neighbors=resolved_n_neighbors,
+            metric=resolved_metric,
             create_using=nx.Graph,
             index_or_name="name",
             n_jobs=n_jobs,
+            **resolved_metric_kwargs,
         )
 
         _barycenters = {
@@ -441,12 +847,13 @@ class KNNSC:
             distances = pairwise_distances(
                 representation,
                 barycenter_coordinate,
-                metric=self.metric,
+                metric=resolved_metric,
                 n_jobs=n_jobs,
+                **resolved_metric_kwargs,
             ).reshape(1, -1)
             _knn_graph.add_node(key)
-            knn_indices = np.argpartition(distances, kth=self.n_neighbors, axis=1)[
-                :, : self.n_neighbors
+            knn_indices = np.argpartition(distances, kth=resolved_n_neighbors, axis=1)[
+                :, :resolved_n_neighbors
             ].reshape(-1)
             distances = list(distances[0, knn_indices].reshape(-1))
             for obs_name, distance in zip(adata.obs.index.take(knn_indices), distances):
@@ -463,48 +870,43 @@ class KNNSC:
                 adata_any = cast(Any, adata)
                 x_matrix = choose_representation(
                     adata_any[paired_scc[0], :],
-                    use_rep=self.use_rep,
+                    use_rep=resolved_use_rep,
+                    n_components=resolved_n_components,
                 )
                 y_matrix = choose_representation(
                     adata_any[paired_scc[1], :],
-                    use_rep=self.use_rep,
+                    use_rep=resolved_use_rep,
+                    n_components=resolved_n_components,
                 )
                 dists = pairwise_distances(
                     x_matrix,
                     y_matrix,
-                    metric=self.metric,
+                    metric=resolved_metric,
                     n_jobs=n_jobs,
+                    **resolved_metric_kwargs,
                 )
                 i, j = np.unravel_index(np.argmin(dists), shape=dists.shape, order="C")
                 _knn_graph.add_edge(
                     paired_scc[0][i], paired_scc[1][j], distance=dists[i, j]
                 )
 
-        self.knn_graph = _knn_graph
-        self.cluster_key = cluster_key
-        self.min_cluster_size = min_cluster_size
-        self.cluster_counts = cluster_counts
-        self.obs = cast(pd.Series, candidate_obs)
+        self._knn_graph = _knn_graph
+        self._cluster_key = cluster_key
+        self._min_cluster_size = min_cluster_size
+        self._cluster_counts = cluster_counts
+        self._obs = cast(pd.Series, candidate_obs)
+        self._use_rep = resolved_use_rep
+        self._n_components = resolved_n_components
+        self._n_neighbors = resolved_n_neighbors
+        self._metric = resolved_metric
+        self._metric_kwargs = resolved_metric_kwargs
+        self._method = method
+        self._compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
         return None
 
-    def compute_shortest_path_lengths(
+    def _compute_shortest_path_lengths(
         self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
     ) -> None:
-        """
-        Compute pairwise shortest path lengths between cells and barycenters.
-
-        Parameters
-        ----------
-        method: 'dijkstra' | 'bellman-ford' (default: 'dijkstra')
-            Algorithm used to compute the shortest path lengths.
-        n_jobs: int (default: 1)
-            Number of allocated processors.
-
-        Notes
-        -----
-        The method updates the KNNSC object in place and adds the
-        `shortest_path_lengths_df` attribute.
-        """
 
         def shortest_path_lengths_from(
             source: str,
@@ -554,10 +956,29 @@ class KNNSC:
         for k, v in shortest_path_lengths_ls:
             shortest_path_lengths_dict[k] = v
 
-        self.shortest_path_lengths_df = pd.DataFrame.from_dict(
+        self._shortest_path_lengths_df = pd.DataFrame.from_dict(
             data=shortest_path_lengths_dict, orient="columns"
         )
         return None
+
+    def compute_shortest_path_lengths(
+        self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
+    ) -> None:
+        """
+        Deprecated. Recompute pairwise shortest path lengths.
+
+        Use `KNNSC.fit(...)` instead. This method is kept temporarily for
+        compatibility and updates `shortest_path_lengths_df` in place.
+        """
+
+        warnings.warn(
+            "`compute_shortest_path_lengths()` is deprecated and no longer "
+            "required after `fit()`. Calling it explicitly recomputes "
+            "`shortest_path_lengths_df`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self._compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
 
     def shortest_path_lengths(
         self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
@@ -566,19 +987,17 @@ class KNNSC:
         Deprecated alias for `compute_shortest_path_lengths`.
         """
 
-        warnings.warn(
-            "`shortest_path_lengths` is deprecated and will be removed in "
-            "2.0.0; use "
-            "`compute_shortest_path_lengths` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`shortest_path_lengths`",
+            replacement="`KNNSC.fit(...)`",
             stacklevel=2,
         )
-        return self.compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
+        return self._compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
 
     def select_peripheral_cells(
         self,
         subcluster_size: int = 30,
-        key: Optional[str] = "knnbs",
+        key: Optional[str] = "knnsc",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -590,7 +1009,7 @@ class KNNSC:
             Number of cells in each macrostate.
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
-        key: str, optional (default: 'knnbs')
+        key: str, optional (default: 'knnsc')
             Pandas Series name. If None, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
@@ -652,18 +1071,16 @@ class KNNSC:
     def find_furthest_cells_to_other_barycenters(
         self,
         size: int = 30,
-        key: Optional[str] = "knnbs",
+        key: Optional[str] = "knnsc",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
         Deprecated alias for `select_peripheral_cells`.
         """
 
-        warnings.warn(
-            "`find_furthest_cells_to_other_barycenters` is deprecated and will "
-            "be removed in 2.0.0; use "
-            "`select_peripheral_cells` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`find_furthest_cells_to_other_barycenters`",
+            replacement="`select_peripheral_cells`",
             stacklevel=2,
         )
         return self.select_peripheral_cells(
@@ -675,7 +1092,7 @@ class KNNSC:
     def select_central_cells(
         self,
         subcluster_size: int = 30,
-        key: Optional[str] = "knnbs",
+        key: Optional[str] = "knnsc",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
@@ -687,7 +1104,7 @@ class KNNSC:
             Number of cells in each macrostate.
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
-        key: str, optional (default: 'knnbs')
+        key: str, optional (default: 'knnsc')
             Pandas Series name. If None, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
@@ -741,18 +1158,16 @@ class KNNSC:
     def find_closest_cells_to_self_barycenter(
         self,
         size: int = 30,
-        key: Optional[str] = "knnbs",
+        key: Optional[str] = "knnsc",
         clusters: Optional[Iterable[str]] = None,
     ) -> pd.Series:
         """
         Deprecated alias for `select_central_cells`.
         """
 
-        warnings.warn(
-            "`find_closest_cells_to_self_barycenter` is deprecated and will be "
-            "removed in 2.0.0; use "
-            "`select_central_cells` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`find_closest_cells_to_self_barycenter`",
+            replacement="`select_central_cells`",
             stacklevel=2,
         )
         return self.select_central_cells(
@@ -764,12 +1179,14 @@ class KNNSC:
     def predict(
         self,
         subcluster_size: int = 30,
-        key: str = "knnbs",
+        key: str = "knnsc",
         peripheral_clusters: Optional[Sequence[str]] = None,
         central_clusters: Optional[Sequence[str]] = None,
     ) -> pd.Series:
         """
-        Find cluster-related cell manifolds with the KNNBS algorithm.
+        Find cluster-related cell manifolds with the KNNSC algorithm.
+
+        Call `fit()` before calling this method.
 
         Parameters
         ----------
@@ -777,7 +1194,7 @@ class KNNSC:
             Number of cells in each macrostate.
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
-        key: str (default: 'knnbs')
+        key: str (default: 'knnsc')
             Pandas Series name.
         peripheral_clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed
@@ -861,18 +1278,18 @@ class KNNSC:
         Deprecated alias for `predict`.
         """
 
-        warnings.warn(
-            "`knnbs` is deprecated and will be removed in 2.0.0; use "
-            "`predict` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
+        _warn_deprecated("`knnbs`", replacement="`predict`", stacklevel=2)
         return self.predict(
             subcluster_size=size,
             key=key,
             peripheral_clusters=subclusters_maximizing_distances,
             central_clusters=subclusters_minimizing_distances,
         )
+
+    def _require_fitted_attribute(self, name: str) -> Any:
+        if not hasattr(self, name):
+            raise AttributeError("KNNSC has not been fitted yet")
+        return getattr(self, name)
 
     def _validate_candidate_clusters(
         self,
@@ -887,18 +1304,25 @@ class KNNSC:
             return None
 
         below_minimum = []
+        empty = []
         missing = []
         for cluster in invalid_clusters:
             if cluster in self.cluster_counts.index:
-                below_minimum.append(
-                    f"{cluster} "
-                    f"(size={int(self.cluster_counts[cluster])}, "
-                    f"min_cluster_size={self.min_cluster_size})"
-                )
+                size = int(self.cluster_counts[cluster])
+                if size == 0:
+                    empty.append(str(cluster))
+                else:
+                    below_minimum.append(
+                        f"{cluster} "
+                        f"(size={size}, "
+                        f"min_cluster_size={self.min_cluster_size})"
+                    )
             else:
                 missing.append(str(cluster))
 
         details = []
+        if empty:
+            details.append("empty: " + ", ".join(empty))
         if below_minimum:
             details.append("below minimum size: " + ", ".join(below_minimum))
         if missing:
@@ -920,10 +1344,9 @@ class Knnbs(KNNSC):
         metric: Metric = "euclidean",
         **metric_kwargs: Any,
     ):
-        warnings.warn(
-            "`bt.sct.tl.Knnbs` is deprecated and will be removed in 2.0.0; use "
-            "`bt.sct.tl.KNNSC` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            "`bt.sct.tl.Knnbs`",
+            replacement="`bt.sct.tl.KNNSC`",
             stacklevel=2,
         )
         super().__init__(
@@ -941,12 +1364,8 @@ def _shared_nearest_neighbors_graph(
 ) -> csr_matrix:
 
     n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
-    if prune_snn < 0:
-        raise ValueError(
-            f"invalid argument value for 'prune_snn': "
-            f"expected non-negative value but received {prune_snn!r}"
-        )
-    elif prune_snn < 1:
+    prune_snn = _as_non_negative_number(prune_snn, "prune_snn")
+    if prune_snn < 1:
         prune_snn = math.ceil(n_neighbors * prune_snn)
     elif prune_snn >= n_neighbors:
         raise ValueError(
@@ -978,6 +1397,49 @@ def _shared_nearest_neighbors_graph(
     return neighborhood_graph
 
 
+@overload
+def shared_neighbors(
+    scdata: ScData,
+    knn_key: str = "neighbors",
+    snn_key: str = "shared_neighbors",
+    prune_snn: Optional[Union[float, int]] = 1 / 15,
+    metric: Metric = "euclidean",
+    normalize_connectivities: bool = True,
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    copy: Literal[False] = False,
+) -> None: ...
+
+
+@overload
+def shared_neighbors(
+    scdata: ScData,
+    knn_key: str = "neighbors",
+    snn_key: str = "shared_neighbors",
+    prune_snn: Optional[Union[float, int]] = 1 / 15,
+    metric: Metric = "euclidean",
+    normalize_connectivities: bool = True,
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    *,
+    copy: Literal[True],
+) -> ScData: ...
+
+
+@overload
+def shared_neighbors(
+    scdata: ScData,
+    knn_key: str = "neighbors",
+    snn_key: str = "shared_neighbors",
+    prune_snn: Optional[Union[float, int]] = 1 / 15,
+    metric: Metric = "euclidean",
+    normalize_connectivities: bool = True,
+    distances_key: Optional[str] = None,
+    connectivities_key: Optional[str] = None,
+    copy: bool = False,
+) -> Optional[ScData]: ...
+
+
 @require_sklearn
 @anndata_or_mudata_checker
 def shared_neighbors(
@@ -990,7 +1452,7 @@ def shared_neighbors(
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False,
-) -> Union[ScData, None]:  # type: ignore
+) -> Optional[ScData]:  # type: ignore
     """
     Compute a shared-nearest-neighbor graph of observations.
 
@@ -1025,11 +1487,14 @@ def shared_neighbors(
     Returns
     -------
     ScData or None
-        Copy of `scdata` with shared-neighbor results if `copy=True`;
-        otherwise None after updating `scdata` in place.
+        If `copy=True`, returns a copy of `scdata` with shared-neighbor
+        results added. Otherwise, updates `scdata` in place and returns None.
 
-    The resulting object stores metadata in `scdata.uns[snn_key]` and matrices
-    in `scdata.obsp[distances_key]` and `scdata.obsp[connectivities_key]`.
+        Shared-neighbor results are stored in:
+
+        - `scdata.uns[snn_key]`: shared-neighbor graph metadata;
+        - `scdata.obsp[distances_key]`: pairwise distances;
+        - `scdata.obsp[connectivities_key]`: shared-neighbor connectivities.
 
     Raises
     ------

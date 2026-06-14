@@ -32,13 +32,16 @@ from boolean.boolean import (
 )
 
 from ..._compat import Literal
+from ..._validation import _as_non_negative_integer, _as_probability
 from ..boolean_algebra import (
     BooleanRule,
     ConfigurationLike,
+    HypercubeLike,
     PartialBoolean,
     dnf_to_structure,
     expressions_equivalent,
     is_configuration_like,
+    is_hypercube_like,
     rule_to_string,
 )
 from ..influence_graph._influence_graph import InfluenceGraph
@@ -777,12 +780,13 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return next_configuration
 
-    def is_fixed_point(self, state: ConfigurationLike) -> bool:
+    def is_fixed_point(self, state: HypercubeLike) -> bool:
         """
-        Test whether a fully specified state is a fixed point.
+        Test whether a state is a fixed point.
 
         A fixed point is a Boolean state `x` such that `f_i(x) = x_i` for every
-        component `i`.
+        component `i`. States containing free Boolean values such as `"*"`
+        are accepted and return False.
 
         Examples
         --------
@@ -794,8 +798,8 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        state: ConfigurationLike
-            Fully specified Boolean state.
+        state: HypercubeLike
+            Boolean state to test.
 
         Returns
         -------
@@ -810,6 +814,35 @@ class BooleanNetwork(Dict[str, Expression]):
         """
 
         self.validate()
+        if not isinstance(state, MappingABC):
+            raise TypeError(
+                "unsupported argument type for 'state': "
+                f"expected Mapping but received {type(state)}"
+            )
+
+        if not all(isinstance(component, str) for component in state):
+            raise ValueError(
+                "invalid argument value for 'state': " "expected string component names"
+            )
+
+        if set(state) != self.components:
+            raise ValueError(
+                "invalid argument value for 'state': "
+                f"expected components {sorted(self.components)} but received "
+                f"{sorted(state)}"
+            )
+
+        if not is_configuration_like(state):
+            if is_hypercube_like(state):
+                return False
+
+            for component in self:
+                self._normalize_boolean_value(
+                    state[component],
+                    name="state",
+                    component=component,
+                )
+
         state = self._normalize_state(state)
 
         return self.next_configuration(state) == state
@@ -847,11 +880,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         self.validate()
 
-        if not isinstance(limit, int) or limit < 0:
-            raise ValueError(
-                "invalid argument value for 'limit': "
-                f"expected non-negative integer but received {limit!r}"
-            )
+        limit = _as_non_negative_integer(limit, "limit")
 
         components = list(self.keys())
         fixed_points = []
@@ -1216,7 +1245,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return None
 
-    def _normalize_state(self, state: ConfigurationLike) -> Dict[str, int]:
+    def _normalize_state(self, state: HypercubeLike) -> Dict[str, int]:
         if not isinstance(state, MappingABC):
             raise TypeError(
                 "unsupported argument type for 'state': "
@@ -1884,11 +1913,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         graph = self.to_networkx(remove_isolated_nodes=False)
 
-        if not 0 <= min_ratio <= 1:
-            raise ValueError(
-                f"invalid argument value for 'min_ratio': "
-                f"expected value between 0 and 1 but received {min_ratio!r}"
-            )
+        min_ratio = _as_probability(min_ratio, "min_ratio")
 
         edges_to_remove = [
             (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio
@@ -2011,11 +2036,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         graph = self.to_networkx(remove_isolated_nodes=False)
 
-        if not 0 <= min_ratio <= 1:
-            raise ValueError(
-                f"invalid argument value for 'min_ratio': "
-                f"expected value between 0 and 1 but received {min_ratio!r}"
-            )
+        min_ratio = _as_probability(min_ratio, "min_ratio")
 
         edges_to_remove = [
             (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio

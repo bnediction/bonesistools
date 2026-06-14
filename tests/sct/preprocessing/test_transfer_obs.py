@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import warnings
+from typing import cast
 
 import anndata as ad
 import numpy as np
@@ -10,6 +11,10 @@ import pytest
 import bonesistools as bt
 
 pytestmark = pytest.mark.filterwarnings("ignore:Observation names are not unique")
+
+
+def _obs_dataframe(adata: ad.AnnData) -> pd.DataFrame:
+    return cast(pd.DataFrame, adata.obs)
 
 
 def _adata_with_obs(index, obs):
@@ -122,7 +127,7 @@ def test_transfer_obs_to_integrated_keeps_unmatched_integrated_cells_as_missing(
 
 def test_transfer_obs_to_integrated_supports_custom_condition_column():
     integrated, adatas = _integrated_and_specific_adatas()
-    integrated.obs = integrated.obs.rename(columns={"condition": "sample"})
+    integrated.obs = _obs_dataframe(integrated).rename(columns={"condition": "sample"})
 
     bt.sct.pp.transfer_obs_to_integrated(
         integrated,
@@ -196,7 +201,7 @@ def test_transfer_obs_to_specific_keeps_unmatched_specific_cells_as_missing():
 
 def test_transfer_obs_to_specific_supports_custom_condition_column():
     integrated, adatas = _integrated_and_specific_adatas()
-    integrated.obs = integrated.obs.rename(columns={"condition": "sample"})
+    integrated.obs = _obs_dataframe(integrated).rename(columns={"condition": "sample"})
 
     bt.sct.pp.transfer_obs_to_specific(
         integrated,

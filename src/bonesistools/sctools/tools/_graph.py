@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 import networkx as nx
 import numpy as np
 from anndata import AnnData
 
+from ..._validation import _as_non_negative_number
+from ..._warnings import _warn_deprecated
 from .._typing import anndata_checker
 
 
@@ -50,16 +51,13 @@ def extract_paga_graph(
     KeyError
         If `edges` is not found in `adata.uns` and no fallback
         connectivities matrix is available.
-    TypeError
-        If `threshold` is not a float.
     ValueError
         If `threshold` is negative.
 
     References
     ----------
-    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell
-    states through dynamical modeling. Nature biotechnology, 38(12), 1408-1414
-    (https://doi.org/10.1038/s41587-020-0591-3)
+    Bergen et al. (2020). Generalizing RNA velocity to transient cell states
+    through dynamical modeling. Nature Biotechnology, 38(12), 1408-1414.
     """
 
     clusters = adata.obs[obs].cat.categories
@@ -75,17 +73,8 @@ def extract_paga_graph(
             raise KeyError(f"key '{edges}' not found in adata.uns")
     adjacency = adata.uns[edges].copy()
 
-    if not isinstance(threshold, float):
-        raise TypeError(
-            f"unsupported argument type for 'threshold': "
-            f"expected {float} but received {type(threshold)}"
-        )
-    elif threshold < 0:
-        raise ValueError(
-            f"invalid argument value for 'threshold': "
-            f"expected non-negative value but received {threshold!r}"
-        )
-    elif threshold > 0:
+    threshold = _as_non_negative_number(threshold, "threshold")
+    if threshold > 0:
         adjacency.data[adjacency.data < threshold] = 0
         adjacency.eliminate_zeros()
         adjacency = adjacency.todense()
@@ -108,11 +97,9 @@ def get_paga_graph(*args: Any, **kwargs: Any) -> nx.DiGraph[Any]:
     Deprecated alias for `extract_paga_graph`.
     """
 
-    warnings.warn(
-        "`bt.sct.tl.get_paga_graph` is deprecated and will be removed in "
-        "2.0.0; use "
-        "`bt.sct.tl.extract_paga_graph` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.tl.get_paga_graph`",
+        replacement="`bt.sct.tl.extract_paga_graph`",
         stacklevel=2,
     )
     return extract_paga_graph(*args, **kwargs)

@@ -6,12 +6,12 @@ Parsers for Boolean algebra objects.
 
 import json
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
-from ..._compat import Literal
+from ..._typing import FileOrientation
+from ..._validation import _as_orientation
+from ..._warnings import _warn_deprecated_argument
 from ._hypercube import Hypercube
-
-Axis = Literal["columns", "rows"]
 
 
 def read_hypercube(file: Union[str, Path]) -> Hypercube:
@@ -56,8 +56,10 @@ def read_hypercube(file: Union[str, Path]) -> Hypercube:
 
 def read_hypercubes(
     file: Union[str, Path],
-    axis: Axis = "columns",
+    orientation: FileOrientation = "columns",
     sep: str = ",",
+    *,
+    axis: Optional[FileOrientation] = None,
 ) -> Dict[str, Hypercube]:
     """
     Read named hypercubes from a CSV, TSV or JSON file.
@@ -71,11 +73,13 @@ def read_hypercubes(
     ----------
     file: str or Path
         Input file.
-    axis: str (default: "columns")
-        Axis along which hypercubes are stored. Supported values are
-        `"columns"` and `"rows"`. Only used for tabular files.
+    orientation: {"columns", "rows"} (default: "columns")
+        File orientation. If `"columns"`, each column stores one hypercube. If
+        `"rows"`, each row stores one hypercube. Only used for tabular files.
     sep: str (default: ",")
         Field delimiter used for tabular files.
+    axis: {"columns", "rows"}, optional
+        Deprecated alias for `orientation`.
 
     Returns
     -------
@@ -85,10 +89,15 @@ def read_hypercubes(
     Raises
     ------
     ValueError
-        If the file extension or axis value is not supported, or if one of the
-        stored values cannot be interpreted as a PartialBoolean value.
+        If the file extension or orientation value is not supported, or if one
+        of the stored values cannot be interpreted as a PartialBoolean value.
     """
 
+    if axis is not None:
+        _warn_deprecated_argument("axis", "orientation", stacklevel=2)
+        orientation = axis
+
+    orientation = _as_orientation(orientation)
     file = Path(file)
     suffix = file.suffix.lower()
 
@@ -116,18 +125,12 @@ def read_hypercubes(
             "(supported formats: .csv, .tsv, .json)"
         )
 
-    if axis not in {"columns", "rows"}:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 'columns' or 'rows' but received {axis!r}"
-        )
-
     import pandas as pd
 
     data = pd.read_csv(file, index_col=0, sep=sep)
     data = data.where(data.notna(), "*")
 
-    if axis == "rows":
+    if orientation == "rows":
         data = data.T
 
     hypercubes = {}

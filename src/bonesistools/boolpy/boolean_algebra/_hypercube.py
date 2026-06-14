@@ -8,13 +8,16 @@ from collections.abc import (
     Mapping,
 )
 from typing import (
+    Any,
     Dict,
     FrozenSet,
     MutableMapping,
     MutableSet,
     Optional,
     Set,
+    Tuple,
     cast,
+    overload,
 )
 
 from ._boolean import PartialBoolean
@@ -168,6 +171,44 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         """
 
         return len(self._values)
+
+    @overload
+    def update(self, mapping: Mapping[str, PartialBooleanLike]) -> None: ...
+
+    @overload
+    def update(self, mapping: Iterable[Tuple[str, PartialBooleanLike]]) -> None: ...
+
+    @overload
+    def update(self, **kwargs: PartialBooleanLike) -> None: ...
+
+    def update(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        *args: Any,
+        **kwargs: PartialBooleanLike,
+    ) -> None:
+        """
+        Update explicitly specified component values.
+
+        Values are converted to `PartialBoolean`, following `__setitem__`.
+        """
+
+        if len(args) > 1:
+            raise TypeError(
+                f"update expected at most 1 positional argument, got {len(args)}"
+            )
+
+        if args:
+            other = args[0]
+            if isinstance(other, Mapping):
+                iterable = other.items()
+            else:
+                iterable = other
+
+            for component, value in iterable:
+                self[component] = value
+
+        for component, value in kwargs.items():
+            self[component] = value
 
     def __repr__(self) -> str:
         """

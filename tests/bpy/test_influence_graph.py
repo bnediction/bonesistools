@@ -3,6 +3,7 @@
 import builtins
 import sys
 from types import ModuleType
+from typing import Any, cast
 
 import networkx as nx
 import pytest
@@ -10,10 +11,22 @@ import pytest
 import bonesistools as bt
 
 
+def _pydot_get(obj, method):
+    return getattr(cast(Any, obj), method)()
+
+
+def _pydot_get_string(obj, method):
+    return cast(str, _pydot_get(obj, method)).strip('"')
+
+
 def _edge_signs(graph):
     return sorted(
         (source, target, sign) for source, target, sign in graph.edges(data="sign")
     )
+
+
+def _edge_data(graph, source, target, key=0):
+    return cast(Any, graph[source][target])[key]
 
 
 def _cycle_sets(circuits):
@@ -34,7 +47,7 @@ def test_influence_graph_add_edge_normalizes_signs_and_rejects_duplicates():
         ig.add_edge("A", "B", sign=1)
 
     with pytest.raises(ValueError, match="unsupported edge sign"):
-        ig.add_edge("B", "C", sign=0)
+        ig.add_edge("B", "C", sign=cast(Any, 0))
 
     assert _edge_signs(ig) == [("A", "B", -1), ("A", "B", 1)]
 
@@ -192,10 +205,10 @@ def test_influence_graph_rename_validates_inputs():
         graph.rename("missing", "C")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'old'"):
-        graph.rename(1, "C")
+        graph.rename(cast(Any, 1), "C")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'new'"):
-        graph.rename("A", 1)
+        graph.rename("A", cast(Any, 1))
 
     assert _edge_signs(graph) == [("A", "B", 1)]
 
@@ -220,7 +233,7 @@ def test_influence_graph_relabel_renames_several_nodes_and_ignores_missing():
     assert _edge_signs(graph) == [("TP53", "SOX2", 1)]
     assert graph.nodes["TP53"]["family"] == "tf"
     assert graph.nodes["SOX2"]["family"] == "stem"
-    assert graph["TP53"]["SOX2"][0]["evidence"] == "curated"
+    assert _edge_data(graph, "TP53", "SOX2")["evidence"] == "curated"
 
 
 def test_influence_graph_relabel_merges_nodes_and_duplicate_edges():
@@ -260,13 +273,13 @@ def test_influence_graph_relabel_validates_mapping():
     graph.add_edge("A", "B", sign=1)
 
     with pytest.raises(TypeError, match="unsupported argument type for 'mapping'"):
-        graph.relabel([("A", "X")])
+        graph.relabel(cast(Any, [("A", "X")]))
 
     with pytest.raises(TypeError, match="unsupported mapping key type"):
-        graph.relabel({1: "X"})
+        graph.relabel(cast(Any, {1: "X"}))
 
     with pytest.raises(TypeError, match="unsupported mapping value type"):
-        graph.relabel({"A": 1})
+        graph.relabel(cast(Any, {"A": 1}))
 
     assert _edge_signs(graph) == [("A", "B", 1)]
 
@@ -482,7 +495,7 @@ def test_marker_paths_from_docstring():
     assert ig.marker_paths(["missing"]) == []
 
     with pytest.raises(ValueError, match="unsupported direction"):
-        ig.marker_paths(["marker2"], direction="sideways")
+        ig.marker_paths(["marker2"], direction=cast(Any, "sideways"))
 
 
 def test_marker_paths_supports_upstream_paths_and_sign_filter():
@@ -641,16 +654,19 @@ def test_to_pydot_applies_signed_edge_styles_and_custom_options():
     )
 
     edge_styles = {
-        (edge.get_source().strip('"'), edge.get_destination().strip('"')): {
-            "color": edge.get_color(),
-            "arrowhead": edge.get_arrowhead(),
-            "label": edge.get_label(),
+        (
+            _pydot_get_string(edge, "get_source"),
+            _pydot_get_string(edge, "get_destination"),
+        ): {
+            "color": _pydot_get(edge, "get_color"),
+            "arrowhead": _pydot_get(edge, "get_arrowhead"),
+            "label": _pydot_get(edge, "get_label"),
         }
         for edge in dot.get_edges()
     }
 
     assert dot.prog == "dot"
-    assert dot.get_rankdir() == "LR"
+    assert cast(Any, dot).get_rankdir() == "LR"
     assert edge_styles[("A", "B")] == {
         "color": "green4",
         "arrowhead": "normal",
@@ -672,8 +688,8 @@ def test_show_uses_ipython_display(monkeypatch):
             return b"<svg></svg>"
 
     display_module = ModuleType("IPython.display")
-    display_module.SVG = lambda svg: ("SVG", svg)
-    display_module.display = displayed.append
+    setattr(display_module, "SVG", lambda svg: ("SVG", svg))
+    setattr(display_module, "display", displayed.append)
 
     monkeypatch.setitem(sys.modules, "IPython", ModuleType("IPython"))
     monkeypatch.setitem(sys.modules, "IPython.display", display_module)
@@ -708,7 +724,7 @@ def test_private_sign_and_graph_validation_guards():
     ig = bt.bpy.ig.InfluenceGraph()
 
     with pytest.raises(ValueError, match="unsupported edge sign"):
-        ig.add_edge("A", "B", sign=True)
+        ig.add_edge("A", "B", sign=cast(Any, True))
 
     nx.MultiDiGraph.add_edge(ig, "A", "B")
     with pytest.raises(ValueError, match="missing edge attribute 'sign'"):

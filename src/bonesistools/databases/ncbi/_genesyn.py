@@ -38,6 +38,8 @@ from pandas import DataFrame
 from pandas._typing import Axis
 
 from ..._compat import Literal, get_args
+from ..._validation import _as_boolean, _as_dataframe_axis
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from ._typing import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -248,10 +250,6 @@ def support_legacy_gene_synonyms_args(func):
     """
     Decorate GeneSynonyms methods to accept deprecated argument names.
 
-    Raises
-    ------
-    TypeError
-        If both a deprecated argument name and its replacement are provided.
     """
 
     valid_parameters = inspect.signature(func).parameters
@@ -266,12 +264,7 @@ def support_legacy_gene_synonyms_args(func):
             if new_name not in valid_parameters:
                 continue
 
-            warnings.warn(
-                f"'{old_name}' is deprecated and will be removed in 2.0.0; "
-                f"use '{new_name}' instead.",
-                FutureWarning,
-                stacklevel=2,
-            )
+            _warn_deprecated_argument(old_name, new_name, stacklevel=2)
 
             if new_name in kwargs:
                 raise TypeError(
@@ -353,8 +346,6 @@ class GeneSynonyms:
 
     Raises
     ------
-    TypeError
-        If `show_warnings` or converted data has an unsupported type.
     ValueError
         If `organism`, identifier types, database names or axis values are
         unsupported.
@@ -372,11 +363,9 @@ class GeneSynonyms:
     ) -> None:
 
         if not _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING:
-            warnings.warn(
-                "`bt.dbs.ncbi.GeneSynonyms()` is deprecated as a constructor "
-                "entry point and will be removed in 2.0.0; use "
-                "`bt.dbs.ncbi.genesyn()` instead.",
-                FutureWarning,
+            _warn_deprecated(
+                "`bt.dbs.ncbi.GeneSynonyms()`",
+                replacement="`bt.dbs.ncbi.genesyn()`",
                 stacklevel=2,
             )
 
@@ -388,11 +377,7 @@ class GeneSynonyms:
                 f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
             )
 
-        if not isinstance(show_warnings, bool):
-            raise TypeError(
-                f"unsupported argument type for 'show_warnings': "
-                f"expected {bool} but received {type(show_warnings)}"
-            )
+        show_warnings = _as_boolean(show_warnings, "show_warnings")
 
         self.organism = organism
         self.version = self.__normalize_gene_info_version(version)
@@ -429,10 +414,6 @@ class GeneSynonyms:
             Converted object. The exact type depends on `data` and the selected
             conversion method.
 
-        Raises
-        ------
-        TypeError
-            If `data` has an unsupported type.
         """
 
         from ...boolpy.boolean_network._typing import is_boolean_network_like
@@ -677,16 +658,12 @@ class GeneSynonyms:
         alias_conversion = self.__conversion_function(output_identifier_type)
 
         genes = list()
+        axis = _as_dataframe_axis(axis)
 
-        if axis == 0 or axis == "index":
+        if axis == "index":
             iterator = iter(df.index)
-        elif axis == 1 or axis == "columns":
+        elif axis == "columns":
             iterator = iter(df.columns)
-        else:
-            raise ValueError(
-                f"invalid argument value for 'axis': "
-                f"expected 0, 1, 'index' or 'columns' but received {axis!r}"
-            )
 
         for gene in iterator:
             output_alias = alias_conversion(
@@ -695,9 +672,9 @@ class GeneSynonyms:
             output_alias = gene if output_alias is None else output_alias
             genes.append(output_alias)
 
-        if axis == 0 or axis == "index":
+        if axis == "index":
             df.index = genes
-        elif axis == 1 or axis == "columns":
+        elif axis == "columns":
             df.columns = genes
 
         if copy is True:
@@ -1027,8 +1004,6 @@ class GeneSynonyms:
 
         Raises
         ------
-        TypeError
-            If `show_warnings` is not Boolean.
         ValueError
             If `organism` is unsupported.
         RuntimeError
@@ -1046,11 +1021,7 @@ class GeneSynonyms:
                 f"expected one of {get_args(ORGANISMS)} but received {organism!r}"
             )
 
-        if not isinstance(show_warnings, bool):
-            raise TypeError(
-                f"unsupported argument type for 'show_warnings': "
-                f"expected {bool} but received {type(show_warnings)}"
-            )
+        show_warnings = _as_boolean(show_warnings, "show_warnings")
 
         self.organism = organism
         resolved_version: GeneInfoVersion

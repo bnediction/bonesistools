@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union, cast, overload
 
 import numpy as np
 from anndata import AnnData
 from pandas import DataFrame
 from scipy.sparse import issparse
 
+from ..._compat import Literal
 from .._dependencies import require_sklearn
 from .._typing import Keys, anndata_checker
 
@@ -31,6 +32,43 @@ def __linear_regress_out_feature(
         predicted = interest - prediction
 
     return predicted[:, 0]
+
+
+@overload
+def regress_out(
+    adata: AnnData,
+    keys: Keys,
+    layer: Optional[str] = None,
+    intercept: bool = False,
+    *,
+    copy: Literal[False],
+    n_jobs: int = 1,
+) -> None:
+    ...
+
+
+@overload
+def regress_out(
+    adata: AnnData,
+    keys: Keys,
+    layer: Optional[str] = None,
+    intercept: bool = False,
+    copy: Literal[True] = True,
+    n_jobs: int = 1,
+) -> AnnData:
+    ...
+
+
+@overload
+def regress_out(
+    adata: AnnData,
+    keys: Keys,
+    layer: Optional[str] = None,
+    intercept: bool = False,
+    copy: bool = False,
+    n_jobs: int = 1,
+) -> Union[AnnData, None]:
+    ...
 
 
 @require_sklearn
@@ -64,7 +102,13 @@ def regress_out(
     Returns
     -------
     AnnData or None
-        Corrected AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with corrected values added.
+        Otherwise, updates `adata` in place and returns None.
+
+        Corrected values are stored in:
+
+        - `adata.X`: corrected matrix if `layer=None`;
+        - `adata.layers[layer]`: corrected layer otherwise.
     """
 
     from sklearn.linear_model import LinearRegression

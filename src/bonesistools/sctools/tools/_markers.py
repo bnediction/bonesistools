@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Sequence as Seq
 from typing import (
     Any,
@@ -12,6 +11,7 @@ from typing import (
     Sequence,
     Union,
     cast,
+    overload,
 )
 
 import numpy as np
@@ -20,6 +20,8 @@ from anndata import AnnData
 from numpy import log2
 
 from ..._compat import Literal
+from ..._validation import _as_callable
+from ..._warnings import _warn_deprecated
 from .._typing import anndata_checker
 from ._conversion import anndata_to_dataframe
 
@@ -72,16 +74,14 @@ def logfoldchanges(
     with Seurat and Scanpy here:
     <https://www.biostars.org/p/453129/>
 
-    Raises
-    ------
-    TypeError
-        If `filter_logfoldchanges` is specified but is not callable.
     """
 
     def compute_logfc(mean_in, mean_out, cluster):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            logfc = log2(mean_in) - log2(mean_out)
 
         __df = pd.DataFrame(
-            log2(mean_in) - log2(mean_out),
+            logfc,
             columns=cast(Any, [column_name]),
         )
         __df.reset_index(names="names", inplace=True)
@@ -123,18 +123,17 @@ def logfoldchanges(
 
     logfoldchanges_df = pd.concat(logfoldchanges, ignore_index=True)
 
+    filter_logfoldchanges = _as_callable(
+        filter_logfoldchanges,
+        "filter_logfoldchanges",
+        allow_none=True,
+    )
     if filter_logfoldchanges is not None:
-        if not callable(filter_logfoldchanges):
-            raise TypeError(
-                f"unsupported argument type for 'filter_logfoldchanges': "
-                f"expected callable object but received {type(filter_logfoldchanges)}"
+        logfoldchanges_df = logfoldchanges_df.loc[
+            filter_logfoldchanges(
+                cast(np.ndarray, logfoldchanges_df[column_name].values)
             )
-        else:
-            logfoldchanges_df = logfoldchanges_df.loc[
-                filter_logfoldchanges(
-                    cast(np.ndarray, logfoldchanges_df[column_name].values)
-                )
-            ]
+        ]
 
     return logfoldchanges_df.reset_index(drop=True)
 
@@ -144,11 +143,9 @@ def calculate_logfoldchanges(*args: Any, **kwargs: Any) -> pd.DataFrame:
     Deprecated alias for `logfoldchanges`.
     """
 
-    warnings.warn(
-        "`bt.sct.tl.calculate_logfoldchanges` is deprecated and will be "
-        "removed in 2.0.0; use "
-        "`bt.sct.tl.logfoldchanges` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.tl.calculate_logfoldchanges`",
+        replacement="`bt.sct.tl.logfoldchanges`",
         stacklevel=2,
     )
     return logfoldchanges(*args, **kwargs)
@@ -176,10 +173,6 @@ def hypergeometric_test(
     float
         Hypergeometric survival-function p-value.
 
-    Raises
-    ------
-    TypeError
-        If `adata` is not an AnnData object.
     """
 
     from scipy.stats import hypergeom
@@ -201,6 +194,52 @@ def hypergeometric_test(
     k = len(marked_genes)  # number of observed successes (matching genes)
 
     return float(hypergeom.sf(k=k, M=N, n=K, N=n, loc=1))
+
+
+@overload
+def smirnov_tests(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Iterable[str]] = "all",
+    reference: str = "rest",
+    layer: Optional[str] = None,
+    alternative: _Alternatives = "two-sided",
+    corr_method: _CorrMethod = "benjamini-hochberg",
+    pval_cutoff: Optional[float] = None,
+    key_added: Optional[str] = None,
+    copy: Literal[False] = False,
+) -> None: ...
+
+
+@overload
+def smirnov_tests(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Iterable[str]] = "all",
+    reference: str = "rest",
+    layer: Optional[str] = None,
+    alternative: _Alternatives = "two-sided",
+    corr_method: _CorrMethod = "benjamini-hochberg",
+    pval_cutoff: Optional[float] = None,
+    key_added: Optional[str] = None,
+    *,
+    copy: Literal[True],
+) -> pd.DataFrame: ...
+
+
+@overload
+def smirnov_tests(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Iterable[str]] = "all",
+    reference: str = "rest",
+    layer: Optional[str] = None,
+    alternative: _Alternatives = "two-sided",
+    corr_method: _CorrMethod = "benjamini-hochberg",
+    pval_cutoff: Optional[float] = None,
+    key_added: Optional[str] = None,
+    copy: bool = False,
+) -> Optional[pd.DataFrame]: ...
 
 
 def smirnov_tests(
@@ -248,9 +287,13 @@ def smirnov_tests(
 
     Returns
     -------
-    AnnData or None
-        Copy of `adata` with results if `copy=True`; otherwise None after
-        modifying `adata`.
+    DataFrame or None
+        If `copy=True`, returns the marker ranking results. Otherwise, updates
+        `adata` in place and returns None.
+
+        Marker ranking results are stored in:
+
+        - `adata.uns[key_added]`: marker ranking table and metadata.
 
     Notes
     -----
@@ -258,13 +301,6 @@ def smirnov_tests(
     `group`, `names`, `statistics`, `locations`, `signs`, `pvals` and
     `pvals_adj`.
 
-    Raises
-    ------
-    TypeError
-        If `groups` is neither `"all"` nor a non-string sequence.
-    ValueError
-        If `reference` is neither `"rest"` nor one of the categories in
-        `adata.obs[groupby]`.
     """
 
     from scipy.sparse import issparse

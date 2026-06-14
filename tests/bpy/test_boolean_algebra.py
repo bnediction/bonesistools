@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 from collections import Counter
+from typing import Any, cast
 
 import pytest
-from boolean import BooleanAlgebra
+from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
 
@@ -232,7 +233,7 @@ def test_boolean_predecessor_inference_rejects_invalid_inputs():
         differential.differential("0", 1)
 
     with pytest.raises(TypeError):
-        differential.differential(object(), 1)
+        differential.differential(cast(Any, object()), 1)
 
     with pytest.raises(ValueError):
         inference.pairwise_predecessor_test(1, 1, 0, 1, sign=0)
@@ -289,8 +290,8 @@ def test_dnf_to_structure_disjunction():
 def test_dnf_to_structure_constants():
     ba = BooleanAlgebra()
 
-    assert bt.bpy.ba.dnf_to_structure(ba, ba.TRUE) is True
-    assert bt.bpy.ba.dnf_to_structure(ba, ba.FALSE) is False
+    assert bt.bpy.ba.dnf_to_structure(ba, cast(Expression, ba.TRUE)) is True
+    assert bt.bpy.ba.dnf_to_structure(ba, cast(Expression, ba.FALSE)) is False
 
 
 def test_dnf_to_structure_list_container():

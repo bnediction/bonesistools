@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import warnings
-from typing import Any, List, Union, cast
+from typing import Any, List, Union, cast, overload
 
 import pandas as pd
 from anndata import AnnData
 from numpy import nan
 from pandas import DataFrame
 
+from ..._compat import Literal
+from ..._warnings import _warn_deprecated
 from .._typing import (
     AnnDataList,
     Axis,
@@ -20,6 +21,7 @@ from .._typing import (
     anndata_checker,
     type_checker,
 )
+from .._validation import _as_anndata_axis
 from ..tools import anndata_to_dataframe
 
 
@@ -35,6 +37,37 @@ def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
         index_name = f"index_{_i}"
         _i += 1
     return index_name
+
+
+@overload
+def transfer_layer(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    layers: Keys,
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def transfer_layer(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    layers: Keys,
+    copy: Literal[True] = True,
+) -> AnnData:
+    ...
+
+
+@overload
+def transfer_layer(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    layers: Keys,
+    copy: bool = False,
+) -> Union[AnnData, None]:
+    ...
 
 
 @anndata_checker(n=2)
@@ -69,12 +102,13 @@ def transfer_layer(
     Returns
     -------
     AnnData or None
-        Updated AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `left_ad` with layers transferred.
+        Otherwise, updates `left_ad` in place and returns None.
 
-    Raises
-    ------
-    TypeError
-        If `layers` is neither a string nor a list.
+        Transferred layer data are stored in:
+
+        - `left_ad.layers[layer]`: transferred matrix for each requested layer.
+
     """
 
     left_ad = left_ad.copy() if copy else left_ad
@@ -121,11 +155,45 @@ def transfer_layer(
     return left_ad if copy else None
 
 
+@overload
+def merge(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    axis: Axis = "obs",
+    suffixes: Suffixes = ("_x", "_y"),
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def merge(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    axis: Axis = "obs",
+    suffixes: Suffixes = ("_x", "_y"),
+    copy: Literal[True] = True,
+) -> AnnData:
+    ...
+
+
+@overload
+def merge(
+    left_ad: AnnData,
+    right_ad: AnnData,
+    axis: Axis = "obs",
+    suffixes: Suffixes = ("_x", "_y"),
+    copy: bool = False,
+) -> Union[AnnData, None]:
+    ...
+
+
 @anndata_checker(n=2)
 def merge(
     left_ad: AnnData,
     right_ad: AnnData,
-    axis: Axis = 0,
+    axis: Axis = "obs",
     suffixes: Suffixes = ("_x", "_y"),
     copy: bool = False,
 ) -> Union[AnnData, None]:
@@ -133,8 +201,8 @@ def merge(
     Merge annotation tables from two AnnData objects with an index-based join.
 
     The left AnnData object receives columns from the right AnnData object.
-    Observation annotations are merged when `axis=0` or `"obs"`; variable
-    annotations are merged when `axis=1` or `"var"`.
+    Observation annotations are merged when `axis="obs"`; variable annotations
+    are merged when `axis="var"`.
 
     Parameters
     ----------
@@ -144,8 +212,9 @@ def merge(
     right_ad: AnnData
         Unimodal annotated data matrix.
         It corresponds to the object sending information.
-    axis: {0, 1, "obs", "var"} (default: 0)
-        If 0 or `"obs"`, merge `.obs`. If 1 or `"var"`, merge `.var`.
+    axis: {"obs", "var"} (default: "obs")
+        If `"obs"`, merge `.obs`. If `"var"`, merge `.var`. Deprecated values
+        0 and 1 are still accepted as aliases for `"obs"` and `"var"`.
     suffixes: Tuple[str, str] (default: ('_x','_y'))
         Length-2 sequence where each element is a string indicating the suffix
         to add to overlapping column names in `left_ad` and `right_ad`,
@@ -156,42 +225,77 @@ def merge(
     Returns
     -------
     AnnData or None
-        Merged AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `left_ad` with annotations merged.
+        Otherwise, updates `left_ad` in place and returns None.
 
-    Raises
-    ------
-    ValueError
-        If `axis` is not 0, 1, `"obs"` or `"var"`.
+        Merged annotations are stored in:
+
+        - `left_ad.obs`: merged observation annotations if `axis="obs"`;
+        - `left_ad.var`: merged variable annotations if `axis="var"`.
+
     """
 
     left_ad = left_ad.copy() if copy else left_ad
 
-    if axis in [0, "obs"]:
+    axis = _as_anndata_axis(axis, allow_integer=True)
+    if axis == "obs":
         left_obs = cast(DataFrame, left_ad.obs)
         right_obs = cast(DataFrame, right_ad.obs)
         left_df = left_obs.copy()
         right_df = right_obs.copy()
-    elif axis in [1, "var"]:
+    elif axis == "var":
         left_var = cast(DataFrame, left_ad.var)
         right_var = cast(DataFrame, right_ad.var)
         left_df = left_var.copy()
         right_df = right_var.copy()
-    else:
-        raise ValueError(
-            f"invalid argument value for 'axis': "
-            f"expected 0, 1, 'obs' or 'var' but received {axis!r}"
-        )
 
     df = left_df.merge(
         right=right_df, how="left", left_index=True, right_index=True, suffixes=suffixes
     )
 
-    if axis in [0, "obs"]:
+    if axis == "obs":
         left_ad.obs = df
-    elif axis in [1, "var"]:
+    elif axis == "var":
         left_ad.var = df
 
     return left_ad if copy else None
+
+
+@overload
+def transfer_obs_to_integrated(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def transfer_obs_to_integrated(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    copy: Literal[True] = True,
+) -> AnnData:
+    ...
+
+
+@overload
+def transfer_obs_to_integrated(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    copy: bool = False,
+) -> Union[AnnData, None]:
+    ...
 
 
 @anndata_checker
@@ -234,7 +338,13 @@ def transfer_obs_to_integrated(
     Returns
     -------
     AnnData or None
-        Updated integrated AnnData object if `copy=True`; otherwise None.
+        If `copy=True`, returns a copy of `adata` with observation
+        annotations transferred. Otherwise, updates `adata` in place and
+        returns None.
+
+        Transferred annotations are stored in:
+
+        - `adata.obs`: integrated observation annotations.
     """
 
     adata = adata.copy() if copy else adata
@@ -269,6 +379,43 @@ def transfer_obs_to_integrated(
     adata.obs = merge_df
 
     return adata if copy else None
+
+
+@overload
+def transfer_obs_to_specific(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def transfer_obs_to_specific(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    copy: Literal[True] = True,
+) -> AnnDataList:
+    ...
+
+
+@overload
+def transfer_obs_to_specific(
+    adata: AnnData,
+    adatas: AnnDataList,
+    obs: Keys,
+    conditions: Keys,
+    condition_colname: str = "condition",
+    copy: bool = False,
+) -> Union[AnnDataList, None]:
+    ...
 
 
 @anndata_checker
@@ -308,7 +455,13 @@ def transfer_obs_to_specific(
     Returns
     -------
     list of AnnData or None
-        Updated AnnData objects if `copy=True`; otherwise None.
+        If `copy=True`, returns copies of `adatas` with observation
+        annotations transferred. Otherwise, updates each AnnData object in
+        place and returns None.
+
+        Transferred annotations are stored in:
+
+        - `adata.obs`: specific observation annotations for each AnnData object.
     """
 
     adatas_cp: AnnDataList = []
@@ -335,11 +488,9 @@ def transfer_obs_sti(*args: Any, **kwargs: Any) -> Union[AnnData, None]:
     Deprecated alias for `transfer_obs_to_integrated`.
     """
 
-    warnings.warn(
-        "`bt.sct.pp.transfer_obs_sti` is deprecated and will be removed in "
-        "2.0.0; use "
-        "`bt.sct.pp.transfer_obs_to_integrated` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pp.transfer_obs_sti`",
+        replacement="`bt.sct.pp.transfer_obs_to_integrated`",
         stacklevel=2,
     )
     return transfer_obs_to_integrated(*args, **kwargs)
@@ -350,11 +501,9 @@ def transfer_obs_its(*args: Any, **kwargs: Any) -> Union[AnnDataList, None]:
     Deprecated alias for `transfer_obs_to_specific`.
     """
 
-    warnings.warn(
-        "`bt.sct.pp.transfer_obs_its` is deprecated and will be removed in "
-        "2.0.0; use "
-        "`bt.sct.pp.transfer_obs_to_specific` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pp.transfer_obs_its`",
+        replacement="`bt.sct.pp.transfer_obs_to_specific`",
         stacklevel=2,
     )
     return transfer_obs_to_specific(*args, **kwargs)

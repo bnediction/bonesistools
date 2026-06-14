@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import math
+from typing import Any, cast
 
 import pytest
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
@@ -24,7 +25,7 @@ def test_get_color_returns_rgb_or_hex_and_rejects_invalid_values():
     assert bt.sct.pl.get_color("black", color_type="hex") == "#000000"
 
     with pytest.raises(ValueError, match="invalid argument value for 'color_type'"):
-        bt.sct.pl.get_color("black", color_type="hsl")
+        bt.sct.pl.get_color("black", color_type=cast(Any, "hsl"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'color'"):
         bt.sct.pl.get_color("not_a_color")
@@ -57,7 +58,7 @@ def test_generate_colormap_shorter_and_longer_than_base_colormap():
 
 def test_generate_colormap_validates_arguments():
     with pytest.raises(TypeError, match="unsupported argument type for 'cm'"):
-        bt.sct.pl.generate_colormap(cm="not a colormap")
+        bt.sct.pl.generate_colormap(cm=cast(Any, "not a colormap"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'color_number'"):
         bt.sct.pl.generate_colormap(color_number=0)

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, Sequence, cast
+
 import anndata as ad
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -9,6 +11,7 @@ import pytest
 from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _distribution
@@ -16,9 +19,17 @@ from bonesistools.sctools.plotting import _distribution
 ADATA = bt.sct.datasets.nestorowa()
 
 
+def _n_counts(adata: ad.AnnData) -> np.ndarray:
+    return np.asarray(cast(Any, adata.X).sum(axis=1)).flatten()
+
+
+def _median_lines(bp: _distribution.BoxPlots) -> Sequence[Line2D]:
+    return cast(Sequence[Line2D], bp["medians"])
+
+
 def test_distribution_without_hue():
     adata = ADATA.copy()
-    adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
+    adata.obs["n_counts"] = _n_counts(adata)
 
     fig, ax, bps = bt.sct.pl.distribution(
         adata,
@@ -40,10 +51,10 @@ def test_distribution_without_hue():
 
 def test_distribution_with_hue():
     adata = ADATA.copy()
-    adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
-    adata.obs["condition"] = "condition2"
-    adata.obs.iloc[:1000, adata.obs.columns.get_loc("condition")] = "condition1"
-    adata.obs["condition"] = adata.obs["condition"].astype("category")
+    adata.obs["n_counts"] = _n_counts(adata)
+    condition = np.full(adata.n_obs, "condition2", dtype=object)
+    condition[:1000] = "condition1"
+    adata.obs["condition"] = pd.Categorical(condition)
 
     fig, _, bps = bt.sct.pl.distribution(
         adata,
@@ -64,14 +75,14 @@ def test_distribution_with_hue():
 
 def test_distribution_invalid_sort():
     adata = ADATA.copy()
-    adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
+    adata.obs["n_counts"] = _n_counts(adata)
 
     with pytest.raises(ValueError):
         bt.sct.pl.distribution(
             adata,
             obs="n_counts",
             groupby="label",
-            sort="invalid",
+            sort=cast(Any, "invalid"),
         )
 
 
@@ -79,7 +90,7 @@ def test_distribution_outfile(tmp_path):
     mpl.rcParams["text.usetex"] = False
 
     adata = ADATA.copy()
-    adata.obs["n_counts"] = np.asarray(adata.X.sum(axis=1)).flatten()
+    adata.obs["n_counts"] = _n_counts(adata)
     outfile = tmp_path / "distribution.png"
 
     result = bt.sct.pl.distribution(
@@ -106,14 +117,14 @@ def test_distribution_without_groupby_and_validation_errors(mini_adata):
     assert isinstance(ax, Axes)
     assert ax.get_title() == "score"
     assert len(bps["boxes"]) == 1
-    assert all(median.get_linewidth() == 0 for median in bps["medians"])
+    assert all(median.get_linewidth() == 0 for median in _median_lines(bps))
     plt.close(fig)
 
     with pytest.raises(ValueError, match="invalid argument values"):
         bt.sct.pl.distribution(mini_adata, obs="score", hue="cluster")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'title'"):
-        bt.sct.pl.distribution(mini_adata, obs="score", title=object())
+        bt.sct.pl.distribution(mini_adata, obs="score", title=cast(Any, object()))
 
 
 def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
@@ -136,7 +147,7 @@ def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
     assert set(bps) == {"ctrl", "stim"}
     assert ax.get_legend() is not None
     for bp in bps.values():
-        assert all(median.get_linewidth() == 0 for median in bp["medians"])
+        assert all(median.get_linewidth() == 0 for median in _median_lines(bp))
     plt.close(fig)
 
 
@@ -219,16 +230,33 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
 
 def test_distribution_position_and_point_helper_validation():
     with pytest.raises(ValueError, match="groups' and 'hues'"):
-        _distribution.__get_box_positions(widths=0.5, hues=(2, 0.1))
+        _distribution.__get_box_positions(
+            widths=0.5,
+            hues=(2, 0.1),
+        )
 
     with pytest.raises(ValueError, match="2-length tuple"):
-        _distribution.__get_box_positions(widths=0.5, groups=(1, 2, 3))
+        _distribution.__get_box_positions(
+            widths=0.5,
+            groups=cast(Any, (1, 2, 3)),
+        )
 
     with pytest.raises(ValueError, match="expected None or 2-length tuple"):
-        _distribution.__get_box_positions(widths=0.5, groups="bad")
+        _distribution.__get_box_positions(
+            widths=0.5,
+            groups=cast(Any, "bad"),
+        )
 
     with pytest.raises(ValueError, match="2-length tuple"):
-        _distribution.__get_box_positions(widths=0.5, groups=(1, 0.2), hues=(1, 2, 3))
+        _distribution.__get_box_positions(
+            widths=0.5,
+            groups=(1, 0.2),
+            hues=cast(Any, (1, 2, 3)),
+        )
 
     with pytest.raises(ValueError, match="expected None or 2-length tuple"):
-        _distribution.__get_box_positions(widths=0.5, groups=(1, 0.2), hues="bad")
+        _distribution.__get_box_positions(
+            widths=0.5,
+            groups=(1, 0.2),
+            hues=cast(Any, "bad"),
+        )

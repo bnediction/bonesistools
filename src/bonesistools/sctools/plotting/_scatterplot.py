@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import (
     Any,
@@ -15,6 +14,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import matplotlib.pyplot as plt
@@ -25,6 +25,7 @@ from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_or_mudata_checker
 from ..tools import barycenters
 from ..tools._utils import choose_representation
@@ -65,12 +66,7 @@ def __deprecated_bool_kwarg(
 
     old_value = kwargs.pop(old_name)
 
-    warnings.warn(
-        f"'{old_name}' is deprecated and will be removed in 2.0.0; "
-        f"use '{new_name}' instead.",
-        FutureWarning,
-        stacklevel=3,
-    )
+    _warn_deprecated_argument(old_name, new_name, stacklevel=3)
 
     if new_value != default_value:
         raise TypeError(
@@ -90,12 +86,7 @@ def __deprecated_graph_kwarg(
         return False
 
     old_value = kwargs.pop(old_name)
-    warnings.warn(
-        f"`{old_name}` is deprecated and will be removed in 2.0.0; "
-        f"use `{target}` instead.",
-        FutureWarning,
-        stacklevel=2,
-    )
+    _warn_deprecated(f"`{old_name}`", replacement=f"`{target}`", stacklevel=2)
 
     return cast(bool, old_value)
 
@@ -125,11 +116,6 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
         ax: Optional[Axes] = None,
         **kwargs: Any,
     ) -> Tuple[Figure, Axes]:
-
-        if obs not in scdata.obs:
-            raise KeyError(f"key '{obs}' not found in scdata.obs")
-        if use_rep not in scdata.obsm:
-            raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
         n_components = 2 if n_components is None else n_components
         fig, ax = cast(
@@ -496,6 +482,65 @@ def __draw_labels(
             ax3d.text(x=value[0], y=value[1], z=value[2], s=label, **kwargs)
 
 
+@overload
+def embedding(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Callable[[], None]] = None,
+    outfile: None = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]:
+    ...
+
+
+@overload
+def embedding(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Path,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> None:
+    ...
+
+
+@overload
+def embedding(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes]]:
+    ...
+
+
 @anndata_or_mudata_checker
 def embedding(
     scdata: ScData,  # type: ignore
@@ -576,8 +621,6 @@ def embedding(
     ------
     ValueError
         If `n_components` is not 2 or 3.
-    TypeError
-        If `title` is neither a string nor a dictionary.
     """
 
     if n_components not in [2, 3]:
@@ -696,11 +739,9 @@ def embedding_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     Deprecated alias for `embedding()`.
     """
 
-    warnings.warn(
-        "`bt.sct.pl.embedding_plot` is deprecated and will be removed in "
-        "2.0.0; use "
-        "`bt.sct.pl.embedding` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pl.embedding_plot`",
+        replacement="`bt.sct.pl.embedding`",
         stacklevel=2,
     )
 

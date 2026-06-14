@@ -2,11 +2,24 @@
 
 import sys
 from types import ModuleType
+from typing import Any, cast
 
 import pytest
-from boolean import BooleanAlgebra
+from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
+
+
+def _pydot_get(obj, method):
+    return getattr(cast(Any, obj), method)()
+
+
+def _pydot_get_string(obj, method):
+    return cast(str, _pydot_get(obj, method)).strip('"')
+
+
+def _edge_data(graph, source, target, key=0):
+    return cast(Any, graph[source][target])[key]
 
 
 def test_boolean_network_coerces_string_rules():
@@ -56,8 +69,8 @@ def test_boolean_network_accepts_boolean_algebra_constants():
 
     bn = bt.bpy.bn.BooleanNetwork(
         {
-            "A": ba.TRUE,
-            "B": ba.FALSE,
+            "A": cast(Expression, ba.TRUE),
+            "B": cast(Expression, ba.FALSE),
         },
         ba=ba,
     )
@@ -69,7 +82,7 @@ def test_boolean_network_accepts_boolean_algebra_constants():
 def test_boolean_network_rejects_invalid_rule_type():
 
     with pytest.raises(TypeError):
-        bt.bpy.bn.BooleanNetwork({"A": object()})
+        bt.bpy.bn.BooleanNetwork({"A": cast(Any, object())})
 
 
 def test_boolean_network_rejects_undefined_symbols():
@@ -163,7 +176,7 @@ def test_boolean_network_setitem_coerces_rules():
     assert bn["C"] is bn.ba.FALSE
 
     with pytest.raises(TypeError, match="unsupported argument type for 'component'"):
-        bn[1] = 0
+        bn[cast(Any, 1)] = 0
 
 
 def test_boolean_network_string_representation():
@@ -246,10 +259,10 @@ def test_boolean_network_rename_validates_inputs_and_collisions():
         bn.rename("A", "B")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'old'"):
-        bn.rename(1, "Y")
+        bn.rename(cast(Any, 1), "Y")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'new'"):
-        bn.rename("A", 1)
+        bn.rename("A", cast(Any, 1))
 
 
 def test_boolean_network_rename_validates_candidate_before_mutating():
@@ -300,13 +313,13 @@ def test_boolean_network_relabel_validates_mapping():
     bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
 
     with pytest.raises(TypeError, match="unsupported argument type for 'mapping'"):
-        bn.relabel([("A", "X")])
+        bn.relabel(cast(Any, [("A", "X")]))
 
     with pytest.raises(TypeError, match="unsupported mapping key type"):
-        bn.relabel({1: "X"})
+        bn.relabel(cast(Any, {1: "X"}))
 
     with pytest.raises(TypeError, match="unsupported mapping value type"):
-        bn.relabel({"A": 1})
+        bn.relabel(cast(Any, {"A": 1}))
 
     assert bn.rules == {"A": "B", "B": "1"}
 
@@ -427,7 +440,7 @@ def test_boolean_network_equivalence_rejects_unknown_method():
     bn = bt.bpy.bn.BooleanNetwork({"A": 1})
 
     with pytest.raises(ValueError):
-        bn.equivalent(bn, method="unknown")
+        bn.equivalent(bn, method=cast(Any, "unknown"))
 
 
 def test_boolean_network_influences():
@@ -502,17 +515,15 @@ def test_boolean_network_fixed_points_validate_inputs():
     with pytest.raises(ValueError, match="expected components"):
         bn.is_fixed_point({"A": 1, "B": 1, "C": 0})
 
-    with pytest.raises(ValueError, match="expected 0 or 1"):
-        bn.is_fixed_point({"A": 1, "B": "*"})
+    assert bn.is_fixed_point({"A": 1, "B": "*"}) is False
 
-    with pytest.raises(ValueError, match="expected 0 or 1"):
-        bn.is_fixed_point({"A": 1, "B": bt.bpy.ba.PartialBoolean("*")})
+    assert bn.is_fixed_point({"A": 1, "B": bt.bpy.ba.PartialBoolean("*")}) is False
 
     with pytest.raises(TypeError, match="unsupported argument type for 'state'"):
-        bn.is_fixed_point(object())
+        bn.is_fixed_point(cast(Any, object()))
 
     with pytest.raises(ValueError, match="expected string component names"):
-        bn.is_fixed_point({"A": 1, 2: 0})
+        bn.is_fixed_point(cast(Any, {"A": 1, 2: 0}))
 
 
 def test_boolean_network_to_influence_graph():
@@ -532,8 +543,8 @@ def test_boolean_network_to_influence_graph():
     assert graph.has_edge("B", "A")
     assert graph.has_edge("C", "A")
 
-    assert graph["B"]["A"][0]["sign"] == 1
-    assert graph["C"]["A"][0]["sign"] == -1
+    assert _edge_data(graph, "B", "A")["sign"] == 1
+    assert _edge_data(graph, "C", "A")["sign"] == -1
 
 
 def test_boolean_network_to_graphviz(fake_graphviz):
@@ -573,21 +584,24 @@ def test_boolean_network_to_pydot():
 
     dot = bn.to_pydot(rankdir="LR")
 
-    assert dot.get_rankdir() == "LR"
+    assert cast(Any, dot).get_rankdir() == "LR"
 
     edges = {
-        (edge.get_source().strip('"'), edge.get_destination().strip('"')): edge
+        (
+            _pydot_get_string(edge, "get_source"),
+            _pydot_get_string(edge, "get_destination"),
+        ): edge
         for edge in dot.get_edges()
     }
 
     assert ("B", "A") in edges
     assert ("C", "A") in edges
 
-    assert edges[("B", "A")].get_color() == "green4"
-    assert edges[("B", "A")].get_arrowhead() == "normal"
+    assert _pydot_get(edges[("B", "A")], "get_color") == "green4"
+    assert _pydot_get(edges[("B", "A")], "get_arrowhead") == "normal"
 
-    assert edges[("C", "A")].get_color() == "red2"
-    assert edges[("C", "A")].get_arrowhead() == "tee"
+    assert _pydot_get(edges[("C", "A")], "get_color") == "red2"
+    assert _pydot_get(edges[("C", "A")], "get_arrowhead") == "tee"
 
 
 def test_boolean_network_show(monkeypatch):
@@ -613,8 +627,8 @@ def test_boolean_network_show(monkeypatch):
         calls["display"] = svg
 
     display_module = ModuleType("IPython.display")
-    display_module.SVG = FakeSVG
-    display_module.display = fake_display
+    setattr(display_module, "SVG", FakeSVG)
+    setattr(display_module, "display", fake_display)
     monkeypatch.setitem(sys.modules, "IPython.display", display_module)
     monkeypatch.setattr(bt.bpy.bn.BooleanNetwork, "to_pydot", fake_to_pydot)
 

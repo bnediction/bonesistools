@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from types import SimpleNamespace
+from typing import Any, cast
 
 import anndata as ad
 import numpy as np
@@ -33,7 +34,7 @@ def mini_adata():
             index=["g1", "g2", "g3"],
         ),
     )
-    adata.layers["counts"] = adata.X.copy() + 1.0
+    adata.layers["counts"] = cast(Any, adata.X).copy() + 1.0
     adata.obsm["X_pca"] = np.array(
         [
             [0.0, 0.0, 1.0],
@@ -156,7 +157,7 @@ def fake_gene_synonyms_cls():
         def get_official_name(self, gene, **_):
             return self._official_names.get(gene, gene)
 
-        def get_gene_id(self, gene, input_identifier_type="name"):
+        def get_gene_id(self, gene, input_identifier_type="name", **_):
             return self._gene_ids.get(gene, gene)
 
     return FakeGeneSynonyms

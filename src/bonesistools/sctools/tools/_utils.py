@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import warnings
 from typing import Any, Optional, cast
 
 from anndata import AnnData
 from numpy import ndarray
 
+from ..._warnings import _warn_deprecated
 from .._typing import (
     ScData,
     anndata_checker,
@@ -71,11 +71,9 @@ def choose_mtx_representation(*args: Any, **kwargs: Any) -> ndarray:
     Deprecated alias for `choose_matrix_representation`.
     """
 
-    warnings.warn(
-        "`bt.sct.tl.choose_mtx_representation` is deprecated and will be "
-        "removed in 2.0.0; use "
-        "`bt.sct.tl.choose_matrix_representation` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.tl.choose_mtx_representation`",
+        replacement="`bt.sct.tl.choose_matrix_representation`",
         stacklevel=2,
     )
     return choose_matrix_representation(*args, **kwargs)
@@ -116,7 +114,8 @@ def choose_representation(
     if use_rep not in scdata.obsm:
         if use_rep == "X_pca":
             raise KeyError(
-                "key 'X_pca' not found in scdata.obsm: please run scanpy.tl.pca"
+                "key 'X_pca' not found in scdata.obsm: "
+                "please run bonesistools.sct.tl.pca"
             )
         else:
             raise KeyError(f"key '{use_rep}' not found in scdata.obsm")

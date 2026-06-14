@@ -8,12 +8,14 @@ from typing import (
     Optional,
     Union,
     cast,
+    overload,
 )
 
 import numpy as np
 
 from .._dependencies import require_sklearn
 from .._typing import (
+    AnnData,
     Metric,
     Metric_Function,
     ScData,
@@ -23,10 +25,36 @@ from .._typing import (
 from ._utils import choose_representation
 
 
+@overload
+def pairwise_distances(
+    adata: AnnData,
+    n_components: Optional[int] = None,
+    use_rep: Optional[str] = None,
+    metric: Union[Metric, Metric_Function] = "euclidean",
+    *,
+    key_added: None = None,
+    n_jobs: int = 1,
+    **metric_kwds: Any,
+) -> np.ndarray: ...
+
+
+@overload
+def pairwise_distances(
+    adata: AnnData,
+    n_components: Optional[int] = None,
+    use_rep: Optional[str] = None,
+    metric: Union[Metric, Metric_Function] = "euclidean",
+    *,
+    key_added: str,
+    n_jobs: int = 1,
+    **metric_kwds: Any,
+) -> None: ...
+
+
 @require_sklearn
 @anndata_checker
 def pairwise_distances(
-    adata,
+    adata: AnnData,  # type: ignore
     n_components: Optional[int] = None,
     use_rep: Optional[str] = None,
     metric: Union[Metric, Metric_Function] = "euclidean",
@@ -58,7 +86,13 @@ def pairwise_distances(
     Returns
     -------
     ndarray or None
-        Pairwise distance matrix if `key_added` is None; otherwise None.
+        If `key_added` is None, returns the pairwise distance matrix.
+        Otherwise, updates `adata` in place and returns None.
+
+        Pairwise distance results are stored in:
+
+        - `adata.obsp[key_added]`: pairwise distance matrix;
+        - `adata.uns[key_added]`: distance metadata.
     """
 
     from sklearn.metrics import pairwise_distances

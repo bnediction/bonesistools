@@ -15,6 +15,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import matplotlib.pyplot as plt
@@ -130,6 +131,77 @@ def __apply_ticklabel_colors(
     return None
 
 
+@overload
+def composition(
+    scdata: ScData,
+    obs: str,
+    groupby: str,
+    obs_order: Optional[Sequence[object]] = None,
+    group_order: Optional[Sequence[object]] = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
+    normalize: bool = True,
+    percent: bool = True,
+    dropna: bool = True,
+    orientation: Orientation = "vertical",
+    width: float = 0.8,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    showlegend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    outfile: None = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]: ...
+
+
+@overload
+def composition(
+    scdata: ScData,
+    obs: str,
+    groupby: str,
+    obs_order: Optional[Sequence[object]] = None,
+    group_order: Optional[Sequence[object]] = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
+    normalize: bool = True,
+    percent: bool = True,
+    dropna: bool = True,
+    orientation: Orientation = "vertical",
+    width: float = 0.8,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    showlegend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Path,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def composition(
+    scdata: ScData,
+    obs: str,
+    groupby: str,
+    obs_order: Optional[Sequence[object]] = None,
+    group_order: Optional[Sequence[object]] = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
+    normalize: bool = True,
+    percent: bool = True,
+    dropna: bool = True,
+    orientation: Orientation = "vertical",
+    width: float = 0.8,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    showlegend: bool = True,
+    default_parameters: Optional[Callable[[], None]] = None,
+    *,
+    outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes]]: ...
+
+
 @anndata_or_mudata_checker
 def composition(
     scdata: ScData,  # type: ignore
@@ -217,8 +289,6 @@ def composition(
 
     Raises
     ------
-    TypeError
-        If `title` is neither a string nor a dictionary.
     KeyError
         If explicit color mappings miss plotted segment values.
     ValueError

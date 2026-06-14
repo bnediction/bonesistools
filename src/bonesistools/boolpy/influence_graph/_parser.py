@@ -13,10 +13,7 @@ from typing import (
 import networkx as nx
 import pandas as pd
 
-from ...databases.ncbi._typing import (
-    InputIdentifierType,
-    OutputIdentifierType,
-)
+from ...databases.ncbi._typing import InputIdentifierType, OutputIdentifierType
 
 if TYPE_CHECKING:
     from ...databases.ncbi._genesyn import GeneSynonyms

@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast, overload
 
 import numpy as np
 from anndata import AnnData
@@ -13,7 +13,42 @@ from pandas import DataFrame, Index
 from scipy.sparse import csc_matrix, issparse
 
 from ..._compat import Literal
+from ..._warnings import _warn_deprecated
 from .._typing import anndata_checker
+
+
+@overload
+def merge_duplicate_vars(
+    adata: AnnData,
+    keep: Literal["first", "consensus"] = "first",
+    varm: Literal["nan", "first", "mean"] = "nan",
+    varp: Literal["error", "drop"] = "error",
+    copy: Literal[True] = True,
+) -> AnnData:
+    ...
+
+
+@overload
+def merge_duplicate_vars(
+    adata: AnnData,
+    keep: Literal["first", "consensus"] = "first",
+    varm: Literal["nan", "first", "mean"] = "nan",
+    varp: Literal["error", "drop"] = "error",
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def merge_duplicate_vars(
+    adata: AnnData,
+    keep: Literal["first", "consensus"] = "first",
+    varm: Literal["nan", "first", "mean"] = "nan",
+    varp: Literal["error", "drop"] = "error",
+    copy: bool = True,
+) -> Union[AnnData, None]:
+    ...
 
 
 @anndata_checker
@@ -74,8 +109,17 @@ def merge_duplicate_vars(
     Returns
     -------
     AnnData or None
-        AnnData object with duplicated variable names merged if `copy=True`;
-        otherwise None.
+        If `copy=True`, returns a copy of `adata` with duplicated variables
+        merged. Otherwise, updates `adata` in place and returns None.
+
+        Merged variable data are stored in:
+
+        - `adata.var_names`: deduplicated variable names;
+        - `adata.var`: merged variable annotations;
+        - `adata.X`: summed expression matrix;
+        - `adata.layers`: summed layer matrices;
+        - `adata.varm`: merged variable mappings according to `varm`;
+        - `adata.varp`: pairwise variable matrices handled according to `varp`.
     """
 
     if keep not in ["first", "consensus"]:
@@ -145,6 +189,34 @@ def merge_duplicate_vars(
     return None
 
 
+@overload
+def var_names_merge_duplicates(
+    adata: AnnData,
+    var_names_column: Optional[str] = None,
+    copy: Literal[True] = True,
+) -> AnnData:
+    ...
+
+
+@overload
+def var_names_merge_duplicates(
+    adata: AnnData,
+    var_names_column: Optional[str] = None,
+    *,
+    copy: Literal[False],
+) -> None:
+    ...
+
+
+@overload
+def var_names_merge_duplicates(
+    adata: AnnData,
+    var_names_column: Optional[str] = None,
+    copy: bool = True,
+) -> Union[AnnData, None]:
+    ...
+
+
 def var_names_merge_duplicates(
     adata: AnnData,
     var_names_column: Optional[str] = None,
@@ -156,18 +228,15 @@ def var_names_merge_duplicates(
     Use `merge_duplicate_vars` instead.
     """
 
-    warnings.warn(
-        "`bt.sct.pp.var_names_merge_duplicates` is deprecated and will be "
-        "removed in 2.0.0; use "
-        "`bt.sct.pp.merge_duplicate_vars` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pp.var_names_merge_duplicates`",
+        replacement="`bt.sct.pp.merge_duplicate_vars`",
         stacklevel=2,
     )
     if var_names_column is not None:
-        warnings.warn(
-            "`var_names_column` is deprecated and will be removed in 2.0.0; "
-            "use `keep` to control `.var` merging.",
-            FutureWarning,
+        _warn_deprecated(
+            "`var_names_column`",
+            replacement="`keep` to control `.var` merging",
             stacklevel=2,
         )
     return merge_duplicate_vars(

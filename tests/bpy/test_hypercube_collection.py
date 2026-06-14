@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from types import MappingProxyType
+from typing import Any, cast
 
 import pytest
 
@@ -48,7 +49,7 @@ def test_hypercube_collection_add_discard_and_copy():
 
     hcs.discard({"A": 0})
     hcs.discard({"A": 3})
-    hcs.discard(object())
+    hcs.discard(cast(Any, object()))
 
     assert {"A": 0} not in hcs
     assert {"A": 1} in hcs
@@ -125,13 +126,13 @@ def test_hypercube_collection_rejects_invalid_inputs():
     hcs = bt.bpy.ba.HypercubeCollection()
 
     with pytest.raises(TypeError):
-        hcs.add(object())
+        hcs.add(cast(Any, object()))
 
     with pytest.raises(ValueError):
         hcs.add({"A": 2})
 
     with pytest.raises(TypeError):
-        hcs.smaller_than(object())
+        hcs.smaller_than(cast(Any, object()))
 
     with pytest.raises(ValueError):
         hcs.larger_than({"A": 2})

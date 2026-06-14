@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any, List, Optional, Union
 
 import networkx as nx
 import pandas as pd
 
+from ..._validation import _as_boolean
+from ..._warnings import _warn_deprecated
 from ...boolpy.influence_graph import InfluenceGraph
 from ..ncbi import GeneSynonyms
-from ..ncbi._typing import OutputIdentifierType
+from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
 from ._archive import (
     OmnipathVersion,
     list_interactions_versions,
@@ -22,7 +23,7 @@ def collectri(
     organism: Union[str, int] = "mouse",
     split_complexes: bool = False,
     remove_pmid: bool = False,
-    genesyn: Optional[GeneSynonyms] = None,
+    genesyn: Optional[GeneSynonymsLike] = None,
     gene_identifier_type: OutputIdentifierType = "official_name",
     version: OmnipathVersion = "latest",
 ) -> InfluenceGraph:
@@ -54,18 +55,11 @@ def collectri(
     InfluenceGraph
         Signed regulatory network.
 
-    Raises
-    ------
-    TypeError
-        If `organism`, `split_complexes`, `remove_pmid` or `genesyn` has an
-        unsupported type.
-
     References
     ----------
-    [1] Müller-Dott et al. (2023). Expanding the coverage of regulons
-    from high-confidence prior knowledge for accurate estimation of
-    transcription factor activities. Nucleic Acids Research, 51(20),
-    10934-10949 (https://doi.org/10.1093/nar/gkad841)
+    Müller-Dott et al. (2023). Expanding the coverage of regulons from
+    high-confidence prior knowledge for accurate estimation of transcription
+    factor activities. Nucleic Acids Research, 51(20), 10934-10949.
     """
 
     if not isinstance(organism, (str, int)):
@@ -73,16 +67,8 @@ def collectri(
             f"unsupported argument type for 'organism': "
             f"expected {str} or {int} but received {type(organism)}"
         )
-    if not isinstance(split_complexes, bool):
-        raise TypeError(
-            f"unsupported argument type for 'split_complexes': "
-            f"expected {bool} but received {type(split_complexes)}"
-        )
-    if not isinstance(remove_pmid, bool):
-        raise TypeError(
-            f"unsupported argument type for 'remove_pmid': "
-            f"expected {bool} but received {type(remove_pmid)}"
-        )
+    split_complexes = _as_boolean(split_complexes, "split_complexes")
+    remove_pmid = _as_boolean(remove_pmid, "remove_pmid")
 
     collectri_db = load_interactions_version(
         "collectri",
@@ -127,19 +113,20 @@ def collectri(
     if genesyn is None:
         return grn
 
-    if isinstance(genesyn, GeneSynonyms):
-        genesyn(
-            grn,
-            input_identifier_type="name",
-            output_identifier_type=gene_identifier_type,
-            copy=False,
+    if not callable(genesyn):
+        raise TypeError(
+            f"unsupported argument type for 'genesyn': "
+            f"expected {GeneSynonyms} or compatible callable "
+            f"but received {type(genesyn)}"
         )
-        return grn
 
-    raise TypeError(
-        f"unsupported argument type for 'genesyn': "
-        f"expected {GeneSynonyms} but received {type(genesyn)}"
+    genesyn(
+        grn,
+        input_identifier_type="name",
+        output_identifier_type=gene_identifier_type,
+        copy=False,
     )
+    return grn
 
 
 def _collectri_versions() -> List[str]:
@@ -165,10 +152,9 @@ def load_collectri_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:
     Deprecated alias for `collectri`.
     """
 
-    warnings.warn(
-        "`load_collectri_grn` is deprecated and will be removed in 2.0.0; "
-        "use `collectri` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`load_collectri_grn`",
+        replacement="`collectri`",
         stacklevel=2,
     )
 

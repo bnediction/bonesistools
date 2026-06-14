@@ -1,14 +1,21 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.container import BarContainer
 from matplotlib.figure import Figure
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _barplot
+
+
+def _bar_container(ax: Axes, index: int) -> BarContainer:
+    return cast(BarContainer, ax.containers[index])
 
 
 def test_composition_plots_expected_proportions(mini_adata):
@@ -37,8 +44,14 @@ def test_composition_plots_expected_proportions(mini_adata):
 
     assert isinstance(fig, Figure)
     assert isinstance(ax, Axes)
-    assert [patch.get_height() for patch in ax.containers[0].patches] == [0.5, 1.0]
-    assert [patch.get_height() for patch in ax.containers[1].patches] == [0.5, 0.0]
+    assert [patch.get_height() for patch in _bar_container(ax, 0).patches] == [
+        0.5,
+        1.0,
+    ]
+    assert [patch.get_height() for patch in _bar_container(ax, 1).patches] == [
+        0.5,
+        0.0,
+    ]
     assert ax.get_ylim() == (0.0, 1.0)
     assert ax.get_legend() is not None
     assert ax.get_xticklabels()[0].get_color() == "tab:green"
@@ -56,8 +69,8 @@ def test_composition_can_plot_counts_without_legend(mini_adata):
         colors={"b1": "red", "b2": "blue"},
     )
 
-    assert [patch.get_height() for patch in ax.containers[0].patches] == [1, 1]
-    assert [patch.get_height() for patch in ax.containers[1].patches] == [1, 1]
+    assert [patch.get_height() for patch in _bar_container(ax, 0).patches] == [1, 1]
+    assert [patch.get_height() for patch in _bar_container(ax, 1).patches] == [1, 1]
     assert ax.get_legend() is None
     plt.close(fig)
 
@@ -87,7 +100,7 @@ def test_composition_horizontal_orientation(mini_adata):
         group_colors={"A": "tab:red", "B": "tab:blue"},
     )
 
-    assert ax.containers[0].patches[0].get_width() == 0.5
+    assert _bar_container(ax, 0).patches[0].get_width() == 0.5
     assert ax.get_xlabel() == "proportion"
     assert ax.get_ylabel() == "cluster"
     assert ax.get_xlim() == (0.0, 1.0)
@@ -162,7 +175,7 @@ def test_composition_outfile_and_validation(mini_adata, tmp_path):
             mini_adata,
             obs="batch",
             groupby="cluster",
-            title=object(),
+            title=cast(Any, object()),
         )
 
     with pytest.raises(ValueError, match="orientation"):
@@ -170,5 +183,5 @@ def test_composition_outfile_and_validation(mini_adata, tmp_path):
             mini_adata,
             obs="batch",
             groupby="cluster",
-            orientation="diagonal",
+            orientation=cast(Any, "diagonal"),
         )

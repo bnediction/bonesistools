@@ -10,6 +10,7 @@ for BooleanNetworkLike objects used in logical modelling frameworks.
 from typing import Any as _Any
 from typing import List as _List
 
+from ..._warnings import _warn_deprecated
 from . import _typing as typing
 from ._network import (
     BooleanNetwork,
@@ -36,12 +37,9 @@ def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
     Use `BooleanNetwork(bn).to_pydot(**kwargs)` instead.
     """
 
-    import warnings
-
-    warnings.warn(
-        "`bt.bpy.bn.bn_to_pydot` is deprecated and will be removed in 2.0.0; use "
-        "`bt.bpy.bn.BooleanNetwork(bn).to_pydot()` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.bpy.bn.bn_to_pydot`",
+        replacement="`bt.bpy.bn.BooleanNetwork(bn).to_pydot()`",
         stacklevel=2,
     )
 

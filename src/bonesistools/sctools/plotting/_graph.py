@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence as SequenceABC
 from numbers import Number
@@ -16,6 +15,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import matplotlib.pyplot as plt
@@ -27,6 +27,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import art3d
 
+from ..._warnings import _warn_deprecated
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
 from ..tools import extract_paga_graph
 from ._colors import black
@@ -81,11 +82,8 @@ def graph_overlay(
     ValueError
         If `n_components` is not 2 or 3.
 
-    References
-    ----------
     Chen et al. (2019). Single-cell trajectories reconstruction, exploration
-    and mapping of omics data with STREAM. Nature communications, 10(1), 1903
-    (https://www.nature.com/articles/s41467-019-09670-4)
+    and mapping of omics data with STREAM. Nature Communications, 10(1), 1903.
     """
 
     if n_components not in (2, 3):
@@ -174,6 +172,77 @@ def graph_overlay(
     return ax
 
 
+@overload
+def trajectory(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    graph_key: str = "epg",
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Any] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Any] = None,
+    outfile: None = None,
+    ax: Optional[Axes] = None,
+    graph: Optional[Dict[str, Any]] = None,
+    graph_z_offset: float = 0.0,
+    label_key: str = "label",
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]:
+    ...
+
+
+@overload
+def trajectory(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    graph_key: str = "epg",
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Any] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Any] = None,
+    *,
+    outfile: Path,
+    ax: Optional[Axes] = None,
+    graph: Optional[Dict[str, Any]] = None,
+    graph_z_offset: float = 0.0,
+    label_key: str = "label",
+    **kwargs: Any,
+) -> None:
+    ...
+
+
+@overload
+def trajectory(
+    scdata: ScData,
+    obs: str,
+    use_rep: str,
+    graph_key: str = "epg",
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    title: Optional[Any] = None,
+    show_legend: bool = True,
+    show_labels: bool = False,
+    automatic_resize: bool = False,
+    default_parameters: Optional[Any] = None,
+    *,
+    outfile: Optional[Path] = None,
+    ax: Optional[Axes] = None,
+    graph: Optional[Dict[str, Any]] = None,
+    graph_z_offset: float = 0.0,
+    label_key: str = "label",
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes]]:
+    ...
+
+
 @anndata_or_mudata_checker
 def trajectory(
     scdata: ScData,  # type: ignore
@@ -251,8 +320,7 @@ def trajectory(
     References
     ----------
     Chen et al. (2019). Single-cell trajectories reconstruction, exploration
-    and mapping of omics data with STREAM. Nature communications, 10(1), 1903
-    (https://www.nature.com/articles/s41467-019-09670-4)
+    and mapping of omics data with STREAM. Nature Communications, 10(1), 1903.
     """
 
     result = embedding(
@@ -342,9 +410,8 @@ def paga(
 
     References
     ----------
-    [1] Bergen et al. (2020). Generalizing RNA velocity to transient cell
-    states through dynamical modeling. Nature biotechnology, 38(12), 1408-1414
-    (https://doi.org/10.1038/s41587-020-0591-3)
+    Bergen et al. (2020). Generalizing RNA velocity to transient cell states
+    through dynamical modeling. Nature Biotechnology, 38(12), 1408-1414.
     """
 
     if ax is None:
@@ -390,10 +457,9 @@ def add_graph(*args: Any, **kwargs: Any) -> Axes:
     Deprecated alias for `graph_overlay`.
     """
 
-    warnings.warn(
-        "`bt.sct.pl.add_graph` is deprecated and will be removed in 2.0.0; use "
-        "`bt.sct.pl.graph_overlay` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pl.add_graph`",
+        replacement="`bt.sct.pl.graph_overlay`",
         stacklevel=2,
     )
     return graph_overlay(*args, **kwargs)
@@ -407,11 +473,6 @@ def draw_paga(*args: Any, **kwargs: Any) -> Union[Axes, None]:
     compatibility.
     """
 
-    warnings.warn(
-        "`draw_paga()` is deprecated and will be removed in 2.0.0; use "
-        "`paga()` instead.",
-        FutureWarning,
-        stacklevel=2,
-    )
+    _warn_deprecated("`draw_paga()`", replacement="`paga()`", stacklevel=2)
 
     return paga(*args, **kwargs)

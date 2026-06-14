@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import warnings
+from typing import Any, cast
+
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -74,6 +77,24 @@ def _empty_group_logfoldchange_adata():
     )
 
 
+def _zero_mean_logfoldchange_adata():
+    return ad.AnnData(
+        X=np.array(
+            [
+                [0.0],
+                [0.0],
+                [2.0],
+                [2.0],
+            ]
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A", "A", "B", "B"])},
+            index=["c1", "c2", "c3", "c4"],
+        ),
+        var=pd.DataFrame(index=["g1"]),
+    )
+
+
 def _empty_var_smirnov_adata():
     return ad.AnnData(
         X=np.empty((2, 0)),
@@ -143,7 +164,7 @@ def test_choose_representation_reports_missing_key(mini_adata):
     pca_missing = mini_adata.copy()
     del pca_missing.obsm["X_pca"]
 
-    with pytest.raises(KeyError, match="please run scanpy.tl.pca"):
+    with pytest.raises(KeyError, match="bonesistools.sct.tl.pca"):
         bt.sct.tl.choose_representation(pca_missing, use_rep=None)
 
 
@@ -373,6 +394,22 @@ def test_logfoldchanges_returns_empty_table_without_groups():
     assert result.columns.tolist() == ["group", "names", "logfoldchanges"]
 
 
+def test_logfoldchanges_handles_zero_means_without_warning():
+    with warnings.catch_warnings(record=True) as warnings_record:
+        warnings.simplefilter("always")
+        result = bt.sct.tl.logfoldchanges(
+            _zero_mean_logfoldchange_adata(),
+            groupby="cluster",
+        )
+
+    messages = [str(record.message) for record in warnings_record]
+    assert not any("divide by zero" in message for message in messages)
+
+    observed = result.set_index(["group", "names"])["logfoldchanges"].to_dict()
+    assert observed[("A", "g1")] == -np.inf
+    assert observed[("B", "g1")] == np.inf
+
+
 def test_logfoldchanges_filtering_keeps_expected_positive_ratios():
     adata = _toy_logfoldchange_adata()
 
@@ -399,7 +436,7 @@ def test_logfoldchanges_rejects_invalid_filter(mini_adata):
         bt.sct.tl.logfoldchanges(
             mini_adata,
             groupby="cluster",
-            filter_logfoldchanges="not callable",
+            filter_logfoldchanges=cast(Any, "not callable"),
         )
 
 
@@ -421,7 +458,7 @@ def test_hypergeometric_test_returns_expected_probability():
 
     with pytest.raises(TypeError, match="unsupported argument type for 'adata'"):
         bt.sct.tl.hypergeometric_test(
-            object(),
+            cast(Any, object()),
             signature=["g1"],
             markers=["g1"],
         )
@@ -508,7 +545,11 @@ def test_smirnov_tests_empty_gene_table_has_empty_adjusted_pvalues():
 
 def test_smirnov_tests_validates_groups_and_reference(mini_adata):
     with pytest.raises(TypeError, match="unsupported argument type for 'groups'"):
-        bt.sct.tl.smirnov_tests(mini_adata, groupby="cluster", groups=1)
+        bt.sct.tl.smirnov_tests(
+            mini_adata,
+            groupby="cluster",
+            groups=cast(Any, 1),
+        )
 
     with pytest.raises(ValueError, match="invalid argument value for 'reference'"):
         bt.sct.tl.smirnov_tests(

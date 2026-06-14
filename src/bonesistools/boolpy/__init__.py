@@ -21,13 +21,13 @@ pl
 from __future__ import annotations
 
 import sys as _sys
-import warnings as _warnings
 from types import ModuleType as _ModuleType
 from typing import Dict as _Dict
 from typing import List as _List
 from typing import Tuple as _Tuple
 from typing import cast as _cast
 
+from .._warnings import _warn_deprecated
 from . import boolean_algebra as ba
 from . import boolean_network as bn
 from . import influence_graph as ig
@@ -65,10 +65,9 @@ __all__ = [
 def __getattr__(name: str) -> object:
     if name in _DEPRECATED:
         module_alias, attr = _DEPRECATED[name]
-        _warnings.warn(
-            f"`bt.bpy.{name}` is deprecated and will be removed in 2.0.0; use "
-            f"`bt.bpy.{module_alias}.{attr}` instead.",
-            FutureWarning,
+        _warn_deprecated(
+            f"`bt.bpy.{name}`",
+            replacement=f"`bt.bpy.{module_alias}.{attr}`",
             stacklevel=2,
         )
         return _cast(object, getattr(_MODULES[module_alias], attr))

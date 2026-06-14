@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import pandas as pd
 import pytest
 
@@ -703,22 +705,22 @@ def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
     )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
-        _dorothea.dorothea(organism=object())
+        _dorothea.dorothea(organism=cast(Any, object()))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _dorothea.dorothea(genesyn=object(), version="latest")
+        _dorothea.dorothea(genesyn=cast(Any, object()), version="latest")
 
     with pytest.raises(
         TypeError,
         match="unsupported argument type for 'compatibility'",
     ):
-        _dorothea.dorothea(compatibility="yes")
+        _dorothea.dorothea(compatibility=cast(Any, "yes"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'flavor'"):
-        _dorothea.dorothea(flavor="old")
+        _dorothea.dorothea(flavor=cast(Any, "old"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'wrapper'"):
-        _dorothea.dorothea(wrapper="legacy")
+        _dorothea.dorothea(wrapper=cast(Any, "legacy"))
 
     with pytest.raises(ValueError, match="conflicting DoRothEA"):
         _dorothea.dorothea(flavor="legacy", wrapper="op")
@@ -727,16 +729,16 @@ def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
         TypeError,
         match="unsupported argument type for 'split_complexes'",
     ):
-        _collectri.collectri(split_complexes="yes")
+        _collectri.collectri(split_complexes=cast(Any, "yes"))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'remove_pmid'"):
-        _collectri.collectri(remove_pmid="yes")
+        _collectri.collectri(remove_pmid=cast(Any, "yes"))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
-        _collectri.collectri(organism=object())
+        _collectri.collectri(organism=cast(Any, object()))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _collectri.collectri(genesyn=object(), version="latest")
+        _collectri.collectri(genesyn=cast(Any, object()), version="latest")
 
     with pytest.raises(ValueError, match="support human, mouse and rat"):
         _archive.load_interactions_version(

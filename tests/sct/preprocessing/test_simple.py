@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Any, cast
+
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -18,23 +20,23 @@ def test_filter_obs_and_filter_var_subset_in_place(mini_adata):
 
 
 def test_filter_obs_and_filter_var_validate_inputs(mini_adata):
-    with pytest.raises(KeyError, match="key 'missing' not found in adata.obs"):
+    with pytest.raises(KeyError):
         bt.sct.pp.filter_obs(mini_adata, "missing", lambda values: values)
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'obs'"):
-        bt.sct.pp.filter_obs(mini_adata, 1, lambda values: values)
+    with pytest.raises(TypeError):
+        bt.sct.pp.filter_obs(mini_adata, cast(Any, 1), lambda values: values)
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'function'"):
-        bt.sct.pp.filter_obs(mini_adata, "score", "not callable")
+    with pytest.raises(TypeError):
+        bt.sct.pp.filter_obs(mini_adata, "score", cast(Any, "not callable"))
 
-    with pytest.raises(KeyError, match="key 'missing' not found in adata.var"):
+    with pytest.raises(KeyError):
         bt.sct.pp.filter_var(mini_adata, "missing", lambda values: values)
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'var'"):
-        bt.sct.pp.filter_var(mini_adata, 1, lambda values: values)
+    with pytest.raises(TypeError):
+        bt.sct.pp.filter_var(mini_adata, cast(Any, 1), lambda values: values)
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'function'"):
-        bt.sct.pp.filter_var(mini_adata, "kind", "not callable")
+    with pytest.raises(TypeError):
+        bt.sct.pp.filter_var(mini_adata, "kind", cast(Any, "not callable"))
 
 
 def test_regress_out_removes_linear_covariate_and_preserves_copy():
@@ -109,7 +111,7 @@ def test_merge_obs_and_var(mini_adata):
     assert merged_var.var["symbol"].tolist() == ["G1", "G2", "G3"]
 
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.pp.merge(mini_adata, right, axis="bad")
+        bt.sct.pp.merge(mini_adata, right, axis=cast(Any, "bad"))
 
 
 def test_transfer_layer_aligns_obs_and_var(mini_adata):

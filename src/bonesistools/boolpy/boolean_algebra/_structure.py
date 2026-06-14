@@ -12,6 +12,7 @@ from boolean import (
 from boolean.boolean import _FALSE, _TRUE
 
 from ..._compat import Literal
+from ..._validation import _as_literal
 
 EquivalenceMethod = Literal["simplify", "truth_table"]
 
@@ -119,6 +120,12 @@ def expressions_equivalent(
         truth-table comparison.
     """
 
+    method = _as_literal(
+        method,
+        choices=("simplify", "truth_table"),
+        name="method",
+    )
+
     if method == "simplify":
         return expr1.simplify() == expr2.simplify()
 
@@ -138,11 +145,6 @@ def expressions_equivalent(
                 return False
 
         return True
-
-    raise ValueError(
-        f"invalid argument value for 'method': "
-        f"expected 'simplify' or 'truth_table' but received {method!r}"
-    )
 
 
 def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:

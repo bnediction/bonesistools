@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Mapping as MappingABC
 from pathlib import Path
 from typing import (
@@ -15,6 +14,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    overload,
 )
 
 import matplotlib.patches as mpatches
@@ -27,6 +27,8 @@ from pandas import Series
 from pandas.core.groupby.generic import SeriesGroupBy
 
 from ..._compat import Literal
+from ..._validation import _as_literal
+from ..._warnings import _warn_deprecated
 from .._typing import ScData, anndata_or_mudata_checker
 from ._colors import (
     QUALITATIVE_COLORS,
@@ -151,6 +153,128 @@ def __add_points(
     return None
 
 
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    groupby: str,
+    hue: str,
+    notch: Optional[bool] = None,
+    sym: Optional[str] = None,
+    patch_artist: Optional[bool] = None,
+    vert: Optional[bool] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    sort: Optional[Literal["ascending", "descending"]] = None,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    box_colors: Optional[Colors] = None,
+    point_colors: Optional[Colors] = None,
+    boxitems_to_color: Tuple[BoxItem, ...] = ("whiskers", "caps", "boxes"),
+    showmedians: bool = True,
+    showmeans: bool = False,
+    showcaps: bool = True,
+    showbox: bool = True,
+    showfliers: Optional[bool] = None,
+    showpoints: Optional[bool] = None,
+    showlegend: bool = True,
+    outfile: None = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes, Dict[object, BoxPlots]]: ...
+
+
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    groupby: Optional[str] = None,
+    hue: None = None,
+    notch: Optional[bool] = None,
+    sym: Optional[str] = None,
+    patch_artist: Optional[bool] = None,
+    vert: Optional[bool] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    sort: Optional[Literal["ascending", "descending"]] = None,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    box_colors: Optional[Colors] = None,
+    point_colors: Optional[Colors] = None,
+    boxitems_to_color: Tuple[BoxItem, ...] = ("whiskers", "caps", "boxes"),
+    showmedians: bool = True,
+    showmeans: bool = False,
+    showcaps: bool = True,
+    showbox: bool = True,
+    showfliers: Optional[bool] = None,
+    showpoints: Optional[bool] = None,
+    showlegend: bool = True,
+    outfile: None = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes, BoxPlots]: ...
+
+
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    groupby: Optional[str] = None,
+    hue: None = None,
+    notch: Optional[bool] = None,
+    sym: Optional[str] = None,
+    patch_artist: Optional[bool] = None,
+    vert: Optional[bool] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    sort: Optional[Literal["ascending", "descending"]] = None,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    box_colors: Optional[Colors] = None,
+    point_colors: Optional[Colors] = None,
+    boxitems_to_color: Tuple[BoxItem, ...] = ("whiskers", "caps", "boxes"),
+    showmedians: bool = True,
+    showmeans: bool = False,
+    showcaps: bool = True,
+    showbox: bool = True,
+    showfliers: Optional[bool] = None,
+    showpoints: Optional[bool] = None,
+    showlegend: bool = True,
+    *,
+    outfile: Path,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    groupby: Optional[str] = None,
+    hue: Optional[str] = None,
+    notch: Optional[bool] = None,
+    sym: Optional[str] = None,
+    patch_artist: Optional[bool] = None,
+    vert: Optional[bool] = None,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    sort: Optional[Literal["ascending", "descending"]] = None,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    box_colors: Optional[Colors] = None,
+    point_colors: Optional[Colors] = None,
+    boxitems_to_color: Tuple[BoxItem, ...] = ("whiskers", "caps", "boxes"),
+    showmedians: bool = True,
+    showmeans: bool = False,
+    showcaps: bool = True,
+    showbox: bool = True,
+    showfliers: Optional[bool] = None,
+    showpoints: Optional[bool] = None,
+    showlegend: bool = True,
+    *,
+    outfile: Optional[Path] = None,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]: ...
+
+
 @anndata_or_mudata_checker
 def distribution(
     scdata: ScData,  # type: ignore
@@ -206,8 +330,6 @@ def distribution(
 
     Raises
     ------
-    TypeError
-        If `title` is neither a string nor a dictionary.
     ValueError
         If `groupby` and `hue` are inconsistently specified, or if `sort` is
         not `"ascending"` or `"descending"`.
@@ -257,17 +379,17 @@ def distribution(
             series = cast(
                 SeriesGroupBy, scdata.obs.groupby(by=groupby, observed=True)[obs]
             )
-        elif sort in ["ascending", "descending"]:
+        else:
+            sort = _as_literal(
+                sort,
+                choices=("ascending", "descending"),
+                name="sort",
+            )
             series = cast(
                 SeriesGroupBy, scdata.obs.groupby(by=groupby, observed=True)[obs]
             )
             groups = list(
                 series.median().sort_values(ascending=(sort == "ascending")).index
-            )
-        else:
-            raise ValueError(
-                f"invalid argument value for 'sort': "
-                f"expected 'ascending' or 'descending' but received {sort!r}"
             )
         if hue is None:
             hues = None
@@ -506,10 +628,9 @@ def boxplot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes, BoxplotRe
     Deprecated alias for `distribution`.
     """
 
-    warnings.warn(
-        "`bt.sct.pl.boxplot` is deprecated and will be removed in 2.0.0; "
-        "use `bt.sct.pl.distribution` instead.",
-        FutureWarning,
+    _warn_deprecated(
+        "`bt.sct.pl.boxplot`",
+        replacement="`bt.sct.pl.distribution`",
         stacklevel=2,
     )
     return distribution(*args, **kwargs)

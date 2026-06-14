@@ -55,8 +55,10 @@ class UnionType(object):
 DataFrameList: TypeAlias = List[DataFrame]
 Suffixes: TypeAlias = Tuple[Optional[str], Optional[str]]
 
-AxisInt: TypeAlias = int
-Axis: TypeAlias = Union[AxisInt, Literal["obs", "var"]]
+AnnDataAxis: TypeAlias = Literal["obs", "var"]
+AnnDataAxisWithBoth: TypeAlias = Literal["obs", "var", "both"]
+AnnDataAxisWithInteger: TypeAlias = Union[AnnDataAxis, Literal[0, 1]]
+Axis: TypeAlias = AnnDataAxis
 Keys: TypeAlias = Union[str, Sequence[str]]
 
 AnnDataList: TypeAlias = List[AnnData]
@@ -77,21 +79,51 @@ else:
         ScData = AnnData
 
 Metric: TypeAlias = Literal[
-    "cityblock",
-    "cosine",
-    "euclidean",
-    "l1",
-    "l2",
-    "manhattan",
     "braycurtis",
     "canberra",
     "chebyshev",
+    "cityblock",
     "correlation",
+    "cosine",
     "dice",
+    "euclidean",
     "hamming",
+    "haversine",
+    "jaccard",
+    "l1",
+    "l2",
+    "mahalanobis",
+    "manhattan",
+    "matching",
+    "minkowski",
+    "rogerstanimoto",
+    "russellrao",
+    "seuclidean",
+    "sokalsneath",
+    "sqeuclidean",
+    "wminkowski",
+    "yule",
+]
+UMAPMetric: TypeAlias = Literal[
+    "braycurtis",
+    "canberra",
+    "chebyshev",
+    "cityblock",
+    "correlation",
+    "cosine",
+    "dice",
+    "euclidean",
+    "hamming",
+    "haversine",
+    "hellinger",
     "jaccard",
     "kulsinski",
+    "l1",
+    "l2",
+    "ll_dirichlet",
     "mahalanobis",
+    "manhattan",
+    "matching",
     "minkowski",
     "rogerstanimoto",
     "russellrao",
@@ -99,6 +131,7 @@ Metric: TypeAlias = Literal[
     "sokalmichener",
     "sokalsneath",
     "sqeuclidean",
+    "wminkowski",
     "yule",
 ]
 Metric_Function: TypeAlias = Callable[[np.ndarray, np.ndarray], float]
@@ -143,8 +176,6 @@ def type_checker(
     ------
     Exception
         If no verification options are provided.
-    TypeError
-        If one of the checked arguments has an unsupported type.
     """
 
     if function is not None:
@@ -221,10 +252,6 @@ def anndata_checker(
     Callable
         Decorated function, or decorator if `function` is None.
 
-    Raises
-    ------
-    TypeError
-        If one of the first `n` arguments is not an AnnData object.
     """
 
     if function is not None:
@@ -285,8 +312,6 @@ def mudata_checker(
     ------
     ModuleNotFoundError
         If the decorated function is called while mudata is not installed.
-    TypeError
-        If one of the first `n` arguments is not a MuData object.
     """
 
     if function is not None:
@@ -348,11 +373,6 @@ def anndata_or_mudata_checker(
     Callable
         Decorated function, or decorator if `function` is None.
 
-    Raises
-    ------
-    TypeError
-        If one of the first `n` arguments is neither an AnnData nor an
-        available MuData object.
     """
 
     if function is not None:
