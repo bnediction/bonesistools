@@ -25,6 +25,7 @@ import pandas as pd
 from networkx import Graph
 
 from ..._compat import Literal
+from ..._validation import _as_positive_integer
 
 if TYPE_CHECKING:
     from ...boolpy.boolean_network._typing import BooleanNetworkLike
@@ -55,7 +56,7 @@ class Orthologs:
     output_organism: str (default: "mouse")
         Target organism. Supported values are listed by
         `bt.dbs.hcop.organisms()`.
-    min_evidence: int or float (default: 3)
+    min_evidence: int (default: 3)
         Minimum number of HCOP support sources required for each retained
         mapping.
     version: "bundled", "latest", str path or Path (default: "bundled")
@@ -75,7 +76,7 @@ class Orthologs:
         Source organism used by the converter.
     output_organism: str
         Target organism used by the converter.
-    min_evidence: int or float
+    min_evidence: int
         Minimum HCOP support threshold used to build mappings.
     version: str
         Normalized HCOP version label used by the converter.
@@ -115,7 +116,7 @@ class Orthologs:
         self,
         input_organism: str = "human",
         output_organism: str = "mouse",
-        min_evidence: Union[int, float] = 3,
+        min_evidence: int = 3,
         version: HcopVersion = "bundled",
         table: Optional[pd.DataFrame] = None,
         target_organism: Optional[str] = None,
@@ -344,7 +345,7 @@ class Orthologs:
         columns: Optional[Union[str, Sequence[str]]] = None,
         keep_if_missing: bool = True,
         copy: Literal[True] = True,
-        one_to_many: Optional[Union[int, float]] = None,
+        one_to_many: Optional[int] = None,
     ) -> pd.DataFrame: ...
 
     @overload
@@ -355,7 +356,7 @@ class Orthologs:
         keep_if_missing: bool = True,
         *,
         copy: Literal[False],
-        one_to_many: Optional[Union[int, float]] = None,
+        one_to_many: Optional[int] = None,
     ) -> None: ...
 
     @overload
@@ -365,7 +366,7 @@ class Orthologs:
         columns: Optional[Union[str, Sequence[str]]] = None,
         keep_if_missing: bool = True,
         copy: bool = True,
-        one_to_many: Optional[Union[int, float]] = None,
+        one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]: ...
 
     def translate_df(
@@ -374,7 +375,7 @@ class Orthologs:
         columns: Optional[Union[str, Sequence[str]]] = None,
         keep_if_missing: bool = True,
         copy: bool = True,
-        one_to_many: Optional[Union[int, float]] = None,
+        one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]:
         """
         Translate human gene symbols in selected DataFrame columns.
@@ -397,7 +398,7 @@ class Orthologs:
             with missing translations in selected columns are removed.
         copy: bool (default: True)
             Return a translated copy instead of modifying `df`.
-        one_to_many: int or float, optional
+        one_to_many: int, optional
             Maximum number of orthologs allowed per gene. If provided, use the
             same expansion semantics as `decoupler.op.translate`.
 
@@ -419,7 +420,7 @@ class Orthologs:
             )
 
         if one_to_many is not None:
-            self._validate_one_to_many(one_to_many)
+            one_to_many = self._validate_one_to_many(one_to_many)
             if not copy:
                 raise TypeError(
                     "invalid argument combination: 'one_to_many' can change "
@@ -602,7 +603,7 @@ class Orthologs:
         self,
         input_organism: Optional[str] = None,
         output_organism: Optional[str] = None,
-        min_evidence: Optional[Union[int, float]] = None,
+        min_evidence: Optional[int] = None,
         version: Optional[HcopVersion] = None,
         table: Optional[pd.DataFrame] = None,
         target_organism: Optional[str] = None,
@@ -617,7 +618,7 @@ class Orthologs:
             Currently only `"human"` is supported.
         output_organism: str, optional
             Target organism. If None, keep the current target organism.
-        min_evidence: int or float, optional
+        min_evidence: int, optional
             Minimum HCOP support threshold. If None, keep the current threshold.
         version: "bundled", "latest", str path or Path, optional
             HCOP version to load. If None, keep the current version.
@@ -651,7 +652,7 @@ class Orthologs:
             resolved_output_organism = output_organism
         if min_evidence is None:
             resolved_min_evidence = cast(
-                Union[int, float],
+                int,
                 getattr(self, "min_evidence", 3),
             )
         else:
@@ -667,7 +668,7 @@ class Orthologs:
 
         self._validate_input_organism(resolved_input_organism)
         self._validate_output_organism(resolved_output_organism)
-        self._validate_min_evidence(resolved_min_evidence)
+        resolved_min_evidence = self._validate_min_evidence(resolved_min_evidence)
 
         if table is None:
             table = self.orthologs(
@@ -741,7 +742,7 @@ class Orthologs:
         self,
         df: pd.DataFrame,
         column: str,
-        one_to_many: Union[int, float],
+        one_to_many: int,
     ) -> pd.DataFrame:
         map_data = self._generate_orthologs(
             values=cast(pd.Series, df[column]),
@@ -756,7 +757,7 @@ class Orthologs:
     def orthologs(
         input_organism: str = "human",
         output_organism: str = "mouse",
-        min_evidence: Union[int, float] = 3,
+        min_evidence: int = 3,
         version: HcopVersion = "bundled",
         target_organism: Optional[str] = None,
     ) -> pd.DataFrame:
@@ -775,7 +776,7 @@ class Orthologs:
         output_organism: str (default: "mouse")
             Target organism. Supported values are listed by
             `bt.dbs.hcop.organisms()`.
-        min_evidence: int or float (default: 3)
+        min_evidence: int (default: 3)
             Minimum number of HCOP support sources required for a mapping.
             The support count is computed from the comma-separated `support`
             column.
@@ -812,7 +813,7 @@ class Orthologs:
             output_organism = target_organism
         Orthologs._validate_input_organism(input_organism)
         Orthologs._validate_output_organism(output_organism)
-        Orthologs._validate_min_evidence(min_evidence)
+        min_evidence = Orthologs._validate_min_evidence(min_evidence)
         version_label = Orthologs._normalize_version(version)
 
         hcop = Orthologs._read_hcop_table(output_organism, version=version_label)
@@ -917,7 +918,7 @@ class Orthologs:
     def _generate_orthologs(
         self,
         values: pd.Series,
-        one_to_many: Union[int, float],
+        one_to_many: int,
     ) -> pd.DataFrame:
         map_dict = (
             self._table.groupby("human_symbol")["target_symbol"].apply(list).to_dict()
@@ -984,24 +985,12 @@ class Orthologs:
             )
 
     @staticmethod
-    def _validate_min_evidence(min_evidence: Union[int, float]) -> None:
-        if not isinstance(min_evidence, (int, float)) or min_evidence <= 0:
-            raise TypeError(
-                "unsupported argument value for 'min_evidence': expected a positive "
-                f"number but received {min_evidence!r}"
-            )
+    def _validate_min_evidence(min_evidence: int) -> int:
+        return _as_positive_integer(min_evidence, "min_evidence")
 
     @staticmethod
-    def _validate_one_to_many(one_to_many: Union[int, float]) -> None:
-        if (
-            isinstance(one_to_many, bool)
-            or not isinstance(one_to_many, (int, float))
-            or one_to_many <= 0
-        ):
-            raise TypeError(
-                "unsupported argument value for 'one_to_many': expected a positive "
-                f"number but received {one_to_many!r}"
-            )
+    def _validate_one_to_many(one_to_many: int) -> int:
+        return _as_positive_integer(one_to_many, "one_to_many")
 
     @staticmethod
     def _normalize_version(version: HcopVersion) -> str:
@@ -1110,7 +1099,7 @@ def organisms() -> List[str]:
 
 def orthologs(
     output_organism: str = "mouse",
-    min_evidence: Union[int, float] = 3,
+    min_evidence: int = 3,
     version: HcopVersion = "bundled",
     target_organism: Optional[str] = None,
 ) -> Orthologs:
@@ -1128,7 +1117,7 @@ def orthologs(
     output_organism: str (default: "mouse")
         Target organism. Supported values are listed by
         `bt.dbs.hcop.organisms()`.
-    min_evidence: int or float (default: 3)
+    min_evidence: int (default: 3)
         Minimum number of HCOP support sources required for each retained
         mapping.
     version: "bundled", "latest", str path or Path (default: "bundled")

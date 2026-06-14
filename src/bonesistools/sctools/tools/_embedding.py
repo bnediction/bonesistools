@@ -22,15 +22,13 @@ from ..._validation import (
 )
 from .._dependencies import require_sklearn
 from .._metadata import _format_random_state
-from .._typing import Metric, UMAPMetric, anndata_checker
+from .._typing import Metric, anndata_checker
 from ._utils import choose_matrix_representation, choose_representation
 
-EmbeddingMethod = Literal["spectral", "umap", "tsne"]
 EigenSolver = Literal["arpack", "lobpcg", "amg"]
 PCASolver = Literal["auto", "full", "arpack", "randomized"]
 TruncatedSVDSolver = Literal["arpack", "randomized"]
 
-EMBEDDING_METHODS: Tuple[EmbeddingMethod, ...] = ("spectral", "umap", "tsne")
 EIGEN_SOLVERS: Tuple[EigenSolver, ...] = ("arpack", "lobpcg", "amg")
 PCA_SOLVERS: Tuple[PCASolver, ...] = ("auto", "full", "arpack", "randomized")
 
@@ -217,129 +215,57 @@ def pca(
     return adata if copy else None
 
 
-@anndata_checker
-def embedding(
+def _neighbors_graph(
     adata: AnnData,
-    method: EmbeddingMethod = "umap",
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
-    n_components: int = 2,
-    key_added: Optional[str] = None,
-    seed: RandomStateSeed = None,
-    n_jobs: int = 1,
-    copy: bool = False,
-    **kwargs: Any,
-) -> Union[AnnData, None]:
-    """
-    Compute a low-dimensional embedding from an existing representation.
+    neighbors_key: str,
+) -> Tuple[str, Dict[str, Any], Any]:
+    if neighbors_key not in adata.uns:
+        raise KeyError(
+            f"key {neighbors_key!r} not found in adata.uns: "
+            f"please run `bt.sct.tl.neighbors(..., key_added={neighbors_key!r})`"
+        )
 
-    `method="umap"` uses `umap-learn` on the selected representation.
-    `method="spectral"` computes a spectral embedding with
-    `sklearn.manifold.SpectralEmbedding`. `method="tsne"` uses
-    `sklearn.manifold.TSNE`.
+    neighbors = cast(Dict[str, Any], adata.uns[neighbors_key])
+    if "connectivities_key" not in neighbors:
+        raise KeyError(
+            f"key 'connectivities_key' not found in "
+            f"adata.uns[{neighbors_key!r}]"
+        )
 
-    Parameters
-    ----------
-    adata: AnnData
-        Unimodal annotated data matrix.
-    method: {'umap', 'spectral', 'tsne'} (default: 'umap')
-        Embedding method.
-    use_rep: str, optional (default: 'X_pca')
-        Representation key in `adata.obsm` used as input.
-    n_rep_components: int, optional
-        Number of input representation dimensions to use. If None, use all
-        dimensions in `use_rep`.
-    n_components: int (default: 2)
-        Number of embedding dimensions to compute.
-    key_added: str, optional
-        Key used to store the embedding in `adata.obsm`. Defaults to `X_se`,
-        `X_umap` or `X_tsne` depending on `method`.
-    seed: int, np.random.RandomState, np.random or None, optional
-        Random seed or random state used by the embedding estimator.
-    n_jobs: int (default: 1)
-        Number of allocated processors.
-    copy: bool (default: False)
-        Return a copy instead of modifying `adata`.
-    **kwargs: Any
-        Additional keyword arguments passed to the selected embedding function:
-        `spectral`, `umap` or `tsne`.
-
-    Examples
-    --------
-    >>> bt.sct.tl.embedding(adata, use_rep="X_pca")
-
-    Returns
-    -------
-    AnnData or None
-        If `copy=True`, returns a copy of `adata` with embedding results
-        added. Otherwise, updates `adata` in place and returns None.
-
-        Embedding results are stored in:
-
-        - `adata.obsm[key_added]`: cell coordinates;
-        - `adata.uns[key_added]`: embedding metadata.
-    """
-
-    method = _as_literal(
-        method,
-        choices=EMBEDDING_METHODS,
-        name="method",
+    connectivities_key = _as_string(
+        neighbors["connectivities_key"],
+        "connectivities_key",
     )
+    if connectivities_key not in adata.obsp:
+        raise KeyError(
+            f"key {connectivities_key!r} not found in adata.obsp: "
+            f"expected connectivities from adata.uns[{neighbors_key!r}]"
+        )
 
-    if method == "spectral":
-        return spectral(
-            adata,
-            use_rep=use_rep,
-            n_rep_components=n_rep_components,
-            n_components=n_components,
-            key_added=key_added,
-            seed=seed,
-            n_jobs=n_jobs,
-            copy=copy,
-            **kwargs,
-        )
-    elif method == "umap":
-        return umap(
-            adata,
-            use_rep=use_rep,
-            n_rep_components=n_rep_components,
-            n_components=n_components,
-            key_added=key_added,
-            seed=seed,
-            n_jobs=n_jobs,
-            copy=copy,
-            **kwargs,
-        )
+    connectivities = cast(Any, adata.obsp[connectivities_key])
+    if sparse.issparse(connectivities):
+        graph = connectivities.tocoo(copy=True)
     else:
-        return tsne(
-            adata,
-            use_rep=use_rep,
-            n_rep_components=n_rep_components,
-            n_components=n_components,
-            key_added=key_added,
-            seed=seed,
-            n_jobs=n_jobs,
-            copy=copy,
-            **kwargs,
-        )
+        graph = sparse.coo_matrix(connectivities)
+
+    neighbor_params = cast(Dict[str, Any], neighbors.get("params", {}))
+    return connectivities_key, neighbor_params, graph
 
 
 @require_sklearn
 @anndata_checker
 def spectral(
     adata: AnnData,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
     n_components: int = 2,
-    n_neighbors: int = 15,
+    neighbors_key: str = "neighbors",
+    eigen_solver: Optional[EigenSolver] = None,
     key_added: Optional[str] = None,
     seed: RandomStateSeed = None,
-    eigen_solver: Optional[EigenSolver] = None,
     n_jobs: int = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
-    Compute a spectral embedding from an existing representation.
+    Compute a spectral embedding from a precomputed neighborhood graph.
 
     Spectral embedding is a nonlinear dimensionality reduction method based on
     the eigenvectors of a graph Laplacian constructed from local neighborhood
@@ -349,21 +275,18 @@ def spectral(
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    use_rep: str, optional (default: 'X_pca')
-        Representation key in `adata.obsm` used as input.
-    n_rep_components: int, optional
-        Number of input representation dimensions to use. If None, use all
-        dimensions in `use_rep`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
-    n_neighbors: int (default: 15)
-        Number of nearest neighbors used by spectral embedding.
+    neighbors_key: str (default: 'neighbors')
+        Key in `adata.uns` describing the precomputed neighborhood graph.
+        Spectral embedding reads the graph from
+        `adata.obsp[adata.uns[neighbors_key]["connectivities_key"]]`.
+    eigen_solver: {'arpack', 'lobpcg', 'amg'}, optional
+        Eigen solver passed to `sklearn.manifold.SpectralEmbedding`.
     key_added: str, optional
         Key used to store the embedding in `adata.obsm`. Defaults to `X_se`.
     seed: int, np.random.RandomState, np.random or None, optional
         Random seed or random state used by the embedding estimator.
-    eigen_solver: {'arpack', 'lobpcg', 'amg'}, optional
-        Eigen solver passed to `sklearn.manifold.SpectralEmbedding`.
     n_jobs: int (default: 1)
         Number of allocated processors.
     copy: bool (default: False)
@@ -389,7 +312,6 @@ def spectral(
     from sklearn.manifold import SpectralEmbedding
 
     n_components = _as_positive_integer(n_components, "n_components")
-    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
     if not isinstance(n_jobs, int):
         raise TypeError(
             f"unsupported argument type for 'n_jobs': "
@@ -405,12 +327,7 @@ def spectral(
         allow_none=True,
     )
 
-    if n_neighbors >= adata.n_obs:
-        raise ValueError(
-            f"invalid argument value for 'n_neighbors': "
-            f"expected value smaller than number of observations "
-            f"({adata.n_obs}) but received {n_neighbors!r}"
-        )
+    neighbors_key = _as_string(neighbors_key, "neighbors_key")
 
     if key_added is None:
         key_added = "X_se"
@@ -418,30 +335,30 @@ def spectral(
         key_added = _as_string(key_added, "key_added")
 
     adata = adata.copy() if copy else adata
-    X = choose_representation(
+    connectivities_key, neighbor_params, graph = _neighbors_graph(
         adata,
-        use_rep=use_rep,
-        n_components=n_rep_components,
+        neighbors_key,
     )
 
     embedding = cast(
         np.ndarray,
         SpectralEmbedding(
             n_components=n_components,
-            n_neighbors=n_neighbors,
+            affinity="precomputed",
             random_state=resolved_random_state,
             eigen_solver=eigen_solver,
             n_jobs=n_jobs,
-        ).fit_transform(X),
+        ).fit_transform(graph),
     )
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {
         "method": "spectral",
-        "use_rep": use_rep,
-        "n_rep_components": n_rep_components,
+        "neighbors_key": neighbors_key,
+        "connectivities_key": connectivities_key,
         "n_components": n_components,
-        "n_neighbors": n_neighbors,
+        "n_neighbors": neighbor_params.get("n_neighbors"),
+        "metric": neighbor_params.get("metric"),
         "seed": _format_random_state(seed),
         "eigen_solver": eigen_solver,
         "n_jobs": n_jobs,
@@ -453,13 +370,8 @@ def spectral(
 @anndata_checker
 def umap(
     adata: AnnData,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
     n_components: int = 2,
-    n_neighbors: int = 15,
-    key_added: Optional[str] = None,
-    seed: RandomStateSeed = 0,
-    n_jobs: int = 1,
+    neighbors_key: str = "neighbors",
     min_dist: float = 0.5,
     spread: float = 1.0,
     max_iter: Optional[int] = None,
@@ -469,11 +381,13 @@ def umap(
     init_pos: Union[str, np.ndarray] = "spectral",
     a: Optional[float] = None,
     b: Optional[float] = None,
-    metric: UMAPMetric = "euclidean",
+    key_added: Optional[str] = None,
+    seed: RandomStateSeed = 0,
+    n_jobs: int = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
-    Compute a UMAP embedding from an existing representation.
+    Compute a UMAP embedding from a precomputed neighborhood graph.
 
     UMAP is a nonlinear dimensionality reduction method based on neighborhood
     graphs and manifold learning.
@@ -482,21 +396,12 @@ def umap(
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    use_rep: str, optional (default: 'X_pca')
-        Representation key in `adata.obsm` used as input.
-    n_rep_components: int, optional
-        Number of input representation dimensions to use. If None, use all
-        dimensions in `use_rep`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
-    n_neighbors: int (default: 15)
-        Number of nearest neighbors used by UMAP.
-    key_added: str, optional
-        Key used to store the embedding in `adata.obsm`. Defaults to `X_umap`.
-    seed: int, np.random.RandomState, np.random or None (default: 0)
-        Random seed or random state used by UMAP.
-    n_jobs: int (default: 1)
-        Number of allocated processors.
+    neighbors_key: str (default: 'neighbors')
+        Key in `adata.uns` describing the precomputed neighborhood graph.
+        UMAP reads the graph from
+        `adata.obsp[adata.uns[neighbors_key]["connectivities_key"]]`.
     min_dist: float (default: 0.5)
         Effective minimum distance between embedded points.
     spread: float (default: 1.0)
@@ -517,8 +422,12 @@ def umap(
     b: float, optional
         UMAP curve parameter. If None, UMAP determines it from `min_dist` and
         `spread`.
-    metric: UMAPMetric (default: 'euclidean')
-        Distance metric.
+    key_added: str, optional
+        Key used to store the embedding in `adata.obsm`. Defaults to `X_umap`.
+    seed: int, np.random.RandomState, np.random or None (default: 0)
+        Random seed or random state used by UMAP.
+    n_jobs: int (default: 1)
+        Number of allocated processors.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
@@ -540,7 +449,6 @@ def umap(
     """
 
     n_components = _as_positive_integer(n_components, "n_components")
-    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
     if not isinstance(n_jobs, int):
         raise TypeError(
             f"unsupported argument type for 'n_jobs': "
@@ -549,12 +457,7 @@ def umap(
 
     resolved_random_state = _as_seed(seed)
 
-    if n_neighbors >= adata.n_obs:
-        raise ValueError(
-            f"invalid argument value for 'n_neighbors': "
-            f"expected value smaller than number of observations "
-            f"({adata.n_obs}) but received {n_neighbors!r}"
-        )
+    neighbors_key = _as_string(neighbors_key, "neighbors_key")
 
     if max_iter is not None:
         max_iter = _as_positive_integer(max_iter, "max_iter")
@@ -564,63 +467,76 @@ def umap(
         "negative_sample_rate",
     )
 
-    metric = _as_literal(
-        metric,
-        choices=get_args(UMAPMetric),
-        name="metric",
-    )
-
     if key_added is None:
         key_added = "X_umap"
     else:
         key_added = _as_string(key_added, "key_added")
 
     adata = adata.copy() if copy else adata
-    X = choose_representation(
+
+    connectivities_key, neighbor_params, graph = _neighbors_graph(
         adata,
-        use_rep=use_rep,
-        n_components=n_rep_components,
+        neighbors_key,
     )
+    graph_metric = cast(str, neighbor_params.get("metric", "euclidean"))
+    X = np.zeros((adata.n_obs, 1), dtype=np.float32)
 
     try:
-        umap_module = importlib.import_module("umap")
+        umap_umap_module = importlib.import_module("umap.umap_")
     except ImportError as error:
         raise ImportError(
             "umap-learn is required for `bt.sct.tl.umap`. "
             "Install bonesistools with the sctools extra or install umap-learn."
         ) from error
 
-    UMAP = cast(Any, getattr(umap_module, "UMAP"))
-    estimator = cast(
+    find_ab_params = cast(Any, getattr(umap_umap_module, "find_ab_params"))
+    simplicial_set_embedding = cast(
         Any,
-        UMAP(
-            n_neighbors=n_neighbors,
+        getattr(umap_umap_module, "simplicial_set_embedding"),
+    )
+    if a is None or b is None:
+        a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
+
+    if isinstance(init_pos, str) and init_pos in adata.obsm:
+        init = np.asarray(adata.obsm[init_pos], dtype=np.float32)
+    else:
+        init = init_pos
+
+    default_epochs = 500 if adata.n_obs <= 10000 else 200
+    n_epochs = default_epochs if max_iter is None else max_iter
+    embedding, _ = cast(
+        Tuple[np.ndarray, Any],
+        simplicial_set_embedding(
+            data=X,
+            graph=graph,
             n_components=n_components,
-            metric=metric,
-            min_dist=min_dist,
-            spread=spread,
-            n_epochs=max_iter,
-            learning_rate=alpha,
-            repulsion_strength=gamma,
-            negative_sample_rate=negative_sample_rate,
-            init=init_pos,
+            initial_alpha=alpha,
             a=a,
             b=b,
+            gamma=gamma,
+            negative_sample_rate=negative_sample_rate,
+            n_epochs=n_epochs,
+            init=init,
             random_state=resolved_random_state,
-            n_jobs=n_jobs,
+            metric=graph_metric,
+            metric_kwds={},
+            densmap=False,
+            densmap_kwds={},
+            output_dens=False,
+            parallel=n_jobs != 1 and seed is None,
+            verbose=False,
         ),
     )
-    embedding = cast(np.ndarray, estimator.fit_transform(X))
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {
         "method": "umap",
-        "use_rep": use_rep,
-        "n_rep_components": n_rep_components,
+        "neighbors_key": neighbors_key,
+        "connectivities_key": connectivities_key,
         "n_components": n_components,
         "seed": _format_random_state(seed),
-        "n_neighbors": n_neighbors,
-        "metric": metric,
+        "n_neighbors": neighbor_params.get("n_neighbors"),
+        "metric": graph_metric,
         "min_dist": min_dist,
         "spread": spread,
         "max_iter": max_iter,
@@ -641,16 +557,16 @@ def umap(
 def tsne(
     adata: AnnData,
     use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
+    n_pcs: Optional[int] = None,
     n_components: int = 2,
-    key_added: Optional[str] = None,
-    seed: RandomStateSeed = 0,
-    n_jobs: int = 1,
     max_iter: Optional[int] = None,
     perplexity: float = 30.0,
     learning_rate: float = 1000.0,
     early_exaggeration: float = 12.0,
     metric: Metric = "euclidean",
+    key_added: Optional[str] = None,
+    seed: RandomStateSeed = 0,
+    n_jobs: int = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
@@ -666,17 +582,11 @@ def tsne(
         Unimodal annotated data matrix.
     use_rep: str, optional (default: 'X_pca')
         Representation key in `adata.obsm` used as input.
-    n_rep_components: int, optional
+    n_pcs: int, optional
         Number of input representation dimensions to use. If None, use all
         dimensions in `use_rep`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
-    key_added: str, optional
-        Key used to store the embedding in `adata.obsm`. Defaults to `X_tsne`.
-    seed: int, np.random.RandomState, np.random or None (default: 0)
-        Random seed or random state used by t-SNE.
-    n_jobs: int (default: 1)
-        Number of allocated processors.
     max_iter: int, optional
         Maximum number of optimization iterations. Defaults to 1000.
     perplexity: float (default: 30.0)
@@ -687,6 +597,12 @@ def tsne(
         t-SNE early exaggeration.
     metric: Metric (default: 'euclidean')
         Distance metric.
+    key_added: str, optional
+        Key used to store the embedding in `adata.obsm`. Defaults to `X_tsne`.
+    seed: int, np.random.RandomState, np.random or None (default: 0)
+        Random seed or random state used by t-SNE.
+    n_jobs: int (default: 1)
+        Number of allocated processors.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
@@ -744,7 +660,7 @@ def tsne(
     X = choose_representation(
         adata,
         use_rep=use_rep,
-        n_components=n_rep_components,
+        n_components=n_pcs,
     )
 
     tsne_kwargs: Dict[str, Any] = {
@@ -768,7 +684,7 @@ def tsne(
     adata.uns[key_added] = {
         "method": "tsne",
         "use_rep": use_rep,
-        "n_rep_components": n_rep_components,
+        "n_pcs": n_pcs,
         "n_components": n_components,
         "seed": _format_random_state(seed),
         "perplexity": perplexity,

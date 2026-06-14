@@ -124,6 +124,25 @@ instead of `axis`.
 
 ---
 
+## Public parameter order
+
+Public functions should use a consistent parameter hierarchy when it naturally
+fits the API:
+
+1. object being operated on;
+2. hyperparameters and behavior options;
+3. metric parameters;
+4. where results are stored, such as `key_added`, `distances_key` or
+   `connectivities_key`;
+5. `seed`;
+6. `n_jobs`;
+7. `copy`.
+
+Do not reorder parameters mechanically when it would create noisy diffs or
+break a stable public API without a clear benefit.
+
+---
+
 ## Fitted objects
 
 Objects that learn state during execution should distinguish between:

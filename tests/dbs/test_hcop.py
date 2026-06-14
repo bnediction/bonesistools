@@ -157,7 +157,7 @@ def test_hcop_translate_rejects_invalid_arguments():
     with pytest.raises(ValueError, match="columns"):
         orthologs.translate_df(pd.DataFrame({"other": ["A"]}), columns=["source"])
 
-    with pytest.raises(TypeError, match="one_to_many"):
+    with pytest.raises(ValueError, match="one_to_many"):
         orthologs.translate_df(
             pd.DataFrame({"source": ["A"]}),
             columns=["source"],

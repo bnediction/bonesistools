@@ -2,7 +2,7 @@
 
 import sys
 from types import ModuleType
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 import numpy as np
 import pytest
@@ -12,21 +12,17 @@ from sklearn.manifold import TSNE, SpectralEmbedding
 import bonesistools as bt
 
 
-def test_embedding_stores_spectral_embedding_and_metadata(mini_adata):
+def test_spectral_stores_graph_embedding_and_metadata(mini_adata):
     expected = SpectralEmbedding(
         n_components=2,
-        n_neighbors=3,
+        affinity="precomputed",
         random_state=0,
         n_jobs=1,
-    ).fit_transform(mini_adata.obsm["X_pca"][:, :2])
+    ).fit_transform(mini_adata.obsp["connectivities"])
 
-    result = bt.sct.tl.embedding(
+    result = bt.sct.tl.spectral(
         mini_adata,
-        method="spectral",
-        use_rep="X_pca",
-        n_rep_components=2,
         n_components=2,
-        n_neighbors=3,
         seed=0,
         n_jobs=1,
     )
@@ -35,22 +31,21 @@ def test_embedding_stores_spectral_embedding_and_metadata(mini_adata):
     assert np.allclose(mini_adata.obsm["X_se"], expected)
     assert mini_adata.uns["X_se"] == {
         "method": "spectral",
-        "use_rep": "X_pca",
-        "n_rep_components": 2,
+        "neighbors_key": "neighbors",
+        "connectivities_key": "connectivities",
         "n_components": 2,
         "n_neighbors": 3,
+        "metric": None,
         "seed": 0,
         "eigen_solver": None,
         "n_jobs": 1,
     }
 
 
-def test_embedding_copy_does_not_mutate_input(mini_adata):
-    copied = bt.sct.tl.embedding(
+def test_spectral_copy_does_not_mutate_input(mini_adata):
+    copied = bt.sct.tl.spectral(
         mini_adata,
-        method="spectral",
         n_components=2,
-        n_neighbors=3,
         key_added="X_custom",
         seed=0,
         copy=True,
@@ -65,7 +60,6 @@ def test_spectral_wrapper_stores_spectral_embedding(mini_adata):
     bt.sct.tl.spectral(
         mini_adata,
         n_components=2,
-        n_neighbors=3,
         key_added="X_spectral",
         seed=0,
     )
@@ -74,19 +68,17 @@ def test_spectral_wrapper_stores_spectral_embedding(mini_adata):
     assert mini_adata.uns["X_spectral"]["method"] == "spectral"
 
 
-def test_embedding_accepts_random_state_object(mini_adata):
+def test_spectral_accepts_random_state_object(mini_adata):
     expected = SpectralEmbedding(
         n_components=2,
-        n_neighbors=3,
+        affinity="precomputed",
         random_state=np.random.RandomState(7),
         n_jobs=1,
-    ).fit_transform(mini_adata.obsm["X_pca"])
+    ).fit_transform(mini_adata.obsp["connectivities"])
 
-    bt.sct.tl.embedding(
+    bt.sct.tl.spectral(
         mini_adata,
-        method="spectral",
         n_components=2,
-        n_neighbors=3,
         seed=np.random.RandomState(7),
         n_jobs=1,
     )
@@ -95,21 +87,19 @@ def test_embedding_accepts_random_state_object(mini_adata):
     assert mini_adata.uns["X_se"]["seed"] == "RandomState"
 
 
-def test_embedding_accepts_numpy_random_module(mini_adata):
+def test_spectral_accepts_numpy_random_module(mini_adata):
     np.random.seed(2)
     expected = SpectralEmbedding(
         n_components=2,
-        n_neighbors=3,
+        affinity="precomputed",
         random_state=np.random.mtrand._rand,
         n_jobs=1,
-    ).fit_transform(mini_adata.obsm["X_pca"])
+    ).fit_transform(mini_adata.obsp["connectivities"])
 
     np.random.seed(2)
-    bt.sct.tl.embedding(
+    bt.sct.tl.spectral(
         mini_adata,
-        method="spectral",
         n_components=2,
-        n_neighbors=3,
         seed=np.random,
         n_jobs=1,
     )
@@ -118,21 +108,15 @@ def test_embedding_accepts_numpy_random_module(mini_adata):
     assert mini_adata.uns["X_se"]["seed"] == "np.random"
 
 
-def test_embedding_validates_method_representation_and_neighbors(mini_adata):
-    with pytest.raises(ValueError, match="invalid argument value for 'method'"):
-        bt.sct.tl.embedding(mini_adata, method=cast(Any, "bad"))
-
-    with pytest.raises(ValueError, match="invalid argument value for 'method'"):
-        bt.sct.tl.embedding(mini_adata, method=cast(Any, "pca"))
-
+def test_spectral_validates_neighbors_and_seed(mini_adata):
     with pytest.raises(KeyError, match="key 'missing' not found"):
-        bt.sct.tl.embedding(mini_adata, use_rep="missing", n_neighbors=3)
-
-    with pytest.raises(ValueError, match="smaller than number of observations"):
-        bt.sct.tl.embedding(mini_adata, n_neighbors=mini_adata.n_obs)
+        bt.sct.tl.spectral(
+            mini_adata,
+            neighbors_key="missing",
+        )
 
     with pytest.raises(ValueError, match="invalid argument value for 'seed'"):
-        bt.sct.tl.embedding(mini_adata, n_neighbors=3, seed=cast(Any, "bad"))
+        bt.sct.tl.spectral(mini_adata, seed=cast(Any, "bad"))
 
 
 def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
@@ -150,7 +134,7 @@ def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
     assert mini_adata.uns["X_tsne"] == {
         "method": "tsne",
         "use_rep": "X_pca",
-        "n_rep_components": None,
+        "n_pcs": None,
         "n_components": 2,
         "seed": 0,
         "perplexity": 1.0,
@@ -175,9 +159,8 @@ def test_tsne_embedding_matches_sklearn(mini_adata):
         method="barnes_hut",
     ).fit_transform(mini_adata.obsm["X_pca"])
 
-    bt.sct.tl.embedding(
+    bt.sct.tl.tsne(
         mini_adata,
-        method="tsne",
         n_components=2,
         perplexity=1.0,
         max_iter=250,
@@ -188,34 +171,42 @@ def test_tsne_embedding_matches_sklearn(mini_adata):
     assert np.allclose(mini_adata.obsm["X_tsne"], expected)
 
 
-def test_umap_embedding_uses_umap_learn_and_stores_metadata(mini_adata, monkeypatch):
+def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
+    mini_adata,
+    monkeypatch,
+):
     class FakeUMAP:
         parameters: Dict[str, Any] = {}
         input_matrix: Optional[np.ndarray] = None
+        graph_shape: Optional[Tuple[int, int]] = None
 
-        def __init__(self, **kwargs):
-            FakeUMAP.parameters = kwargs
+    def fake_find_ab_params(spread, min_dist):
+        FakeUMAP.parameters["find_ab_params"] = (spread, min_dist)
+        return 1.7, 0.9
 
-        def fit_transform(self, X):
-            FakeUMAP.input_matrix = X.copy()
-            return np.full((X.shape[0], self.parameters["n_components"]), 2.0)
+    def fake_simplicial_set_embedding(**kwargs):
+        FakeUMAP.parameters.update(kwargs)
+        FakeUMAP.input_matrix = kwargs["data"].copy()
+        FakeUMAP.graph_shape = kwargs["graph"].shape
+        return np.full((kwargs["data"].shape[0], kwargs["n_components"]), 2.0), {}
 
     module = ModuleType("umap")
-    setattr(module, "UMAP", FakeUMAP)
+    setattr(module, "__path__", [])
+    umap_module = ModuleType("umap.umap_")
+    setattr(umap_module, "find_ab_params", fake_find_ab_params)
+    setattr(umap_module, "simplicial_set_embedding", fake_simplicial_set_embedding)
     monkeypatch.setitem(sys.modules, "umap", module)
+    monkeypatch.setitem(sys.modules, "umap.umap_", umap_module)
 
     result = bt.sct.tl.umap(
         mini_adata,
-        n_rep_components=2,
         n_components=2,
-        n_neighbors=3,
         min_dist=0.2,
         spread=1.5,
         max_iter=17,
         alpha=0.75,
         gamma=1.25,
         negative_sample_rate=7,
-        metric="cosine",
         seed=0,
         n_jobs=2,
     )
@@ -223,24 +214,26 @@ def test_umap_embedding_uses_umap_learn_and_stores_metadata(mini_adata, monkeypa
     assert result is None
     input_matrix = FakeUMAP.input_matrix
     assert input_matrix is not None
-    assert np.array_equal(input_matrix, mini_adata.obsm["X_pca"][:, :2])
-    assert FakeUMAP.parameters["n_neighbors"] == 3
-    assert FakeUMAP.parameters["metric"] == "cosine"
-    assert FakeUMAP.parameters["min_dist"] == 0.2
-    assert FakeUMAP.parameters["spread"] == 1.5
-    assert FakeUMAP.parameters["n_epochs"] == 17
-    assert FakeUMAP.parameters["learning_rate"] == 0.75
-    assert FakeUMAP.parameters["repulsion_strength"] == 1.25
+    assert np.array_equal(input_matrix, np.zeros((mini_adata.n_obs, 1)))
+    assert FakeUMAP.graph_shape == (mini_adata.n_obs, mini_adata.n_obs)
+    assert FakeUMAP.parameters["n_components"] == 2
+    assert FakeUMAP.parameters["initial_alpha"] == 0.75
+    assert FakeUMAP.parameters["a"] == 1.7
+    assert FakeUMAP.parameters["b"] == 0.9
+    assert FakeUMAP.parameters["gamma"] == 1.25
     assert FakeUMAP.parameters["negative_sample_rate"] == 7
+    assert FakeUMAP.parameters["n_epochs"] == 17
+    assert FakeUMAP.parameters["init"] == "spectral"
+    assert FakeUMAP.parameters["metric"] == "euclidean"
     assert np.allclose(mini_adata.obsm["X_umap"], 2.0)
     assert mini_adata.uns["X_umap"] == {
         "method": "umap",
-        "use_rep": "X_pca",
-        "n_rep_components": 2,
+        "neighbors_key": "neighbors",
+        "connectivities_key": "connectivities",
         "n_components": 2,
         "seed": 0,
         "n_neighbors": 3,
-        "metric": "cosine",
+        "metric": "euclidean",
         "min_dist": 0.2,
         "spread": 1.5,
         "max_iter": 17,
@@ -248,10 +241,17 @@ def test_umap_embedding_uses_umap_learn_and_stores_metadata(mini_adata, monkeypa
         "gamma": 1.25,
         "negative_sample_rate": 7,
         "init_pos": "spectral",
-        "a": None,
-        "b": None,
+        "a": 1.7,
+        "b": 0.9,
         "n_jobs": 2,
     }
+
+
+def test_umap_requires_neighbors_graph_by_default(mini_adata):
+    del mini_adata.uns["neighbors"]
+
+    with pytest.raises(KeyError, match="bt.sct.tl.neighbors"):
+        bt.sct.tl.umap(mini_adata)
 
 
 def test_tsne_validates_perplexity(mini_adata):

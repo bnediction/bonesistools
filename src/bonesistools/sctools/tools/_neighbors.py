@@ -78,8 +78,8 @@ def _kneighbors_distance_matrix(
 
 def _normalize_knnsc_configuration(
     use_rep: Optional[str],
-    n_components: Optional[Union[int, float]],
-    n_neighbors: Optional[Union[int, float]],
+    n_components: Optional[int],
+    n_neighbors: Optional[int],
     metric: Optional[Metric],
     metric_kwargs: Optional[Dict[str, Any]],
 ) -> Tuple[str, Optional[int], int, Metric, Dict[str, Any]]:
@@ -452,8 +452,8 @@ class KNNSC:
     def __init__(
         self,
         use_rep: Optional[str] = None,
-        n_components: Optional[Union[int, float]] = None,
-        n_neighbors: Optional[Union[int, float]] = None,
+        n_components: Optional[int] = None,
+        n_neighbors: Optional[int] = None,
         metric: Optional[Metric] = None,
         **metric_kwargs: Any,
     ):
@@ -697,15 +697,15 @@ class KNNSC:
         adata: AnnData,
         cluster_key: Optional[str] = None,
         use_rep: Optional[str] = None,
-        n_components: Optional[Union[int, float]] = None,
-        n_neighbors: Optional[Union[int, float]] = None,
+        n_components: Optional[int] = None,
+        n_neighbors: Optional[int] = None,
         metric: Optional[Metric] = None,
         metric_kwargs: Optional[Dict[str, Any]] = None,
         n_jobs: int = 1,
         method: Shortest_Path_Method = "dijkstra",
         *,
         obs: Optional[str] = None,
-        min_cluster_size: Union[int, float] = 1,
+        min_cluster_size: int = 1,
     ) -> None:
         """
         Fit the KNNSC estimator using an embedding space.
@@ -724,10 +724,10 @@ class KNNSC:
             Observation column in `adata.obs` defining clusters.
         use_rep: str, optional (default: "X_pca")
             Representation key in `adata.obsm`.
-        n_components: int or float, optional
-            Integer-valued number of dimensions to use. If None, use all dimensions.
-        n_neighbors: int or float
-            Integer-valued number of nearest neighbors.
+        n_components: int, optional
+            Number of dimensions to use. If None, use all dimensions.
+        n_neighbors: int
+            Number of nearest neighbors.
         metric: Metric (default: 'euclidean')
             Metric used when calculating pairwise distances between observations.
         metric_kwargs: dict, optional
@@ -766,13 +766,11 @@ class KNNSC:
 
         init_params = self._deprecated_init_params
         if n_neighbors is None and "n_neighbors" in init_params:
-            n_neighbors = cast(Union[int, float], init_params["n_neighbors"])
+            n_neighbors = cast(int, init_params["n_neighbors"])
         if use_rep is None:
             use_rep = cast(Optional[str], init_params.get("use_rep"))
         if n_components is None:
-            n_components = cast(
-                Optional[Union[int, float]], init_params.get("n_components")
-            )
+            n_components = cast(Optional[int], init_params.get("n_components"))
         if metric is None:
             metric = cast(Optional[Metric], init_params.get("metric"))
         if metric_kwargs is None:
@@ -1338,9 +1336,9 @@ class Knnbs(KNNSC):
 
     def __init__(
         self,
-        n_neighbors: Union[int, float],
+        n_neighbors: int,
         use_rep: str = "X_pca",
-        n_components: Optional[Union[int, float]] = None,
+        n_components: Optional[int] = None,
         metric: Metric = "euclidean",
         **metric_kwargs: Any,
     ):
@@ -1403,8 +1401,8 @@ def shared_neighbors(
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
     prune_snn: Optional[Union[float, int]] = 1 / 15,
-    metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
+    metric: Metric = "euclidean",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: Literal[False] = False,
@@ -1417,8 +1415,8 @@ def shared_neighbors(
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
     prune_snn: Optional[Union[float, int]] = 1 / 15,
-    metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
+    metric: Metric = "euclidean",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     *,
@@ -1432,8 +1430,8 @@ def shared_neighbors(
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
     prune_snn: Optional[Union[float, int]] = 1 / 15,
-    metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
+    metric: Metric = "euclidean",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False,
@@ -1447,8 +1445,8 @@ def shared_neighbors(
     knn_key: str = "neighbors",
     snn_key: str = "shared_neighbors",
     prune_snn: Optional[Union[float, int]] = 1 / 15,
-    metric: Metric = "euclidean",
     normalize_connectivities: bool = True,
+    metric: Metric = "euclidean",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False,
@@ -1472,11 +1470,11 @@ def shared_neighbors(
         whose number of shared neighbors is less than or equal to the threshold.
         Value can be relative (float between 0 and 1) or absolute
         (integer between 1 and k).
-    metric: Metric (default: 'euclidean')
-        Metric used when calculating pairwise distances between observations.
     normalize_connectivities: bool (default: True)
         If False, connectivities store the absolute number of shared neighbors.
         Otherwise, connectivities are normalized.
+    metric: Metric (default: 'euclidean')
+        Metric used when calculating pairwise distances between observations.
     distances_key: str (optional, default: None)
         Key used to store distances in `scdata.obsp`.
     connectivities_key: str (optional, default: None)

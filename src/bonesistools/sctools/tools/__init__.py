@@ -12,7 +12,7 @@ from typing import List as _List
 
 from ._classification import mitochondrial_genes, ribosomal_genes
 from ._conversion import anndata_to_dataframe
-from ._embedding import embedding, pca, spectral, tsne, umap
+from ._embedding import pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
 from ._markers import (
     calculate_logfoldchanges,
@@ -53,7 +53,6 @@ __all__ = [
     "kneighbors_graph",
     "neighbors",
     "shared_neighbors",
-    "embedding",
     "pca",
     "spectral",
     "tsne",

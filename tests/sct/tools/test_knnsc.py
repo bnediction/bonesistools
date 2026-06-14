@@ -351,7 +351,7 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
         estimator.fit(mini_adata, cluster_key="cluster", n_neighbors=0)
 
     with pytest.raises(ValueError, match="expected integer"):
-        estimator.fit(mini_adata, cluster_key="cluster", n_neighbors=1.5)
+        estimator.fit(mini_adata, cluster_key="cluster", n_neighbors=cast(Any, 1.5))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'n_neighbors'"):
         estimator.fit(mini_adata, cluster_key="cluster", n_neighbors=cast(Any, "5"))
@@ -368,7 +368,7 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
         estimator.fit(
             mini_adata,
             cluster_key="cluster",
-            n_components=1.2,
+            n_components=cast(Any, 1.2),
             n_neighbors=5,
         )
 
@@ -400,8 +400,8 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
 
     with pytest.warns(FutureWarning, match="__init__"):
         deprecated_estimator = bt.sct.tl.KNNSC(
-            n_components=2.0,
-            n_neighbors=5.0,
+            n_components=cast(Any, 2.0),
+            n_neighbors=cast(Any, 5.0),
             metric="cosine",
         )
 
