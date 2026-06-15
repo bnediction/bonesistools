@@ -230,6 +230,7 @@ def _leiden_adjacency(
     neighbors_key: Optional[str],
     obsp: Optional[str],
 ) -> Tuple[str, sparse.csr_matrix]:
+
     if neighbors_key is not None and obsp is not None:
         raise ValueError(
             "invalid argument combination: "

@@ -223,6 +223,7 @@ _GENE_SYNONYMS_DEPRECATED_ARGS = {
 
 
 def _is_interaction(item: Any) -> bool:
+
     return (
         isinstance(item, SequenceInstance)
         and not isinstance(item, str)
@@ -234,6 +235,7 @@ def _is_interaction(item: Any) -> bool:
 
 
 def _is_interaction_list(data: Any) -> bool:
+
     if not (
         (isinstance(data, SequenceInstance) and not isinstance(data, str))
         or isinstance(data, set)
@@ -1393,6 +1395,7 @@ class GeneSynonyms:
             return None
 
     def __normalize_gene_info_version(self, version: GeneInfoVersion) -> str:
+
         if not isinstance(version, (str, Path)):
             raise TypeError(
                 f"unsupported argument type for 'version': "
@@ -1417,6 +1420,7 @@ class GeneSynonyms:
         return version
 
     def __resolve_gene_info_file(self, version: str) -> Path:
+
         bundled_file = NCBI_GENE_INFO_FILES[self.organism]
 
         if version == "bundled":
@@ -1482,6 +1486,7 @@ class GeneSynonyms:
             return
 
     def __download_full_gene_info(self, outfile: Path) -> None:
+
         gzip_outfile = Path(f"{outfile}.gz")
         url = FTP_GENE_INFO[self.organism]
 
@@ -1497,6 +1502,7 @@ class GeneSynonyms:
             raise RuntimeError("failed to download NCBI gene_info file") from e
 
     def __write_bundled_gene_info_file(self, infile: Path, outfile: Path) -> None:
+
         outfile.parent.mkdir(parents=True, exist_ok=True)
         temporary_outfile = Path(f"{outfile}.tmp")
 
@@ -1688,6 +1694,7 @@ class GeneSynonyms:
         return gene_aliases_mapping
 
     def __initialize_mappings(self, show_warnings: bool) -> None:
+
         self.show_warnings = show_warnings
         try:
             self.gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
@@ -1765,6 +1772,7 @@ class GeneSynonyms:
 
     @staticmethod
     def __gene_info_base_name(gene_info_file: Path) -> str:
+
         name = gene_info_file.name
         if name.endswith(".tsv.gz"):
             return name[:-7]
@@ -1774,12 +1782,14 @@ class GeneSynonyms:
 
     @staticmethod
     def __make_temporary_gene_info_file() -> Path:
+
         temporary_file = tempfile.NamedTemporaryFile(suffix=".tsv", delete=False)
         temporary_file.close()
         return Path(temporary_file.name)
 
     @staticmethod
     def __read_gene_info_command(gene_info_file: Path) -> str:
+
         quoted_file = shlex.quote(str(gene_info_file))
         if str(gene_info_file).endswith(".gz"):
             return f"gzip -dc {quoted_file}"
@@ -1787,6 +1797,7 @@ class GeneSynonyms:
 
     @staticmethod
     def __unlink_if_exists(path: Path) -> None:
+
         try:
             path.unlink()
         except FileNotFoundError:

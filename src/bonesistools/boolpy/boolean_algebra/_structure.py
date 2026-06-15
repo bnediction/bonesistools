@@ -29,6 +29,7 @@ def _eval_as_bool(
     expr: Expression,
     assignment: Mapping[Any, bool],
 ) -> bool:
+
     substitutions = {
         symbol: ba.TRUE if value else ba.FALSE for symbol, value in assignment.items()
     }
@@ -148,6 +149,7 @@ def expressions_equivalent(
 
 
 def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:
+
     literal_any: Any = literal
 
     if isinstance(literal_any, ba.NOT):
@@ -170,6 +172,7 @@ def _clause_to_structure(
     container: Callable[[Iterable[Any]], Any],
     sort: bool,
 ):
+
     if isinstance(clause, ba.AND):
         literals = clause.args
     else:

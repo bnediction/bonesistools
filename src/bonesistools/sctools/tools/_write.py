@@ -11,10 +11,12 @@ PathInput = Union[str, Path]
 
 
 def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
+
     return adata.X if layer is None else adata.layers[layer]
 
 
 def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
+
     X = _get_matrix(adata, layer)
 
     if sparse.issparse(X):

@@ -27,6 +27,7 @@ from ..tools import anndata_to_dataframe
 
 @type_checker(dfs=UnionType(DataFrame, List))
 def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
+
     dfs = [dfs] if isinstance(dfs, DataFrame) else dfs
     column_names = set()
     for df in dfs:

@@ -60,10 +60,14 @@ jobs:
           pip install -e .
           pip install pytest
 
-      - name: Check DoRothEA reproducibility signatures
+      - name: Check reproducibility tests
         env:
           BONESISTOOLS_RUN_REPRODUCIBILITY: "1"
-        run: pytest tests/dbs/test_omnipath_reproducibility.py -q
+        run: |
+          pytest \
+            tests/dbs/test_omnipath_reproducibility.py \
+            tests/sct/tools/test_stats_reproducibility.py \
+            -q
 
   pytest:
     name: pytest (${{ matrix.python-version }}, ${{ matrix.test-mode }})

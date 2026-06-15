@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numbers
+import re
 from typing import Callable, Iterable, Optional, TypeVar, Union, overload
 
 import numpy as np
@@ -15,8 +16,24 @@ from ._typing import (
 T = TypeVar("T", bound=str)
 F = TypeVar("F", bound=Callable[..., object])
 
+_MEMORY_SIZE_PATTERN = re.compile(
+    r"^\s*(?P<value>[0-9]+(?:\.[0-9]+)?)\s*(?P<unit>[KMGT]i?B)\s*$",
+    re.IGNORECASE,
+)
+_MEMORY_SIZE_UNITS = {
+    "KB": 10**3,
+    "MB": 10**6,
+    "GB": 10**9,
+    "TB": 10**12,
+    "KIB": 2**10,
+    "MIB": 2**20,
+    "GIB": 2**30,
+    "TIB": 2**40,
+}
+
 
 def _format_choices(choices: Iterable[str], *, include_none: bool = False) -> str:
+
     choices = tuple(choices)
     formatted = tuple(repr(choice) for choice in choices)
     if include_none:
@@ -55,6 +72,7 @@ def _as_literal(
     name: str,
     allow_none: bool = False,
 ) -> Optional[T]:
+
     if value is None and allow_none:
         return None
 
@@ -101,6 +119,7 @@ def _as_string(
     *,
     allow_none: bool = False,
 ) -> Optional[str]:
+
     if value is None and allow_none:
         return None
 
@@ -138,6 +157,7 @@ def _as_boolean(
     *,
     allow_none: bool = False,
 ) -> Optional[bool]:
+
     if value is None and allow_none:
         return None
 
@@ -175,6 +195,7 @@ def _as_callable(
     *,
     allow_none: bool = False,
 ) -> Optional[F]:
+
     if value is None and allow_none:
         return None
 
@@ -189,6 +210,7 @@ def _as_callable(
 
 
 def _as_positive_number(value: float, name: str) -> float:
+
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise TypeError(
             f"unsupported argument type for '{name}': "
@@ -206,6 +228,7 @@ def _as_positive_number(value: float, name: str) -> float:
 
 
 def _as_non_negative_number(value: float, name: str) -> float:
+
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise TypeError(
             f"unsupported argument type for '{name}': "
@@ -223,6 +246,7 @@ def _as_non_negative_number(value: float, name: str) -> float:
 
 
 def _as_positive_integer(value: Union[int, float], name: str) -> int:
+
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise TypeError(
             f"unsupported argument type for '{name}': "
@@ -245,6 +269,7 @@ def _as_positive_integer(value: Union[int, float], name: str) -> int:
 
 
 def _as_non_negative_integer(value: Union[int, float], name: str) -> int:
+
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise TypeError(
             f"unsupported argument type for '{name}': "
@@ -266,7 +291,44 @@ def _as_non_negative_integer(value: Union[int, float], name: str) -> int:
     return int(value)
 
 
+def _as_memory_size(value: Union[int, str], name: str) -> int:
+
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise TypeError(
+            f"unsupported argument type for '{name}': "
+            f"expected {int} or {str} but received {type(value)}"
+        )
+
+    if isinstance(value, int):
+        if value <= 0:
+            raise ValueError(
+                f"invalid argument value for '{name}': "
+                f"expected positive memory size but received {value!r}"
+            )
+        return value
+
+    match = _MEMORY_SIZE_PATTERN.match(value)
+    if match is None:
+        raise ValueError(
+            f"invalid argument value for '{name}': "
+            "expected memory size with unit KB, MB, GB, TB, KiB, MiB, GiB or TiB "
+            f"but received {value!r}"
+        )
+
+    size = float(match.group("value"))
+    unit = match.group("unit").upper()
+    bytes_size = int(size * _MEMORY_SIZE_UNITS[unit])
+    if bytes_size <= 0:
+        raise ValueError(
+            f"invalid argument value for '{name}': "
+            f"expected positive memory size but received {value!r}"
+        )
+
+    return bytes_size
+
+
 def _as_probability(value: float, name: str) -> float:
+
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise TypeError(
             f"unsupported argument type for '{name}': "
@@ -284,6 +346,7 @@ def _as_probability(value: float, name: str) -> float:
 
 
 def _as_seed(seed: RandomStateSeed) -> np.random.RandomState:
+
     if seed is None or seed is np.random:
         return np.random.mtrand._rand
     if isinstance(seed, numbers.Integral):
@@ -298,6 +361,7 @@ def _as_seed(seed: RandomStateSeed) -> np.random.RandomState:
 
 
 def _as_dataframe_axis(axis: Union[int, str]) -> DataFrameAxis:
+
     if isinstance(axis, str) and axis == "index":
         return "index"
     if isinstance(axis, str) and axis == "columns":
@@ -314,6 +378,7 @@ def _as_dataframe_axis(axis: Union[int, str]) -> DataFrameAxis:
 
 
 def _as_orientation(orientation: str) -> FileOrientation:
+
     if orientation == "rows" or orientation == "columns":
         return orientation
 

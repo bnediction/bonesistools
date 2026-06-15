@@ -407,6 +407,7 @@ class BooleanPredecessorInference:
 
     @staticmethod
     def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
+
         return PartialBooleanDifferential._coerce_value(value)
 
     @staticmethod

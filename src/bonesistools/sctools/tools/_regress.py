@@ -21,6 +21,7 @@ def __linear_regress_out_feature(
     intercept: bool = False,
     n_jobs: int = 1,
 ):
+
     regression_model = linear_regression(fit_intercept=False, n_jobs=n_jobs)
     regression_model.fit(regressors, interest)
     prediction = regression_model.predict(regressors)

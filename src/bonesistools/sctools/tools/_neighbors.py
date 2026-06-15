@@ -63,6 +63,7 @@ def _kneighbors_distance_matrix(
     metric: Metric,
     n_jobs: int,
 ) -> csr_matrix:
+
     from sklearn import neighbors as sklearn_neighbors
 
     representation_mtx = get_representation(
@@ -87,6 +88,7 @@ def _normalize_knnsc_configuration(
     metric: Optional[Metric],
     metric_kwargs: Optional[Dict[str, Any]],
 ) -> Tuple[str, Optional[int], int, Metric, Dict[str, Any]]:
+
     if n_components is not None:
         n_components = _as_positive_integer(n_components, "n_components")
 
@@ -1300,6 +1302,7 @@ class KNNSC:
         )
 
     def _require_fitted_attribute(self, name: str) -> Any:
+
         if not hasattr(self, name):
             raise AttributeError("KNNSC has not been fitted yet")
         return getattr(self, name)
@@ -1309,6 +1312,7 @@ class KNNSC:
         clusters: Iterable[str],
         argument: str,
     ) -> None:
+
         candidate_clusters = set(self.obs.cat.categories)
         invalid_clusters = [
             cluster for cluster in clusters if cluster not in candidate_clusters

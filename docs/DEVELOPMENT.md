@@ -38,6 +38,7 @@ Examples:
 * `_as_callable`
 * `_as_string`
 * `_as_literal`
+* `_as_memory_size`
 * `_as_seed`
 * `_as_dataframe_axis`
 

@@ -240,6 +240,7 @@ def var_names_merge_duplicates(
 
 
 def _group_var_positions(adata: AnnData) -> "OrderedDict[str, List[int]]":
+
     groups = OrderedDict()
     for position, var_name in enumerate(adata.var_names):
         groups.setdefault(str(var_name), []).append(position)
@@ -250,6 +251,7 @@ def _var_group_matrix(
     n_vars: int,
     groups: "OrderedDict[str, List[int]]",
 ) -> csc_matrix:
+
     row_positions = list()
     column_positions = list()
 
@@ -267,6 +269,7 @@ def _var_group_matrix(
 
 
 def _sum_var_groups(matrix: Any, group_matrix: csc_matrix) -> Any:
+
     if issparse(matrix):
         return (matrix @ group_matrix).tocsr()
     return np.asarray(matrix) @ group_matrix.toarray()
@@ -278,6 +281,7 @@ def _merge_var(
     selected_positions: List[int],
     keep: Literal["first", "consensus"],
 ) -> DataFrame:
+
     source_var = cast(DataFrame, adata.var)
     merged_index = Index(list(groups.keys()))
     merged_index.name = (
@@ -305,6 +309,7 @@ def _merge_var(
 
 
 def _consensus_value(values: Any) -> Any:
+
     first = values.iloc[0]
     if all(_metadata_values_equal(first, value) for value in values.iloc[1:]):
         return first
@@ -312,6 +317,7 @@ def _consensus_value(values: Any) -> Any:
 
 
 def _metadata_values_equal(left: Any, right: Any) -> bool:
+
     try:
         left_is_nan = bool(np.isscalar(left) and np.isnan(left))
         right_is_nan = bool(np.isscalar(right) and np.isnan(right))
@@ -326,6 +332,7 @@ def _metadata_values_equal(left: Any, right: Any) -> bool:
 
 
 def _copy_axis_mapping(mapping: Any) -> Dict[str, Any]:
+
     return {
         key: value.copy() if hasattr(value, "copy") else deepcopy(value)
         for key, value in mapping.items()
@@ -339,6 +346,7 @@ def _merge_varm_value(
     selected_positions: List[int],
     strategy: Literal["nan", "first", "mean"],
 ) -> Any:
+
     if isinstance(value, DataFrame):
         return _merge_varm_dataframe(
             key,
@@ -363,6 +371,7 @@ def _merge_varm_dataframe(
     selected_positions: List[int],
     strategy: Literal["nan", "first", "mean"],
 ) -> DataFrame:
+
     if strategy == "mean":
         try:
             merged_values = [
@@ -395,6 +404,7 @@ def _merge_varm_array(
     selected_positions: List[int],
     strategy: Literal["nan", "first", "mean"],
 ) -> np.ndarray:
+
     if strategy == "mean":
         if not np.issubdtype(value.dtype, np.number):
             raise TypeError(f"varm='mean' requires numeric values for `.varm[{key!r}]`")

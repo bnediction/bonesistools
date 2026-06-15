@@ -178,6 +178,7 @@ def _format_signed_interactions(
     target_column: str,
     version_label: str,
 ) -> pd.DataFrame:
+
     stimulation_column = (
         "consensus_stimulation"
         if "consensus_stimulation" in interactions
@@ -214,6 +215,7 @@ def _format_dorothea(
     version_label: str,
     levels: Optional[Sequence[str]],
 ) -> pd.DataFrame:
+
     interactions = interactions.copy()
     interactions["dorothea_level"] = (
         interactions["dorothea_level"].astype(str).str.split(";").str[0]
@@ -262,6 +264,7 @@ def _deduplicate_dorothea(
     dorothea: pd.DataFrame,
     compatibility: bool = False,
 ) -> pd.DataFrame:
+
     dorothea = cast(
         pd.DataFrame,
         dorothea[dorothea["source"] != dorothea["target"]],
@@ -287,6 +290,7 @@ def _copy_optional_columns(
     source: pd.DataFrame,
     columns: Sequence[str],
 ) -> None:
+
     for column in columns:
         if column in source:
             target[column] = source[column]
@@ -296,6 +300,7 @@ def _filter_organism_interactions(
     interactions: pd.DataFrame,
     target_organism: str,
 ) -> Tuple[pd.DataFrame, bool]:
+
     tax_columns = ["ncbi_tax_id_source", "ncbi_tax_id_target"]
     if not all(column in interactions for column in tax_columns):
         return interactions, target_organism != "human"
@@ -316,6 +321,7 @@ def _filter_human_interactions(
     interactions: pd.DataFrame,
     target_organism: str,
 ) -> Tuple[pd.DataFrame, bool]:
+
     tax_columns = ["ncbi_tax_id_source", "ncbi_tax_id_target"]
     if not all(column in interactions for column in tax_columns):
         return interactions, target_organism != "human"
@@ -330,6 +336,7 @@ def _filter_dataset_evidences(
     interactions: pd.DataFrame,
     dataset: str,
 ) -> pd.DataFrame:
+
     if "evidences" not in interactions:
         return interactions
 
@@ -385,6 +392,7 @@ def _filter_dataset_evidences(
 
 
 def _filter_evidences(evidences: Any, dataset: str) -> Any:
+
     if isinstance(evidences, dict):
         if "dataset" in evidences and "resource" in evidences:
             return evidences if evidences.get("dataset") == dataset else []
@@ -402,10 +410,12 @@ def _filter_evidences(evidences: Any, dataset: str) -> Any:
 
 
 def _parse_evidences(evidences: Any) -> Any:
+
     return json.loads(evidences) if isinstance(evidences, str) else evidences
 
 
 def _flatten_evidences(evidences: Any) -> List[dict]:
+
     if isinstance(evidences, dict):
         if "dataset" in evidences and "resource" in evidences:
             return [evidences]
@@ -424,10 +434,12 @@ def _flatten_evidences(evidences: Any) -> List[dict]:
 
 
 def _curation_effort(evidences: Iterable[dict]) -> int:
+
     return sum(len(evidence.get("references", [])) + 1 for evidence in evidences)
 
 
 def _resources_from(evidences: Iterable[dict]) -> str:
+
     return ";".join(
         sorted(
             {
@@ -440,6 +452,7 @@ def _resources_from(evidences: Iterable[dict]) -> str:
 
 
 def _references_from(evidences: Iterable[dict]) -> str:
+
     return ";".join(
         sorted(
             {
@@ -452,6 +465,7 @@ def _references_from(evidences: Iterable[dict]) -> str:
 
 
 def _normalize_version(version: OmnipathVersion) -> str:
+
     if isinstance(version, date):
         return version.strftime("%Y%m%d")
 
@@ -481,6 +495,7 @@ def _normalize_version(version: OmnipathVersion) -> str:
 
 
 def _validate_dorothea_flavor(flavor: str) -> None:
+
     if flavor not in ["modern", "legacy"]:
         raise ValueError(
             "invalid argument value for 'flavor': expected 'modern' or "
@@ -489,6 +504,7 @@ def _validate_dorothea_flavor(flavor: str) -> None:
 
 
 def _format_archive_ranges(archives: Sequence[Tuple[str, str, str]]) -> str:
+
     if not archives:
         return "none"
 
@@ -496,6 +512,7 @@ def _format_archive_ranges(archives: Sequence[Tuple[str, str, str]]) -> str:
 
 
 def _format_archive_interval(start: str, end: str) -> str:
+
     start_label = _format_archive_date(start)
     end_label = _format_archive_date(end)
     if start_label == end_label:
@@ -504,6 +521,7 @@ def _format_archive_interval(start: str, end: str) -> str:
 
 
 def _format_archive_date(version_label: str) -> str:
+
     return (
         f"{version_label[0:4]}-{version_label[4:6]}-{version_label[6:8]}"
         if re.fullmatch(r"[0-9]{8}", version_label)
@@ -512,6 +530,7 @@ def _format_archive_date(version_label: str) -> str:
 
 
 def _list_interactions_archives() -> List[Tuple[str, str, str]]:
+
     with urlopen(f"{OMNIPATH_ARCHIVE_URL}/") as response:
         index = response.read().decode("utf-8")
 
@@ -523,6 +542,7 @@ def _list_interactions_archives() -> List[Tuple[str, str, str]]:
 
 
 def _read_interactions_archive(url: str) -> pd.DataFrame:
+
     columns = {
         "source",
         "target",
@@ -552,6 +572,7 @@ def _read_interactions_archive(url: str) -> pd.DataFrame:
 
 
 def _normalize_organism(organism: Union[str, int]) -> str:
+
     organism_key = str(organism).lower().replace("-", " ")
     organism_name = ORGANISM_NAMES.get(organism_key)
 
@@ -566,6 +587,7 @@ def _normalize_organism(organism: Union[str, int]) -> str:
 
 
 def _tax_id(organism: str) -> str:
+
     return {
         "human": "9606",
         "mouse": "10090",
@@ -578,6 +600,7 @@ def _translate_hcop(
     target_organism: str,
     hcop_version: HcopVersion = "latest",
 ) -> pd.DataFrame:
+
     translated = hcop_orthologs(
         target_organism=target_organism,
         version=hcop_version,
@@ -590,4 +613,5 @@ def _translate_hcop(
 
 
 def _truthy(values: Any) -> pd.Series:
+
     return pd.Series(values).astype(str).str.lower().isin(["true", "1", "yes"])

@@ -250,6 +250,7 @@ def _load_latest_dorothea(
     flavor: DorotheaFlavor,
     compatibility: bool = False,
 ) -> pd.DataFrame:
+
     if flavor == "legacy":
         return _load_latest_legacy_dorothea(
             organism=organism,
@@ -271,6 +272,7 @@ def _load_latest_modern_dorothea(
     hcop_version: HcopVersion,
     compatibility: bool = False,
 ) -> pd.DataFrame:
+
     organism_name = _normalize_organism(organism)
     url = (
         OMNIPATH_INTERACTIONS_URL
@@ -368,6 +370,7 @@ def _load_latest_legacy_dorothea(
     levels: List[str],
     compatibility: bool = False,
 ) -> pd.DataFrame:
+
     organism_name = _normalize_organism(organism)
     url = (
         "https://omnipathdb.org/interactions?"

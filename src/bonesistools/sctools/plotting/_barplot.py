@@ -51,6 +51,7 @@ def __ordered_values(
     series: pd.Series,
     order: Optional[Sequence[object]],
 ) -> Sequence[object]:
+
     if order is not None:
         return list(order)
 
@@ -61,6 +62,7 @@ def __ordered_values(
 
 
 def __index_from_values(values: Sequence[object], name: str) -> pd.Index:
+
     return pd.Index(np.asarray(list(values), dtype=object), name=name)
 
 
@@ -70,6 +72,7 @@ def __normalize_colors(
     scdata: ScData,
     uns_key: str,
 ) -> Sequence[object]:
+
     if colors is None:
         colors = colors_from_uns(scdata, uns_key, values)
 
@@ -114,6 +117,7 @@ def __apply_ticklabel_colors(
     colors: Optional[Mapping[object, object]],
     orientation: Orientation,
 ) -> None:
+
     if colors is None:
         return None
 

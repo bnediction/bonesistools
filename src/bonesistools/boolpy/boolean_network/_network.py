@@ -1246,6 +1246,7 @@ class BooleanNetwork(Dict[str, Expression]):
         return None
 
     def _normalize_state(self, state: HypercubeLike) -> Dict[str, int]:
+
         if not isinstance(state, MappingABC):
             raise TypeError(
                 "unsupported argument type for 'state': "

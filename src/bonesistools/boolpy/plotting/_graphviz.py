@@ -8,12 +8,14 @@ from typing import (
 
 
 def _graphviz_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str]:
+
     return {
         str(key): str(value) for key, value in attributes.items() if value is not None
     }
 
 
 def _new_graphviz_digraph(program: str, **kwargs: Any) -> Any:
+
     try:
         graphviz = importlib.import_module("graphviz")
 
@@ -36,6 +38,7 @@ def _networkx_to_graphviz(
     program: str = "dot",
     **kwargs: Any,
 ) -> Any:
+
     graphviz_graph = _new_graphviz_digraph(program=program, **kwargs)
 
     for node, data in networkx_graph.nodes(data=True):

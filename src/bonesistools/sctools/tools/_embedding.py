@@ -41,6 +41,7 @@ UNCENTERED_PCA_SOLVERS: Tuple[TruncatedSVDSolver, ...] = ("arpack", "randomized"
 
 
 def _format_var_subset(var_subset: VarSubset) -> Union[str, Tuple[str, ...], None]:
+
     if var_subset is None or isinstance(var_subset, str):
         return var_subset
     return tuple(sorted(var_subset))
@@ -151,19 +152,16 @@ def pca(
 
     adata = adata.copy() if copy else adata
     mask = _as_var_subset(adata, var_subset)
-    expression_mtx = cast(
+    selected_expression_mtx = cast(
         Any,
         get_expression(
             adata,
             use_raw=use_raw,
             layer=layer,
+            var_subset=var_subset,
             copy=True,
         ),
     )
-
-    selected_expression_mtx = expression_mtx
-    if mask is not None:
-        selected_expression_mtx = cast(Any, expression_mtx)[:, mask]
 
     max_components = min(selected_expression_mtx.shape)
     if n_components > max_components:

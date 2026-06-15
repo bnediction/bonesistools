@@ -61,6 +61,7 @@ def __deprecated_bool_kwarg(
     new_value: bool,
     default_value: bool,
 ) -> bool:
+
     if old_name not in kwargs:
         return new_value
 
@@ -82,6 +83,7 @@ def __deprecated_graph_kwarg(
     old_name: str,
     target: str,
 ) -> bool:
+
     if old_name not in kwargs:
         return False
 
@@ -92,6 +94,7 @@ def __deprecated_graph_kwarg(
 
 
 def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
+
     if colors is None:
         return plt.get_cmap("autumn_r")
     if isinstance(colors, str):

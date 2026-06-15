@@ -221,6 +221,7 @@ def is_hypercube_like(obj: _Any) -> _TypeGuard[HypercubeLike]:
 
 
 def _is_configuration_value_like(value: _Any) -> bool:
+
     if isinstance(value, PartialBoolean):
         value = value.value
 

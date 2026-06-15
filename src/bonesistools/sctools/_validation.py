@@ -37,6 +37,7 @@ def _as_anndata_axis(
     allow_both: bool = False,
     allow_integer: bool = False,
 ) -> AnnDataAxisWithBoth:
+
     if isinstance(axis, str) and (axis == "obs" or axis == "var"):
         return axis
 
@@ -65,6 +66,7 @@ def _as_anndata_axis(
 
 
 def _as_var_subset(adata: AnnData, var_subset: VarSubset) -> Optional[np.ndarray]:
+
     if var_subset is None:
         return None
 

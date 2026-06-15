@@ -31,6 +31,7 @@ from ._neighbors import (
     shared_neighbors,
 )
 from ._regress import regress_out
+from ._stats import wilcoxon_tests
 from ._utils import get_expression, get_pairwise, get_representation
 from ._write import (
     to_csv,
@@ -61,6 +62,7 @@ __all__ = [
     "pairwise_distances",
     "barycenters",
     "regress_out",
+    "wilcoxon_tests",
     "to_csv",
     "to_csv_or_mtx",
     "to_csv_or_npz",

@@ -733,6 +733,7 @@ class Orthologs:
         ]
 
     def _translate_best(self, gene: str, keep_if_missing: bool) -> Optional[str]:
+
         translated = self.translate(gene, keep_if_missing=keep_if_missing)
         if len(translated) == 0:
             return None
@@ -744,6 +745,7 @@ class Orthologs:
         column: str,
         one_to_many: int,
     ) -> pd.DataFrame:
+
         map_data = self._generate_orthologs(
             values=cast(pd.Series, df[column]),
             one_to_many=one_to_many,
@@ -866,6 +868,7 @@ class Orthologs:
 
     @staticmethod
     def _is_interaction(item: Any) -> bool:
+
         return (
             isinstance(item, SequenceInstance)
             and not isinstance(item, str)
@@ -877,6 +880,7 @@ class Orthologs:
 
     @staticmethod
     def _is_interaction_list(data: Any) -> bool:
+
         if not (
             (isinstance(data, SequenceInstance) and not isinstance(data, str))
             or isinstance(data, set)
@@ -891,6 +895,7 @@ class Orthologs:
         df: pd.DataFrame,
         columns: Optional[Union[str, Sequence[str]]],
     ) -> List[str]:
+
         if columns is None:
             requested_columns = ["source", "target", "genesymbol"]
         elif isinstance(columns, str):
@@ -920,6 +925,7 @@ class Orthologs:
         values: pd.Series,
         one_to_many: int,
     ) -> pd.DataFrame:
+
         map_dict = (
             self._table.groupby("human_symbol")["target_symbol"].apply(list).to_dict()
         )
@@ -952,6 +958,7 @@ class Orthologs:
 
     @staticmethod
     def _target_symbol_column(output_organism: str) -> str:
+
         if output_organism == "anole_lizard":
             return "anole lizard_symbol"
         if output_organism == "fruitfly":
@@ -960,6 +967,7 @@ class Orthologs:
 
     @staticmethod
     def _validate_input_organism(input_organism: str) -> None:
+
         if not isinstance(input_organism, str):
             raise TypeError(
                 f"unsupported argument type for 'input_organism': "
@@ -973,6 +981,7 @@ class Orthologs:
 
     @staticmethod
     def _validate_output_organism(output_organism: str) -> None:
+
         if not isinstance(output_organism, str):
             raise TypeError(
                 f"unsupported argument type for 'output_organism': "
@@ -986,14 +995,17 @@ class Orthologs:
 
     @staticmethod
     def _validate_min_evidence(min_evidence: int) -> int:
+
         return _as_positive_integer(min_evidence, "min_evidence")
 
     @staticmethod
     def _validate_one_to_many(one_to_many: int) -> int:
+
         return _as_positive_integer(one_to_many, "one_to_many")
 
     @staticmethod
     def _normalize_version(version: HcopVersion) -> str:
+
         if isinstance(version, Path):
             return str(version)
 
@@ -1013,6 +1025,7 @@ class Orthologs:
 
     @staticmethod
     def _validate_orthologs_table(table: pd.DataFrame) -> None:
+
         required_columns = ["human_symbol", "target_symbol", "support", "evidence"]
         missing_columns = [column for column in required_columns if column not in table]
         if missing_columns:
@@ -1023,6 +1036,7 @@ class Orthologs:
 
     @staticmethod
     def _build_mapping(table: pd.DataFrame) -> Dict[str, List[str]]:
+
         ranked = table.groupby(["human_symbol", "target_symbol"], as_index=False).agg(
             count=("target_symbol", "size"),
             evidence=("evidence", "max"),
@@ -1042,6 +1056,7 @@ class Orthologs:
 
     @staticmethod
     def _resolve_hcop_table_source(output_organism: str, version: str) -> str:
+
         if version == "bundled":
             bundled_files = [
                 HCOP_DIR / f"human_{output_organism}_hcop.tsv.gz",
@@ -1077,6 +1092,7 @@ class Orthologs:
     def _read_hcop_table(
         output_organism: str, version: HcopVersion = "bundled"
     ) -> pd.DataFrame:
+
         source = Orthologs._resolve_hcop_table_source(
             output_organism=output_organism,
             version=Orthologs._normalize_version(version),

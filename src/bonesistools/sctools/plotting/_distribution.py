@@ -104,6 +104,7 @@ def __apply_box_colors(
     color: object,
     items: Sequence[BoxItem],
 ) -> None:
+
     for k in bp.keys():
         if k in items:
             plt.setp(bp.get(k), color=color)
@@ -119,6 +120,7 @@ def __add_points(
     hues: Optional[Sequence[object]] = None,
     **kwargs: Any,
 ) -> None:
+
     ax = plt.gca()
     if groups is None:
         pos = positions[0]

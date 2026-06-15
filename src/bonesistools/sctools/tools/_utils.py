@@ -1,17 +1,24 @@
 #!/usr/bin/env python
 
-from typing import Any, Optional, cast
+from collections.abc import Collection as CollectionInstance
+from collections.abc import Sequence as SequenceInstance
+from typing import Any, Optional, Sequence, Tuple, cast
 
+import numpy as np
 from anndata import AnnData
+from pandas import Index
+from scipy import sparse
 
+from ..._validation import _as_string
 from .._typing import (
     AnnDataAxis,
     Matrix,
     ScData,
+    VarSubset,
     anndata_checker,
     anndata_or_mudata_checker,
 )
-from .._validation import _as_anndata_axis
+from .._validation import _as_anndata_axis, _as_var_subset
 
 
 @anndata_checker
@@ -19,6 +26,7 @@ def get_expression(
     adata: AnnData,
     use_raw: bool = False,
     layer: Optional[str] = None,
+    var_subset: VarSubset = None,
     copy: bool = True,
 ) -> Matrix:
     """
@@ -35,6 +43,10 @@ def get_expression(
         Use `adata.raw.X` instead of `adata.X`.
     layer: str, optional
         Layer to use instead of `adata.X`.
+    var_subset: str or collection of str, optional
+        Variables to select. If a string is provided, it is interpreted as a
+        boolean column in `adata.var`. If a collection is provided, it is
+        interpreted as variable names.
     copy: bool (default: True)
         Return a copy of the selected matrix.
 
@@ -56,15 +68,193 @@ def get_expression(
         )
     elif layer is not None:
         matrix: Any = adata.layers[layer]
+        var_names = adata.var_names
+        var = adata.var
     elif use_raw:
         matrix = adata.raw.X
+        var_names = adata.raw.var_names
+        var = adata.raw.var
     else:
         matrix = adata.X
+        var_names = adata.var_names
+        var = adata.var
+
+    if use_raw and var_subset is not None:
+        if isinstance(var_subset, str):
+            if var_subset not in var:
+                raise KeyError(f"column {var_subset!r} not found in adata.raw.var")
+            subset = var[var_subset]
+            if not hasattr(subset, "dtype") or subset.dtype != bool:
+                raise TypeError(
+                    f"unsupported column dtype for 'var_subset': "
+                    f"expected boolean values in adata.raw.var[{var_subset!r}]"
+                )
+            mask = subset.to_numpy(dtype=bool)
+        elif isinstance(var_subset, CollectionInstance):
+            variables = list(var_subset)
+            if not variables:
+                raise ValueError(
+                    "invalid argument value for 'var_subset': "
+                    "expected at least one variable name"
+                )
+            invalid_types = [
+                variable for variable in variables if not isinstance(variable, str)
+            ]
+            if invalid_types:
+                variable = invalid_types[0]
+                raise TypeError(
+                    f"unsupported element type in 'var_subset': "
+                    f"expected {str} but received {type(variable)}"
+                )
+            missing = [variable for variable in variables if variable not in var_names]
+            if missing:
+                formatted_missing = ", ".join(repr(variable) for variable in missing)
+                raise KeyError(
+                    "variable(s) not found in adata.raw.var_names: "
+                    f"{formatted_missing}"
+                )
+            mask = var_names.isin(variables)
+        else:
+            raise TypeError(
+                f"unsupported argument type for 'var_subset': "
+                f"expected {str} or a collection of variable names "
+                f"but received {type(var_subset)}"
+            )
+    else:
+        mask = _as_var_subset(adata, var_subset)
+    if mask is not None:
+        matrix = cast(Any, matrix)[:, mask]
 
     if copy:
         return cast(Matrix, matrix.copy())
     else:
         return cast(Matrix, matrix)
+
+
+def _get_expression_with_gene_names(
+    adata: AnnData,
+    expression: Optional[str],
+    var_subset: Optional[Sequence[str]],
+) -> Tuple[Matrix, Index]:
+    """
+    Get an expression matrix and the matching gene names.
+
+    This helper mirrors the public `expression` API used by tools that need
+    both the selected matrix and gene labels. The returned gene names are
+    aligned with the matrix columns after applying `var_subset`.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    expression: str, optional
+        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
+    var_subset: sequence of str, optional
+        Variable names to select. If None, keep all variables from the selected
+        expression source.
+
+    Returns
+    -------
+    tuple
+        Selected expression matrix and matching gene names.
+    """
+
+    if expression is None or expression in {"X", ".X"}:
+        expression_mtx = get_expression(adata, var_subset=var_subset, copy=False)
+        gene_names = adata.var_names
+        gene_names_label = "adata.var_names"
+    elif expression in {"raw", "raw.X", ".raw.X"}:
+        if adata.raw is None:
+            raise ValueError(
+                "invalid argument value for 'expression': "
+                "adata.raw is required when expression='raw.X'"
+            )
+        expression_mtx = get_expression(
+            adata,
+            use_raw=True,
+            var_subset=var_subset,
+            copy=False,
+        )
+        gene_names = adata.raw.var_names
+        gene_names_label = "adata.raw.var_names"
+    else:
+        expression = _as_string(expression, "expression")
+        expression_mtx = get_expression(
+            adata,
+            layer=expression,
+            var_subset=var_subset,
+            copy=False,
+        )
+        gene_names = adata.var_names
+        gene_names_label = "adata.var_names"
+
+    if var_subset is None:
+        return expression_mtx, gene_names
+
+    if isinstance(var_subset, str) or not isinstance(var_subset, SequenceInstance):
+        raise TypeError(
+            f"unsupported argument type for 'var_subset': "
+            f"expected sequence of {str} but received {type(var_subset)}"
+        )
+
+    variables = list(var_subset)
+    if not variables:
+        raise ValueError(
+            "invalid argument value for 'var_subset': "
+            "expected at least one variable name"
+        )
+    invalid_types = [
+        variable for variable in variables if not isinstance(variable, str)
+    ]
+    if invalid_types:
+        variable = invalid_types[0]
+        raise TypeError(
+            f"unsupported element type in 'var_subset': "
+            f"expected {str} but received {type(variable)}"
+        )
+
+    positions = gene_names.get_indexer(Index(variables))
+    missing = [
+        variable for variable, position in zip(variables, positions) if position < 0
+    ]
+    if missing:
+        formatted_missing = ", ".join(repr(variable) for variable in missing)
+        raise KeyError(
+            f"variable(s) not found in {gene_names_label}: {formatted_missing}"
+        )
+
+    return expression_mtx, gene_names[gene_names.isin(variables)]
+
+
+def _as_dense_matrix_chunk(expression_mtx: Matrix, start: int, end: int) -> np.ndarray:
+    """
+    Get a dense column chunk from a dense or sparse matrix.
+
+    Parameters
+    ----------
+    expression_mtx: ndarray or sparse matrix
+        Matrix to slice.
+    start: int
+        First column index.
+    end: int
+        Stop column index.
+
+    Returns
+    -------
+    ndarray
+        Dense two-dimensional matrix chunk.
+    """
+
+    matrix_chunk = cast(Any, expression_mtx)[:, start:end]
+    dense_chunk = (
+        matrix_chunk.toarray()
+        if sparse.issparse(matrix_chunk)
+        else np.asarray(matrix_chunk)
+    )
+    if dense_chunk.ndim != 2:
+        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
+    return dense_chunk
 
 
 @anndata_or_mudata_checker

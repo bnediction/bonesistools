@@ -48,6 +48,7 @@ Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, obj
 
 
 def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarray:
+
     counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
 
     if scipy.sparse.issparse(counts):
@@ -377,6 +378,7 @@ def cdf(
     """
 
     def _ecdf(values):
+
         values = np.sort(np.asarray(values))
         y = np.arange(1, len(values) + 1) / len(values)
         return values, y

@@ -58,6 +58,7 @@ class InteractionScore:
 
 
 def _default_weights(max_depth: int) -> List[float]:
+
     return [1 / (length**2) for length in range(1, max_depth + 1)]
 
 
@@ -65,6 +66,7 @@ def _path_weight(
     path_length: int,
     weights: Sequence[float],
 ) -> float:
+
     try:
         return weights[path_length - 1]
 
@@ -80,6 +82,7 @@ def _edge_signs(
     source: str,
     target: str,
 ) -> List[int]:
+
     edge_data = graph.get_edge_data(source, target)
 
     if edge_data is None:
@@ -110,6 +113,7 @@ def _walk_signs(
     graph: nx.Graph[Any],
     walk: Sequence[str],
 ) -> List[int]:
+
     edge_signs = [
         _edge_signs(graph, source, target) for source, target in zip(walk, walk[1:])
     ]
@@ -214,6 +218,7 @@ def interaction_scores_from_walks(
 
 
 def _empty_score() -> InteractionScore:
+
     return InteractionScore(score=0.0, total_weight=0.0, path_number=0)
 
 
@@ -222,6 +227,7 @@ def _passes_threshold(
     minimum_path_number: int,
     threshold: float,
 ) -> bool:
+
     return (
         score.path_number >= minimum_path_number
         and score.normalized_score != 0

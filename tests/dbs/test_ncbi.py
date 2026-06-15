@@ -198,9 +198,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
         + "\n"
         + "\t".join(["3", "Low", "LowRef", "Shared", "-", "pseudo"])
         + "\n"
-        + "\t".join(
-            ["4", "High", "HighRef", "Shared", "MGI:MGI4", "protein-coding"]
-        )
+        + "\t".join(["4", "High", "HighRef", "Shared", "MGI:MGI4", "protein-coding"])
         + "\n",
         encoding="utf-8",
     )
@@ -221,11 +219,14 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
     assert genesyn.get_ensembl_id("1", input_identifier_type="gene_id") == (
         "ENSMUSG00000000001"
     )
-    assert genesyn.get_alias_from_database(
-        "1",
-        database="MGI",
-        input_identifier_type="gene_id",
-    ) == "MGI1"
+    assert (
+        genesyn.get_alias_from_database(
+            "1",
+            database="MGI",
+            input_identifier_type="gene_id",
+        )
+        == "MGI1"
+    )
     assert genesyn.contains("MGI4", identifier_type="MGI") == [True]
     assert genesyn.find("MGI1", "missing", identifier_type="MGI") == ["MGI1"]
     assert genesyn.databases == {"MGI"}
@@ -299,11 +300,14 @@ def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_p
     assert genesyn.get_ensembl_id("10", input_identifier_type="gene_id") == (
         "ENSMUSG00000000010"
     )
-    assert genesyn.get_alias_from_database(
-        "10",
-        database="MGI",
-        input_identifier_type="gene_id",
-    ) == "MGI10"
+    assert (
+        genesyn.get_alias_from_database(
+            "10",
+            database="MGI",
+            input_identifier_type="gene_id",
+        )
+        == "MGI10"
+    )
     assert not gene_info.exists()
     assert not gzip_file.exists()
 

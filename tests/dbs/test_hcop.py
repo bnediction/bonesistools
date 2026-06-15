@@ -162,9 +162,7 @@ def test_hcop_translates_sequences_and_dispatches_supported_objects():
     assert orthologs.translate("A_B") == ["a_b"]
 
     interactions = [("A", "B", {"sign": 1}), ("A", "missing", {"sign": -1})]
-    assert orthologs(interactions, keep_if_missing=False) == [
-        ("a", "b", {"sign": 1})
-    ]
+    assert orthologs(interactions, keep_if_missing=False) == [("a", "b", {"sign": 1})]
 
     df = pd.DataFrame({"source": ["A"], "target": ["B"]})
     assert orthologs(df, columns=["source", "target"]).to_dict("records") == [
