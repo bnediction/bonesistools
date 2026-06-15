@@ -224,9 +224,7 @@ def test_merge_duplicate_vars_merges_varm_with_nan_strategy():
             obs=pd.DataFrame(index=["c1"]),
             var=pd.DataFrame(index=["g1", "g1", "g2"]),
         )
-        adata.varm["scores"] = np.array(
-            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
-        )
+        adata.varm["scores"] = np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="nan")
 
@@ -249,9 +247,7 @@ def test_merge_duplicate_vars_merges_varm_with_first_strategy():
                 index=["g1", "g1", "g2"],
             ),
         )
-        adata.varm["scores"] = np.array(
-            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
-        )
+        adata.varm["scores"] = np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])
         adata.varm["df_scores"] = pd.DataFrame(
             {"score": [1.0, 2.0, 3.0]},
             index=["g1", "g1", "g2"],
@@ -278,9 +274,7 @@ def test_merge_duplicate_vars_merges_varm_with_mean_strategy():
             obs=pd.DataFrame(index=["c1"]),
             var=pd.DataFrame(index=["g1", "g1", "g2"]),
         )
-        adata.varm["scores"] = np.array(
-            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
-        )
+        adata.varm["scores"] = np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="mean")
 

@@ -33,7 +33,7 @@ import bonesistools as bt
 
 ## Single-cell tools
 
-`bt.sct` follows a [Scanpy](https://github.com/scverse/scanpy)-like API while providing additional and complementary features for single-cell analyses.
+`bt.sct` is inspired by [Scanpy](https://github.com/scverse/scanpy) while providing additional and complementary features for single-cell analyses.
 
 Submodules:
 

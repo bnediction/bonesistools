@@ -191,8 +191,7 @@ def trajectory(
     graph_z_offset: float = 0.0,
     label_key: str = "label",
     **kwargs: Any,
-) -> Tuple[Figure, Axes]:
-    ...
+) -> Tuple[Figure, Axes]: ...
 
 
 @overload
@@ -215,8 +214,7 @@ def trajectory(
     graph_z_offset: float = 0.0,
     label_key: str = "label",
     **kwargs: Any,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -239,8 +237,7 @@ def trajectory(
     graph_z_offset: float = 0.0,
     label_key: str = "label",
     **kwargs: Any,
-) -> Optional[Tuple[Figure, Axes]]:
-    ...
+) -> Optional[Tuple[Figure, Axes]]: ...
 
 
 @anndata_or_mudata_checker

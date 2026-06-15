@@ -11,6 +11,7 @@ feature classification utilities.
 from typing import List as _List
 
 from ._classification import mitochondrial_genes, ribosomal_genes
+from ._clustering import leiden
 from ._conversion import anndata_to_dataframe
 from ._embedding import pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
@@ -30,11 +31,7 @@ from ._neighbors import (
     shared_neighbors,
 )
 from ._regress import regress_out
-from ._utils import (
-    choose_matrix_representation,
-    choose_mtx_representation,
-    choose_representation,
-)
+from ._utils import get_expression, get_pairwise, get_representation
 from ._write import (
     to_csv,
     to_csv_or_mtx,
@@ -44,15 +41,16 @@ from ._write import (
 )
 
 __all__ = [
-    "choose_matrix_representation",
-    "choose_mtx_representation",
-    "choose_representation",
+    "get_expression",
+    "get_representation",
+    "get_pairwise",
     "KNNSC",
     "Knnbs",
     "knn_graph",
     "kneighbors_graph",
     "neighbors",
     "shared_neighbors",
+    "leiden",
     "pca",
     "spectral",
     "tsne",

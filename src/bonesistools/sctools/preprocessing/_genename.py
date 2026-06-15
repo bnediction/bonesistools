@@ -29,8 +29,7 @@ def convert_gene_identifiers(
     output_identifier_type: OutputIdentifierType = "official_name",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[False] = False,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -41,8 +40,7 @@ def convert_gene_identifiers(
     output_identifier_type: OutputIdentifierType = "official_name",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[True] = True,
-) -> ScData:
-    ...
+) -> ScData: ...
 
 
 @overload
@@ -53,8 +51,7 @@ def convert_gene_identifiers(
     output_identifier_type: OutputIdentifierType = "official_name",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
-) -> Union[ScData, None]:
-    ...
+) -> Union[ScData, None]: ...
 
 
 @support_legacy_gene_synonyms_args
@@ -140,8 +137,7 @@ def standardize_gene_identifiers(
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[False] = False,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -150,8 +146,7 @@ def standardize_gene_identifiers(
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[True] = True,
-) -> ScData:
-    ...
+) -> ScData: ...
 
 
 @overload
@@ -160,8 +155,7 @@ def standardize_gene_identifiers(
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
-) -> Union[ScData, None]:
-    ...
+) -> Union[ScData, None]: ...
 
 
 @support_legacy_gene_synonyms_args

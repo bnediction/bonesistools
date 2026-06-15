@@ -28,7 +28,7 @@ from matplotlib.ticker import FormatStrFormatter
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_or_mudata_checker
 from ..tools import barycenters
-from ..tools._utils import choose_representation
+from ..tools._utils import get_representation
 from ._colors import (
     QUALITATIVE_COLORS,
     generate_colormap,
@@ -208,9 +208,9 @@ def __scatterplot_discrete(
     if isinstance(colors, ListedColormap):
         colors = colormap_colors(colors)
 
-    X = cast(
+    representation_mtx = cast(
         np.ndarray,
-        choose_representation(scdata, use_rep=use_rep, n_components=n_components),
+        get_representation(scdata, use_rep=use_rep, n_components=n_components),
     )
 
     if ax is None:
@@ -233,8 +233,8 @@ def __scatterplot_discrete(
         idx = scdata.obs[obs].isna()
         if n_components == 2:
             ax.scatter(
-                X[idx, 0],
-                X[idx, 1],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
                 s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
                 facecolors=(
                     kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else gray
@@ -249,9 +249,9 @@ def __scatterplot_discrete(
         elif n_components == 3:
             ax3d = cast(Any, ax)
             ax3d.scatter3D(
-                X[idx, 0],
-                X[idx, 1],
-                X[idx, 2],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
+                representation_mtx[idx, 2],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=(
                     kwargs["nan"]["facecolors"]
@@ -278,8 +278,8 @@ def __scatterplot_discrete(
         idx = np.where(scdata.obs[obs] == _cluster)[0]
         if n_components == 2:
             ax.scatter(
-                X[idx, 0],
-                X[idx, 1],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=_color,
                 edgecolors="none",
@@ -293,9 +293,9 @@ def __scatterplot_discrete(
         elif n_components == 3:
             ax3d = cast(Any, ax)
             ax3d.scatter3D(
-                X[idx, 0],
-                X[idx, 1],
-                X[idx, 2],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
+                representation_mtx[idx, 2],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=_color,
                 edgecolors="none",
@@ -357,9 +357,9 @@ def __scatterplot_continuous(
     if not np.all(cmap.get_bad() != 0) and "facecolor" not in kwargs["nan"]:
         kwargs["nan"]["color"] = cmap.get_bad()
 
-    X = cast(
+    representation_mtx = cast(
         np.ndarray,
-        choose_representation(scdata, use_rep=use_rep, n_components=n_components),
+        get_representation(scdata, use_rep=use_rep, n_components=n_components),
     )
 
     if ax is None:
@@ -380,8 +380,8 @@ def __scatterplot_continuous(
         idx = scdata.obs[obs].isna()
         if n_components == 2:
             ax.scatter(
-                X[idx, 0],
-                X[idx, 1],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
                 s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
                 facecolors=(
                     kwargs["nan"]["facecolor"]
@@ -398,9 +398,9 @@ def __scatterplot_continuous(
         elif n_components == 3:
             ax3d = cast(Any, ax)
             ax3d.scatter3D(
-                X[idx, 0],
-                X[idx, 1],
-                X[idx, 2],
+                representation_mtx[idx, 0],
+                representation_mtx[idx, 1],
+                representation_mtx[idx, 2],
                 s=kwargs["s"] if "s" in kwargs else 3,
                 facecolors=(
                     kwargs["nan"]["facecolors"]
@@ -417,8 +417,8 @@ def __scatterplot_continuous(
 
     if n_components == 2:
         sc = ax.scatter(
-            X[:, 0],
-            X[:, 1],
+            representation_mtx[:, 0],
+            representation_mtx[:, 1],
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
             cmap=cmap,
@@ -432,9 +432,9 @@ def __scatterplot_continuous(
     elif n_components == 3:
         ax3d = cast(Any, ax)
         ax3d.scatter3D(
-            X[:, 0],
-            X[:, 1],
-            X[:, 2],
+            representation_mtx[:, 0],
+            representation_mtx[:, 1],
+            representation_mtx[:, 2],
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
             cmap=cmap,
@@ -497,8 +497,7 @@ def embedding(
     outfile: None = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes]:
-    ...
+) -> Tuple[Figure, Axes]: ...
 
 
 @overload
@@ -517,8 +516,7 @@ def embedding(
     outfile: Path,
     ax: Optional[Axes] = None,
     **kwargs: Any,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -537,8 +535,7 @@ def embedding(
     outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
-) -> Optional[Tuple[Figure, Axes]]:
-    ...
+) -> Optional[Tuple[Figure, Axes]]: ...
 
 
 @anndata_or_mudata_checker

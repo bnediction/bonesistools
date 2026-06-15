@@ -30,8 +30,8 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
     result = bt.sct.tl.neighbors(
         mini_adata,
         n_neighbors=3,
-        use_rep="X_pca",
-        n_rep_components=2,
+        representation="X_pca",
+        n_pcs=2,
         metric="euclidean",
         n_jobs=1,
     )
@@ -42,9 +42,9 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
     assert mini_adata.uns["neighbors"]["params"] == {
         "n_neighbors": 3,
         "n_pcs": 2,
-        "use_rep": "X_pca",
+        "representation": "X_pca",
         "metric": "euclidean",
-        "method": "bonesistools",
+        "method": "umap",
     }
     assert np.allclose(
         mini_adata.obsp["distances"].toarray(),
@@ -60,7 +60,7 @@ def test_neighbors_custom_keys_and_copy(mini_adata):
     copied = bt.sct.tl.neighbors(
         mini_adata,
         n_neighbors=3,
-        use_rep="X_pca",
+        representation="X_pca",
         key_added="custom_neighbors",
         distances_key="custom_distances",
         connectivities_key="custom_connectivities",
@@ -81,7 +81,7 @@ def test_neighbors_custom_keys_and_copy(mini_adata):
     derived = bt.sct.tl.neighbors(
         mini_adata,
         n_neighbors=3,
-        use_rep="X_pca",
+        representation="X_pca",
         key_added="derived",
         copy=True,
     )
@@ -119,8 +119,8 @@ def test_neighbors_can_feed_shared_neighbors(mini_adata):
     bt.sct.tl.neighbors(
         mini_adata,
         n_neighbors=3,
-        use_rep="X_pca",
-        n_rep_components=2,
+        representation="X_pca",
+        n_pcs=2,
     )
     bt.sct.tl.shared_neighbors(
         mini_adata,
@@ -150,7 +150,7 @@ def test_neighbors_validates_arguments(mini_adata):
         bt.sct.tl.neighbors(mini_adata, n_neighbors=mini_adata.n_obs + 1)
 
     with pytest.raises(KeyError):
-        bt.sct.tl.neighbors(mini_adata, n_neighbors=3, use_rep="missing")
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=3, representation="missing")
 
     with pytest.raises(ValueError):
         bt.sct.tl.neighbors(mini_adata, n_neighbors=3, metric=cast(Any, "bad"))

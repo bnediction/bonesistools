@@ -50,7 +50,7 @@ from .._typing import (
     Shortest_Path_Method,
     anndata_or_mudata_checker,
 )
-from ._utils import choose_representation
+from ._utils import get_representation
 
 IndexOrName = Literal["index", "name"]
 
@@ -65,9 +65,13 @@ def _kneighbors_distance_matrix(
 ) -> csr_matrix:
     from sklearn import neighbors as sklearn_neighbors
 
-    X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
+    representation_mtx = get_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components,
+    )
     matrix = sklearn_neighbors.kneighbors_graph(
-        X=X,
+        X=representation_mtx,
         n_neighbors=n_neighbors,
         mode="distance",
         metric=metric,
@@ -124,8 +128,8 @@ def _normalize_knnsc_configuration(
 def neighbors(
     scdata: ScData,
     n_neighbors: int = 15,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -139,8 +143,8 @@ def neighbors(
 def neighbors(
     scdata: ScData,
     n_neighbors: int = 15,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -155,8 +159,8 @@ def neighbors(
 def neighbors(
     scdata: ScData,
     n_neighbors: int = 15,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -171,8 +175,8 @@ def neighbors(
 def neighbors(
     scdata: ScData,  # type: ignore
     n_neighbors: int = 15,
-    use_rep: Optional[str] = "X_pca",
-    n_rep_components: Optional[int] = None,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -189,11 +193,11 @@ def neighbors(
         Unimodal or multimodal annotated data matrix.
     n_neighbors: int (default: 15)
         Number of nearest neighbors.
-    use_rep: str, optional (default: 'X_pca')
+    representation: str, optional (default: 'X_pca')
         Representation key in `scdata.obsm`.
-    n_rep_components: int, optional
+    n_pcs: int, optional
         Number of representation dimensions to use. If None, use all
-        dimensions in `use_rep`.
+        dimensions in `representation`.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     key_added: str (default: 'neighbors')
@@ -213,7 +217,7 @@ def neighbors(
 
     Examples
     --------
-    >>> bt.sct.tl.neighbors(adata, use_rep="X_pca")
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
 
     Returns
     -------
@@ -241,10 +245,14 @@ def neighbors(
             f"({scdata.n_obs}) but received {n_neighbors!r}"
         )
 
-    if n_rep_components is not None:
-        n_rep_components = _as_positive_integer(n_rep_components, "n_rep_components")
+    if n_pcs is not None:
+        n_pcs = _as_positive_integer(n_pcs, "n_pcs")
 
-    use_rep = "X_pca" if use_rep is None else _as_string(use_rep, "use_rep")
+    representation = (
+        "X_pca"
+        if representation is None
+        else _as_string(representation, "representation")
+    )
     metric = _as_literal(
         metric,
         choices=get_args(Metric),
@@ -277,8 +285,8 @@ def neighbors(
 
     distances = _kneighbors_distance_matrix(
         scdata=scdata,
-        use_rep=use_rep,
-        n_components=n_rep_components,
+        use_rep=representation,
+        n_components=n_pcs,
         n_neighbors=n_neighbors - 1,
         metric=metric,
         n_jobs=n_jobs,
@@ -294,13 +302,13 @@ def neighbors(
         "params": {
             "n_neighbors": n_neighbors,
             "n_pcs": (
-                n_rep_components
-                if n_rep_components is not None
-                else int(scdata.obsm[use_rep].shape[1])
+                n_pcs
+                if n_pcs is not None
+                else int(scdata.obsm[representation].shape[1])
             ),
-            "use_rep": use_rep,
+            "representation": representation,
             "metric": metric,
-            "method": "bonesistools",
+            "method": "umap",
         },
     }
 
@@ -364,9 +372,13 @@ def knn_graph(
     if metric_kwargs:
         from sklearn import neighbors as sklearn_neighbors
 
-        X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
+        representation_mtx = get_representation(
+            scdata,
+            use_rep=use_rep,
+            n_components=n_components,
+        )
         weighted_adjacency_matrix = sklearn_neighbors.kneighbors_graph(
-            X=X,
+            X=representation_mtx,
             n_neighbors=n_neighbors,
             mode="distance",
             metric=metric,
@@ -820,7 +832,7 @@ class KNNSC:
                 f"min_cluster_size={min_cluster_size} cells"
             )
 
-        representation = choose_representation(
+        representation_mtx = get_representation(
             adata, use_rep=resolved_use_rep, n_components=resolved_n_components
         )
 
@@ -837,13 +849,16 @@ class KNNSC:
         )
 
         _barycenters = {
-            category: np.nanmean(representation[raw_obs == category], axis=0)
+            category: np.nanmean(
+                cast(Any, representation_mtx)[raw_obs == category],
+                axis=0,
+            )
             for category in candidate_obs.cat.categories
         }
         for key, value in _barycenters.items():
             barycenter_coordinate = value.reshape(1, -1)
             distances = pairwise_distances(
-                representation,
+                representation_mtx,
                 barycenter_coordinate,
                 metric=resolved_metric,
                 n_jobs=n_jobs,
@@ -866,19 +881,19 @@ class KNNSC:
             scc = [list(cc - set(_barycenters.keys())) for cc in scc]
             for paired_scc in combinations(scc, 2):
                 adata_any = cast(Any, adata)
-                x_matrix = choose_representation(
+                x_representation_mtx = get_representation(
                     adata_any[paired_scc[0], :],
                     use_rep=resolved_use_rep,
                     n_components=resolved_n_components,
                 )
-                y_matrix = choose_representation(
+                y_representation_mtx = get_representation(
                     adata_any[paired_scc[1], :],
                     use_rep=resolved_use_rep,
                     n_components=resolved_n_components,
                 )
                 dists = pairwise_distances(
-                    x_matrix,
-                    y_matrix,
+                    x_representation_mtx,
+                    y_representation_mtx,
                     metric=resolved_metric,
                     n_jobs=n_jobs,
                     **resolved_metric_kwargs,
@@ -1524,14 +1539,16 @@ def shared_neighbors(
         scdata, cluster_key=knn_key, prune_snn=prune_snn
     )
 
-    n_pcs = scdata.uns[knn_key]["params"]["n_pcs"]
-    obsm = scdata.uns[knn_key]["params"]["use_rep"]
+    knn_params = scdata.uns[knn_key]["params"]
+    n_pcs = knn_params["n_pcs"]
+    obsm = knn_params.get("representation", knn_params.get("use_rep"))
+    obsm = _as_string(obsm, "representation")
 
-    X = scdata.obsm[obsm][:, 0:n_pcs]
+    representation_mtx = scdata.obsm[obsm][:, 0:n_pcs]
     zeros_ones = snn_graph.toarray()
     zeros_ones[zeros_ones > 0] = 1
 
-    distances_matrix = pairwise_distances(X, metric=metric)
+    distances_matrix = pairwise_distances(representation_mtx, metric=metric)
     distances_matrix = np.multiply(zeros_ones, distances_matrix)
     distances_matrix = csr_matrix(distances_matrix)
     connectivities_matrix = snn_graph.copy()

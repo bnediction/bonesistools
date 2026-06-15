@@ -6,6 +6,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Collection,
     List,
     Optional,
     Sequence,
@@ -18,6 +19,7 @@ from typing import (
 import numpy as np
 from anndata import AnnData
 from pandas import DataFrame
+from scipy.sparse import spmatrix
 from typing_extensions import ParamSpec, TypeAlias
 
 from bonesistools._compat import Literal
@@ -62,6 +64,8 @@ Axis: TypeAlias = AnnDataAxis
 Keys: TypeAlias = Union[str, Sequence[str]]
 
 AnnDataList: TypeAlias = List[AnnData]
+Matrix: TypeAlias = Union[np.ndarray, spmatrix]
+VarSubset: TypeAlias = Optional[Union[str, Collection[str]]]
 
 if TYPE_CHECKING:
     MuData = object

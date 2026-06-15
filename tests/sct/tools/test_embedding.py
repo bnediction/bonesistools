@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional, Tuple, cast
 
 import numpy as np
 import pytest
-from sklearn.decomposition import PCA
+from scipy.sparse import csr_matrix
+from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.manifold import TSNE, SpectralEmbedding
 
 import bonesistools as bt
@@ -133,7 +134,7 @@ def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
     assert mini_adata.obsm["X_tsne"].shape == (mini_adata.n_obs, 2)
     assert mini_adata.uns["X_tsne"] == {
         "method": "tsne",
-        "use_rep": "X_pca",
+        "representation": "X_pca",
         "n_pcs": None,
         "n_components": 2,
         "seed": 0,
@@ -214,7 +215,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
     assert result is None
     input_matrix = FakeUMAP.input_matrix
     assert input_matrix is not None
-    assert np.array_equal(input_matrix, np.zeros((mini_adata.n_obs, 1)))
+    assert np.array_equal(input_matrix, mini_adata.obsm["X_pca"][:, :2])
     assert FakeUMAP.graph_shape == (mini_adata.n_obs, mini_adata.n_obs)
     assert FakeUMAP.parameters["n_components"] == 2
     assert FakeUMAP.parameters["initial_alpha"] == 0.75
@@ -289,7 +290,7 @@ def test_pca_stores_scores_loadings_and_metadata(mini_adata):
     )
     assert mini_adata.uns["pca"]["params"] == {
         "zero_center": True,
-        "use_highly_variable": None,
+        "var_subset": None,
         "layer": None,
         "use_raw": False,
         "svd_solver": "full",
@@ -305,7 +306,7 @@ def test_pca_copy_layer_and_highly_variable_genes(mini_adata):
         mini_adata,
         n_components=2,
         layer="counts",
-        use_highly_variable=True,
+        var_subset="highly_variable",
         key_added="X_custom",
         svd_solver="full",
         seed=0,
@@ -318,12 +319,136 @@ def test_pca_copy_layer_and_highly_variable_genes(mini_adata):
     assert copied.varm["PCs"].shape == (mini_adata.n_vars, 2)
     assert np.allclose(copied.varm["PCs"][1, :], 0.0)
     assert copied.uns["pca"]["params"]["layer"] == "counts"
-    assert copied.uns["pca"]["params"]["use_highly_variable"] is True
+    assert copied.uns["pca"]["params"]["var_subset"] == "highly_variable"
+
+
+def test_pca_accepts_variable_name_subset(mini_adata):
+    bt.sct.tl.pca(
+        mini_adata,
+        n_components=2,
+        var_subset=["g1", "g3"],
+        svd_solver="full",
+        seed=0,
+    )
+
+    assert mini_adata.obsm["X_pca"].shape == (mini_adata.n_obs, 2)
+    assert np.allclose(mini_adata.varm["PCs"][1, :], 0.0)
+    assert mini_adata.uns["pca"]["params"]["var_subset"] == ("g1", "g3")
+
+
+def test_pca_without_zero_center_preserves_sparse_input(mini_adata):
+    sparse_expression_mtx = csr_matrix(mini_adata.X)
+    mini_adata.X = sparse_expression_mtx
+    expected = TruncatedSVD(
+        n_components=2,
+        algorithm="randomized",
+        random_state=np.random.RandomState(10),
+    )
+    expected_scores = expected.fit_transform(sparse_expression_mtx)
+
+    bt.sct.tl.pca(
+        mini_adata,
+        n_components=2,
+        zero_center=False,
+        seed=10,
+    )
+
+    assert np.allclose(mini_adata.obsm["X_pca"], expected_scores)
+    assert np.allclose(mini_adata.varm["PCs"], expected.components_.T)
+    assert np.allclose(mini_adata.uns["pca"]["variance"], expected.explained_variance_)
+    assert np.allclose(
+        mini_adata.uns["pca"]["variance_ratio"],
+        expected.explained_variance_ratio_,
+    )
+    assert mini_adata.uns["pca"]["params"]["svd_solver"] == "randomized"
+
+
+def test_pca_with_sparse_input_densifies_for_dense_solver(mini_adata):
+    sparse_expression_mtx = csr_matrix(mini_adata.X.astype(np.float32))
+    mini_adata.X = sparse_expression_mtx
+    expected = PCA(
+        n_components=2,
+        svd_solver="randomized",
+        random_state=np.random.RandomState(10),
+    )
+    expected_scores = expected.fit_transform(sparse_expression_mtx.toarray())
+
+    bt.sct.tl.pca(
+        mini_adata,
+        n_components=2,
+        zero_center=True,
+        svd_solver="randomized",
+        seed=10,
+    )
+
+    assert np.allclose(np.abs(mini_adata.obsm["X_pca"]), np.abs(expected_scores))
+    assert np.allclose(
+        np.abs(mini_adata.varm["PCs"]),
+        np.abs(expected.components_.T),
+    )
+    assert np.allclose(mini_adata.uns["pca"]["variance"], expected.explained_variance_)
+    assert np.allclose(
+        mini_adata.uns["pca"]["variance_ratio"],
+        expected.explained_variance_ratio_,
+    )
+    assert mini_adata.uns["pca"]["params"]["svd_solver"] == "randomized"
+
+
+@pytest.mark.parametrize("zero_center", [True, False])
+def test_pca_matches_scanpy_with_sparse_input_and_seed(mini_adata, zero_center):
+    sc = pytest.importorskip("scanpy")
+
+    sparse_expression_mtx = csr_matrix(mini_adata.X.astype(np.float32))
+    mini_adata.X = sparse_expression_mtx
+    mini_adata.var["highly_variable"] = [True, True, True]
+    scanpy_adata = mini_adata.copy()
+    bonesis_adata = mini_adata.copy()
+
+    sc.tl.pca(
+        scanpy_adata,
+        n_comps=2,
+        zero_center=zero_center,
+        use_highly_variable=True,
+        random_state=10,
+        copy=False,
+    )
+    bt.sct.tl.pca(
+        bonesis_adata,
+        n_components=2,
+        zero_center=zero_center,
+        var_subset="highly_variable",
+        seed=10,
+        copy=False,
+    )
+
+    assert np.allclose(
+        np.abs(bonesis_adata.obsm["X_pca"]),
+        np.abs(scanpy_adata.obsm["X_pca"]),
+    )
+    assert np.allclose(
+        np.abs(bonesis_adata.varm["PCs"]),
+        np.abs(scanpy_adata.varm["PCs"]),
+    )
+    assert np.allclose(
+        bonesis_adata.uns["pca"]["variance"],
+        scanpy_adata.uns["pca"]["variance"],
+    )
+    assert np.allclose(
+        bonesis_adata.uns["pca"]["variance_ratio"],
+        scanpy_adata.uns["pca"]["variance_ratio"],
+    )
 
 
 def test_pca_validates_arguments(mini_adata):
     with pytest.raises(KeyError, match="highly_variable"):
-        bt.sct.tl.pca(mini_adata, n_components=2, use_highly_variable=True)
+        bt.sct.tl.pca(mini_adata, n_components=2, var_subset="highly_variable")
+
+    mini_adata.var["not_boolean"] = ["yes", "no", "yes"]
+    with pytest.raises(TypeError):
+        bt.sct.tl.pca(mini_adata, n_components=2, var_subset="not_boolean")
+
+    with pytest.raises(KeyError):
+        bt.sct.tl.pca(mini_adata, n_components=2, var_subset=["missing"])
 
     with pytest.raises(ValueError, match="invalid argument value for 'svd_solver'"):
         bt.sct.tl.pca(mini_adata, n_components=2, svd_solver=cast(Any, "bad"))

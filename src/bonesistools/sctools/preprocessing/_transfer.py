@@ -46,8 +46,7 @@ def transfer_layer(
     layers: Keys,
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -56,8 +55,7 @@ def transfer_layer(
     right_ad: AnnData,
     layers: Keys,
     copy: Literal[True] = True,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -66,8 +64,7 @@ def transfer_layer(
     right_ad: AnnData,
     layers: Keys,
     copy: bool = False,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 @anndata_checker(n=2)
@@ -163,8 +160,7 @@ def merge(
     suffixes: Suffixes = ("_x", "_y"),
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -174,8 +170,7 @@ def merge(
     axis: Axis = "obs",
     suffixes: Suffixes = ("_x", "_y"),
     copy: Literal[True] = True,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -185,8 +180,7 @@ def merge(
     axis: Axis = "obs",
     suffixes: Suffixes = ("_x", "_y"),
     copy: bool = False,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 @anndata_checker(n=2)
@@ -270,8 +264,7 @@ def transfer_obs_to_integrated(
     condition_colname: str = "condition",
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -282,8 +275,7 @@ def transfer_obs_to_integrated(
     conditions: Keys,
     condition_colname: str = "condition",
     copy: Literal[True] = True,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -294,8 +286,7 @@ def transfer_obs_to_integrated(
     conditions: Keys,
     condition_colname: str = "condition",
     copy: bool = False,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 @anndata_checker
@@ -390,8 +381,7 @@ def transfer_obs_to_specific(
     condition_colname: str = "condition",
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -402,8 +392,7 @@ def transfer_obs_to_specific(
     conditions: Keys,
     condition_colname: str = "condition",
     copy: Literal[True] = True,
-) -> AnnDataList:
-    ...
+) -> AnnDataList: ...
 
 
 @overload
@@ -414,8 +403,7 @@ def transfer_obs_to_specific(
     conditions: Keys,
     condition_colname: str = "condition",
     copy: bool = False,
-) -> Union[AnnDataList, None]:
-    ...
+) -> Union[AnnDataList, None]: ...
 
 
 @anndata_checker

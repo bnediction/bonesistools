@@ -336,20 +336,20 @@ def smirnov_tests(
     }
 
     if layer is not None:
-        x_matrix = adata.layers[layer]
+        expression_mtx = adata.layers[layer]
     else:
-        x_matrix = adata.X
+        expression_mtx = adata.X
 
-    if issparse(x_matrix):
-        cast(Any, x_matrix).eliminate_zeros()
+    if issparse(expression_mtx):
+        cast(Any, expression_mtx).eliminate_zeros()
 
     def get_gene_values(obs_mask, gene_name):
         obs_indices = np.where(np.asarray(obs_mask))[0]
         var_indices = np.where(np.asarray(adata.var.index == gene_name))[0]
-        if issparse(x_matrix):
-            values = cast(Any, x_matrix)[obs_indices][:, var_indices].toarray()
+        if issparse(expression_mtx):
+            values = cast(Any, expression_mtx)[obs_indices][:, var_indices].toarray()
         else:
-            values = cast(np.ndarray, x_matrix)[np.ix_(obs_indices, var_indices)]
+            values = cast(np.ndarray, expression_mtx)[np.ix_(obs_indices, var_indices)]
         return np.asarray(values).reshape(-1)
 
     df = pd.DataFrame(

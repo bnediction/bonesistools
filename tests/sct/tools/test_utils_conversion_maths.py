@@ -106,19 +106,19 @@ def _empty_var_smirnov_adata():
     )
 
 
-def test_choose_matrix_representation_selects_x_layer_and_raw(mini_adata):
+def test_get_expression_selects_x_layer_and_raw(mini_adata):
     mini_adata.raw = mini_adata
 
-    x_copy = bt.sct.tl.choose_matrix_representation(mini_adata)
+    expression_mtx_copy = bt.sct.tl.get_expression(mini_adata)
 
-    assert np.array_equal(x_copy, mini_adata.X)
-    assert x_copy is not mini_adata.X
+    assert np.array_equal(expression_mtx_copy, mini_adata.X)
+    assert expression_mtx_copy is not mini_adata.X
     assert np.array_equal(
-        bt.sct.tl.choose_matrix_representation(mini_adata, copy=False),
+        bt.sct.tl.get_expression(mini_adata, copy=False),
         mini_adata.X,
     )
     assert np.array_equal(
-        bt.sct.tl.choose_matrix_representation(
+        bt.sct.tl.get_expression(
             mini_adata,
             layer="counts",
             copy=False,
@@ -126,7 +126,7 @@ def test_choose_matrix_representation_selects_x_layer_and_raw(mini_adata):
         mini_adata.layers["counts"],
     )
     assert np.array_equal(
-        bt.sct.tl.choose_matrix_representation(
+        bt.sct.tl.get_expression(
             mini_adata,
             use_raw=True,
             copy=False,
@@ -135,37 +135,57 @@ def test_choose_matrix_representation_selects_x_layer_and_raw(mini_adata):
     )
 
 
-def test_choose_matrix_representation_rejects_raw_and_layer(mini_adata):
+def test_get_expression_rejects_raw_and_layer(mini_adata):
     with pytest.raises(ValueError, match="invalid argument combination"):
-        bt.sct.tl.choose_matrix_representation(
+        bt.sct.tl.get_expression(
             mini_adata,
             use_raw=True,
             layer="counts",
         )
 
 
-def test_choose_representation_truncates_dimensions(mini_adata):
-    full_representation = bt.sct.tl.choose_representation(mini_adata, use_rep=None)
-    rep = bt.sct.tl.choose_representation(
+def test_get_representation_truncates_dimensions(mini_adata):
+    full_representation_mtx = bt.sct.tl.get_representation(mini_adata, use_rep=None)
+    representation_mtx = bt.sct.tl.get_representation(
         mini_adata,
         use_rep="X_pca",
         n_components=2,
     )
 
-    assert full_representation is mini_adata.obsm["X_pca"]
-    assert rep.shape == (4, 2)
-    assert np.array_equal(rep, mini_adata.obsm["X_pca"][:, :2])
+    assert full_representation_mtx is mini_adata.obsm["X_pca"]
+    assert representation_mtx.shape == (4, 2)
+    assert np.array_equal(representation_mtx, mini_adata.obsm["X_pca"][:, :2])
 
 
-def test_choose_representation_reports_missing_key(mini_adata):
+def test_get_representation_reports_missing_key(mini_adata):
     with pytest.raises(KeyError, match="key 'missing' not found in scdata.obsm"):
-        bt.sct.tl.choose_representation(mini_adata, use_rep="missing")
+        bt.sct.tl.get_representation(mini_adata, use_rep="missing")
 
     pca_missing = mini_adata.copy()
     del pca_missing.obsm["X_pca"]
 
     with pytest.raises(KeyError, match="bonesistools.sct.tl.pca"):
-        bt.sct.tl.choose_representation(pca_missing, use_rep=None)
+        bt.sct.tl.get_representation(pca_missing, use_rep=None)
+
+
+def test_get_pairwise_selects_obsp_and_varp(mini_adata):
+    mini_adata.varp["correlations"] = csr_matrix(
+        [
+            [1.0, 0.5, 0.0],
+            [0.5, 1.0, 0.2],
+            [0.0, 0.2, 1.0],
+        ]
+    )
+
+    obs_pairwise_mtx = bt.sct.tl.get_pairwise(mini_adata, "connectivities")
+    var_pairwise_mtx = bt.sct.tl.get_pairwise(
+        mini_adata,
+        "correlations",
+        axis="var",
+    )
+
+    assert obs_pairwise_mtx is mini_adata.obsp["connectivities"]
+    assert var_pairwise_mtx is mini_adata.varp["correlations"]
 
 
 def test_get_distances_and_connectivities_from_default_neighbors(mini_adata):

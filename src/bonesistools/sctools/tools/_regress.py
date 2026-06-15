@@ -43,8 +43,7 @@ def regress_out(
     *,
     copy: Literal[False],
     n_jobs: int = 1,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -55,8 +54,7 @@ def regress_out(
     intercept: bool = False,
     copy: Literal[True] = True,
     n_jobs: int = 1,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -67,8 +65,7 @@ def regress_out(
     intercept: bool = False,
     copy: bool = False,
     n_jobs: int = 1,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 @require_sklearn

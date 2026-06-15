@@ -8,5 +8,6 @@ import numpy as np
 from ._compat import Literal
 
 RandomStateSeed = Optional[Union[int, np.random.RandomState, ModuleType]]
+AutoInteger = Union[int, Literal["auto"]]
 DataFrameAxis = Literal["index", "columns"]
 FileOrientation = Literal["rows", "columns"]

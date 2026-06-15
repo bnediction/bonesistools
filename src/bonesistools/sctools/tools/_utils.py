@@ -3,25 +3,26 @@
 from typing import Any, Optional, cast
 
 from anndata import AnnData
-from numpy import ndarray
 
-from ..._warnings import _warn_deprecated
 from .._typing import (
+    AnnDataAxis,
+    Matrix,
     ScData,
     anndata_checker,
     anndata_or_mudata_checker,
 )
+from .._validation import _as_anndata_axis
 
 
 @anndata_checker
-def choose_matrix_representation(
+def get_expression(
     adata: AnnData,
     use_raw: bool = False,
     layer: Optional[str] = None,
     copy: bool = True,
-) -> ndarray:
+) -> Matrix:
     """
-    Select the expression matrix from an AnnData object.
+    Get the expression matrix from an AnnData object.
 
     The matrix is selected from `adata.X`, `adata.raw.X`, or a named layer.
     `use_raw` and `layer` are mutually exclusive.
@@ -39,8 +40,8 @@ def choose_matrix_representation(
 
     Returns
     -------
-    ndarray
-        Selected matrix.
+    ndarray or sparse matrix
+        Selected expression matrix.
 
     Raises
     ------
@@ -61,32 +62,19 @@ def choose_matrix_representation(
         matrix = adata.X
 
     if copy:
-        return cast(ndarray, matrix.copy())
+        return cast(Matrix, matrix.copy())
     else:
-        return cast(ndarray, matrix)
-
-
-def choose_mtx_representation(*args: Any, **kwargs: Any) -> ndarray:
-    """
-    Deprecated alias for `choose_matrix_representation`.
-    """
-
-    _warn_deprecated(
-        "`bt.sct.tl.choose_mtx_representation`",
-        replacement="`bt.sct.tl.choose_matrix_representation`",
-        stacklevel=2,
-    )
-    return choose_matrix_representation(*args, **kwargs)
+        return cast(Matrix, matrix)
 
 
 @anndata_or_mudata_checker
-def choose_representation(
+def get_representation(
     scdata: ScData,  # type: ignore
     use_rep: Optional[str] = "X_pca",
     n_components: Optional[int] = None,
-) -> ndarray:
+) -> Matrix:
     """
-    Select and optionally truncate an embedding representation.
+    Get and optionally truncate an observation representation.
 
     Parameters
     ----------
@@ -99,7 +87,7 @@ def choose_representation(
 
     Returns
     -------
-    ndarray
+    ndarray or sparse matrix
         Selected representation.
 
     Raises
@@ -121,9 +109,41 @@ def choose_representation(
             raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
 
     if n_components is None:
-        return cast(ndarray, scdata.obsm[use_rep])
+        return cast(Matrix, scdata.obsm[use_rep])
     else:
-        return cast(ndarray, scdata.obsm[use_rep][:, :n_components])
+        return cast(Matrix, scdata.obsm[use_rep][:, :n_components])
+
+
+@anndata_checker
+def get_pairwise(
+    adata: AnnData,
+    pairwise: str,
+    axis: AnnDataAxis = "obs",
+) -> Matrix:
+    """
+    Get a pairwise matrix from an AnnData object.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    pairwise: str
+        Pairwise matrix key.
+    axis: {"obs", "var"} (default: "obs")
+        Axis whose pairwise matrix is retrieved. If `"obs"`, read from
+        `adata.obsp[pairwise]`. If `"var"`, read from `adata.varp[pairwise]`.
+
+    Returns
+    -------
+    ndarray or sparse matrix
+        Selected pairwise matrix.
+    """
+
+    axis = _as_anndata_axis(axis, allow_both=False)
+    if axis == "obs":
+        return cast(Matrix, adata.obsp[pairwise])
+    else:
+        return cast(Matrix, adata.varp[pairwise])
 
 
 @anndata_or_mudata_checker
@@ -131,7 +151,7 @@ def _get_distances(
     scdata: ScData,  # type: ignore
     obsp: Optional[str] = None,
     neighbors_key: Optional[str] = None,
-) -> ndarray:
+) -> Matrix:
     """
     Retrieve a precomputed distance matrix.
 
@@ -146,7 +166,7 @@ def _get_distances(
 
     Returns
     -------
-    ndarray
+    ndarray or sparse matrix
         Distance matrix.
 
     Raises
@@ -164,14 +184,14 @@ def _get_distances(
             "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
-        return cast(ndarray, scdata.obsp[obsp])
+        return cast(Matrix, scdata.obsp[obsp])
     elif neighbors_key is not None:
         distances_key = scdata.uns[neighbors_key]["distances_key"]
-        return cast(ndarray, scdata.obsp[distances_key])
+        return cast(Matrix, scdata.obsp[distances_key])
     else:
         if "neighbors" in scdata.uns:
             distances_key = scdata.uns["neighbors"]["distances_key"]
-            return cast(ndarray, scdata.obsp[distances_key])
+            return cast(Matrix, scdata.obsp[distances_key])
         else:
             raise KeyError(
                 "distances not found in 'scdata': "
@@ -184,7 +204,7 @@ def _get_connectivities(
     scdata: ScData,  # type: ignore
     obsp: Optional[str] = None,
     neighbors_key: Optional[str] = None,
-) -> ndarray:
+) -> Matrix:
     """
     Retrieve a precomputed connectivity matrix.
 
@@ -199,7 +219,7 @@ def _get_connectivities(
 
     Returns
     -------
-    ndarray
+    ndarray or sparse matrix
         Connectivity matrix.
 
     Raises
@@ -217,14 +237,14 @@ def _get_connectivities(
             "'obsp' and 'neighbors_key' cannot be both specified"
         )
     elif obsp is not None:
-        return cast(ndarray, scdata.obsp[obsp])
+        return cast(Matrix, scdata.obsp[obsp])
     elif neighbors_key is not None:
         connectivities_key = scdata.uns[neighbors_key]["connectivities_key"]
-        return cast(ndarray, scdata.obsp[connectivities_key])
+        return cast(Matrix, scdata.obsp[connectivities_key])
     else:
         if "neighbors" in scdata.uns:
             connectivities_key = scdata.uns["neighbors"]["connectivities_key"]
-            return cast(ndarray, scdata.obsp[connectivities_key])
+            return cast(Matrix, scdata.obsp[connectivities_key])
         else:
             raise KeyError(
                 "connectivities not found in 'scdata': "

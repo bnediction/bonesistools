@@ -24,8 +24,7 @@ def merge_duplicate_vars(
     varm: Literal["nan", "first", "mean"] = "nan",
     varp: Literal["error", "drop"] = "error",
     copy: Literal[True] = True,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -36,8 +35,7 @@ def merge_duplicate_vars(
     varp: Literal["error", "drop"] = "error",
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -47,8 +45,7 @@ def merge_duplicate_vars(
     varm: Literal["nan", "first", "mean"] = "nan",
     varp: Literal["error", "drop"] = "error",
     copy: bool = True,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 @anndata_checker
@@ -194,8 +191,7 @@ def var_names_merge_duplicates(
     adata: AnnData,
     var_names_column: Optional[str] = None,
     copy: Literal[True] = True,
-) -> AnnData:
-    ...
+) -> AnnData: ...
 
 
 @overload
@@ -204,8 +200,7 @@ def var_names_merge_duplicates(
     var_names_column: Optional[str] = None,
     *,
     copy: Literal[False],
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -213,8 +208,7 @@ def var_names_merge_duplicates(
     adata: AnnData,
     var_names_column: Optional[str] = None,
     copy: bool = True,
-) -> Union[AnnData, None]:
-    ...
+) -> Union[AnnData, None]: ...
 
 
 def var_names_merge_duplicates(

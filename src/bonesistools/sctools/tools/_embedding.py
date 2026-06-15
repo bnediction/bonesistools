@@ -22,15 +22,28 @@ from ..._validation import (
 )
 from .._dependencies import require_sklearn
 from .._metadata import _format_random_state
-from .._typing import Metric, anndata_checker
-from ._utils import choose_matrix_representation, choose_representation
+from .._typing import Metric, VarSubset, anndata_checker
+from .._validation import _as_var_subset
+from ._utils import get_expression, get_representation
 
 EigenSolver = Literal["arpack", "lobpcg", "amg"]
 PCASolver = Literal["auto", "full", "arpack", "randomized"]
 TruncatedSVDSolver = Literal["arpack", "randomized"]
 
 EIGEN_SOLVERS: Tuple[EigenSolver, ...] = ("arpack", "lobpcg", "amg")
-PCA_SOLVERS: Tuple[PCASolver, ...] = ("auto", "full", "arpack", "randomized")
+CENTERED_PCA_SOLVERS: Tuple[PCASolver, ...] = (
+    "auto",
+    "full",
+    "arpack",
+    "randomized",
+)
+UNCENTERED_PCA_SOLVERS: Tuple[TruncatedSVDSolver, ...] = ("arpack", "randomized")
+
+
+def _format_var_subset(var_subset: VarSubset) -> Union[str, Tuple[str, ...], None]:
+    if var_subset is None or isinstance(var_subset, str):
+        return var_subset
+    return tuple(sorted(var_subset))
 
 
 @require_sklearn
@@ -41,7 +54,7 @@ def pca(
     *,
     layer: Optional[str] = None,
     use_raw: bool = False,
-    use_highly_variable: Optional[bool] = None,
+    var_subset: VarSubset = None,
     zero_center: bool = True,
     svd_solver: PCASolver = "auto",
     key_added: str = "X_pca",
@@ -49,7 +62,8 @@ def pca(
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
-    Compute principal components and store them in an AnnData object.
+    Compute a PCA representation of observations and store the results in an
+    AnnData object.
 
     PCA (Principal Component Analysis) is a linear dimensionality reduction
     method based on the Singular Value Decomposition (SVD).
@@ -64,14 +78,18 @@ def pca(
         Layer to use instead of `adata.X`.
     use_raw: bool (default: False)
         Use `adata.raw.X` instead of `adata.X`.
-    use_highly_variable: bool, optional
-        If True, use only genes marked by `adata.var["highly_variable"]`.
+    var_subset: str or collection of str, optional
+        Variables used for PCA. If a string is provided, it is interpreted as a
+        Boolean column in `adata.var`. If a collection is provided,
+        it is interpreted as a collection of variable names.
     zero_center: bool (default: True)
         If True, use centered PCA. If False, use truncated SVD.
     svd_solver: {'auto', 'full', 'arpack', 'randomized'} (default: 'auto')
-        SVD solver passed to the sklearn estimator.
+        SVD solver passed to the sklearn estimator. If `'auto'`, use
+        `'arpack'` when `zero_center=True` and `'randomized'` when
+        `zero_center=False`.
     key_added: str (default: 'X_pca')
-        Key used to store principal component scores in `adata.obsm`.
+        Key used to store PCA coordinates in `adata.obsm`.
     seed: int, np.random.RandomState, np.random or None (default: 0)
         Random seed or random state used by the sklearn estimator.
     copy: bool (default: False)
@@ -79,7 +97,13 @@ def pca(
 
     Examples
     --------
-    >>> bt.sct.tl.pca(adata, n_components=30)
+    Compute PCA using the variables marked as highly variable:
+
+    >>> bt.sct.tl.pca(
+    ...     adata,
+    ...     n_components=30,
+    ...     var_subset="highly_variable",
+    ... )
 
     Returns
     -------
@@ -95,14 +119,14 @@ def pca(
 
     Notes
     -----
-    A fixed `seed` makes the randomized parts deterministic, but it does not
-    fully control multi-threaded numerical kernels. When PCA runs through a
-    stack using several threads, for example with `n_jobs > 1` in a surrounding
-    workflow or with multi-threaded BLAS/OpenMP backends, the order of
-    floating-point operations can vary. The resulting differences are usually
-    very small, but they may still propagate to neighbor graphs, embeddings,
-    or clusters. Use a single-threaded numerical backend when strict
-    reproducibility is required.
+    A fixed `seed` makes randomized computations reproducible, but small numerical
+    differences may still arise when multi-threaded numerical backends are used.
+    Use a single-threaded backend when strict reproducibility is required.
+
+    References
+    ----------
+    Jolliffe (1986). Principal Components in Regression Analysis. Principal
+    Component Analysis. Springer, 129-155.
     """
 
     from sklearn.decomposition import PCA, TruncatedSVD
@@ -111,30 +135,25 @@ def pca(
 
     zero_center = _as_boolean(zero_center, "zero_center")
 
-    svd_solver = _as_literal(
+    resolved_svd_solver = _as_literal(
         svd_solver,
-        choices=PCA_SOLVERS,
+        choices=CENTERED_PCA_SOLVERS,
         name="svd_solver",
     )
 
-    if not zero_center and svd_solver == "full":
+    if not zero_center and resolved_svd_solver == "full":
         raise ValueError(
             "invalid argument value for 'svd_solver': "
             "'full' is not supported when zero_center=False"
         )
 
-    use_highly_variable = _as_boolean(
-        use_highly_variable,
-        "use_highly_variable",
-        allow_none=True,
-    )
-
     key_added = _as_string(key_added, "key_added")
 
     adata = adata.copy() if copy else adata
-    matrix = cast(
+    mask = _as_var_subset(adata, var_subset)
+    expression_mtx = cast(
         Any,
-        choose_matrix_representation(
+        get_expression(
             adata,
             use_raw=use_raw,
             layer=layer,
@@ -142,26 +161,11 @@ def pca(
         ),
     )
 
-    if sparse.issparse(matrix):
-        X = cast(np.ndarray, matrix.toarray())
-    else:
-        X = np.asarray(matrix)
-    mask = None
-    if use_highly_variable is True:
-        if "highly_variable" not in adata.var:
-            raise KeyError(
-                "column 'highly_variable' not found in adata.var: "
-                "please run highly variable gene selection first"
-            )
-
-        mask = np.asarray(adata.var["highly_variable"], dtype=bool)
-        if not bool(mask.any()):
-            raise ValueError("no highly variable genes selected")
-
+    selected_expression_mtx = expression_mtx
     if mask is not None:
-        X = X[:, mask]
+        selected_expression_mtx = cast(Any, expression_mtx)[:, mask]
 
-    max_components = min(X.shape)
+    max_components = min(selected_expression_mtx.shape)
     if n_components > max_components:
         raise ValueError(
             f"invalid argument value for 'n_components': "
@@ -170,25 +174,42 @@ def pca(
 
     resolved_random_state = _as_seed(seed)
     if zero_center:
+        if resolved_svd_solver == "auto":
+            resolved_svd_solver = "arpack"
+
+        if sparse.issparse(selected_expression_mtx):
+            if resolved_svd_solver == "arpack":
+                decomposition_mtx = selected_expression_mtx
+            else:
+                decomposition_mtx = cast(Any, selected_expression_mtx).toarray()
+        else:
+            decomposition_mtx = np.asarray(selected_expression_mtx)
+
         estimator = PCA(
             n_components=n_components,
-            svd_solver=svd_solver,
+            svd_solver=resolved_svd_solver,
             random_state=resolved_random_state,
         )
     else:
-        truncated_solver: TruncatedSVDSolver
-        if svd_solver == "arpack":
-            truncated_solver = "arpack"
+        if resolved_svd_solver == "auto":
+            truncated_solver: TruncatedSVDSolver = "randomized"
         else:
-            truncated_solver = "randomized"
+            truncated_solver = _as_literal(
+                resolved_svd_solver,
+                choices=UNCENTERED_PCA_SOLVERS,
+                name="svd_solver",
+            )
+
+        decomposition_mtx = selected_expression_mtx
 
         estimator = TruncatedSVD(
             n_components=n_components,
             algorithm=truncated_solver,
             random_state=resolved_random_state,
         )
+        resolved_svd_solver = truncated_solver
 
-    scores = cast(np.ndarray, estimator.fit_transform(X))
+    scores = cast(np.ndarray, estimator.fit_transform(decomposition_mtx))
     components = cast(np.ndarray, estimator.components_).T
     loadings = np.zeros((adata.n_vars, n_components), dtype=components.dtype)
     if mask is None:
@@ -201,10 +222,10 @@ def pca(
     adata.uns["pca"] = {
         "params": {
             "zero_center": zero_center,
-            "use_highly_variable": use_highly_variable,
+            "var_subset": _format_var_subset(var_subset),
             "layer": layer,
             "use_raw": use_raw,
-            "svd_solver": svd_solver,
+            "svd_solver": resolved_svd_solver,
             "key_added": key_added,
             "seed": _format_random_state(seed),
         },
@@ -219,6 +240,7 @@ def _neighbors_graph(
     adata: AnnData,
     neighbors_key: str,
 ) -> Tuple[str, Dict[str, Any], Any]:
+
     if neighbors_key not in adata.uns:
         raise KeyError(
             f"key {neighbors_key!r} not found in adata.uns: "
@@ -228,8 +250,7 @@ def _neighbors_graph(
     neighbors = cast(Dict[str, Any], adata.uns[neighbors_key])
     if "connectivities_key" not in neighbors:
         raise KeyError(
-            f"key 'connectivities_key' not found in "
-            f"adata.uns[{neighbors_key!r}]"
+            f"key 'connectivities_key' not found in " f"adata.uns[{neighbors_key!r}]"
         )
 
     connectivities_key = _as_string(
@@ -288,7 +309,7 @@ def spectral(
     seed: int, np.random.RandomState, np.random or None, optional
         Random seed or random state used by the embedding estimator.
     n_jobs: int (default: 1)
-        Number of allocated processors.
+        Number of threads allocated to the spectral embedding computation.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
@@ -310,13 +331,10 @@ def spectral(
     """
 
     from sklearn.manifold import SpectralEmbedding
+    from threadpoolctl import threadpool_limits
 
     n_components = _as_positive_integer(n_components, "n_components")
-    if not isinstance(n_jobs, int):
-        raise TypeError(
-            f"unsupported argument type for 'n_jobs': "
-            f"expected {int} but received {type(n_jobs)}"
-        )
+    n_jobs = _as_positive_integer(n_jobs, "n_jobs")
 
     resolved_random_state = _as_seed(seed)
 
@@ -340,16 +358,17 @@ def spectral(
         neighbors_key,
     )
 
-    embedding = cast(
-        np.ndarray,
-        SpectralEmbedding(
-            n_components=n_components,
-            affinity="precomputed",
-            random_state=resolved_random_state,
-            eigen_solver=eigen_solver,
-            n_jobs=n_jobs,
-        ).fit_transform(graph),
-    )
+    with threadpool_limits(limits=n_jobs):
+        embedding = cast(
+            np.ndarray,
+            SpectralEmbedding(
+                n_components=n_components,
+                affinity="precomputed",
+                random_state=resolved_random_state,
+                eigen_solver=eigen_solver,
+                n_jobs=n_jobs,
+            ).fit_transform(graph),
+        )
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {
@@ -434,13 +453,13 @@ def umap(
     Returns
     -------
     AnnData or None
-        If `copy=True`, returns a copy of `adata` with UMAP embedding results
-        added. Otherwise, updates `adata` in place and returns None.
+        If `copy=True`, returns a copy of `adata` with UMAP results added.
+        Otherwise, updates `adata` in place and returns None.
 
-        UMAP embedding results are stored in:
+        UMAP results are stored in:
 
-        - `adata.obsm[key_added]`: cell coordinates;
-        - `adata.uns[key_added]`: embedding metadata.
+        - `adata.obsm[key_added]`: UMAP coordinates;
+        - `adata.uns[key_added]`: UMAP metadata.
 
     References
     ----------
@@ -479,7 +498,17 @@ def umap(
         neighbors_key,
     )
     graph_metric = cast(str, neighbor_params.get("metric", "euclidean"))
-    X = np.zeros((adata.n_obs, 1), dtype=np.float32)
+    graph_metric_kwargs = cast(Dict[str, Any], neighbor_params.get("metric_kwds", {}))
+    representation = cast(
+        Optional[str],
+        neighbor_params.get("representation", neighbor_params.get("use_rep")),
+    )
+    n_pcs = cast(Optional[int], neighbor_params.get("n_pcs"))
+    representation_mtx = get_representation(
+        adata,
+        use_rep=representation,
+        n_components=n_pcs,
+    )
 
     try:
         umap_umap_module = importlib.import_module("umap.umap_")
@@ -507,7 +536,7 @@ def umap(
     embedding, _ = cast(
         Tuple[np.ndarray, Any],
         simplicial_set_embedding(
-            data=X,
+            data=representation_mtx,
             graph=graph,
             n_components=n_components,
             initial_alpha=alpha,
@@ -519,11 +548,10 @@ def umap(
             init=init,
             random_state=resolved_random_state,
             metric=graph_metric,
-            metric_kwds={},
+            metric_kwds=graph_metric_kwargs,
             densmap=False,
             densmap_kwds={},
             output_dens=False,
-            parallel=n_jobs != 1 and seed is None,
             verbose=False,
         ),
     )
@@ -556,7 +584,7 @@ def umap(
 @anndata_checker
 def tsne(
     adata: AnnData,
-    use_rep: Optional[str] = "X_pca",
+    representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     n_components: int = 2,
     max_iter: Optional[int] = None,
@@ -580,11 +608,11 @@ def tsne(
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    use_rep: str, optional (default: 'X_pca')
+    representation: str, optional (default: 'X_pca')
         Representation key in `adata.obsm` used as input.
     n_pcs: int, optional
         Number of input representation dimensions to use. If None, use all
-        dimensions in `use_rep`.
+        dimensions in `representation`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
     max_iter: int, optional
@@ -596,7 +624,7 @@ def tsne(
     early_exaggeration: float (default: 12.0)
         t-SNE early exaggeration.
     metric: Metric (default: 'euclidean')
-        Distance metric.
+        Distance metric used to compare observations.
     key_added: str, optional
         Key used to store the embedding in `adata.obsm`. Defaults to `X_tsne`.
     seed: int, np.random.RandomState, np.random or None (default: 0)
@@ -609,13 +637,13 @@ def tsne(
     Returns
     -------
     AnnData or None
-        If `copy=True`, returns a copy of `adata` with t-SNE embedding results
-        added. Otherwise, updates `adata` in place and returns None.
+        If `copy=True`, returns a copy of `adata` with t-SNE results added.
+        Otherwise, updates `adata` in place and returns None.
 
-        t-SNE embedding results are stored in:
+        t-SNE results are stored in:
 
-        - `adata.obsm[key_added]`: cell coordinates;
-        - `adata.uns[key_added]`: embedding metadata.
+        - `adata.obsm[key_added]`: t-SNE coordinates;
+        - `adata.uns[key_added]`: t-SNE metadata.
 
     References
     ----------
@@ -657,9 +685,9 @@ def tsne(
         key_added = _as_string(key_added, "key_added")
 
     adata = adata.copy() if copy else adata
-    X = choose_representation(
+    representation_mtx = get_representation(
         adata,
-        use_rep=use_rep,
+        use_rep=representation,
         n_components=n_pcs,
     )
 
@@ -678,12 +706,12 @@ def tsne(
     else:
         tsne_kwargs["n_iter"] = tsne_max_iter
 
-    embedding = cast(np.ndarray, TSNE(**tsne_kwargs).fit_transform(X))
+    embedding = cast(np.ndarray, TSNE(**tsne_kwargs).fit_transform(representation_mtx))
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {
         "method": "tsne",
-        "use_rep": use_rep,
+        "representation": representation,
         "n_pcs": n_pcs,
         "n_components": n_components,
         "seed": _format_random_state(seed),

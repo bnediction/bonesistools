@@ -22,7 +22,7 @@ from .._typing import (
     anndata_checker,
     anndata_or_mudata_checker,
 )
-from ._utils import choose_representation
+from ._utils import get_representation
 
 
 @overload
@@ -97,10 +97,14 @@ def pairwise_distances(
 
     from sklearn.metrics import pairwise_distances
 
-    X = choose_representation(adata, use_rep=use_rep, n_components=n_components)
+    representation_mtx = get_representation(
+        adata,
+        use_rep=use_rep,
+        n_components=n_components,
+    )
 
     distances = pairwise_distances(
-        X,
+        representation_mtx,
         metric=cast(Any, metric),
         n_jobs=n_jobs,
         **metric_kwds,
@@ -151,7 +155,11 @@ def barycenters(
         If `scdata.obs[obs]` does not expose categorical `.cat` access.
     """
 
-    X = choose_representation(scdata, use_rep=use_rep, n_components=n_components)
+    representation_mtx = get_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components,
+    )
 
     if not hasattr(scdata.obs[obs], "cat"):
         raise AttributeError(f"scdata.obs[{obs!r}] object has no attribute 'cat'")
@@ -159,6 +167,9 @@ def barycenters(
         clusters = scdata.obs[obs].cat.categories
 
     return {
-        cluster: np.nanmean(X[scdata.obs[obs] == cluster], axis=0)
+        cluster: np.nanmean(
+            cast(Any, representation_mtx)[scdata.obs[obs] == cluster],
+            axis=0,
+        )
         for cluster in clusters
     }

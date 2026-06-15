@@ -143,6 +143,83 @@ break a stable public API without a clear benefit.
 
 ---
 
+## Expression, representation and pairwise matrices
+
+Use precise naming for AnnData expression matrices and observation
+representations:
+
+* `expression` is a public parameter naming an expression source:
+  `.X`, `.raw.X` or `.layers[...]`;
+* `representation` is a public parameter naming an observation representation
+  in `.obsm[...]`, such as `"X_pca"` or `"X_umap"`;
+* `pairwise` is a public parameter naming a pairwise matrix in `.obsp[...]` or
+  `.varp[...]`;
+* `expression_mtx` is a local variable holding the matrix-like value returned
+  by `get_expression(...)`;
+* `representation_mtx` is a local variable holding the matrix-like value
+  returned by `get_representation(...)`;
+* `pairwise_mtx` is a local variable holding the matrix-like value returned by
+  `get_pairwise(...)`.
+
+Prefer `_mtx` over `_matrix` or `_array` for these values because they may be
+dense NumPy arrays or sparse matrices.
+
+Avoid reusing public selector names for computed matrix-like values:
+
+```python
+expression_mtx = get_expression(...)
+representation_mtx = get_representation(...)
+pairwise_mtx = get_pairwise(...)
+```
+
+Avoid:
+
+```python
+expression = get_expression(...)
+representation = get_representation(...)
+pairwise = get_pairwise(...)
+X = get_expression(...)
+X = get_representation(...)
+```
+
+---
+
+## Variable subsets
+
+Use `var_subset` for generic variable selection in AnnData tools.
+
+Prefer:
+
+```python
+pca(
+    var_subset="highly_variable",
+)
+
+pca(
+    var_subset=["Gata1", "Klf1", "Tal1"],
+)
+```
+
+over specialized options such as:
+
+```python
+pca(
+    use_highly_variable=True,
+)
+```
+
+The `var_subset` argument represents a generic variable-selection mechanism:
+
+* `var_subset=None`: use all variables;
+* `var_subset="highly_variable"`: use the boolean column
+  `adata.var["highly_variable"]`;
+* `var_subset=["Gata1", "Klf1", "Tal1"]`: use explicit variable names.
+
+Keep validation centralized and design the structure so future `obs_subset`
+support can follow the same pattern.
+
+---
+
 ## Fitted objects
 
 Objects that learn state during execution should distinguish between:
