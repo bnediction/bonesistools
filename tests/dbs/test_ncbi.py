@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import warnings
+from pathlib import Path
 from typing import Any, cast
 
 import networkx as nx
@@ -157,6 +158,154 @@ def test_gene_synonyms_get_mapping_returns_deepcopy():
     mapping["name"].clear()
 
     assert genesyn.gene_aliases_mapping == {"name": {"Myc": "17869"}}
+
+
+def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path):
+    gene_info = tmp_path / "gene_info.tsv"
+    gene_info.write_text(
+        "\t".join(
+            [
+                "gene_id",
+                "official_name",
+                "ncbi_name",
+                "synonyms",
+                "dbXrefs",
+                "gene_type",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "1",
+                "OFF1",
+                "Ref1",
+                "Alias1",
+                "MGI:MGI1|Ensembl:ENSMUSG00000000001",
+                "protein-coding",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "2",
+                "-",
+                "Ref2",
+                "OFF1|Alias2",
+                "MGI:MGI2",
+                "pseudo",
+            ]
+        )
+        + "\n"
+        + "\t".join(["3", "Low", "LowRef", "Shared", "-", "pseudo"])
+        + "\n"
+        + "\t".join(
+            ["4", "High", "HighRef", "Shared", "MGI:MGI4", "protein-coding"]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
+    genesyn.organism = "mouse"
+    genesyn.version = "bundled"
+    genesyn.ncbi_file = gene_info
+
+    genesyn._GeneSynonyms__initialize_mappings(show_warnings=False)
+
+    assert genesyn.get_gene_id("OFF1") == "1"
+    assert genesyn.get_gene_id("Ref1") == "1"
+    assert genesyn.get_gene_id("Alias2") == "2"
+    assert genesyn.get_gene_id("Ref2") == "2"
+    assert genesyn.get_gene_id("Shared") == "4"
+    assert genesyn.get_official_name("2", input_identifier_type="gene_id") == "Ref2"
+    assert genesyn.get_ensembl_id("1", input_identifier_type="gene_id") == (
+        "ENSMUSG00000000001"
+    )
+    assert genesyn.get_alias_from_database(
+        "1",
+        database="MGI",
+        input_identifier_type="gene_id",
+    ) == "MGI1"
+    assert genesyn.contains("MGI4", identifier_type="MGI") == [True]
+    assert genesyn.find("MGI1", "missing", identifier_type="MGI") == ["MGI1"]
+    assert genesyn.databases == {"MGI"}
+    assert genesyn.valid_input_identifier_types == (
+        "name",
+        "gene_id",
+        "ensembl_id",
+        "MGI",
+    )
+    assert genesyn.valid_output_identifier_types == (
+        "official_name",
+        "ncbi_name",
+        "gene_id",
+        "ensembl_id",
+        "MGI",
+    )
+    assert not Path(f"{gene_info}_cut").exists()
+
+
+def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_path):
+    gene_info = tmp_path / "latest.tsv"
+    gene_info.write_text(
+        "\t".join(
+            [
+                "#tax_id",
+                "GeneID",
+                "Symbol",
+                "LocusTag",
+                "Synonyms",
+                "dbXrefs",
+                "chromosome",
+                "map_location",
+                "description",
+                "type_of_gene",
+                "Symbol_from_nomenclature_authority",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "10090",
+                "10",
+                "RefA",
+                "-",
+                "AliasA",
+                "Ensembl:ENSMUSG00000000010|MGI:MGI10",
+                "1",
+                "-",
+                "-",
+                "protein-coding",
+                "OfficialA",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gzip_file = Path(f"{gene_info}.gz")
+    gzip_file.write_text("partial", encoding="utf-8")
+
+    genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
+    genesyn.organism = "mouse"
+    genesyn.version = "latest"
+    genesyn.ncbi_file = gene_info
+
+    genesyn._GeneSynonyms__initialize_mappings(show_warnings=False)
+
+    assert genesyn.get_gene_id("AliasA") == "10"
+    assert genesyn.get_official_name("10", input_identifier_type="gene_id") == (
+        "OfficialA"
+    )
+    assert genesyn.get_ensembl_id("10", input_identifier_type="gene_id") == (
+        "ENSMUSG00000000010"
+    )
+    assert genesyn.get_alias_from_database(
+        "10",
+        database="MGI",
+        input_identifier_type="gene_id",
+    ) == "MGI10"
+    assert not gene_info.exists()
+    assert not gzip_file.exists()
 
 
 def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):

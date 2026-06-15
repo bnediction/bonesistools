@@ -408,7 +408,7 @@ def test_pca_matches_scanpy_with_sparse_input_and_seed(mini_adata, zero_center):
         scanpy_adata,
         n_comps=2,
         zero_center=zero_center,
-        use_highly_variable=True,
+        mask_var="highly_variable",
         random_state=10,
         copy=False,
     )

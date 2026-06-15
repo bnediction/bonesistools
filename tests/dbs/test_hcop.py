@@ -2,9 +2,11 @@
 
 from typing import Any, cast
 
+import networkx as nx
 import pandas as pd
 import pytest
 
+import bonesistools as bt
 from bonesistools.databases import hcop
 from bonesistools.databases.hcop import _orthologs as _hcop_orthologs
 
@@ -132,6 +134,109 @@ def test_hcop_translate_df_expands_one_to_many_like_decoupler(monkeypatch):
         {"source": "a1_d", "target": "t", "row": 2},
         {"source": "a2_d", "target": "t", "row": 2},
     ]
+
+
+def test_hcop_translates_sequences_and_dispatches_supported_objects():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B", "C"],
+                "target_symbol": ["a", "b", "c"],
+                "support": [
+                    "Ensembl,HGNC,MGI",
+                    "Ensembl,HGNC,MGI",
+                    "Ensembl,HGNC,MGI",
+                ],
+                "evidence": [3, 3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    assert orthologs("A") == ["a"]
+    assert orthologs(("A", "missing")) == ("a", "missing")
+    assert orthologs.translate_sequence(("A", "missing"), keep_if_missing=False) == (
+        "a",
+    )
+    assert orthologs.translate_sequence({"A", "B"}) == {"a", "b"}
+    assert orthologs.translate("A_B") == ["a_b"]
+
+    interactions = [("A", "B", {"sign": 1}), ("A", "missing", {"sign": -1})]
+    assert orthologs(interactions, keep_if_missing=False) == [
+        ("a", "b", {"sign": 1})
+    ]
+
+    df = pd.DataFrame({"source": ["A"], "target": ["B"]})
+    assert orthologs(df, columns=["source", "target"]).to_dict("records") == [
+        {"source": "a", "target": "b"}
+    ]
+
+
+def test_hcop_translate_graph_preserves_attributes_and_copy_semantics():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["a", "b"],
+                "support": ["Ensembl,HGNC,MGI", "Ensembl,HGNC,MGI"],
+                "evidence": [3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    graph = nx.Graph()
+    graph.add_node("A", role="source")
+    graph.add_node("B", role="target")
+    graph.add_node("missing", role="unknown")
+    graph.add_edge("A", "B", sign=1)
+    graph.add_edge("B", "missing", sign=-1)
+
+    translated = orthologs.translate_graph(graph, keep_if_missing=False, copy=True)
+
+    assert translated is not None
+    assert set(translated.nodes) == {"a", "b"}
+    assert translated.nodes["a"]["role"] == "source"
+    assert translated["a"]["b"]["sign"] == 1
+    assert set(graph.nodes) == {"A", "B", "missing"}
+
+    assert orthologs.translate_graph(graph, copy=False) is None
+    assert set(graph.nodes) == {"a", "b", "missing"}
+
+
+def test_hcop_translate_boolean_network_copy_and_mapping_behaviors():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["a", "b"],
+                "support": ["Ensembl,HGNC,MGI", "Ensembl,HGNC,MGI"],
+                "evidence": [3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": 1})
+    copied = orthologs.translate_bn(bn, copy=True)
+
+    assert isinstance(copied, bt.bpy.bn.BooleanNetwork)
+    assert copied.rules == {"a": "b", "b": "1"}
+    assert bn.rules == {"A": "B", "B": "1"}
+
+    mapping_bn = {"A": "B", "B": 1}
+    translated_mapping = orthologs.translate_bn(mapping_bn, copy=True)
+
+    assert translated_mapping == {"a": "b", "b": "1"}
+
+    with pytest.raises(TypeError, match="copy=True"):
+        orthologs.translate_bn(mapping_bn, copy=False)
+
+    with pytest.raises(ValueError, match="unmapped component"):
+        orthologs.translate_bn(
+            bt.bpy.bn.BooleanNetwork({"A": "missing", "missing": 1}),
+            keep_if_missing=False,
+        )
 
 
 def test_hcop_translate_rejects_invalid_arguments():

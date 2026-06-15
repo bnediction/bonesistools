@@ -369,7 +369,7 @@ def _merge_varm_dataframe(
                 value.iloc[positions].astype(float).mean(axis=0).to_numpy()
                 for positions in groups.values()
             ]
-        except ValueError as error:
+        except (TypeError, ValueError) as error:
             raise TypeError(
                 f"varm='mean' requires numeric values for `.varm[{key!r}]`"
             ) from error
