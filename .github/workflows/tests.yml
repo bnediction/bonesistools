@@ -57,7 +57,7 @@ jobs:
 
       - name: Install package and test dependencies
         run: |
-          pip install -e .
+          pip install -e ".[sctools]"
           pip install pytest
 
       - name: Check reproducibility tests
@@ -65,8 +65,9 @@ jobs:
           BONESISTOOLS_RUN_REPRODUCIBILITY: "1"
         run: |
           pytest \
-            tests/dbs/test_omnipath_reproducibility.py \
-            tests/sct/tools/test_stats_reproducibility.py \
+            tests/reproducibility/test_omnipath.py \
+            tests/reproducibility/test_stats.py \
+            tests/reproducibility/test_workflow.py \
             -q
 
   pytest:

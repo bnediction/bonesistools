@@ -25,7 +25,14 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
             [0.0, far_distance, close_distance, 0.0],
         ]
     )
-    expected_connectivities = (expected_distances > 0).astype(float)
+    expected_connectivities = np.array(
+        [
+            [0.0, 1.0, 0.5849658, 0.0],
+            [1.0, 0.0, 0.8277489, 0.5849658],
+            [0.5849658, 0.8277489, 0.0, 1.0],
+            [0.0, 0.5849658, 1.0, 0.0],
+        ],
+    )
 
     result = bt.sct.tl.neighbors(
         mini_adata,
@@ -50,10 +57,12 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
         mini_adata.obsp["distances"].toarray(),
         expected_distances,
     )
-    assert np.array_equal(
+    assert np.allclose(
         mini_adata.obsp["connectivities"].toarray(),
         expected_connectivities,
     )
+    assert np.all(np.asarray(mini_adata.obsp["connectivities"].sum(axis=0)) > 0)
+    assert np.all(np.asarray(mini_adata.obsp["connectivities"].sum(axis=1)) > 0)
 
 
 def test_neighbors_custom_keys_and_copy(mini_adata):

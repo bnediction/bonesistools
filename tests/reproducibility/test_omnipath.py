@@ -9,9 +9,14 @@ import pytest
 
 from bonesistools.databases.omnipath import dorothea
 
-REFERENCE_DIR = Path(__file__).with_name("data")
+REFERENCE_DIR = Path(__file__).parent
 MODERN_REFERENCE = REFERENCE_DIR / "dorothea_current_mouse_A.sha256"
 LEGACY_REFERENCE = REFERENCE_DIR / "dorothea_legacy_mouse.sha256"
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
+    reason="requires reproducibility CI mode",
+)
 
 
 def _signature_hash(graph):
@@ -30,10 +35,6 @@ def _expected_hash(path):
     return path.read_text(encoding="utf-8").strip().split()[0]
 
 
-@pytest.mark.skipif(
-    os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
-    reason="requires live OmniPath access",
-)
 def test_dorothea_current_mouse_level_a_signature_is_reproducible():
     graph = dorothea(
         organism="mouse",
@@ -47,10 +48,6 @@ def test_dorothea_current_mouse_level_a_signature_is_reproducible():
     assert _signature_hash(graph) == _expected_hash(MODERN_REFERENCE)
 
 
-@pytest.mark.skipif(
-    os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
-    reason="requires live OmniPath archive access",
-)
 def test_dorothea_legacy_mouse_level_a_signature_is_reproducible():
     graph = dorothea(
         organism="mouse",

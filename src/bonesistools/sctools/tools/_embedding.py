@@ -60,6 +60,7 @@ def pca(
     svd_solver: PCASolver = "auto",
     key_added: str = "X_pca",
     seed: RandomStateSeed = 0,
+    n_jobs: int = 1,
     copy: bool = False,
 ) -> Union[AnnData, None]:
     """
@@ -93,6 +94,8 @@ def pca(
         Key used to store PCA coordinates in `adata.obsm`.
     seed: int, np.random.RandomState, np.random or None (default: 0)
         Random seed or random state used by the sklearn estimator.
+    n_jobs: int (default: 1)
+        Number of threads allocated to the PCA computation.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
@@ -118,12 +121,6 @@ def pca(
         - `adata.varm["PCs"]`: principal component loadings;
         - `adata.uns["pca"]`: PCA metadata.
 
-    Notes
-    -----
-    A fixed `seed` makes randomized computations reproducible, but small numerical
-    differences may still arise when multi-threaded numerical backends are used.
-    Use a single-threaded backend when strict reproducibility is required.
-
     References
     ----------
     Jolliffe (1986). Principal Components in Regression Analysis. Principal
@@ -131,8 +128,10 @@ def pca(
     """
 
     from sklearn.decomposition import PCA, TruncatedSVD
+    from threadpoolctl import threadpool_limits
 
     n_components = _as_positive_integer(n_components, "n_components")
+    n_jobs = _as_positive_integer(n_jobs, "n_jobs")
 
     zero_center = _as_boolean(zero_center, "zero_center")
 
@@ -207,7 +206,8 @@ def pca(
         )
         resolved_svd_solver = truncated_solver
 
-    scores = cast(np.ndarray, estimator.fit_transform(decomposition_mtx))
+    with threadpool_limits(limits=n_jobs):
+        scores = cast(np.ndarray, estimator.fit_transform(decomposition_mtx))
     components = cast(np.ndarray, estimator.components_).T
     loadings = np.zeros((adata.n_vars, n_components), dtype=components.dtype)
     if mask is None:
@@ -226,6 +226,7 @@ def pca(
             "svd_solver": resolved_svd_solver,
             "key_added": key_added,
             "seed": _format_random_state(seed),
+            "n_jobs": n_jobs,
         },
         "variance": cast(np.ndarray, estimator.explained_variance_),
         "variance_ratio": cast(np.ndarray, estimator.explained_variance_ratio_),

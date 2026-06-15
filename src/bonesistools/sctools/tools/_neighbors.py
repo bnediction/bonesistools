@@ -42,7 +42,7 @@ from ..._validation import (
     _as_string,
 )
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
-from .._dependencies import require_sklearn
+from .._dependencies import require_dependency, require_sklearn
 from .._typing import (
     AnnData,
     Metric,
@@ -79,6 +79,62 @@ def _kneighbors_distance_matrix(
         n_jobs=n_jobs,
     )
     return cast(csr_matrix, matrix)
+
+
+def _kneighbors_graph_matrices(
+    scdata: ScData,
+    use_rep: Optional[str],
+    n_components: Optional[int],
+    n_neighbors: int,
+    metric: Metric,
+    n_jobs: int,
+) -> Tuple[csr_matrix, csr_matrix]:
+
+    from sklearn import neighbors as sklearn_neighbors
+    from umap.umap_ import fuzzy_simplicial_set
+
+    representation_mtx = get_representation(
+        scdata,
+        use_rep=use_rep,
+        n_components=n_components,
+    )
+    neighbors_model = sklearn_neighbors.NearestNeighbors(
+        n_neighbors=n_neighbors,
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    neighbors_model.fit(representation_mtx)
+    knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+
+    rows = np.repeat(np.arange(scdata.n_obs), n_neighbors)
+    columns = knn_indices.ravel()
+    data = knn_distances.ravel()
+    non_self = rows != columns
+    distances = csr_matrix(
+        (data[non_self], (rows[non_self], columns[non_self])),
+        shape=(scdata.n_obs, scdata.n_obs),
+    )
+    distances.eliminate_zeros()
+
+    connectivities = cast(
+        csr_matrix,
+        cast(
+            Tuple[Any, Any, Any],
+            fuzzy_simplicial_set(
+                X=representation_mtx,
+                n_neighbors=n_neighbors,
+                random_state=np.random.RandomState(0),
+                metric=metric,
+                knn_indices=knn_indices,
+                knn_dists=knn_distances,
+                set_op_mix_ratio=1.0,
+                local_connectivity=1.0,
+                apply_set_operations=True,
+                verbose=False,
+            ),
+        )[0],
+    )
+    return distances, cast(csr_matrix, connectivities.tocsr())
 
 
 def _normalize_knnsc_configuration(
@@ -172,6 +228,7 @@ def neighbors(
 ) -> Optional[ScData]: ...
 
 
+@require_dependency(module="umap", package="umap-learn", extra="sctools")
 @require_sklearn
 @anndata_or_mudata_checker
 def neighbors(
@@ -285,16 +342,14 @@ def neighbors(
 
     scdata = scdata.copy() if copy else scdata
 
-    distances = _kneighbors_distance_matrix(
+    distances, connectivities = _kneighbors_graph_matrices(
         scdata=scdata,
         use_rep=representation,
         n_components=n_pcs,
-        n_neighbors=n_neighbors - 1,
+        n_neighbors=n_neighbors,
         metric=metric,
         n_jobs=n_jobs,
     )
-    connectivities = distances.copy()
-    connectivities.data = np.ones_like(connectivities.data)
 
     scdata.obsp[distances_key] = distances
     scdata.obsp[connectivities_key] = connectivities

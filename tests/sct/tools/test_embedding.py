@@ -296,6 +296,7 @@ def test_pca_stores_scores_loadings_and_metadata(mini_adata):
         "svd_solver": "full",
         "key_added": "X_pca",
         "seed": 0,
+        "n_jobs": 1,
     }
 
 
