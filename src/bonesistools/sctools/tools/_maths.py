@@ -13,7 +13,6 @@ from typing import (
 
 import numpy as np
 
-from .._dependencies import require_sklearn
 from .._typing import (
     AnnData,
     Metric,
@@ -51,7 +50,6 @@ def pairwise_distances(
 ) -> None: ...
 
 
-@require_sklearn
 @anndata_checker
 def pairwise_distances(
     adata: AnnData,  # type: ignore

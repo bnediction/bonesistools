@@ -45,7 +45,6 @@ from ..._validation import (
     _as_string,
 )
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
-from .._dependencies import require_sklearn
 from .._metadata import _format_random_state
 from .._typing import (
     AnnData,
@@ -491,7 +490,6 @@ def neighbors(
 ) -> Optional[ScData]: ...
 
 
-@require_sklearn
 @anndata_or_mudata_checker
 def neighbors(
     scdata: ScData,  # type: ignore
@@ -660,7 +658,6 @@ def neighbors(
     return scdata if copy else None
 
 
-@require_sklearn
 @anndata_or_mudata_checker
 def knn_graph(
     scdata: ScData,  # type: ignore
@@ -1048,7 +1045,6 @@ class KNNSC:
         )
         self._knn_graph = value
 
-    @require_sklearn
     def fit(
         self,
         adata: AnnData,
@@ -1800,7 +1796,6 @@ def shared_neighbors(
 ) -> Optional[ScData]: ...
 
 
-@require_sklearn
 @anndata_or_mudata_checker
 def shared_neighbors(
     scdata: ScData,  # type: ignore

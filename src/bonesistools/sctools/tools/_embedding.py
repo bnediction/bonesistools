@@ -20,7 +20,6 @@ from ..._validation import (
     _as_seed,
     _as_string,
 )
-from .._dependencies import require_sklearn
 from .._metadata import _format_random_state
 from .._typing import Metric, VarSubset, anndata_checker
 from .._validation import _as_var_subset
@@ -47,7 +46,6 @@ def _format_var_subset(var_subset: VarSubset) -> Union[str, Tuple[str, ...], Non
     return tuple(sorted(var_subset))
 
 
-@require_sklearn
 @anndata_checker
 def pca(
     adata: AnnData,
@@ -272,7 +270,6 @@ def _neighbors_graph(
     return connectivities_key, neighbor_params, graph
 
 
-@require_sklearn
 @anndata_checker
 def spectral(
     adata: AnnData,
@@ -579,7 +576,6 @@ def umap(
     return adata if copy else None
 
 
-@require_sklearn
 @anndata_checker
 def tsne(
     adata: AnnData,

@@ -77,37 +77,3 @@ def require_dependency(
 
     return decorator(function) if function is not None else decorator
 
-
-@overload
-def require_sklearn(function: Callable[P, R]) -> Callable[P, R]: ...
-
-
-@overload
-def require_sklearn(
-    function: None = None,
-) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
-
-
-def require_sklearn(
-    function: Optional[Callable[P, R]] = None,
-) -> Union[Callable[P, R], Callable[[Callable[P, R]], Callable[P, R]]]:
-    """
-    Decorate a function requiring scikit-learn.
-
-    Parameters
-    ----------
-    function: Callable, optional
-        Function to decorate. If None, return a decorator.
-
-    Returns
-    -------
-    Callable
-        Decorated function if `function` is provided, otherwise a decorator.
-    """
-
-    return require_dependency(
-        function,
-        module="sklearn",
-        package="scikit-learn",
-        extra="sctools",
-    )

@@ -10,7 +10,6 @@ from pandas import DataFrame
 from scipy.sparse import issparse
 
 from ..._compat import Literal
-from .._dependencies import require_sklearn
 from .._typing import Keys, anndata_checker
 
 
@@ -69,7 +68,6 @@ def regress_out(
 ) -> Union[AnnData, None]: ...
 
 
-@require_sklearn
 @anndata_checker
 def regress_out(
     adata: AnnData,
