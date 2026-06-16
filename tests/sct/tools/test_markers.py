@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.sparse import csr_matrix
+from scipy.stats import hypergeom
 
 import bonesistools as bt
 
@@ -205,28 +206,180 @@ def test_logfoldchanges_rejects_invalid_filter(mini_adata):
         )
 
 
-def test_hypergeometric_test_returns_expected_probability():
-    adata = ad.AnnData(
-        X=np.ones((1, 10)),
-        var=pd.DataFrame(index=[f"g{i}" for i in range(1, 11)]),
+def test_ora_returns_expected_hypergeometric_probability():
+    result = bt.sct.tl.ora(
+        query_set=["g1", "g2", "g5"],
+        signatures={"sig": ["g1", "g2", "g3", "g4"]},
+        background=[f"g{i}" for i in range(1, 11)],
+        correction="bonferroni",
+        include_overlap=True,
     )
 
-    pvalue = bt.sct.tl.hypergeometric_test(
-        adata,
-        signature=["g1", "g2", "g3", "g4"],
-        markers=["g1", "g2", "g5"],
+    expected = hypergeom.sf(2 - 1, 10, 4, 3)
+    assert result.index.name == "signature"
+    assert result.index.tolist() == ["sig"]
+    assert result.loc["sig", "pvals"] == pytest.approx(expected)
+    assert result.loc["sig", "pvals_adj"] == pytest.approx(expected)
+    assert result.loc["sig", "observed_overlap"] == 2
+    assert result.attrs["query_size"] == 3
+    assert result.attrs["background_size"] == 10
+    assert "query_size" not in result.columns
+    assert "background_size" not in result.columns
+    assert result.loc["sig", "expected_overlap"] == pytest.approx(1.2)
+    assert result.loc["sig", "fold_enrichment"] == pytest.approx(2 / 1.2)
+    assert result.loc["sig", "signature_size"] == 4
+    assert result.loc["sig", "overlap"] == ("g1", "g2")
+    assert result.columns.tolist() == [
+        "pvals",
+        "pvals_adj",
+        "observed_overlap",
+        "expected_overlap",
+        "fold_enrichment",
+        "signature_size",
+        "overlap",
+    ]
+
+
+def test_ora_hides_overlap_by_default():
+    result = bt.sct.tl.ora(
+        query_set=["g1", "g2"],
+        signatures={"sig": ["g1", "g3"]},
+        background=["g1", "g2", "g3"],
     )
 
-    # P(X >= 2) for X ~ Hypergeometric(M=10, n=4, N=3):
-    # (C(4, 2) C(6, 1) + C(4, 3) C(6, 0)) / C(10, 3) = 1/3.
-    assert pvalue == pytest.approx(1 / 3)
+    assert "overlap" not in result.columns
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'adata'"):
-        bt.sct.tl.hypergeometric_test(
-            cast(Any, object()),
-            signature=["g1"],
-            markers=["g1"],
+
+def test_ora_filters_query_and_signatures_by_background():
+    result = bt.sct.tl.ora(
+        query_set=["g1", "g2", "missing_query"],
+        signatures={
+            "tested": ["g1", "missing_signature"],
+            "skipped": ["missing_only"],
+        },
+        background=["g1", "g2", "g3"],
+        correction="bonferroni",
+    )
+
+    assert result.index.tolist() == ["tested"]
+    assert result.attrs["query_size"] == 2
+    assert result.loc["tested", "signature_size"] == 1
+    assert result.loc["tested", "observed_overlap"] == 1
+    assert result.loc["tested", "pvals"] == pytest.approx(hypergeom.sf(0, 3, 1, 2))
+
+
+def test_ora_rejects_empty_background_and_filtered_query():
+    with pytest.raises(ValueError):
+        bt.sct.tl.ora(
+            query_set=["g1"],
+            signatures={"sig": ["g1"]},
+            background=[],
         )
+
+    with pytest.raises(ValueError):
+        bt.sct.tl.ora(
+            query_set=["missing"],
+            signatures={"sig": ["g1"]},
+            background=["g1"],
+        )
+
+
+def test_ora_rejects_invalid_gene_collections_and_signatures():
+    with pytest.raises(TypeError):
+        bt.sct.tl.ora(
+            query_set=cast(Any, "g1"),
+            signatures={"sig": ["g1"]},
+            background=["g1"],
+        )
+
+    with pytest.raises(TypeError):
+        bt.sct.tl.ora(
+            query_set=["g1"],
+            signatures={"sig": ["g1"]},
+            background=cast(Any, ["g1", 1]),
+        )
+
+    with pytest.raises(ValueError):
+        bt.sct.tl.ora(
+            query_set=["g1"],
+            signatures=[("sig", ["g1"]), ("sig", ["g2"])],
+            background=["g1", "g2"],
+        )
+
+    with pytest.raises(TypeError):
+        bt.sct.tl.ora(
+            query_set=["g1"],
+            signatures=cast(Any, [["g1"]]),
+            background=["g1"],
+        )
+
+
+def test_ora_mapping_and_sequence_signatures_are_equivalent():
+    mapping = bt.sct.tl.ora(
+        query_set=["g1", "g2"],
+        signatures={"A": ["g1", "g3"], "B": ["g2"]},
+        background=["g1", "g2", "g3", "g4"],
+        correction="bonferroni",
+    )
+    sequence = bt.sct.tl.ora(
+        query_set=["g1", "g2"],
+        signatures=[["A", ["g1", "g3"]], ["B", ["g2"]]],
+        background=["g1", "g2", "g3", "g4"],
+        correction="bonferroni",
+    )
+
+    pd.testing.assert_frame_equal(mapping, sequence)
+
+
+def test_ora_correction_methods_are_explicit():
+    kwargs = {
+        "query_set": ["g1", "g2"],
+        "signatures": {
+            "A": ["g1"],
+            "B": ["g1", "g2"],
+            "C": ["g3"],
+        },
+        "background": [f"g{i}" for i in range(1, 11)],
+    }
+
+    bonferroni = bt.sct.tl.ora(**kwargs, correction="bonferroni")
+    bh = bt.sct.tl.ora(**kwargs, correction="benjamini-hochberg")
+
+    assert bonferroni["pvals_adj"].tolist() == pytest.approx(
+        np.minimum(bonferroni["pvals"].to_numpy(dtype=float) * 3, 1.0)
+    )
+    assert bh["pvals_adj"].to_dict() == pytest.approx(
+        {
+            "B": 1 / 15,
+            "A": 0.3,
+            "C": 1.0,
+        }
+    )
+
+    with pytest.raises(TypeError):
+        bt.sct.tl.ora(**kwargs, correction=cast(Any, None))
+
+
+def test_ora_sorting_uses_observed_overlap_to_break_pvalue_ties(monkeypatch):
+    from bonesistools.sctools.tools import _markers
+
+    monkeypatch.setattr(
+        _markers,
+        "_hypergeometric_pvalue",
+        lambda **__: 0.5,
+    )
+
+    result = bt.sct.tl.ora(
+        query_set=["g1", "g2"],
+        signatures={
+            "small_overlap": ["g1"],
+            "large_overlap": ["g1", "g2"],
+        },
+        background=["g1", "g2", "g3"],
+        correction="bonferroni",
+    )
+
+    assert result.index.tolist() == ["large_overlap", "small_overlap"]
 
 
 def test_smirnov_tests_recovers_expected_ks_statistics():

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection as CollectionInstance
+from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as Seq
 from typing import (
     Any,
     Callable,
+    Collection,
     Iterable,
+    List,
+    Mapping,
     Optional,
     Sequence,
+    Set,
+    Tuple,
     Union,
     cast,
     overload,
@@ -18,15 +25,21 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from numpy import log2
+from scipy.stats import hypergeom
 
 from ..._compat import Literal
-from ..._validation import _as_callable
+from ..._validation import _as_boolean, _as_callable, _as_literal
 from ..._warnings import _warn_deprecated
 from .._typing import anndata_checker
 from ._conversion import anndata_to_dataframe
+from ._stats import CORRECTION_METHODS, CorrectionMethod, _adjust_pvalues
 
 _CorrMethod = Literal["benjamini-hochberg", "bonferroni"]
 _Alternatives = Literal["two-sided", "less", "greater"]
+SignatureCollection = Union[
+    Mapping[str, Collection[str]],
+    Sequence[Tuple[str, Collection[str]]],
+]
 
 
 @anndata_checker
@@ -151,49 +164,249 @@ def calculate_logfoldchanges(*args: Any, **kwargs: Any) -> pd.DataFrame:
     return logfoldchanges(*args, **kwargs)
 
 
-def hypergeometric_test(
-    adata: AnnData,
-    signature: Sequence[str],
-    markers: Sequence[str],
-) -> float:
+def ora(
+    query_set: Collection[str],
+    signatures: SignatureCollection,
+    background: Collection[str],
+    correction: CorrectionMethod = "benjamini-hochberg",
+    include_overlap: bool = False,
+) -> pd.DataFrame:
     """
-    Test marker/signature overlap with a hypergeometric survival function.
+    Run over-representation analysis (ORA).
+
+    Over-representation analysis (ORA) is a statistical method used to identify
+    biological signatures that are significantly enriched in a query gene set
+    relative to a background gene universe.
+
+    For each tested signature, enrichment significance is evaluated using a
+    one-sided hypergeometric test.
+
+    Genes absent from `background` are discarded from both `query_set` and each
+    tested signature before enrichment testing.
 
     Parameters
     ----------
-    adata: AnnData
-        Unimodal annotated data matrix.
-    signature: Sequence[str]
-        Signature genes for a cell type.
-    markers: Sequence[str]
-        Marker genes for a cluster.
+    query_set: collection of str
+        Genes of interest.
+    signatures: mapping or sequence of tuple
+        Named gene signatures. Provide either a mapping from signature names to
+        genes, or a sequence of `(name, genes)` pairs.
+    background: collection of str
+        Tested gene universe.
+    correction: {'benjamini-hochberg', 'bonferroni'}
+        Multiple-testing correction used to compute `pvals_adj`.
+    include_overlap: bool (default: False)
+        Whether to include the sorted tuple of overlapping genes for each
+        signature.
 
     Returns
     -------
-    float
-        Hypergeometric survival-function p-value.
+    DataFrame
+        Table with one row per tested signature. The table contains:
+
+        - `pvals`: one-sided hypergeometric p-value;
+        - `pvals_adj`: adjusted p-value;
+        - `observed_overlap`: number of query genes in the signature;
+        - `expected_overlap`: expected overlap under the null hypothesis;
+        - `fold_enrichment`: observed over expected overlap.
+        - `signature_size`: number of tested signature genes;
+
+        If `include_overlap=True`, the table also contains:
+
+        - `overlap`: sorted tuple of overlapping genes.
+
+        The numbers of tested query and background genes are stored in
+        `DataFrame.attrs["query_size"]` and
+        `DataFrame.attrs["background_size"]`.
 
     """
 
-    from scipy.stats import hypergeom
+    correction = _as_literal(
+        correction,
+        choices=CORRECTION_METHODS,
+        name="correction",
+    )
+    include_overlap = _as_boolean(include_overlap, "include_overlap")
 
-    if not isinstance(adata, AnnData):
-        raise TypeError(
-            f"unsupported argument type for 'adata': "
-            f"expected {AnnData} but received {type(adata)}"
+    background_set = _as_gene_set(background, "background")
+    if not background_set:
+        raise ValueError(
+            "invalid argument value for 'background': expected at least one gene"
         )
 
-    background = set(adata.var.index)
-    signature_set = set(signature)
-    marker_set = set(markers)
-    marked_genes = marker_set.intersection(signature_set)
+    query = _as_gene_set(query_set, "query_set") & background_set
+    if not query:
+        raise ValueError(
+            "invalid argument value for 'query_set': "
+            "no query genes remain after intersection with background"
+        )
 
-    N = len(background)  # population size
-    K = len(signature_set)  # number of success states
-    n = len(marker_set)  # number of draws
-    k = len(marked_genes)  # number of observed successes (matching genes)
+    signature_items = _as_signature_items(signatures)
 
-    return float(hypergeom.sf(k=k, M=N, n=K, N=n, loc=1))
+    rows = []
+    background_size = len(background_set)
+    query_size = len(query)
+
+    for signature_name, signature_genes in signature_items:
+        signature = _as_gene_set(signature_genes, f"signatures[{signature_name!r}]")
+        tested_signature = signature & background_set
+
+        if not tested_signature:
+            continue
+
+        overlap = query & tested_signature
+        overlap_size = len(overlap)
+        signature_size = len(tested_signature)
+
+        pval = _hypergeometric_pvalue(
+            overlap_size=overlap_size,
+            signature_size=signature_size,
+            query_size=query_size,
+            background_size=background_size,
+        )
+
+        expected_overlap = query_size * signature_size / background_size
+        fold_enrichment = (
+            overlap_size / expected_overlap if expected_overlap > 0 else np.nan
+        )
+
+        rows.append(
+            {
+                "signature": signature_name,
+                "pvals": pval,
+                "observed_overlap": overlap_size,
+                "expected_overlap": expected_overlap,
+                "fold_enrichment": fold_enrichment,
+                "signature_size": signature_size,
+                **({"overlap": tuple(sorted(overlap))} if include_overlap else {}),
+            }
+        )
+
+    columns = [
+        "pvals",
+        "pvals_adj",
+        "observed_overlap",
+        "expected_overlap",
+        "fold_enrichment",
+        "signature_size",
+    ]
+    if include_overlap:
+        columns.append("overlap")
+    df = pd.DataFrame(rows)
+    if df.empty:
+        empty_df = pd.DataFrame(columns=cast(Any, columns))
+        empty_df.index.name = "signature"
+        empty_df.attrs["query_size"] = query_size
+        empty_df.attrs["background_size"] = background_size
+        return empty_df
+
+    df["pvals_adj"] = _adjust_pvalues(
+        df["pvals"].to_numpy(dtype=float),
+        correction,
+    )
+    df = cast(pd.DataFrame, df.set_index("signature"))
+    df = cast(pd.DataFrame, df[columns])
+    df.attrs["query_size"] = query_size
+    df.attrs["background_size"] = background_size
+
+    return cast(
+        pd.DataFrame,
+        df.sort_values(
+            by=["pvals", "observed_overlap"],
+            ascending=[True, False],
+            kind="mergesort",
+        ),
+    )
+
+
+def _hypergeometric_pvalue(
+    overlap_size: int,
+    signature_size: int,
+    query_size: int,
+    background_size: int,
+) -> float:
+    """
+    Compute `P[X >= overlap_size]` for over-representation analysis.
+
+    `X` follows a hypergeometric distribution with population size
+    `background_size`, number of success states `signature_size`, and number of
+    draws `query_size`.
+    """
+
+    return float(
+        hypergeom.sf(
+            overlap_size - 1,
+            background_size,
+            signature_size,
+            query_size,
+        )
+    )
+
+
+def _as_gene_set(genes: Collection[str], name: str) -> Set[str]:
+
+    if isinstance(genes, str) or not isinstance(genes, CollectionInstance):
+        raise TypeError(
+            f"unsupported argument type for {name!r}: "
+            f"expected a collection of {str} but received {type(genes)}"
+        )
+
+    gene_set = set(genes)
+    invalid = [gene for gene in gene_set if not isinstance(gene, str)]
+    if invalid:
+        gene = invalid[0]
+        raise TypeError(
+            f"unsupported element type in {name!r}: "
+            f"expected {str} but received {type(gene)}"
+        )
+
+    return gene_set
+
+
+def _as_signature_items(
+    signatures: SignatureCollection,
+) -> List[Tuple[str, Collection[str]]]:
+
+    if isinstance(signatures, MappingInstance):
+        items = list(signatures.items())
+    elif isinstance(signatures, Seq) and not isinstance(signatures, str):
+        items = list(signatures)
+    else:
+        raise TypeError(
+            "unsupported argument type for 'signatures': "
+            "expected a mapping or a sequence of (name, genes) pairs"
+        )
+
+    if not items:
+        raise ValueError(
+            "invalid argument value for 'signatures': expected at least one signature"
+        )
+
+    resolved = []
+    for item in items:
+        if (
+            isinstance(item, str)
+            or not isinstance(item, Seq)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+        ):
+            raise TypeError(
+                "unsupported element type in 'signatures': "
+                "expected (str, Collection[str]) pairs"
+            )
+
+        name, genes = item
+        resolved.append((name, genes))
+
+    names = [name for name, _ in resolved]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(
+            "invalid argument value for 'signatures': duplicate signature name(s) "
+            + ", ".join(repr(name) for name in duplicates)
+        )
+
+    return resolved
 
 
 @overload

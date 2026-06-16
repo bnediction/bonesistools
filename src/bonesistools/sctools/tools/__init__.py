@@ -17,8 +17,8 @@ from ._embedding import pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
 from ._markers import (
     calculate_logfoldchanges,
-    hypergeometric_test,
     logfoldchanges,
+    ora,
     smirnov_tests,
 )
 from ._maths import barycenters, pairwise_distances
@@ -70,7 +70,7 @@ __all__ = [
     "to_npz",
     "logfoldchanges",
     "calculate_logfoldchanges",
-    "hypergeometric_test",
+    "ora",
     "smirnov_tests",
     "mitochondrial_genes",
     "ribosomal_genes",
