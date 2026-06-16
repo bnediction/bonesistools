@@ -65,9 +65,9 @@ jobs:
           BONESISTOOLS_RUN_REPRODUCIBILITY: "1"
         run: |
           pytest \
-            tests/reproducibility/test_omnipath.py \
-            tests/reproducibility/test_stats.py \
-            tests/reproducibility/test_workflow.py \
+            tests/reproducibility/test_reproducibility_omnipath.py \
+            tests/reproducibility/test_reproducibility_stats.py \
+            tests/reproducibility/test_reproducibility_workflow.py \
             -q
 
   pytest:
