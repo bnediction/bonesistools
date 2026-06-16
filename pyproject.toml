@@ -46,6 +46,7 @@ dependencies = [
     "numpy>=1.21",
     "pandas>=1.3.5",
     "scipy>=1.7",
+    "scikit-learn>=1.0",
     "networkx>=2.1",
     "matplotlib>=3.5",
     "h5py>=3.7",
@@ -73,7 +74,6 @@ all = [
     "pydot>=3.0.2",
     "igraph>=0.10",
     "leidenalg>=0.10",
-    "scikit-learn>=1.0",
     "seaborn>=0.11",
     "umap-learn>=0.5",
     "mpbn>=4.1",
@@ -84,7 +84,6 @@ mpbn = [ "mpbn>=4.1" ]
 sctools = [
     "igraph>=0.10",
     "leidenalg>=0.10",
-    "scikit-learn>=1.0",
     "umap-learn>=0.5",
 ]
 

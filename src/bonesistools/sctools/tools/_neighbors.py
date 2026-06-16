@@ -35,15 +35,18 @@ from scipy.sparse import (
 )
 
 from ..._compat import Literal, get_args
+from ..._typing import RandomStateSeed
 from ..._validation import (
     _as_literal,
     _as_non_negative_integer,
     _as_non_negative_number,
     _as_positive_integer,
+    _as_seed,
     _as_string,
 )
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._dependencies import require_sklearn
+from .._metadata import _format_random_state
 from .._typing import (
     AnnData,
     Metric,
@@ -54,6 +57,7 @@ from .._typing import (
 from ._utils import get_representation
 
 IndexOrName = Literal["index", "name"]
+NeighborBackend = Literal["exact", "pynndescent"]
 _SMOOTH_K_TOLERANCE = 1e-5
 _MIN_K_DIST_SCALE = 0.001
 _NPY_FLOATMAX = np.float32(3.4028235e38)
@@ -90,41 +94,206 @@ def _kneighbors_graph_matrices(
     use_rep: Optional[str],
     n_components: Optional[int],
     n_neighbors: int,
+    backend: NeighborBackend,
     metric: Metric,
+    seed: RandomStateSeed,
     n_jobs: int,
 ) -> Tuple[csr_matrix, csr_matrix]:
-
-    from sklearn import neighbors as sklearn_neighbors
 
     representation_mtx = get_representation(
         scdata,
         use_rep=use_rep,
         n_components=n_components,
     )
-    neighbors_model = sklearn_neighbors.NearestNeighbors(
-        n_neighbors=n_neighbors,
-        metric=metric,
-        n_jobs=n_jobs,
-    )
-    neighbors_model.fit(representation_mtx)
-    knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+    if backend == "exact":
+        knn_indices, knn_distances = _exact_knn_arrays(
+            representation_mtx=representation_mtx,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            n_jobs=n_jobs,
+        )
+    else:
+        knn_indices, knn_distances = _pynndescent_knn_arrays(
+            representation_mtx=representation_mtx,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            seed=seed,
+            n_jobs=n_jobs,
+        )
 
-    rows = np.repeat(np.arange(scdata.n_obs), n_neighbors)
-    columns = knn_indices.ravel()
-    data = knn_distances.ravel()
-    non_self = rows != columns
-    distances = csr_matrix(
-        (data[non_self], (rows[non_self], columns[non_self])),
-        shape=(scdata.n_obs, scdata.n_obs),
+    distances = _sparse_distances_from_knn(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+        n_obs=scdata.n_obs,
     )
-    distances.eliminate_zeros()
-
     connectivities = _umap_connectivities_from_knn(
         knn_indices,
         knn_distances,
         n_obs=scdata.n_obs,
     )
     return distances, connectivities
+
+
+def _get_pynndescent_transformer() -> Any:
+
+    try:
+        from pynndescent import PyNNDescentTransformer
+    except ImportError as exc:
+        raise ImportError(
+            "backend='pynndescent' requires the optional dependency "
+            "'pynndescent'. Install it with:\n\n"
+            "pip install pynndescent\n\n"
+            "or use backend='exact'."
+        ) from exc
+
+    return PyNNDescentTransformer
+
+
+def _exact_knn_arrays(
+    representation_mtx: Any,
+    n_neighbors: int,
+    metric: Metric,
+    n_jobs: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    from sklearn import neighbors as sklearn_neighbors
+
+    neighbors_model = sklearn_neighbors.NearestNeighbors(
+        n_neighbors=n_neighbors,
+        algorithm="brute",
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    neighbors_model.fit(representation_mtx)
+    knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+    return (
+        knn_indices.astype(np.int32, copy=False),
+        knn_distances.astype(np.float32, copy=False),
+    )
+
+
+def _pynndescent_knn_arrays(
+    representation_mtx: Any,
+    n_neighbors: int,
+    metric: Metric,
+    seed: RandomStateSeed,
+    n_jobs: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    PyNNDescentTransformer = _get_pynndescent_transformer()
+    transformer = PyNNDescentTransformer(
+        n_neighbors=n_neighbors,
+        metric=metric,
+        random_state=_as_seed(seed),
+        n_jobs=n_jobs,
+    )
+    sparse_distances = cast(csr_matrix, transformer.fit_transform(representation_mtx))
+    return _knn_arrays_from_sparse_distances(
+        sparse_distances=sparse_distances.tocsr(),
+        n_neighbors=n_neighbors,
+    )
+
+
+def _knn_arrays_from_sparse_distances(
+    sparse_distances: csr_matrix,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    row_sizes = np.diff(sparse_distances.indptr)
+    if np.any(row_sizes < n_neighbors):
+        raise ValueError(
+            "invalid neighbor graph: backend returned fewer neighbors than expected"
+        )
+
+    if np.all(row_sizes == row_sizes[0]):
+        row_size = int(row_sizes[0])
+        n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
+        indices = sparse_distances.indices.reshape(n_obs, row_size)
+        distances = sparse_distances.data.reshape(n_obs, row_size)
+        order = np.argsort(distances, axis=1)
+        indices = np.take_along_axis(indices, order, axis=1)
+        distances = np.take_along_axis(distances, order, axis=1)
+
+        rows = np.arange(indices.shape[0])
+        if np.all((indices[:, 0] == rows) & (distances[:, 0] == 0.0)):
+            return (
+                indices[:, :n_neighbors].astype(np.int32, copy=False),
+                distances[:, :n_neighbors].astype(np.float32, copy=False),
+            )
+
+    return _knn_arrays_from_sparse_distances_slow(
+        sparse_distances=sparse_distances,
+        n_neighbors=n_neighbors,
+    )
+
+
+def _knn_arrays_from_sparse_distances_slow(
+    sparse_distances: csr_matrix,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
+    knn_indices = np.empty((n_obs, n_neighbors), dtype=np.int32)
+    knn_distances = np.empty((n_obs, n_neighbors), dtype=np.float32)
+    for row in range(n_obs):
+        start = sparse_distances.indptr[row]
+        end = sparse_distances.indptr[row + 1]
+        indices = sparse_distances.indices[start:end]
+        distances = sparse_distances.data[start:end]
+
+        order = np.argsort(distances)
+        indices = indices[order]
+        distances = distances[order]
+
+        self_positions = np.flatnonzero((indices == row) & (distances == 0.0))
+        if self_positions.size == 0:
+            indices = np.concatenate(([row], indices))
+            distances = np.concatenate(([0.0], distances))
+        elif self_positions[0] != 0:
+            self_position = int(self_positions[0])
+            indices = np.concatenate(
+                (
+                    indices[self_position : self_position + 1],
+                    indices[:self_position],
+                    indices[self_position + 1 :],
+                )
+            )
+            distances = np.concatenate(
+                (
+                    distances[self_position : self_position + 1],
+                    distances[:self_position],
+                    distances[self_position + 1 :],
+                )
+            )
+
+        if indices.shape[0] < n_neighbors:
+            raise ValueError(
+                "invalid neighbor graph: backend returned fewer neighbors than expected"
+            )
+
+        knn_indices[row, :] = indices[:n_neighbors]
+        knn_distances[row, :] = distances[:n_neighbors]
+
+    return knn_indices, knn_distances
+
+
+def _sparse_distances_from_knn(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+    n_obs: int,
+) -> csr_matrix:
+
+    n_neighbors = knn_indices.shape[1]
+    rows = np.repeat(np.arange(n_obs), n_neighbors)
+    columns = knn_indices.ravel()
+    data = knn_distances.ravel()
+    non_self = rows != columns
+    distances = csr_matrix(
+        (data[non_self], (rows[non_self], columns[non_self])),
+        shape=(n_obs, n_obs),
+    )
+    distances.eliminate_zeros()
+    return distances
 
 
 def _umap_smooth_knn_distances(
@@ -276,10 +445,12 @@ def neighbors(
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
+    backend: NeighborBackend = "exact",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: Literal[False] = False,
 ) -> None: ...
@@ -291,10 +462,12 @@ def neighbors(
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
+    backend: NeighborBackend = "exact",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     *,
     copy: Literal[True],
@@ -307,10 +480,12 @@ def neighbors(
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
+    backend: NeighborBackend = "exact",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: bool = False,
 ) -> Optional[ScData]: ...
@@ -323,10 +498,12 @@ def neighbors(
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
+    backend: NeighborBackend = "exact",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: bool = False,
 ) -> Optional[ScData]:  # type: ignore
@@ -344,6 +521,10 @@ def neighbors(
     n_pcs: int, optional
         Number of representation dimensions to use. If None, use all
         dimensions in `representation`.
+    backend: {'exact', 'pynndescent'} (default: 'exact')
+        Neighbor-search backend. If `"exact"`, use scikit-learn brute-force
+        exact nearest neighbors. If `"pynndescent"`, use approximate
+        PyNNDescent neighbors.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     key_added: str (default: 'neighbors')
@@ -356,6 +537,9 @@ def neighbors(
         Key used to store connectivities in `scdata.obsp`. Defaults to
         `"connectivities"` when `key_added="neighbors"` and
         `f"{key_added}_connectivities"` otherwise.
+    seed: int, np.random.RandomState, np.random or None (default: 0)
+        Random seed or random state used by approximate neighbor-search
+        backends.
     n_jobs: int (default: 1)
         Number of allocated processors.
     copy: bool (default: False)
@@ -376,6 +560,13 @@ def neighbors(
         - `scdata.uns[key_added]`: neighborhood graph metadata;
         - `scdata.obsp[distances_key]`: pairwise neighbor distances;
         - `scdata.obsp[connectivities_key]`: neighborhood graph connectivities.
+
+    Notes
+    -----
+    PyNNDescent is approximate. Its recall can decrease substantially as the
+    embedding dimensionality increases. For PCA representations with many
+    components (e.g. 50 PCs or more), the exact backend may be preferable even
+    when PyNNDescent is slightly faster.
     """
 
     n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
@@ -394,6 +585,11 @@ def neighbors(
     if n_pcs is not None:
         n_pcs = _as_positive_integer(n_pcs, "n_pcs")
 
+    backend = _as_literal(
+        backend,
+        choices=get_args(NeighborBackend),
+        name="backend",
+    )
     representation = (
         "X_pca"
         if representation is None
@@ -405,6 +601,7 @@ def neighbors(
         name="metric",
     )
     key_added = _as_string(key_added, "key_added")
+    _as_seed(seed)
     if not isinstance(n_jobs, int):
         raise TypeError(
             f"unsupported argument type for 'n_jobs': "
@@ -428,13 +625,19 @@ def neighbors(
         connectivities_key = _as_string(connectivities_key, "connectivities_key")
 
     scdata = scdata.copy() if copy else scdata
-
+    resolved_n_pcs = (
+        n_pcs
+        if n_pcs is not None
+        else int(cast(Any, scdata.obsm[representation]).shape[1])
+    )
     distances, connectivities = _kneighbors_graph_matrices(
         scdata=scdata,
         use_rep=representation,
         n_components=n_pcs,
         n_neighbors=n_neighbors,
+        backend=backend,
         metric=metric,
+        seed=seed,
         n_jobs=n_jobs,
     )
 
@@ -445,14 +648,12 @@ def neighbors(
         "connectivities_key": connectivities_key,
         "params": {
             "n_neighbors": n_neighbors,
-            "n_pcs": (
-                n_pcs
-                if n_pcs is not None
-                else int(scdata.obsm[representation].shape[1])
-            ),
+            "n_pcs": resolved_n_pcs,
             "representation": representation,
+            "backend": backend,
             "metric": metric,
-            "method": "umap",
+            "connectivity_method": "umap",
+            "seed": _format_random_state(seed),
         },
     }
 

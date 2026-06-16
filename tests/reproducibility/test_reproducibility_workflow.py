@@ -33,6 +33,7 @@ def _run_clustering_workflow():
         n_neighbors=15,
         representation="X_pca",
         n_pcs=20,
+        backend="exact",
         metric="euclidean",
         n_jobs=1,
         copy=False,
@@ -203,7 +204,11 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
     )
 
 
-def test_neighbors_are_reproducible_on_nestorowa():
+@pytest.mark.parametrize("backend", ["exact", "pynndescent"])
+def test_neighbors_are_reproducible_on_nestorowa(backend):
+
+    if backend == "pynndescent":
+        pytest.importorskip("pynndescent")
 
     first = bt.sct.datasets.nestorowa()
     second = bt.sct.datasets.nestorowa()
@@ -220,7 +225,9 @@ def test_neighbors_are_reproducible_on_nestorowa():
             n_neighbors=15,
             representation="X_pca",
             n_pcs=20,
+            backend=backend,
             metric="euclidean",
+            seed=10,
             n_jobs=1,
             copy=False,
         )

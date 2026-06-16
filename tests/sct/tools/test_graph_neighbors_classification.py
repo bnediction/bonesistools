@@ -8,7 +8,7 @@ import pytest
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
-from bonesistools.sctools.tools import _classification
+from bonesistools.sctools.tools import _classification, _neighbors
 
 
 def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
@@ -50,8 +50,10 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
         "n_neighbors": 3,
         "n_pcs": 2,
         "representation": "X_pca",
+        "backend": "exact",
         "metric": "euclidean",
-        "method": "umap",
+        "connectivity_method": "umap",
+        "seed": 0,
     }
     assert np.allclose(
         mini_adata.obsp["distances"].toarray(),
@@ -97,6 +99,175 @@ def test_neighbors_custom_keys_and_copy(mini_adata):
     assert derived is not None
     assert derived.uns["derived"]["distances_key"] == "derived_distances"
     assert derived.uns["derived"]["connectivities_key"] == "derived_connectivities"
+
+
+def test_neighbors_uses_pynndescent_backend_with_sparse_transformer_output(
+    mini_adata,
+    monkeypatch,
+):
+    class FakePyNNDescentTransformer(object):
+        calls = []
+
+        def __init__(
+            self,
+            n_neighbors,
+            metric,
+            random_state,
+            n_jobs,
+        ):
+            self.calls.append(
+                {
+                    "n_neighbors": n_neighbors,
+                    "metric": metric,
+                    "random_state": random_state,
+                    "n_jobs": n_jobs,
+                }
+            )
+
+        def fit_transform(self, matrix):
+            assert matrix.shape == (mini_adata.n_obs, 2)
+            indptr = np.arange(
+                0,
+                (mini_adata.n_obs + 1) * 3,
+                3,
+                dtype=np.int32,
+            )
+            indices = np.array(
+                [
+                    0,
+                    1,
+                    2,
+                    1,
+                    0,
+                    2,
+                    2,
+                    3,
+                    1,
+                    3,
+                    2,
+                    0,
+                ],
+                dtype=np.int32,
+            )
+            data = np.array(
+                [
+                    0.0,
+                    1.0,
+                    2.0,
+                    0.0,
+                    1.0,
+                    3.0,
+                    0.0,
+                    1.0,
+                    3.0,
+                    0.0,
+                    1.0,
+                    2.0,
+                ],
+                dtype=np.float32,
+            )
+            return csr_matrix(
+                (data, indices, indptr),
+                shape=(mini_adata.n_obs, mini_adata.n_obs),
+            )
+
+    monkeypatch.setattr(
+        _neighbors,
+        "_get_pynndescent_transformer",
+        lambda: FakePyNNDescentTransformer,
+    )
+
+    bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        representation="X_pca",
+        n_pcs=2,
+        backend="pynndescent",
+        metric="euclidean",
+        seed=10,
+        n_jobs=2,
+    )
+
+    expected_indices = np.array(
+        [
+            [0, 1, 2],
+            [1, 0, 2],
+            [2, 3, 1],
+            [3, 2, 0],
+        ],
+        dtype=np.int32,
+    )
+    expected_distances = np.array(
+        [
+            [0.0, 1.0, 2.0],
+            [0.0, 1.0, 3.0],
+            [0.0, 1.0, 3.0],
+            [0.0, 1.0, 2.0],
+        ],
+        dtype=np.float32,
+    )
+    expected_distance_mtx = _neighbors._sparse_distances_from_knn(
+        expected_indices,
+        expected_distances,
+        mini_adata.n_obs,
+    )
+    expected_connectivities = _neighbors._umap_connectivities_from_knn(
+        expected_indices,
+        expected_distances,
+        mini_adata.n_obs,
+    )
+
+    assert mini_adata.uns["neighbors"]["params"]["backend"] == "pynndescent"
+    assert mini_adata.uns["neighbors"]["params"]["seed"] == 10
+    assert FakePyNNDescentTransformer.calls[0]["n_neighbors"] == 3
+    assert FakePyNNDescentTransformer.calls[0]["metric"] == "euclidean"
+    assert FakePyNNDescentTransformer.calls[0]["n_jobs"] == 2
+    assert np.array_equal(
+        mini_adata.obsp["distances"].indptr,
+        expected_distance_mtx.indptr,
+    )
+    assert np.array_equal(
+        mini_adata.obsp["distances"].indices,
+        expected_distance_mtx.indices,
+    )
+    assert np.allclose(mini_adata.obsp["distances"].data, expected_distance_mtx.data)
+    assert np.array_equal(
+        mini_adata.obsp["connectivities"].indptr,
+        expected_connectivities.indptr,
+    )
+    assert np.array_equal(
+        mini_adata.obsp["connectivities"].indices,
+        expected_connectivities.indices,
+    )
+    assert np.allclose(
+        mini_adata.obsp["connectivities"].data,
+        expected_connectivities.data,
+    )
+
+
+def test_neighbors_explicit_pynndescent_requires_dependency(
+    mini_adata,
+    monkeypatch,
+):
+    def missing_pynndescent():
+        raise ImportError(
+            "backend='pynndescent' requires the optional dependency 'pynndescent'."
+        )
+
+    monkeypatch.setattr(
+        _neighbors,
+        "_get_pynndescent_transformer",
+        missing_pynndescent,
+    )
+
+    with pytest.raises(ImportError):
+        bt.sct.tl.neighbors(
+            mini_adata,
+            n_neighbors=3,
+            representation="X_pca",
+            n_pcs=2,
+            backend="pynndescent",
+        )
 
 
 def test_neighbors_can_feed_shared_neighbors(mini_adata):
@@ -163,6 +334,9 @@ def test_neighbors_validates_arguments(mini_adata):
 
     with pytest.raises(ValueError):
         bt.sct.tl.neighbors(mini_adata, n_neighbors=3, metric=cast(Any, "bad"))
+
+    with pytest.raises(ValueError):
+        bt.sct.tl.neighbors(mini_adata, n_neighbors=3, backend=cast(Any, "bad"))
 
 
 def test_knn_graph_can_use_observation_names(mini_adata):
