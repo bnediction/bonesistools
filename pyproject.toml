@@ -121,6 +121,9 @@ select = ["E", "F", "I"]
 typing-modules = ["bonesistools._compat"]
 
 [tool.pytest.ini_options]
+norecursedirs = [
+    "tests/reproducibility",
+]
 filterwarnings = [
     "ignore:The NumPy module was reloaded:UserWarning",
 ]

@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.sparse import csr_matrix
+from sklearn.neighbors import NearestNeighbors
+from umap.umap_ import fuzzy_simplicial_set
 
 import bonesistools as bt
 
@@ -144,3 +146,91 @@ def test_clustering_workflow_is_reproducible_across_runs():
 
     assert np.array_equal(first.obsm["X_se"], second.obsm["X_se"])
     _assert_same_value(first.uns["X_se"], second.uns["X_se"])
+
+
+def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
+
+    adata = bt.sct.datasets.nestorowa()
+    bt.sct.tl.pca(
+        adata,
+        n_components=20,
+        seed=10,
+        copy=False,
+    )
+
+    representation_mtx = adata.obsm["X_pca"][:, :20]
+    neighbors_model = NearestNeighbors(
+        n_neighbors=15,
+        metric="euclidean",
+        n_jobs=1,
+    )
+    neighbors_model.fit(representation_mtx)
+    knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+    reference_connectivities = cast(
+        csr_matrix,
+        fuzzy_simplicial_set(
+            X=representation_mtx,
+            n_neighbors=15,
+            random_state=np.random.RandomState(0),
+            metric="euclidean",
+            knn_indices=knn_indices,
+            knn_dists=knn_distances,
+            set_op_mix_ratio=1.0,
+            local_connectivity=1.0,
+            apply_set_operations=True,
+            verbose=False,
+        )[0].tocsr(),
+    )
+
+    bt.sct.tl.neighbors(
+        adata,
+        n_neighbors=15,
+        representation="X_pca",
+        n_pcs=20,
+        metric="euclidean",
+        n_jobs=1,
+        copy=False,
+    )
+    connectivities = cast(csr_matrix, adata.obsp["connectivities"])
+
+    assert np.array_equal(connectivities.indptr, reference_connectivities.indptr)
+    assert np.array_equal(connectivities.indices, reference_connectivities.indices)
+    np.testing.assert_allclose(
+        connectivities.data,
+        reference_connectivities.data,
+        rtol=3e-5,
+        atol=2e-6,
+    )
+
+
+def test_neighbors_are_reproducible_on_nestorowa():
+
+    first = bt.sct.datasets.nestorowa()
+    second = bt.sct.datasets.nestorowa()
+
+    for adata in [first, second]:
+        bt.sct.tl.pca(
+            adata,
+            n_components=20,
+            seed=10,
+            copy=False,
+        )
+        bt.sct.tl.neighbors(
+            adata,
+            n_neighbors=15,
+            representation="X_pca",
+            n_pcs=20,
+            metric="euclidean",
+            n_jobs=1,
+            copy=False,
+        )
+
+    _assert_same_sparse_matrix(
+        cast(csr_matrix, first.obsp["distances"]),
+        cast(csr_matrix, second.obsp["distances"]),
+    )
+    _assert_same_sparse_matrix(
+        cast(csr_matrix, first.obsp["connectivities"]),
+        cast(csr_matrix, second.obsp["connectivities"]),
+    )
+    _assert_same_value(first.uns["neighbors"], second.uns["neighbors"])

@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 from networkx import DiGraph, Graph
 from scipy.sparse import (
+    coo_matrix,
     csr_matrix,
     diags,
     issparse,
@@ -42,7 +43,7 @@ from ..._validation import (
     _as_string,
 )
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
-from .._dependencies import require_dependency, require_sklearn
+from .._dependencies import require_sklearn
 from .._typing import (
     AnnData,
     Metric,
@@ -53,6 +54,9 @@ from .._typing import (
 from ._utils import get_representation
 
 IndexOrName = Literal["index", "name"]
+_SMOOTH_K_TOLERANCE = 1e-5
+_MIN_K_DIST_SCALE = 0.001
+_NPY_FLOATMAX = np.float32(3.4028235e38)
 
 
 def _kneighbors_distance_matrix(
@@ -91,7 +95,6 @@ def _kneighbors_graph_matrices(
 ) -> Tuple[csr_matrix, csr_matrix]:
 
     from sklearn import neighbors as sklearn_neighbors
-    from umap.umap_ import fuzzy_simplicial_set
 
     representation_mtx = get_representation(
         scdata,
@@ -116,25 +119,110 @@ def _kneighbors_graph_matrices(
     )
     distances.eliminate_zeros()
 
-    connectivities = cast(
-        csr_matrix,
-        cast(
-            Tuple[Any, Any, Any],
-            fuzzy_simplicial_set(
-                X=representation_mtx,
-                n_neighbors=n_neighbors,
-                random_state=np.random.RandomState(0),
-                metric=metric,
-                knn_indices=knn_indices,
-                knn_dists=knn_distances,
-                set_op_mix_ratio=1.0,
-                local_connectivity=1.0,
-                apply_set_operations=True,
-                verbose=False,
-            ),
-        )[0],
+    connectivities = _umap_connectivities_from_knn(
+        knn_indices,
+        knn_distances,
+        n_obs=scdata.n_obs,
     )
-    return distances, cast(csr_matrix, connectivities.tocsr())
+    return distances, connectivities
+
+
+def _umap_smooth_knn_distances(
+    distances: np.ndarray,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    distances = distances.astype(np.float32, copy=False)
+    target = np.float32(np.log2(float(n_neighbors)))
+    n_obs = distances.shape[0]
+
+    rhos = np.zeros(n_obs, dtype=np.float32)
+    for i in range(n_obs):
+        non_zero_distances = distances[i][distances[i] > 0.0]
+        if non_zero_distances.shape[0] > 0:
+            rhos[i] = non_zero_distances[0]
+
+    lo = np.zeros(n_obs, dtype=np.float32)
+    hi = np.full(n_obs, _NPY_FLOATMAX, dtype=np.float32)
+    sigmas = np.ones(n_obs, dtype=np.float32)
+    active = np.ones(n_obs, dtype=bool)
+    shifted_distances = distances[:, 1:] - rhos[:, None]
+
+    for _ in range(64):
+        with np.errstate(over="ignore"):
+            probabilities = np.where(
+                shifted_distances > 0.0,
+                np.exp(-(shifted_distances / sigmas[:, None])),
+                1.0,
+            )
+        probability_sums = probabilities.sum(axis=1)
+        close = np.abs(probability_sums - target) < _SMOOTH_K_TOLERANCE
+        update = active & ~close
+        if not np.any(update):
+            break
+
+        greater = update & (probability_sums > target)
+        hi[greater] = sigmas[greater]
+        sigmas[greater] = (lo[greater] + hi[greater]) / 2.0
+
+        lower = update & ~greater
+        lo[lower] = sigmas[lower]
+        unset_hi = lower & (hi >= _NPY_FLOATMAX)
+        sigmas[unset_hi] *= 2.0
+        set_hi = lower & ~unset_hi
+        sigmas[set_hi] = (lo[set_hi] + hi[set_hi]) / 2.0
+
+        active &= ~close
+
+    mean_distances = np.mean(distances)
+    mean_row_distances = np.mean(distances, axis=1)
+    min_sigmas = np.where(
+        rhos > 0.0,
+        _MIN_K_DIST_SCALE * mean_row_distances,
+        _MIN_K_DIST_SCALE * mean_distances,
+    )
+    sigmas = np.maximum(sigmas, min_sigmas)
+
+    return sigmas.astype(np.float32, copy=False), rhos
+
+
+def _umap_connectivities_from_knn(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+    n_obs: int,
+) -> csr_matrix:
+
+    knn_distances = knn_distances.astype(np.float32, copy=False)
+    n_neighbors = knn_indices.shape[1]
+    sigmas, rhos = _umap_smooth_knn_distances(knn_distances, n_neighbors)
+
+    rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
+    columns = knn_indices.astype(np.int32, copy=False).ravel()
+    shifted_distances = knn_distances - rhos[:, None]
+    with np.errstate(over="ignore"):
+        values = np.exp(-(shifted_distances / sigmas[:, None]))
+    values = np.where(
+        (shifted_distances <= 0.0) | (sigmas[:, None] == 0.0),
+        1.0,
+        values,
+    ).astype(np.float32, copy=False)
+    values[knn_indices == np.arange(n_obs)[:, None]] = 0.0
+
+    valid = columns != -1
+    graph = coo_matrix(
+        (
+            values.ravel()[valid],
+            (rows[valid], columns[valid]),
+        ),
+        shape=(n_obs, n_obs),
+    ).tocsr()
+
+    transpose = graph.transpose()
+    intersections = graph.multiply(transpose)
+    graph = graph + transpose - intersections
+    graph.eliminate_zeros()
+
+    return cast(csr_matrix, graph.tocsr())
 
 
 def _normalize_knnsc_configuration(
@@ -228,7 +316,6 @@ def neighbors(
 ) -> Optional[ScData]: ...
 
 
-@require_dependency(module="umap", package="umap-learn", extra="sctools")
 @require_sklearn
 @anndata_or_mudata_checker
 def neighbors(
