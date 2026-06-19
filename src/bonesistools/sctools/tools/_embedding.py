@@ -389,7 +389,7 @@ def umap(
     neighbors_key: str = "neighbors",
     min_dist: float = 0.5,
     spread: float = 1.0,
-    max_iter: Optional[int] = None,
+    n_iter: int = 500,
     alpha: float = 1.0,
     gamma: float = 1.0,
     negative_sample_rate: int = 5,
@@ -421,8 +421,9 @@ def umap(
         Effective minimum distance between embedded points.
     spread: float (default: 1.0)
         Effective scale of embedded points.
-    max_iter: int, optional
-        Number of optimization epochs.
+    n_iter: int (default: 500)
+        Number of optimization iterations. Low values may produce poorly
+        converged embeddings.
     alpha: float (default: 1.0)
         Initial learning rate.
     gamma: float (default: 1.0)
@@ -474,8 +475,7 @@ def umap(
 
     neighbors_key = _as_string(neighbors_key, "neighbors_key")
 
-    if max_iter is not None:
-        max_iter = _as_positive_integer(max_iter, "max_iter")
+    n_iter = _as_positive_integer(n_iter, "n_iter")
 
     negative_sample_rate = _as_positive_integer(
         negative_sample_rate,
@@ -527,8 +527,6 @@ def umap(
     else:
         init = init_pos
 
-    default_epochs = 500 if adata.n_obs <= 10000 else 200
-    n_epochs = default_epochs if max_iter is None else max_iter
     embedding, _ = cast(
         Tuple[np.ndarray, Any],
         simplicial_set_embedding(
@@ -540,7 +538,7 @@ def umap(
             b=b,
             gamma=gamma,
             negative_sample_rate=negative_sample_rate,
-            n_epochs=n_epochs,
+            n_epochs=n_iter,
             init=init,
             random_state=resolved_random_state,
             metric=graph_metric,
@@ -563,7 +561,7 @@ def umap(
         "metric": graph_metric,
         "min_dist": min_dist,
         "spread": spread,
-        "max_iter": max_iter,
+        "n_iter": n_iter,
         "alpha": alpha,
         "gamma": gamma,
         "negative_sample_rate": negative_sample_rate,
@@ -582,7 +580,7 @@ def tsne(
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     n_components: int = 2,
-    max_iter: Optional[int] = None,
+    n_iter: int = 1000,
     perplexity: float = 30.0,
     learning_rate: float = 1000.0,
     early_exaggeration: float = 12.0,
@@ -610,8 +608,9 @@ def tsne(
         dimensions in `representation`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
-    max_iter: int, optional
-        Maximum number of optimization iterations. Defaults to 1000.
+    n_iter: int (default: 1000)
+        Number of gradient-descent optimization iterations. Low values may
+        produce poorly converged embeddings.
     perplexity: float (default: 30.0)
         t-SNE perplexity.
     learning_rate: float (default: 1000.0)
@@ -656,8 +655,7 @@ def tsne(
         )
 
     resolved_random_state = _as_seed(seed)
-    tsne_max_iter = 1000 if max_iter is None else max_iter
-    tsne_max_iter = _as_positive_integer(tsne_max_iter, "max_iter")
+    n_iter = _as_positive_integer(n_iter, "n_iter")
 
     perplexity = _as_positive_number(perplexity, "perplexity")
 
@@ -697,9 +695,9 @@ def tsne(
         "method": "barnes_hut" if n_components <= 3 else "exact",
     }
     if "max_iter" in inspect.signature(TSNE).parameters:
-        tsne_kwargs["max_iter"] = tsne_max_iter
+        tsne_kwargs["max_iter"] = n_iter
     else:
-        tsne_kwargs["n_iter"] = tsne_max_iter
+        tsne_kwargs["n_iter"] = n_iter
 
     embedding = cast(np.ndarray, TSNE(**tsne_kwargs).fit_transform(representation_mtx))
 
@@ -714,7 +712,7 @@ def tsne(
         "metric": metric,
         "early_exaggeration": early_exaggeration,
         "learning_rate": learning_rate,
-        "max_iter": tsne_max_iter,
+        "n_iter": n_iter,
         "n_jobs": n_jobs,
     }
 

@@ -76,4 +76,3 @@ def require_dependency(
         return wrapper
 
     return decorator(function) if function is not None else decorator
-

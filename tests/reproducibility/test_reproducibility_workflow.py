@@ -61,7 +61,7 @@ def _run_clustering_workflow():
         representation="X_pca",
         n_pcs=20,
         n_components=2,
-        max_iter=250,
+        n_iter=250,
         perplexity=30.0,
         metric="euclidean",
         seed=10,

@@ -125,7 +125,7 @@ def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
         mini_adata,
         n_components=2,
         perplexity=1.0,
-        max_iter=250,
+        n_iter=250,
         seed=0,
         n_jobs=1,
     )
@@ -142,7 +142,7 @@ def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
         "metric": "euclidean",
         "early_exaggeration": 12.0,
         "learning_rate": 1000.0,
-        "max_iter": 250,
+        "n_iter": 250,
         "n_jobs": 1,
     }
 
@@ -164,7 +164,7 @@ def test_tsne_embedding_matches_sklearn(mini_adata):
         mini_adata,
         n_components=2,
         perplexity=1.0,
-        max_iter=250,
+        n_iter=250,
         seed=0,
         n_jobs=1,
     )
@@ -204,7 +204,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         n_components=2,
         min_dist=0.2,
         spread=1.5,
-        max_iter=17,
+        n_iter=17,
         alpha=0.75,
         gamma=1.25,
         negative_sample_rate=7,
@@ -237,7 +237,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         "metric": "euclidean",
         "min_dist": 0.2,
         "spread": 1.5,
-        "max_iter": 17,
+        "n_iter": 17,
         "alpha": 0.75,
         "gamma": 1.25,
         "negative_sample_rate": 7,
