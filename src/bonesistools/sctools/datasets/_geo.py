@@ -10,9 +10,10 @@ import gzip
 import os
 import re
 import sys
+import time
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, List, Optional, TextIO, Tuple, Union, cast
 from urllib.error import URLError
 from urllib.parse import unquote, urljoin
 from urllib.request import urlopen
@@ -100,9 +101,12 @@ def from_geo(
         )
 
     quiet = _as_boolean(quiet, "quiet")
-
     if accession.startswith("GSM"):
-        return _from_gsm(accession, cache_dir=cache_dir, quiet=quiet)
+        return _from_gsm(
+            accession,
+            cache_dir=cache_dir,
+            quiet=quiet,
+        )
 
     raise ValueError(
         f"invalid argument value for 'accession': "
@@ -122,17 +126,29 @@ def _from_gsm(
     sample_dir = _geo_cache_dir(gsm, cache_dir)
     matrix_path = sample_dir / "matrix.mtx.gz"
     barcodes_path = sample_dir / "barcodes.tsv.gz"
-    genes_path = sample_dir / "genes.tsv.gz"
+    feature_path = sample_dir / "features.tsv.gz"
     source_url = _gsm_base_url(gsm, geo_ftp_base=geo_ftp_base)
 
-    if not (matrix_path.exists() and barcodes_path.exists() and genes_path.exists()):
+    if not (matrix_path.exists() and barcodes_path.exists() and feature_path.exists()):
         urls = _gsm_urls(gsm, geo_ftp_base=geo_ftp_base)
         source_url = urls["source"]
-        _download(urls["matrix"], matrix_path, quiet=quiet)
-        _download(urls["barcodes"], barcodes_path, quiet=quiet)
-        _download(urls["genes"], genes_path, quiet=quiet)
+        _download(
+            urls["matrix"],
+            matrix_path,
+            quiet=quiet,
+        )
+        _download(
+            urls["barcodes"],
+            barcodes_path,
+            quiet=quiet,
+        )
+        _download(
+            urls["features"],
+            feature_path,
+            quiet=quiet,
+        )
 
-    adata = _read_10x_mtx(matrix_path, barcodes_path, genes_path)
+    adata = _read_10x_mtx(matrix_path, barcodes_path, feature_path)
     adata.uns["geo"] = {
         "accession": gsm,
         "type": "GSM",
@@ -208,71 +224,150 @@ def _gsm_urls(
 
     matrix_url = _require_single_url(matrix_urls, "matrix", gsm, base_url)
     barcodes_url = _require_single_url(barcode_urls, "barcode", gsm, base_url)
-    genes_url = _select_gene_or_feature_url(gene_urls, feature_urls, gsm, base_url)
+    feature_url = _select_gene_or_feature_url(gene_urls, feature_urls, gsm, base_url)
 
     return {
         "matrix": matrix_url,
         "barcodes": barcodes_url,
-        "genes": genes_url,
+        "features": feature_url,
         "source": base_url,
     }
 
 
-def _download(url: str, output: Path, quiet: bool = False) -> None:
+def _download(
+    url: str,
+    output: Path,
+    quiet: bool = False,
+) -> None:
 
     if output.exists():
         return
 
     quiet = _as_boolean(quiet, "quiet")
+    progress_handle = None if quiet else _open_progress_handle()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary_output = Path(f"{output}.tmp")
-    with urlopen(url) as response:
-        total_header = response.headers.get("Content-Length")
-        total = int(total_header) if total_header is not None else None
-        downloaded = 0
-        last_percent = -1
+    try:
+        with urlopen(url) as response:
+            total_header = response.headers.get("Content-Length")
+            total = int(total_header) if total_header is not None else None
+            downloaded = 0
+            start_time = time.monotonic()
+            last_update = 0.0
 
-        with temporary_output.open("wb") as handle:
-            while True:
-                chunk = response.read(_DOWNLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
+            with temporary_output.open("wb") as handle:
+                while True:
+                    chunk = response.read(_DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
 
-                handle.write(chunk)
-                downloaded += len(chunk)
+                    handle.write(chunk)
+                    downloaded += len(chunk)
 
-                if quiet:
-                    continue
+                    if progress_handle is None:
+                        continue
 
-                if total is None or total == 0:
-                    size = downloaded / 1024**2
-                    print(
-                        f"\rDownloading {output.name}: {size:.1f} MiB",
-                        end="",
-                        file=sys.stderr,
-                        flush=True,
+                    now = time.monotonic()
+                    if now - last_update < 0.1:
+                        continue
+
+                    last_update = now
+                    _print_download_progress(
+                        output.name,
+                        downloaded,
+                        total,
+                        now - start_time,
+                        file=progress_handle,
                     )
-                    continue
 
-                percent = min(100, int(downloaded * 100 / total))
-                if percent == last_percent:
-                    continue
-
-                last_percent = percent
-                width = 24
-                filled = percent * width // 100
-                bar = "=" * filled + "." * (width - filled)
-                print(
-                    f"\rDownloading {output.name} [{bar}] {percent:3d}%",
-                    end="",
-                    file=sys.stderr,
-                    flush=True,
+        if not quiet:
+            if progress_handle is not None:
+                _print_download_progress(
+                    output.name,
+                    downloaded,
+                    total,
+                    time.monotonic() - start_time,
+                    file=progress_handle,
                 )
+                print(file=progress_handle)
 
-    if not quiet:
-        print(file=sys.stderr)
+        temporary_output.replace(output)
+    finally:
+        if progress_handle is not None and progress_handle is not sys.stderr:
+            progress_handle.close()
 
-    temporary_output.replace(output)
+
+def _open_progress_handle() -> Optional[TextIO]:
+
+    if Path("/dev/tty").exists():
+        try:
+            return open("/dev/tty", "w")
+        except OSError:
+            pass
+    if sys.stderr.isatty():
+        return sys.stderr
+    return None
+
+
+def _print_download_progress(
+    filename: str,
+    downloaded: int,
+    total: Optional[int],
+    elapsed: float,
+    file: TextIO,
+) -> None:
+
+    speed = downloaded / elapsed if elapsed > 0 else 0
+    if total is None or total == 0:
+        print(
+            f"\rdownloading {filename} {_format_bytes(downloaded):>8} "
+            f"{_format_bytes(speed)}/s",
+            end="",
+            file=file,
+            flush=True,
+        )
+        return
+
+    percent = min(100, int(downloaded * 100 / total))
+    width = 24
+    filled = percent * width // 100
+    if filled >= width:
+        bar = "=" * width
+    else:
+        bar = "=" * filled + ">" + "." * max(0, width - filled - 1)
+    print(
+        f"\rdownloading {filename} {percent:3d}%[{bar}] "
+        f"{_format_bytes(downloaded):>8} {_format_bytes(speed)}/s "
+        f"in {_format_duration(elapsed)}",
+        end="",
+        file=file,
+        flush=True,
+    )
+
+
+def _format_bytes(size: float) -> str:
+
+    units = ("B", "K", "M", "G", "T")
+    value = float(size)
+    for unit in units:
+        if abs(value) < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{value:.0f}{unit}"
+            return f"{value:.2f}{unit}"
+        value /= 1024
+
+    return f"{value:.2f}T"
+
+
+def _format_duration(seconds: float) -> str:
+
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, remaining_seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m{remaining_seconds:04.1f}s"
+    hours, remaining_minutes = divmod(minutes, 60)
+    return f"{int(hours)}h{int(remaining_minutes):02d}m{remaining_seconds:04.1f}s"
 
 
 def _geo_cache_dir(accession: str, cache_dir: Optional[PathInput]) -> Path:
@@ -325,7 +420,7 @@ def _select_gene_or_feature_url(
 def _read_10x_mtx(
     matrix_path: Path,
     barcodes_path: Path,
-    genes_path: Path,
+    feature_path: Path,
 ) -> AnnData:
 
     counts = sparse.csr_matrix(scipy.io.mmread(str(matrix_path)))
@@ -336,7 +431,9 @@ def _read_10x_mtx(
     obs_names = ad_utils.make_index_unique(obs_names)
     obs_names.name = None
 
-    var = _make_var(_read_table(genes_path))
+    var = _make_var(_read_table(feature_path))
+    var.index = ad_utils.make_index_unique(var.index)
+    var.index.name = None
     if counts.shape == (len(var), len(obs_names)):
         counts = counts.T.tocsr()
     elif counts.shape != (len(obs_names), len(var)):
@@ -352,7 +449,6 @@ def _read_10x_mtx(
     )
     adata.obs.index.name = None
     adata.var.index.name = None
-    adata.var_names_make_unique()
 
     return adata
 

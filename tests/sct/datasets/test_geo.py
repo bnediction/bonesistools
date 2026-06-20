@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import gzip
+import warnings
 from pathlib import Path
 
 import anndata as ad
@@ -122,7 +123,7 @@ def test_geo_html_parsing_detects_10x_supplementary_files(monkeypatch):
 
     assert urls["matrix"].endswith("GSM4138110_sample_matrix.mtx.gz")
     assert urls["barcodes"].endswith("GSM4138110_sample_barcodes.tsv.gz")
-    assert urls["genes"].endswith("GSM4138110_sample_features.tsv.gz")
+    assert urls["features"].endswith("GSM4138110_sample_features.tsv.gz")
     assert urls["source"].endswith("/samples/GSM4138nnn/GSM4138110/suppl/")
 
 
@@ -195,7 +196,7 @@ def test_geo_from_geo_uses_cache_without_downloading(monkeypatch, tmp_path):
         ),
     )
     _write_gzip(sample_dir / "barcodes.tsv.gz", "cell\n")
-    _write_gzip(sample_dir / "genes.tsv.gz", "gene_id\tGene\n")
+    _write_gzip(sample_dir / "features.tsv.gz", "gene_id\tGene\n")
 
     def fail_urlopen(_):
         raise AssertionError("cache hit should not open GEO URLs")
@@ -211,6 +212,47 @@ def test_geo_from_geo_uses_cache_without_downloading(monkeypatch, tmp_path):
     assert isinstance(adata, ad.AnnData)
     assert adata.shape == (1, 1)
     assert adata.X.toarray().tolist() == [[7]]
+
+
+def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
+    tmp_path,
+):
+    sample_dir = tmp_path / "cache" / "GSM5492245"
+    _write_gzip(
+        sample_dir / "matrix.mtx.gz",
+        "\n".join(
+            [
+                "%%MatrixMarket matrix coordinate integer general",
+                "%",
+                "2 1 2",
+                "1 1 7",
+                "2 1 11",
+                "",
+            ]
+        ),
+    )
+    _write_gzip(sample_dir / "barcodes.tsv.gz", "cell\n")
+    _write_gzip(
+        sample_dir / "features.tsv.gz",
+        "gene_id_1\tGene\n"
+        "gene_id_2\tGene\n",
+    )
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        adata = bt.sct.datasets.from_geo(
+            "GSM5492245",
+            cache_dir=tmp_path / "cache",
+            quiet=True,
+        )
+
+    assert not any(
+        "Variable names are not unique" in str(record.message)
+        for record in records
+    )
+    assert adata.var_names.tolist() == ["Gene", "Gene-1"]
+    assert adata.var["symbol"].tolist() == ["Gene", "Gene"]
+    np.testing.assert_array_equal(adata.X.toarray(), np.array([[7, 11]]))
 
 
 def test_geo_from_gsm_downloads_and_reads_local_geo_10x_dataset(tmp_path):
@@ -243,4 +285,4 @@ def test_geo_from_gsm_downloads_and_reads_local_geo_10x_dataset(tmp_path):
     }
     assert (tmp_path / "cache" / "GSM5492245" / "matrix.mtx.gz").exists()
     assert (tmp_path / "cache" / "GSM5492245" / "barcodes.tsv.gz").exists()
-    assert (tmp_path / "cache" / "GSM5492245" / "genes.tsv.gz").exists()
+    assert (tmp_path / "cache" / "GSM5492245" / "features.tsv.gz").exists()
