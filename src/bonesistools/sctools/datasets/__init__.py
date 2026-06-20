@@ -20,9 +20,12 @@ else:
 import anndata as _ad
 from anndata import AnnData as _AnnData
 
+from ._geo import from_geo
+
 del annotations
 
 __all__ = [
+    "from_geo",
     "nestorowa",
 ]
 
