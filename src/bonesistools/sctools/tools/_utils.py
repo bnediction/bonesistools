@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 from collections.abc import Collection as CollectionInstance
-from collections.abc import Sequence as SequenceInstance
-from typing import Any, Optional, Sequence, Tuple, cast
+from typing import Any, Optional, Tuple, cast
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData
 from pandas import Index
 from scipy import sparse
@@ -134,7 +134,7 @@ def get_expression(
 def _get_expression_with_gene_names(
     adata: AnnData,
     expression: Optional[str],
-    var_subset: Optional[Sequence[str]],
+    var_subset: VarSubset,
 ) -> Tuple[Matrix, Index]:
     """
     Get an expression matrix and the matching gene names.
@@ -150,9 +150,10 @@ def _get_expression_with_gene_names(
     expression: str, optional
         Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
-    var_subset: sequence of str, optional
-        Variable names to select. If None, keep all variables from the selected
-        expression source.
+    var_subset: str or collection of str, optional
+        Variables to select. If a string is provided, it is interpreted as a
+        boolean column in the selected `.var` annotation. If a collection is
+        provided, it is interpreted as variable names.
 
     Returns
     -------
@@ -163,6 +164,8 @@ def _get_expression_with_gene_names(
     if expression is None or expression in {"X", ".X"}:
         expression_mtx = get_expression(adata, var_subset=var_subset, copy=False)
         gene_names = adata.var_names
+        var = adata.var
+        var_label = "adata.var"
         gene_names_label = "adata.var_names"
     elif expression in {"raw", "raw.X", ".raw.X"}:
         if adata.raw is None:
@@ -177,6 +180,8 @@ def _get_expression_with_gene_names(
             copy=False,
         )
         gene_names = adata.raw.var_names
+        var = adata.raw.var
+        var_label = "adata.raw.var"
         gene_names_label = "adata.raw.var_names"
     else:
         expression = _as_string(expression, "expression")
@@ -187,15 +192,35 @@ def _get_expression_with_gene_names(
             copy=False,
         )
         gene_names = adata.var_names
+        var = adata.var
+        var_label = "adata.var"
         gene_names_label = "adata.var_names"
 
     if var_subset is None:
         return expression_mtx, gene_names
 
-    if isinstance(var_subset, str) or not isinstance(var_subset, SequenceInstance):
+    if isinstance(var_subset, str):
+        if var_subset not in var:
+            raise KeyError(f"column {var_subset!r} not found in {var_label}")
+
+        subset = var[var_subset]
+        if not hasattr(subset, "dtype") or not pd.api.types.is_bool_dtype(subset):
+            raise TypeError(
+                f"unsupported column dtype for 'var_subset': "
+                f"expected boolean values in {var_label}[{var_subset!r}]"
+            )
+        mask = np.asarray(subset, dtype=bool)
+        if not bool(mask.any()):
+            raise ValueError(
+                f"invalid argument value for 'var_subset': "
+                f"{var_label}[{var_subset!r}] selects no variables"
+            )
+        return expression_mtx, gene_names[mask]
+
+    if not isinstance(var_subset, CollectionInstance):
         raise TypeError(
             f"unsupported argument type for 'var_subset': "
-            f"expected sequence of {str} but received {type(var_subset)}"
+            f"expected collection of {str} but received {type(var_subset)}"
         )
 
     variables = list(var_subset)

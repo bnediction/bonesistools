@@ -5,7 +5,9 @@ from types import ModuleType
 from typing import Any, Dict, Optional, Tuple, cast
 
 import numpy as np
+import pandas as pd
 import pytest
+from anndata import AnnData
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.manifold import TSNE, SpectralEmbedding
@@ -437,6 +439,51 @@ def test_pca_matches_scanpy_with_sparse_input_and_seed(mini_adata, zero_center):
     assert np.allclose(
         bonesis_adata.uns["pca"]["variance_ratio"],
         scanpy_adata.uns["pca"]["variance_ratio"],
+    )
+
+
+def test_pca_preserves_dense_var_subset_layout():
+    rng = np.random.RandomState(42)
+    X = rng.normal(size=(200, 80)).astype(np.float32)
+    obs = pd.DataFrame(index=["c" + str(i) for i in range(X.shape[0])])
+    var = pd.DataFrame(index=["g" + str(i) for i in range(X.shape[1])])
+    mask = np.arange(X.shape[1]) % 3 == 0
+    var["highly_variable"] = mask
+
+    bonesis_adata = AnnData(X.copy(), obs=obs.copy(), var=var.copy())
+    expected = PCA(
+        n_components=15,
+        svd_solver="arpack",
+        random_state=np.random.RandomState(10),
+    )
+    expected_scores = expected.fit_transform(X[:, mask])
+    expected_loadings = np.zeros((X.shape[1], 15), dtype=expected.components_.dtype)
+    expected_loadings[mask, :] = expected.components_.T
+
+    bt.sct.tl.pca(
+        bonesis_adata,
+        n_components=15,
+        zero_center=True,
+        var_subset="highly_variable",
+        seed=10,
+        copy=False,
+    )
+
+    assert np.array_equal(
+        np.abs(bonesis_adata.obsm["X_pca"]),
+        np.abs(expected_scores),
+    )
+    assert np.array_equal(
+        np.abs(bonesis_adata.varm["PCs"]),
+        np.abs(expected_loadings),
+    )
+    assert np.array_equal(
+        bonesis_adata.uns["pca"]["variance"],
+        expected.explained_variance_,
+    )
+    assert np.array_equal(
+        bonesis_adata.uns["pca"]["variance_ratio"],
+        expected.explained_variance_ratio_,
     )
 
 

@@ -18,7 +18,8 @@ from ..._validation import (
     _as_memory_size,
     _as_string,
 )
-from .._typing import Matrix, anndata_checker
+from .._stats import _column_mean_variance
+from .._typing import Matrix, VarSubset, anndata_checker
 from ._utils import _as_dense_matrix_chunk, _get_expression_with_gene_names
 
 CorrectionMethod = Literal["benjamini-hochberg", "bonferroni"]
@@ -65,19 +66,19 @@ def _adjust_pvalues(
 @anndata_checker
 def wilcoxon_tests(
     adata: AnnData,
-    obs: str,
+    groupby: str,
     groups: Union[Literal["all"], Sequence[Any]] = "all",
     background: Union[Literal["rest"], Sequence[Any]] = "rest",
     expression: Optional[str] = None,
-    var_subset: Optional[Sequence[str]] = None,
+    var_subset: VarSubset = None,
     correction: Optional[CorrectionMethod] = "benjamini-hochberg",
     tie_correction: bool = True,
-    max_memory: Union[int, str] = "10GB",
+    max_memory: Optional[Union[int, str]] = None,
 ) -> pd.DataFrame:
     """
     Compute vectorized Wilcoxon rank-sum tests for groups of observations.
 
-    For each target group, observations in `adata.obs[obs] == group` are
+    For each target group, observations in `adata.obs[groupby] == group` are
     compared with either the remaining observations or a named background group.
     Ranks are computed gene-wise in a single matrix operation. Ties are ranked
     with average ranks and tie correction is applied by default.
@@ -86,10 +87,10 @@ def wilcoxon_tests(
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    obs: str
+    groupby: str
         Observation column in `adata.obs` defining groups.
     groups: 'all' or sequence (default: "all")
-        Groups to test. If `"all"`, test all groups in `adata.obs[obs]`;
+        Groups to test. If `"all"`, test all groups in `adata.obs[groupby]`;
         when `background` is a sequence, background groups themselves are not
         tested.
     background: 'rest' or sequence (default: "rest")
@@ -101,18 +102,21 @@ def wilcoxon_tests(
     expression: str, optional
         Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
-    var_subset: sequence of str, optional
-        Variable names to test. If None, test all variables in the selected
-        expression matrix.
+    var_subset: str or collection of str, optional
+        Variables to test. If a string is provided, it is interpreted as a
+        boolean column in `adata.var`. If a collection is provided, it is
+        interpreted as variable names. If None, test all variables in the
+        selected expression matrix.
     correction: {'benjamini-hochberg', 'bonferroni'} or None
         Multiple-testing correction applied independently for each group. If
         None, p-values are not adjusted.
     tie_correction: bool (default: True)
         Whether to apply the rank-sum variance correction for tied values.
-    max_memory: int or str (default: "10GB")
-        Approximate maximum memory allocated to dense rank matrices. Integers
-        are interpreted as bytes. Human-readable strings such as `"512MB"`,
-        `"2GB"` or `"1GiB"` are accepted.
+    max_memory: int or str, optional
+        Approximate maximum memory allocated to dense rank matrices. If None,
+        rank all variables in a single chunk. Integers are interpreted as bytes.
+        Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"` are
+        accepted.
 
     Returns
     -------
@@ -127,7 +131,7 @@ def wilcoxon_tests(
         - `sum_ranks`: sum of target-group ranks.
     """
 
-    obs = _as_string(obs, "obs")
+    groupby = _as_string(groupby, "groupby")
     correction = _as_literal(
         correction,
         choices=CORRECTION_METHODS,
@@ -135,7 +139,9 @@ def wilcoxon_tests(
         allow_none=True,
     )
     tie_correction = _as_boolean(tie_correction, "tie_correction")
-    max_memory = _as_memory_size(max_memory, "max_memory")
+    max_memory_bytes = (
+        None if max_memory is None else _as_memory_size(max_memory, "max_memory")
+    )
 
     expression_mtx, gene_names = _get_expression_with_gene_names(
         adata,
@@ -145,7 +151,7 @@ def wilcoxon_tests(
     if len(expression_mtx.shape) != 2:
         raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
 
-    labels = cast(pd.Series, adata.obs[obs])
+    labels = cast(pd.Series, adata.obs[groupby])
     background_groups = _resolve_background_groups(labels, background)
     target_groups = _resolve_groups(labels, groups, background_groups)
     if background_groups is not None:
@@ -163,7 +169,7 @@ def wilcoxon_tests(
             target_groups,
             gene_names,
             tie_correction=tie_correction,
-            max_memory=max_memory,
+            max_memory=max_memory_bytes,
             correction=correction,
         )
     else:
@@ -174,7 +180,7 @@ def wilcoxon_tests(
             background_groups,
             gene_names,
             tie_correction=tie_correction,
-            max_memory=max_memory,
+            max_memory=max_memory_bytes,
             correction=correction,
         )
 
@@ -203,13 +209,340 @@ def wilcoxon_tests(
     )
 
 
+@anndata_checker
+def welch_tests(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Sequence[Any]] = "all",
+    background: Union[Literal["rest"], Sequence[Any]] = "rest",
+    expression: Optional[str] = None,
+    var_subset: VarSubset = None,
+    correction: Optional[CorrectionMethod] = "benjamini-hochberg",
+    overestimate_variance: bool = False,
+    max_memory: Optional[Union[int, str]] = None,
+) -> pd.DataFrame:
+    """
+    Compute Welch t-tests for groups of observations.
+
+    For each target group, observations in `adata.obs[groupby] == group` are
+    compared with either the remaining observations or a named background
+    population. The test statistics and p-values are compatible with Scanpy's
+    `rank_genes_groups(..., method="t-test")` implementation.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    groupby: str
+        Observation column in `adata.obs` defining groups.
+    groups: 'all' or sequence (default: "all")
+        Groups to test. If `"all"`, test all groups in `adata.obs[groupby]`;
+        when `background` is a sequence, background groups themselves are not
+        tested.
+    background: 'rest' or sequence (default: "rest")
+        Background population. If `"rest"`, each target group is compared
+        against all observations outside that group. If a sequence is provided,
+        each target group is compared against the union of observations
+        belonging to those background labels. To compare against an actual group
+        named `"rest"`, pass `background=["rest"]`.
+    expression: str, optional
+        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
+    var_subset: str or collection of str, optional
+        Variables to test. If a string is provided, it is interpreted as a
+        boolean column in `adata.var`. If a collection is provided, it is
+        interpreted as variable names. If None, test all variables in the
+        selected expression matrix.
+    correction: {'benjamini-hochberg', 'bonferroni'} or None
+        Multiple-testing correction applied independently for each group. If
+        None, p-values are not adjusted.
+    overestimate_variance: bool (default: False)
+        If True, reproduce Scanpy's `method="t-test_overestim_var"` behavior by
+        using the target group size for the background variance term.
+    max_memory: int or str, optional
+        Approximate maximum memory allocated to dense working arrays. If None,
+        process all variables in a single chunk. Integers are interpreted as
+        bytes. Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"`
+        are accepted.
+
+    Returns
+    -------
+    DataFrame
+        Long-form table indexed by gene name. The table contains:
+
+        - `group`: tested group;
+        - `statistics`: Welch t statistics;
+        - `pvals`: two-sided p-values;
+        - `pvals_adj`: adjusted p-values;
+        - `mean_group`: target-group mean expression;
+        - `mean_background`: background mean expression;
+        - `variance_group`: target-group expression variance;
+        - `variance_background`: background expression variance.
+
+    References
+    ----------
+    Wolf, Angerer and Theis (2018). SCANPY: large-scale single-cell gene
+    expression data analysis. Genome Biology, 19(1), 15.
+    """
+
+    groupby = _as_string(groupby, "groupby")
+    correction = _as_literal(
+        correction,
+        choices=CORRECTION_METHODS,
+        name="correction",
+        allow_none=True,
+    )
+    overestimate_variance = _as_boolean(
+        overestimate_variance,
+        "overestimate_variance",
+    )
+    max_memory_bytes = (
+        None if max_memory is None else _as_memory_size(max_memory, "max_memory")
+    )
+
+    expression_mtx, gene_names = _get_expression_with_gene_names(
+        adata,
+        expression,
+        var_subset,
+    )
+    if len(expression_mtx.shape) != 2:
+        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
+
+    labels = cast(pd.Series, adata.obs[groupby])
+    background_groups = _resolve_background_groups(labels, background)
+    target_groups = _resolve_groups(labels, groups, background_groups)
+    if background_groups is not None:
+        overlap = set(target_groups) & set(background_groups)
+        if overlap:
+            raise ValueError(
+                "invalid argument combination: target groups and background groups "
+                f"must be disjoint, but overlap on {sorted(overlap)!r}"
+            )
+
+    if background_groups is None:
+        results = _welch_tests_rest(
+            expression_mtx,
+            labels,
+            target_groups,
+            gene_names,
+            correction=correction,
+            overestimate_variance=overestimate_variance,
+            max_memory=max_memory_bytes,
+        )
+    else:
+        results = _welch_tests_fixed_background(
+            expression_mtx,
+            labels,
+            target_groups,
+            background_groups,
+            gene_names,
+            correction=correction,
+            overestimate_variance=overestimate_variance,
+            max_memory=max_memory_bytes,
+        )
+
+    if not results:
+        return pd.DataFrame(
+            columns=cast(
+                Any,
+                [
+                    "group",
+                    "statistics",
+                    "pvals",
+                    "pvals_adj",
+                    "mean_group",
+                    "mean_background",
+                    "variance_group",
+                    "variance_background",
+                ],
+            )
+        )
+
+    df = pd.concat(results, axis=0)
+    df = df[
+        [
+            "group",
+            "statistics",
+            "pvals",
+            "pvals_adj",
+            "mean_group",
+            "mean_background",
+            "variance_group",
+            "variance_background",
+        ]
+    ]
+    df.index.name = "names"
+
+    return cast(
+        pd.DataFrame,
+        cast(Any, df).sort_values(by=["group", "pvals"], kind="mergesort"),
+    )
+
+
+def _welch_tests_rest(
+    expression_mtx: Matrix,
+    labels: pd.Series,
+    target_groups: Sequence[Any],
+    gene_names: Index,
+    correction: Optional[CorrectionMethod],
+    overestimate_variance: bool,
+    max_memory: Optional[int],
+) -> Sequence[pd.DataFrame]:
+
+    results = []
+    for group in target_groups:
+        group_mask = np.asarray(labels == group, dtype=bool)
+        if int(group_mask.sum()) < 2:
+            raise ValueError(
+                "invalid group selection: "
+                "target group must contain at least two observations"
+            )
+
+        background_mask = ~group_mask
+        if int(background_mask.sum()) == 0:
+            raise ValueError("invalid group selection: background group is empty")
+
+        results.append(
+            _welch_test_matrix(
+                expression_mtx,
+                group_mask,
+                background_mask,
+                group,
+                gene_names,
+                correction=correction,
+                overestimate_variance=overestimate_variance,
+                max_memory=max_memory,
+            )
+        )
+
+    return results
+
+
+def _welch_tests_fixed_background(
+    expression_mtx: Matrix,
+    labels: pd.Series,
+    target_groups: Sequence[Any],
+    background_groups: Sequence[Any],
+    gene_names: Index,
+    correction: Optional[CorrectionMethod],
+    overestimate_variance: bool,
+    max_memory: Optional[int],
+) -> Sequence[pd.DataFrame]:
+
+    background_mask = np.asarray(labels.isin(background_groups), dtype=bool)
+    if int(background_mask.sum()) == 0:
+        raise ValueError("invalid group selection: background group is empty")
+
+    results = []
+    for group in target_groups:
+        group_mask = np.asarray(labels == group, dtype=bool)
+        if int(group_mask.sum()) < 2:
+            raise ValueError(
+                "invalid group selection: "
+                "target group must contain at least two observations"
+            )
+
+        results.append(
+            _welch_test_matrix(
+                expression_mtx,
+                group_mask,
+                background_mask,
+                group,
+                gene_names,
+                correction=correction,
+                overestimate_variance=overestimate_variance,
+                max_memory=max_memory,
+            )
+        )
+
+    return results
+
+
+def _welch_test_matrix(
+    expression_mtx: Matrix,
+    group_mask: np.ndarray,
+    background_mask: np.ndarray,
+    group: Any,
+    gene_names: Index,
+    correction: Optional[CorrectionMethod],
+    overestimate_variance: bool,
+    max_memory: Optional[int],
+) -> pd.DataFrame:
+
+    group_mtx = cast(Any, expression_mtx)[group_mask, :]
+    background_mtx = cast(Any, expression_mtx)[background_mask, :]
+    n_group = int(group_mtx.shape[0])
+    n_background = int(background_mtx.shape[0])
+    mean_group, variance_group = _column_mean_variance(group_mtx, max_memory)
+    mean_background, variance_background = _column_mean_variance(
+        background_mtx,
+        max_memory,
+    )
+    statistics, pvals = _welch_t_test_from_stats(
+        mean_group,
+        variance_group,
+        n_group,
+        mean_background,
+        variance_background,
+        n_group if overestimate_variance else n_background,
+    )
+
+    group_result = pd.DataFrame(
+        {
+            "group": group,
+            "statistics": statistics,
+            "pvals": pvals,
+            "mean_group": mean_group,
+            "mean_background": mean_background,
+            "variance_group": variance_group,
+            "variance_background": variance_background,
+        },
+        index=gene_names,
+    )
+    group_result["pvals_adj"] = _adjust_pvalues(
+        group_result["pvals"].to_numpy(dtype=float),
+        correction,
+    )
+
+    return group_result
+
+
+def _welch_t_test_from_stats(
+    mean_group: np.ndarray,
+    variance_group: np.ndarray,
+    n_group: int,
+    mean_background: np.ndarray,
+    variance_background: np.ndarray,
+    n_background: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    from scipy import stats
+
+    with np.errstate(invalid="ignore"):
+        statistics, pvals = stats.ttest_ind_from_stats(
+            mean1=mean_group,
+            std1=np.sqrt(variance_group),
+            nobs1=n_group,
+            mean2=mean_background,
+            std2=np.sqrt(variance_background),
+            nobs2=n_background,
+            equal_var=False,
+        )
+
+    statistics = np.asarray(statistics, dtype=float)
+    pvals = np.asarray(pvals, dtype=float)
+    statistics[np.isnan(statistics)] = 0
+    pvals[np.isnan(pvals)] = 1
+    return statistics, pvals
+
+
 def _wilcoxon_tests_rest(
     expression_mtx: Matrix,
     labels: pd.Series,
     target_groups: Sequence[Any],
     gene_names: Index,
     tie_correction: bool,
-    max_memory: int,
+    max_memory: Optional[int],
     correction: Optional[CorrectionMethod],
 ) -> Sequence[pd.DataFrame]:
 
@@ -283,7 +616,7 @@ def _wilcoxon_tests_fixed_background(
     background_groups: Sequence[Any],
     gene_names: Index,
     tie_correction: bool,
-    max_memory: int,
+    max_memory: Optional[int],
     correction: Optional[CorrectionMethod],
 ) -> Sequence[pd.DataFrame]:
 
@@ -324,7 +657,7 @@ def _wilcoxon_test_matrix(
     mask: np.ndarray,
     gene_names: Index,
     tie_correction: bool,
-    max_memory: int,
+    max_memory: Optional[int],
 ) -> pd.DataFrame:
 
     from scipy.stats import norm, rankdata
@@ -442,7 +775,10 @@ def _resolve_background_groups(
     return background_groups
 
 
-def _rank_chunk_size(expression_mtx: Matrix, max_memory: int) -> int:
+def _rank_chunk_size(expression_mtx: Matrix, max_memory: Optional[int]) -> int:
+
+    if max_memory is None:
+        return max(1, int(expression_mtx.shape[1]))
 
     bytes_per_rank = np.dtype(np.float64).itemsize
     bytes_per_rank_column = expression_mtx.shape[0] * bytes_per_rank

@@ -17,13 +17,15 @@ from ._duplicates import (
     merge_duplicate_vars,
     var_names_merge_duplicates,
 )
+from ._filter import (
+    filter_obs,
+    filter_var,
+)
 from ._genename import (
     convert_gene_identifiers,
     standardize_gene_identifiers,
 )
 from ._simple import (
-    filter_obs,
-    filter_var,
     sort_anndata,
 )
 from ._transfer import (
@@ -34,10 +36,18 @@ from ._transfer import (
     transfer_obs_to_integrated,
     transfer_obs_to_specific,
 )
+from ._transform import (
+    log1p,
+    normalize,
+    scale,
+)
 
 __all__ = [
     "filter_obs",
     "filter_var",
+    "normalize",
+    "log1p",
+    "scale",
     "merge",
     "sort_anndata",
     "transfer_layer",

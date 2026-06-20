@@ -95,6 +95,35 @@ def _zero_mean_logfoldchange_adata():
     )
 
 
+def _toy_dea_adata():
+    adata = ad.AnnData(
+        X=np.array(
+            [
+                [9.0, 1.0, 2.0, 8.0, 0.0, 0.0],
+                [10.0, 1.0, 2.0, 8.0, 0.0, 0.0],
+                [11.0, 2.0, 2.0, 8.0, 0.0, 0.0],
+                [12.0, 2.0, 2.0, 8.0, 0.0, 0.0],
+                [1.0, 9.0, 2.0, 2.0, 1.0, 0.0],
+                [1.0, 10.0, 2.0, 2.0, 1.0, 0.0],
+                [2.0, 11.0, 2.0, 2.0, 1.0, 0.0],
+                [2.0, 12.0, 2.0, 2.0, 1.0, 0.0],
+                [4.0, 4.0, 2.0, 20.0, 0.0, 0.0],
+                [4.0, 4.0, 2.0, 20.0, 0.0, 0.0],
+                [5.0, 5.0, 2.0, 20.0, 0.0, 0.0],
+                [5.0, 5.0, 2.0, 20.0, 0.0, 0.0],
+            ],
+            dtype=float,
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A"] * 4 + ["B"] * 4 + ["C"] * 4)},
+            index=[f"c{i}" for i in range(12)],
+        ),
+        var=pd.DataFrame(index=["g1", "g2", "g3", "g4", "g5", "g6"]),
+    )
+    adata.layers["counts"] = csr_matrix(adata.X)
+    return adata
+
+
 def _empty_var_smirnov_adata():
     return ad.AnnData(
         X=np.empty((2, 0)),
@@ -203,6 +232,223 @@ def test_logfoldchanges_rejects_invalid_filter(mini_adata):
             mini_adata,
             groupby="cluster",
             filter_logfoldchanges=cast(Any, "not callable"),
+        )
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["welch", "welch_overestimate", "wilcoxon"],
+)
+def test_dea_matches_underlying_statistical_tests(method):
+    adata = _toy_dea_adata()
+
+    result = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method=method,
+        correction=None,
+        alpha=None,
+    )
+    if method == "wilcoxon":
+        statistics = bt.sct.tl.wilcoxon_tests(
+            adata,
+            groupby="cluster",
+            groups=["A"],
+            background=["B"],
+            correction=None,
+        )
+    else:
+        statistics = bt.sct.tl.welch_tests(
+            adata,
+            groupby="cluster",
+            groups=["A"],
+            background=["B"],
+            correction=None,
+            overestimate_variance=method == "welch_overestimate",
+        )
+
+    statistics = statistics.reset_index().rename(columns={"names": "feature"})
+    statistics = statistics[["feature", "group", "statistics", "pvals", "pvals_adj"]]
+    pd.testing.assert_frame_equal(
+        result.loc[:, statistics.columns],
+        statistics,
+        check_dtype=False,
+    )
+
+
+def test_dea_returns_expected_logfoldchanges_with_explicit_background():
+    adata = _toy_dea_adata()
+
+    result = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    )
+    observed = result.set_index("feature")["logfoldchanges"].to_dict()
+
+    assert observed["g1"] == pytest.approx(np.log2(10.5 / 1.5))
+    assert observed["g2"] == pytest.approx(np.log2(1.5 / 10.5))
+    assert observed["g3"] == pytest.approx(0.0)
+    assert observed["g4"] == pytest.approx(2.0)
+    assert observed["g5"] == -np.inf
+    assert np.isnan(observed["g6"])
+
+
+def test_dea_background_rest_and_named_background_are_distinct():
+    adata = _toy_dea_adata()
+
+    explicit = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    ).set_index("feature")
+    rest = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background="rest",
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    ).set_index("feature")
+
+    assert explicit.loc["g4", "logfoldchanges"] == pytest.approx(2.0)
+    assert rest.loc["g4", "logfoldchanges"] == pytest.approx(np.log2(8.0 / 11.0))
+
+
+def test_dea_alpha_filters_adjusted_pvalues():
+    adata = _toy_dea_adata()
+
+    complete = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="welch",
+        alpha=None,
+    )
+    filtered = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="welch",
+        alpha=0.05,
+    )
+    expected = complete.loc[complete["pvals_adj"] <= 0.05].reset_index(drop=True)
+
+    assert len(filtered) < len(complete)
+    pd.testing.assert_frame_equal(filtered, expected)
+
+
+def test_dea_filters_logfoldchanges_after_pvalue_filtering():
+    adata = _toy_dea_adata()
+
+    complete = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    )
+    filtered = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+        filter_logfoldchanges=lambda values: np.abs(values) >= 1,
+    )
+    expected = complete.loc[
+        np.abs(complete["logfoldchanges"].to_numpy(dtype=float)) >= 1
+    ].reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(filtered, expected)
+
+
+def test_dea_preserves_infinite_logfoldchanges():
+    result = bt.sct.tl.dea(
+        _zero_mean_logfoldchange_adata(),
+        groupby="cluster",
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    )
+    observed = result.set_index(["group", "feature"])["logfoldchanges"].to_dict()
+
+    assert observed[("A", "g1")] == -np.inf
+    assert observed[("B", "g1")] == np.inf
+
+
+def test_dea_var_subset_and_output_columns():
+    adata = _toy_dea_adata()
+    adata.var["selected"] = [True, False, False, True, False, False]
+
+    result = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="welch",
+        var_subset="selected",
+        alpha=None,
+    )
+
+    assert result["feature"].tolist() == ["g4", "g1"]
+    assert result.columns.tolist() == [
+        "feature",
+        "group",
+        "statistics",
+        "pvals",
+        "pvals_adj",
+        "logfoldchanges",
+    ]
+
+
+def test_dea_output_schema_is_identical_for_all_methods():
+    adata = _toy_dea_adata()
+    expected_columns = [
+        "feature",
+        "group",
+        "statistics",
+        "pvals",
+        "pvals_adj",
+        "logfoldchanges",
+    ]
+
+    for method in ["welch", "welch_overestimate", "wilcoxon"]:
+        result = bt.sct.tl.dea(
+            adata,
+            groupby="cluster",
+            groups=["A"],
+            background=["B"],
+            method=method,
+            alpha=None,
+        )
+
+        assert result.columns.tolist() == expected_columns
+
+
+def test_dea_rejects_invalid_method(mini_adata):
+    with pytest.raises(ValueError):
+        bt.sct.tl.dea(
+            mini_adata,
+            groupby="cluster",
+            method=cast(Any, "bad"),
         )
 
 

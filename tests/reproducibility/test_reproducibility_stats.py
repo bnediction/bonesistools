@@ -19,14 +19,13 @@ def test_wilcoxon_tests_are_reproducible_on_nestorowa():
 
     whole = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="label",
+        groupby="label",
         groups="all",
         correction="benjamini-hochberg",
-        max_memory="100GB",
     )
     memory_limited = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="label",
+        groupby="label",
         groups="all",
         correction="benjamini-hochberg",
         max_memory="1MB",

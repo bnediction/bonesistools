@@ -6,11 +6,21 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
+from bonesistools.sctools._stats import _column_mean_variance
 from bonesistools.sctools._typing import Matrix
 from bonesistools.sctools.tools import _stats
+
+
+def _import_scanpy():
+    try:
+        import scanpy as sc
+    except Exception as error:
+        pytest.skip(f"scanpy is not importable: {error}")
+    return sc
 
 
 def _toy_wilcoxon_adata() -> ad.AnnData:
@@ -32,6 +42,24 @@ def _toy_wilcoxon_adata() -> ad.AnnData:
     )
     adata.layers["counts"] = csr_matrix(adata.X)
     return adata
+
+
+def test_column_mean_variance_supports_sparse_arrays():
+    matrix = sparse.csr_array(
+        np.array(
+            [
+                [1.0, 0.0, 2.0],
+                [3.0, 0.0, 4.0],
+                [5.0, 6.0, 0.0],
+            ]
+        )
+    )
+
+    means, variances = _column_mean_variance(matrix)
+
+    dense_matrix = matrix.toarray()
+    np.testing.assert_allclose(means, dense_matrix.mean(axis=0))
+    np.testing.assert_allclose(variances, dense_matrix.var(axis=0, ddof=1))
 
 
 def _previous_fixed_background_loop(
@@ -71,7 +99,7 @@ def test_wilcoxon_tests_returns_expected_group_statistics():
 
     result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background="rest",
         correction="bonferroni",
@@ -96,6 +124,16 @@ def test_wilcoxon_tests_returns_expected_group_statistics():
     for gene, statistic in expected_statistics.items():
         assert result.loc[gene, "statistics"] == pytest.approx(statistic)
     assert (result["pvals_adj"] >= result["pvals"]).all()
+
+
+def test_wilcoxon_tests_exposes_primary_statistics_column():
+    result = bt.sct.tl.wilcoxon_tests(
+        _toy_wilcoxon_adata(),
+        groupby="cluster",
+        groups=["A"],
+    )
+
+    assert "statistics" in result.columns
 
 
 def test_wilcoxon_tests_matches_expected_tie_correction_values():
@@ -130,7 +168,7 @@ def test_wilcoxon_tests_matches_expected_tie_correction_values():
 
     result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background=["B"],
         correction=None,
@@ -221,7 +259,7 @@ def test_wilcoxon_tests_warns_when_memory_is_smaller_than_one_rank_column():
     with pytest.warns(RuntimeWarning):
         result = bt.sct.tl.wilcoxon_tests(
             adata,
-            obs="cluster",
+            groupby="cluster",
             groups=["A"],
             correction=None,
             max_memory=39,
@@ -229,10 +267,9 @@ def test_wilcoxon_tests_warns_when_memory_is_smaller_than_one_rank_column():
 
     expected = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         correction=None,
-        max_memory=40,
     )
     pd.testing.assert_frame_equal(result, expected)
 
@@ -242,7 +279,7 @@ def test_wilcoxon_tests_groups_all_background_and_var_subset():
 
     result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups="all",
         background=["B"],
         var_subset=["Tal1", "Gata1"],
@@ -265,6 +302,28 @@ def test_wilcoxon_tests_groups_all_background_and_var_subset():
 
     assert gata1_pvals_adj.tolist() == gata1_pvals.tolist()
     assert tal1_pvals_adj.tolist() == tal1_pvals.tolist()
+
+
+def test_wilcoxon_tests_accepts_boolean_var_subset_column():
+    adata = _toy_wilcoxon_adata()
+    adata.var["selected"] = [True, False, True]
+
+    from_column = bt.sct.tl.wilcoxon_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        var_subset="selected",
+        correction=None,
+    )
+    from_names = bt.sct.tl.wilcoxon_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        var_subset=["Gata1", "Tal1"],
+        correction=None,
+    )
+
+    pd.testing.assert_frame_equal(from_column, from_names)
 
 
 def test_wilcoxon_tests_fixed_background_matches_previous_loop():
@@ -325,7 +384,7 @@ def test_wilcoxon_tests_fixed_background_cannot_use_global_ranks():
 
     result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background=["B"],
         correction=None,
@@ -350,7 +409,7 @@ def test_wilcoxon_tests_fixed_background_cannot_use_global_ranks():
     assert invalid_global_sum_ranks != expected_sum_ranks
 
 
-def test_wilcoxon_tests_fixed_background_chunking_preserves_results():
+def test_wilcoxon_tests_fixed_background_chunking_preserves_default_results():
     base = _toy_wilcoxon_adata()
     repeats = 50
     base_mtx = cast(np.ndarray, base.X)
@@ -367,17 +426,16 @@ def test_wilcoxon_tests_fixed_background_chunking_preserves_results():
         ),
     )
 
-    large_memory = bt.sct.tl.wilcoxon_tests(
+    unchunked = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A", "C"],
         background=["B"],
         correction=None,
-        max_memory="10GB",
     )
     small_memory = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A", "C"],
         background=["B"],
         correction=None,
@@ -386,22 +444,22 @@ def test_wilcoxon_tests_fixed_background_chunking_preserves_results():
 
     np.testing.assert_allclose(
         small_memory["statistics"].to_numpy(),
-        large_memory["statistics"].to_numpy(),
+        unchunked["statistics"].to_numpy(),
         equal_nan=True,
     )
     np.testing.assert_allclose(
         small_memory["pvals"].to_numpy(),
-        large_memory["pvals"].to_numpy(),
+        unchunked["pvals"].to_numpy(),
         equal_nan=True,
     )
     np.testing.assert_allclose(
         small_memory["u_statistics"].to_numpy(),
-        large_memory["u_statistics"].to_numpy(),
+        unchunked["u_statistics"].to_numpy(),
         equal_nan=True,
     )
     np.testing.assert_allclose(
         small_memory["sum_ranks"].to_numpy(),
-        large_memory["sum_ranks"].to_numpy(),
+        unchunked["sum_ranks"].to_numpy(),
         equal_nan=True,
     )
 
@@ -411,14 +469,14 @@ def test_wilcoxon_tests_supports_composite_background_groups():
 
     composite = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background=["B", "C"],
         correction=None,
     )
     rest = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background="rest",
         correction=None,
@@ -439,14 +497,14 @@ def test_wilcoxon_tests_distinguishes_rest_keyword_from_rest_group():
 
     keyword_result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background="rest",
         correction=None,
     )
     group_result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         background=["rest"],
         correction=None,
@@ -467,7 +525,7 @@ def test_wilcoxon_tests_supports_numeric_group_labels():
 
     result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=[0],
         background=[1],
         correction=None,
@@ -482,13 +540,13 @@ def test_wilcoxon_tests_uses_sparse_layer():
 
     dense_result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         expression="X",
     )
     sparse_result = bt.sct.tl.wilcoxon_tests(
         adata,
-        obs="cluster",
+        groupby="cluster",
         groups=["A"],
         expression="counts",
     )
@@ -500,51 +558,386 @@ def test_wilcoxon_tests_validates_arguments():
     adata = _toy_wilcoxon_adata()
 
     with pytest.raises(ValueError, match="invalid argument value for 'groups'"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", groups=["missing"])
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", groups=["missing"])
 
     with pytest.raises(ValueError, match="invalid argument value for 'background'"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", background=["missing"])
-
-    with pytest.raises(ValueError, match="must be disjoint"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", groups=["A"], background=["A"])
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", background=["missing"])
 
     with pytest.raises(ValueError, match="must be disjoint"):
         bt.sct.tl.wilcoxon_tests(
             adata,
-            obs="cluster",
+            groupby="cluster",
+            groups=["A"],
+            background=["A"],
+        )
+
+    with pytest.raises(ValueError, match="must be disjoint"):
+        bt.sct.tl.wilcoxon_tests(
+            adata,
+            groupby="cluster",
             groups=["B", "A"],
             background=["B", "C"],
         )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'background'"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", background=cast(Any, "B"))
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", background=cast(Any, "B"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'background'"):
         bt.sct.tl.wilcoxon_tests(
             adata,
-            obs="cluster",
+            groupby="cluster",
             background=cast(Any, ["B", 1]),
         )
 
     with pytest.raises(ValueError, match="expected at least one background group"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", background=[])
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", background=[])
 
     with pytest.raises(KeyError, match="variable"):
         bt.sct.tl.wilcoxon_tests(
             adata,
-            obs="cluster",
+            groupby="cluster",
             var_subset=["missing"],
         )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'groups'"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", groups=cast(Any, 1))
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", groups=cast(Any, 1))
 
     with pytest.raises(TypeError, match="unsupported element type in 'var_subset'"):
         bt.sct.tl.wilcoxon_tests(
             adata,
-            obs="cluster",
+            groupby="cluster",
             var_subset=cast(Any, ["Gata1", 1]),
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'max_memory'"):
-        bt.sct.tl.wilcoxon_tests(adata, obs="cluster", max_memory="1XB")
+        bt.sct.tl.wilcoxon_tests(adata, groupby="cluster", max_memory="1XB")
+
+
+def _toy_welch_test_adata() -> ad.AnnData:
+    adata = ad.AnnData(
+        X=np.array(
+            [
+                [1.0, 2.0, 0.0, 5.0],
+                [2.0, 3.0, 0.0, 5.0],
+                [3.0, 4.0, 1.0, 5.0],
+                [4.0, 8.0, 2.0, 5.0],
+                [5.0, 9.0, 2.0, 5.0],
+                [6.0, 10.0, 3.0, 5.0],
+            ],
+            dtype=np.float64,
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A", "A", "A", "B", "B", "B"])},
+            index=[f"c{i}" for i in range(6)],
+        ),
+        var=pd.DataFrame(index=["G1", "G2", "G3", "G4"]),
+    )
+    adata.layers["counts"] = csr_matrix(adata.X)
+    return adata
+
+
+def test_welch_tests_returns_expected_fixed_background_statistics():
+    from scipy import stats
+
+    adata = _toy_welch_test_adata()
+
+    result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        correction=None,
+    )
+
+    group_mtx = np.asarray(adata.X[:3, :])
+    background_mtx = np.asarray(adata.X[3:, :])
+    mean_group = group_mtx.mean(axis=0, dtype=np.float64)
+    mean_background = background_mtx.mean(axis=0, dtype=np.float64)
+    variance_group = group_mtx.var(axis=0, ddof=1)
+    variance_background = background_mtx.var(axis=0, ddof=1)
+    statistics, pvals = stats.ttest_ind_from_stats(
+        mean1=mean_group,
+        std1=np.sqrt(variance_group),
+        nobs1=group_mtx.shape[0],
+        mean2=mean_background,
+        std2=np.sqrt(variance_background),
+        nobs2=background_mtx.shape[0],
+        equal_var=False,
+    )
+    statistics[np.isnan(statistics)] = 0
+    pvals[np.isnan(pvals)] = 1
+
+    result = result.loc[adata.var_names]
+    assert result["group"].unique().tolist() == ["A"]
+    np.testing.assert_allclose(result["statistics"].to_numpy(), statistics)
+    np.testing.assert_allclose(result["pvals"].to_numpy(), pvals)
+    np.testing.assert_allclose(result["pvals_adj"].to_numpy(), pvals)
+    np.testing.assert_allclose(result["mean_group"].to_numpy(), mean_group)
+    np.testing.assert_allclose(
+        result["mean_background"].to_numpy(),
+        mean_background,
+    )
+    np.testing.assert_allclose(result["variance_group"].to_numpy(), variance_group)
+    np.testing.assert_allclose(
+        result["variance_background"].to_numpy(),
+        variance_background,
+    )
+
+
+def test_welch_tests_exposes_primary_statistics_column():
+    result = bt.sct.tl.welch_tests(
+        _toy_welch_test_adata(),
+        groupby="cluster",
+        groups=["A"],
+    )
+
+    assert "statistics" in result.columns
+
+
+def test_welch_tests_overestimates_background_variance_like_scanpy():
+    from scipy import stats
+
+    adata = ad.AnnData(
+        X=np.array(
+            [
+                [1.0, 2.0],
+                [2.0, 4.0],
+                [5.0, 5.0],
+                [6.0, 7.0],
+                [7.0, 8.0],
+                [8.0, 10.0],
+            ],
+            dtype=np.float64,
+        ),
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["A", "A", "B", "B", "B", "B"])},
+            index=[f"c{i}" for i in range(6)],
+        ),
+        var=pd.DataFrame(index=["G1", "G2"]),
+    )
+
+    result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        correction=None,
+        overestimate_variance=True,
+    ).loc[adata.var_names]
+
+    group_mtx = np.asarray(adata.X[:2, :])
+    background_mtx = np.asarray(adata.X[2:, :])
+    statistics, pvals = stats.ttest_ind_from_stats(
+        mean1=group_mtx.mean(axis=0, dtype=np.float64),
+        std1=np.sqrt(group_mtx.var(axis=0, ddof=1)),
+        nobs1=2,
+        mean2=background_mtx.mean(axis=0, dtype=np.float64),
+        std2=np.sqrt(background_mtx.var(axis=0, ddof=1)),
+        nobs2=2,
+        equal_var=False,
+    )
+
+    np.testing.assert_allclose(result["statistics"].to_numpy(), statistics)
+    np.testing.assert_allclose(result["pvals"].to_numpy(), pvals)
+
+
+def test_welch_tests_uses_sparse_layer():
+    adata = _toy_welch_test_adata()
+
+    dense_result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        expression="X",
+    )
+    sparse_result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        expression="counts",
+    )
+
+    pd.testing.assert_frame_equal(sparse_result, dense_result)
+
+
+def test_welch_tests_accepts_boolean_var_subset_column():
+    adata = _toy_welch_test_adata()
+    adata.var["selected"] = [True, False, True, False]
+
+    from_column = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        var_subset="selected",
+        correction=None,
+    )
+    from_names = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        var_subset=["G1", "G3"],
+        correction=None,
+    )
+
+    pd.testing.assert_frame_equal(from_column, from_names)
+
+
+def test_welch_tests_chunking_preserves_default_results():
+    base = _toy_welch_test_adata()
+    repeats = 40
+    base_mtx = cast(np.ndarray, base.X)
+    adata = ad.AnnData(
+        X=np.tile(base_mtx, (1, repeats)),
+        obs=cast(pd.DataFrame, base.obs).copy(),
+        var=pd.DataFrame(
+            index=[
+                f"{gene}_{repeat}"
+                for repeat in range(repeats)
+                for gene in base.var_names
+            ]
+        ),
+    )
+
+    unchunked = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        correction="benjamini-hochberg",
+    )
+    chunked = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        correction="benjamini-hochberg",
+        max_memory=128,
+    )
+
+    pd.testing.assert_frame_equal(chunked, unchunked)
+
+
+def test_welch_tests_matches_scanpy_rank_genes_groups_t_test():
+    sc = _import_scanpy()
+    adata = _toy_welch_test_adata()
+    scanpy_adata = adata.copy()
+
+    sc.tl.rank_genes_groups(
+        scanpy_adata,
+        "cluster",
+        groups=["A"],
+        reference="rest",
+        method="t-test",
+        corr_method="benjamini-hochberg",
+        use_raw=False,
+        n_genes=adata.n_vars,
+    )
+    result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background="rest",
+        correction="benjamini-hochberg",
+    )
+
+    scanpy_result = pd.DataFrame(
+        {
+            "statistics": scanpy_adata.uns["rank_genes_groups"]["scores"]["A"],
+            "pvals": scanpy_adata.uns["rank_genes_groups"]["pvals"]["A"],
+            "pvals_adj": scanpy_adata.uns["rank_genes_groups"]["pvals_adj"]["A"],
+        },
+        index=scanpy_adata.uns["rank_genes_groups"]["names"]["A"],
+    )
+    result = result.loc[scanpy_result.index]
+
+    np.testing.assert_array_equal(
+        result["statistics"].to_numpy(dtype=np.float32),
+        scanpy_result["statistics"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        result["pvals"].to_numpy(),
+        scanpy_result["pvals"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        result["pvals_adj"].to_numpy(),
+        scanpy_result["pvals_adj"].to_numpy(),
+    )
+
+
+def test_welch_tests_matches_scanpy_rank_genes_groups_overestimated_t_test():
+    sc = _import_scanpy()
+    adata = _toy_welch_test_adata()
+    scanpy_adata = adata.copy()
+
+    sc.tl.rank_genes_groups(
+        scanpy_adata,
+        "cluster",
+        groups=["A"],
+        reference="B",
+        method="t-test_overestim_var",
+        corr_method="bonferroni",
+        use_raw=False,
+        n_genes=adata.n_vars,
+    )
+    result = bt.sct.tl.welch_tests(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        correction="bonferroni",
+        overestimate_variance=True,
+    )
+
+    scanpy_result = pd.DataFrame(
+        {
+            "statistics": scanpy_adata.uns["rank_genes_groups"]["scores"]["A"],
+            "pvals": scanpy_adata.uns["rank_genes_groups"]["pvals"]["A"],
+            "pvals_adj": scanpy_adata.uns["rank_genes_groups"]["pvals_adj"]["A"],
+        },
+        index=scanpy_adata.uns["rank_genes_groups"]["names"]["A"],
+    )
+    result = result.loc[scanpy_result.index]
+
+    np.testing.assert_array_equal(
+        result["statistics"].to_numpy(dtype=np.float32),
+        scanpy_result["statistics"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        result["pvals"].to_numpy(),
+        scanpy_result["pvals"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        result["pvals_adj"].to_numpy(),
+        scanpy_result["pvals_adj"].to_numpy(),
+    )
+
+
+def test_welch_tests_validates_arguments():
+    adata = _toy_welch_test_adata()
+
+    with pytest.raises(ValueError, match="invalid argument value for 'groups'"):
+        bt.sct.tl.welch_tests(adata, groupby="cluster", groups=["missing"])
+
+    with pytest.raises(ValueError, match="invalid argument value for 'background'"):
+        bt.sct.tl.welch_tests(adata, groupby="cluster", background=["missing"])
+
+    with pytest.raises(ValueError, match="must be disjoint"):
+        bt.sct.tl.welch_tests(adata, groupby="cluster", groups=["A"], background=["A"])
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'background'"):
+        bt.sct.tl.welch_tests(adata, groupby="cluster", background=cast(Any, "B"))
+
+    with pytest.raises(ValueError, match="invalid argument value for 'max_memory'"):
+        bt.sct.tl.welch_tests(adata, groupby="cluster", max_memory="1XB")
+
+    with pytest.raises(
+        ValueError,
+        match="target group must contain at least two observations",
+    ):
+        small_group = adata.copy()
+        small_group.obs["cluster"] = pd.Categorical(["A", "B", "B", "B", "B", "B"])
+        bt.sct.tl.welch_tests(small_group, groupby="cluster", groups=["A"])

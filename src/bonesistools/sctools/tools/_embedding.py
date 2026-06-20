@@ -156,7 +156,7 @@ def pca(
             use_raw=use_raw,
             layer=layer,
             var_subset=var_subset,
-            copy=True,
+            copy=False,
         ),
     )
 

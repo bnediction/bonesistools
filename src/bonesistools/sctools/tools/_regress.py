@@ -10,28 +10,8 @@ from pandas import DataFrame
 from scipy.sparse import issparse
 
 from ..._compat import Literal
+from ..._validation import _as_positive_integer
 from .._typing import Keys, anndata_checker
-
-
-def __linear_regress_out_feature(
-    interest: np.ndarray,
-    regressors: np.ndarray,
-    linear_regression,
-    intercept: bool = False,
-    n_jobs: int = 1,
-):
-
-    regression_model = linear_regression(fit_intercept=False, n_jobs=n_jobs)
-    regression_model.fit(regressors, interest)
-    prediction = regression_model.predict(regressors)
-
-    if intercept:
-        intercept = regression_model.coef_[0][0]
-        predicted = interest - prediction + intercept
-    else:
-        predicted = interest - prediction
-
-    return predicted[:, 0]
 
 
 @overload
@@ -93,7 +73,8 @@ def regress_out(
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
     n_jobs: int (default: 1)
-        Number of allocated processors.
+        Number of BLAS/LAPACK threads allocated to the least-squares solve and
+        matrix multiplication.
 
     Returns
     -------
@@ -107,7 +88,9 @@ def regress_out(
         - `adata.layers[layer]`: corrected layer otherwise.
     """
 
-    from sklearn.linear_model import LinearRegression
+    from threadpoolctl import threadpool_limits
+
+    n_jobs = _as_positive_integer(n_jobs, "n_jobs")
 
     adata = adata.copy() if copy else adata
 
@@ -120,20 +103,22 @@ def regress_out(
         counts = cast(Any, counts).toarray()
 
     counts = np.asarray(counts)
-    adata_obs = cast(DataFrame, adata.obs)
-    regressors = adata_obs[[keys]] if isinstance(keys, str) else adata_obs[keys]
-    regressors.insert(0, "ones", 1.0)
-    regressors = regressors.to_numpy()
+    if not np.issubdtype(counts.dtype, np.floating):
+        counts = counts.astype(np.float32)
 
-    for i in range(adata.n_vars):
-        interest = counts[:, i].reshape(-1, 1)
-        counts[:, i] = __linear_regress_out_feature(
-            interest,
-            regressors,
-            LinearRegression,
-            intercept=intercept,
-            n_jobs=n_jobs,
-        )
+    adata_obs = cast(DataFrame, adata.obs)
+    regressors = adata_obs[[keys]] if isinstance(keys, str) else adata_obs[list(keys)]
+    regressors = regressors.to_numpy()
+    ones = np.ones((regressors.shape[0], 1), dtype=regressors.dtype)
+    regressors = np.concatenate([ones, regressors], axis=1)
+
+    with threadpool_limits(limits=n_jobs):
+        coefficients = np.linalg.lstsq(regressors, counts, rcond=None)[0]
+        prediction = regressors @ coefficients
+    if intercept:
+        counts = counts - prediction + coefficients[0, :]
+    else:
+        counts = counts - prediction
 
     if layer is None:
         adata.X = counts

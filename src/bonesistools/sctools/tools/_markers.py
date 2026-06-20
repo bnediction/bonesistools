@@ -28,18 +28,33 @@ from numpy import log2
 from scipy.stats import hypergeom
 
 from ..._compat import Literal
-from ..._validation import _as_boolean, _as_callable, _as_literal
+from ..._validation import _as_boolean, _as_callable, _as_literal, _as_probability
 from ..._warnings import _warn_deprecated
-from .._typing import anndata_checker
+from .._typing import VarSubset, anndata_checker
 from ._conversion import anndata_to_dataframe
-from ._stats import CORRECTION_METHODS, CorrectionMethod, _adjust_pvalues
+from ._stats import (
+    CORRECTION_METHODS,
+    CorrectionMethod,
+    _adjust_pvalues,
+    _resolve_background_groups,
+    _resolve_groups,
+    welch_tests,
+    wilcoxon_tests,
+)
+from ._utils import _get_expression_with_gene_names
 
 _CorrMethod = Literal["benjamini-hochberg", "bonferroni"]
 _Alternatives = Literal["two-sided", "less", "greater"]
+DEAMethod = Literal["welch", "welch_overestimate", "wilcoxon"]
 SignatureCollection = Union[
     Mapping[str, Collection[str]],
     Sequence[Tuple[str, Collection[str]]],
 ]
+DEA_METHODS: Tuple[DEAMethod, ...] = (
+    "welch",
+    "welch_overestimate",
+    "wilcoxon",
+)
 
 
 @anndata_checker
@@ -162,6 +177,194 @@ def calculate_logfoldchanges(*args: Any, **kwargs: Any) -> pd.DataFrame:
         stacklevel=2,
     )
     return logfoldchanges(*args, **kwargs)
+
+
+@anndata_checker
+def dea(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Sequence[Any]] = "all",
+    background: Union[Literal["rest"], Sequence[Any]] = "rest",
+    method: DEAMethod = "welch",
+    expression: Optional[str] = None,
+    var_subset: VarSubset = None,
+    correction: Optional[CorrectionMethod] = "benjamini-hochberg",
+    alpha: Optional[float] = 0.05,
+    filter_logfoldchanges: Optional[Callable[[np.ndarray], Any]] = None,
+    max_memory: Optional[Union[int, str]] = None,
+) -> pd.DataFrame:
+    """
+    Run differential expression analysis.
+
+    Differential expression analysis combines statistical testing and log2
+    fold-change estimation.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    groupby: str
+        Observation column in `adata.obs` defining groups.
+    groups: 'all' or sequence (default: "all")
+        Groups to test. If `"all"`, test all groups in `adata.obs[groupby]`;
+        when `background` is a sequence, background groups themselves are not
+        tested.
+    background: 'rest' or sequence (default: "rest")
+        Background population. If `"rest"`, each target group is compared
+        against all observations outside that group. If a sequence is provided,
+        each target group is compared against the union of observations
+        belonging to those background labels. To compare against an actual group
+        named `"rest"`, pass `background=["rest"]`.
+    method: {'welch', 'welch_overestimate', 'wilcoxon'} (default: 'welch')
+        Statistical test used before log2 fold-change estimation.
+    expression: str, optional
+        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
+    var_subset: str or collection of str, optional
+        Variables to test. If a string is provided, it is interpreted as a
+        boolean column in `adata.var`. If a collection is provided, it is
+        interpreted as variable names. If None, test all variables in the
+        selected expression matrix.
+    correction: {'benjamini-hochberg', 'bonferroni'} or None
+        Multiple-testing correction applied independently for each group. If
+        None, p-values are not adjusted.
+    alpha: float, optional
+        Significance threshold applied to adjusted p-values (`pvals_adj`). If
+        None, p-value filtering is disabled.
+    filter_logfoldchanges: Callable, optional
+        Callable used to filter rows from the resulting table after p-value
+        filtering. The callable receives the log2 fold-change vector and must
+        return a boolean mask.
+    max_memory: int or str, optional
+        Approximate maximum memory allocated to dense working arrays. If None,
+        process all variables in a single chunk. Integers are interpreted as
+        bytes. Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"`
+        are accepted.
+
+    Returns
+    -------
+    DataFrame
+        Differential expression table. The table contains:
+
+        - `feature`: variable name;
+        - `group`: tested group;
+        - `statistics`: primary test statistic;
+        - `pvals`: two-sided p-values;
+        - `pvals_adj`: adjusted p-values;
+        - `logfoldchanges`: log2 fold changes.
+
+        The `statistics` column contains the primary test statistic: Welch t
+        statistic for `method="welch"` and `method="welch_overestimate"`, and z
+        statistic for `method="wilcoxon"`.
+
+    See Also
+    --------
+    welch_tests
+    wilcoxon_tests
+    logfoldchanges
+    """
+
+    method = _as_literal(method, choices=DEA_METHODS, name="method")
+    alpha = None if alpha is None else _as_probability(alpha, "alpha")
+    filter_logfoldchanges = _as_callable(
+        filter_logfoldchanges,
+        "filter_logfoldchanges",
+        allow_none=True,
+    )
+
+    if method == "welch":
+        test_results = welch_tests(
+            adata,
+            groupby=groupby,
+            groups=groups,
+            background=background,
+            expression=expression,
+            var_subset=var_subset,
+            correction=correction,
+            overestimate_variance=False,
+            max_memory=max_memory,
+        )
+    elif method == "welch_overestimate":
+        test_results = welch_tests(
+            adata,
+            groupby=groupby,
+            groups=groups,
+            background=background,
+            expression=expression,
+            var_subset=var_subset,
+            correction=correction,
+            overestimate_variance=True,
+            max_memory=max_memory,
+        )
+    else:
+        test_results = wilcoxon_tests(
+            adata,
+            groupby=groupby,
+            groups=groups,
+            background=background,
+            expression=expression,
+            var_subset=var_subset,
+            correction=correction,
+            max_memory=max_memory,
+        )
+
+    if test_results.empty:
+        return pd.DataFrame(
+            columns=cast(
+                Any,
+                [
+                    "feature",
+                    "group",
+                    "statistics",
+                    "pvals",
+                    "pvals_adj",
+                    "logfoldchanges",
+                ],
+            )
+        )
+
+    test_results_df = test_results.reset_index().rename(columns={"names": "feature"})
+    logfoldchanges_df = _dea_logfoldchanges(
+        adata,
+        groupby,
+        groups,
+        background,
+        expression,
+        var_subset,
+    ).rename(
+        columns={"names": "feature"}
+    )
+    dea_df = test_results_df.merge(
+        logfoldchanges_df,
+        on=["group", "feature"],
+        how="left",
+        sort=False,
+    )
+
+    first_columns = [
+        "feature",
+        "group",
+        "statistics",
+        "pvals",
+        "pvals_adj",
+        "logfoldchanges",
+    ]
+    dea_df = dea_df[first_columns]
+
+    if alpha is not None:
+        dea_df = cast(pd.DataFrame, dea_df.loc[dea_df["pvals_adj"] <= alpha])
+
+    if filter_logfoldchanges is not None:
+        dea_df = cast(
+            pd.DataFrame,
+            dea_df.loc[
+                filter_logfoldchanges(
+                    cast(np.ndarray, dea_df["logfoldchanges"].values)
+                )
+            ],
+        )
+
+    return cast(pd.DataFrame, dea_df.reset_index(drop=True))
 
 
 def ora(
@@ -317,6 +520,61 @@ def ora(
             kind="mergesort",
         ),
     )
+
+
+def _dea_logfoldchanges(
+    adata: AnnData,
+    groupby: str,
+    groups: Union[Literal["all"], Sequence[Any]],
+    background: Union[Literal["rest"], Sequence[Any]],
+    expression: Optional[str],
+    var_subset: VarSubset,
+) -> pd.DataFrame:
+
+    expression_mtx, gene_names = _get_expression_with_gene_names(
+        adata,
+        expression,
+        var_subset,
+    )
+    labels = cast(pd.Series, adata.obs[groupby])
+    background_groups = _resolve_background_groups(labels, background)
+    target_groups = _resolve_groups(labels, groups, background_groups)
+
+    logfoldchange_tables = []
+    for group in target_groups:
+        group_mask = np.asarray(labels == group, dtype=bool)
+        if background_groups is None:
+            background_mask = ~group_mask
+        else:
+            background_mask = np.asarray(labels.isin(background_groups), dtype=bool)
+
+        combined_mask = group_mask | background_mask
+        temporary_obs_index = pd.Index(labels.index.to_numpy()[combined_mask])
+        temporary_adata = AnnData(
+            X=cast(Any, expression_mtx)[combined_mask, :],
+            obs=pd.DataFrame(
+                {"__group": group_mask[combined_mask]},
+                index=temporary_obs_index,
+            ),
+            var=pd.DataFrame(index=gene_names),
+        )
+        group_logfoldchanges = logfoldchanges(
+            temporary_adata,
+            groupby="__group",
+        )
+        group_logfoldchanges = group_logfoldchanges.loc[
+            cast(pd.Series, group_logfoldchanges["group"]).astype(bool),
+            ["names", "logfoldchanges"],
+        ].copy()
+        group_logfoldchanges.insert(0, "group", group)
+        logfoldchange_tables.append(group_logfoldchanges)
+
+    if not logfoldchange_tables:
+        return pd.DataFrame(
+            columns=cast(Any, ["group", "names", "logfoldchanges"])
+        )
+
+    return pd.concat(logfoldchange_tables, ignore_index=True)
 
 
 def _hypergeometric_pvalue(

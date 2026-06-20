@@ -17,6 +17,7 @@ from ._embedding import pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
 from ._markers import (
     calculate_logfoldchanges,
+    dea,
     logfoldchanges,
     ora,
     smirnov_tests,
@@ -31,7 +32,7 @@ from ._neighbors import (
     shared_neighbors,
 )
 from ._regress import regress_out
-from ._stats import wilcoxon_tests
+from ._stats import welch_tests, wilcoxon_tests
 from ._utils import get_expression, get_pairwise, get_representation
 from ._write import (
     to_csv,
@@ -62,6 +63,7 @@ __all__ = [
     "pairwise_distances",
     "barycenters",
     "regress_out",
+    "welch_tests",
     "wilcoxon_tests",
     "to_csv",
     "to_csv_or_mtx",
@@ -70,6 +72,7 @@ __all__ = [
     "to_npz",
     "logfoldchanges",
     "calculate_logfoldchanges",
+    "dea",
     "ora",
     "smirnov_tests",
     "mitochondrial_genes",

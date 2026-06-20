@@ -53,6 +53,9 @@ library. For example, prefer using `adata.obsm[key]`, `adata.obs[key]` or
 `adata.layers[key]` directly and let AnnData or pandas raise the natural
 `KeyError`, unless bonesistools needs to add domain-specific behavior.
 
+Shared single-cell statistical helpers, such as expression mean and variance
+calculations, live in `sctools/_stats.py`.
+
 ### `_warnings.py`
 
 Centralized warning and deprecation helpers.
@@ -141,6 +144,23 @@ fits the API:
 
 Do not reorder parameters mechanically when it would create noisy diffs or
 break a stable public API without a clear benefit.
+
+---
+
+## Local helpers
+
+Prefer keeping logic inline when a private helper would be used only once and
+does not clarify a genuinely complex block.
+
+Create a private helper when it:
+
+* is reused by multiple functions;
+* isolates a coherent algorithmic step;
+* improves readability of a long public function;
+* provides a stable boundary around external package typing or compatibility.
+
+Avoid adding private helpers only to give a name to two or three obvious lines
+of code.
 
 ---
 
