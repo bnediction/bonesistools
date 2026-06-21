@@ -29,6 +29,7 @@ from typing import List as _List
 from . import boolpy as bpy
 from . import databases as dbs
 from . import sctools as sct
+from ._metadata import package_version as _package_version
 from ._warnings import _warn_deprecated
 
 if _TYPE_CHECKING:
@@ -37,8 +38,10 @@ if _TYPE_CHECKING:
 del annotations
 
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
+__version__ = _package_version()
 
 __all__ = [
+    "__version__",
     "sct",
     "bpy",
     "dbs",

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bonesistools"
 description = "Bioinformatics toolkit for upstream and downstream analyses around the BoNesis framework"
-version = "1.2.5"
+version = "1.2.6"
 license = {file = "LICENSE"}
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [
@@ -41,6 +41,7 @@ classifiers = [
 ]
 requires-python = ">=3.7"
 dependencies = [
+    "importlib-metadata; python_version < '3.8'",
     "importlib_resources; python_version < '3.9'",
     "typing-extensions>=4.0",
     "numpy>=1.21",
