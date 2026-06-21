@@ -187,6 +187,7 @@ def dea(
     background: Union[Literal["rest"], Sequence[Any]] = "rest",
     method: DEAMethod = "welch",
     expression: Optional[str] = None,
+    is_log: bool = False,
     var_subset: VarSubset = None,
     correction: Optional[CorrectionMethod] = "benjamini-hochberg",
     alpha: Optional[float] = 0.05,
@@ -220,6 +221,9 @@ def dea(
     expression: str, optional
         Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
+    is_log: bool (default: False)
+        Whether selected expression values are already log1p-transformed. This
+        only affects log2 fold-change estimation, not statistical testing.
     var_subset: str or collection of str, optional
         Variables to test. If a string is provided, it is interpreted as a
         boolean column in `adata.var`. If a collection is provided, it is
@@ -330,10 +334,9 @@ def dea(
         groups,
         background,
         expression,
+        is_log,
         var_subset,
-    ).rename(
-        columns={"names": "feature"}
-    )
+    ).rename(columns={"names": "feature"})
     dea_df = test_results_df.merge(
         logfoldchanges_df,
         on=["group", "feature"],
@@ -358,9 +361,7 @@ def dea(
         dea_df = cast(
             pd.DataFrame,
             dea_df.loc[
-                filter_logfoldchanges(
-                    cast(np.ndarray, dea_df["logfoldchanges"].values)
-                )
+                filter_logfoldchanges(cast(np.ndarray, dea_df["logfoldchanges"].values))
             ],
         )
 
@@ -528,6 +529,7 @@ def _dea_logfoldchanges(
     groups: Union[Literal["all"], Sequence[Any]],
     background: Union[Literal["rest"], Sequence[Any]],
     expression: Optional[str],
+    is_log: bool,
     var_subset: VarSubset,
 ) -> pd.DataFrame:
 
@@ -561,6 +563,7 @@ def _dea_logfoldchanges(
         group_logfoldchanges = logfoldchanges(
             temporary_adata,
             groupby="__group",
+            is_log=is_log,
         )
         group_logfoldchanges = group_logfoldchanges.loc[
             cast(pd.Series, group_logfoldchanges["group"]).astype(bool),
@@ -570,9 +573,7 @@ def _dea_logfoldchanges(
         logfoldchange_tables.append(group_logfoldchanges)
 
     if not logfoldchange_tables:
-        return pd.DataFrame(
-            columns=cast(Any, ["group", "names", "logfoldchanges"])
-        )
+        return pd.DataFrame(columns=cast(Any, ["group", "names", "logfoldchanges"]))
 
     return pd.concat(logfoldchange_tables, ignore_index=True)
 

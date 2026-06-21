@@ -187,10 +187,7 @@ def _gsm_series_dir(gsm: str) -> str:
 def _gsm_base_url(gsm: str, geo_ftp_base: str = _GEO_FTP_BASE) -> str:
 
     gsm = _as_gsm(gsm)
-    return (
-        f"{geo_ftp_base.rstrip('/')}/samples/"
-        f"{_gsm_series_dir(gsm)}/{gsm}/suppl/"
-    )
+    return f"{geo_ftp_base.rstrip('/')}/samples/" f"{_gsm_series_dir(gsm)}/{gsm}/suppl/"
 
 
 def _gsm_urls(

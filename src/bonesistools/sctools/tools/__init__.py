@@ -10,8 +10,9 @@ feature classification utilities.
 
 from typing import List as _List
 
+from ._binarize import DEABinarizer
 from ._classification import mitochondrial_genes, ribosomal_genes
-from ._clustering import leiden
+from ._clustering import kmeans, leiden, louvain
 from ._conversion import anndata_to_dataframe
 from ._embedding import pca, spectral, tsne, umap
 from ._graph import extract_paga_graph, get_paga_graph
@@ -46,13 +47,16 @@ __all__ = [
     "get_expression",
     "get_representation",
     "get_pairwise",
+    "DEABinarizer",
     "KNNSC",
     "Knnbs",
     "knn_graph",
     "kneighbors_graph",
     "neighbors",
     "shared_neighbors",
+    "kmeans",
     "leiden",
+    "louvain",
     "pca",
     "spectral",
     "tsne",

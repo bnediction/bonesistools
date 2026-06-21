@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numbers
+import random
 from importlib import import_module
 from typing import Any, Dict, Optional, Tuple, cast, overload
 
@@ -16,13 +17,337 @@ from ..._typing import AutoInteger, RandomStateSeed
 from ..._validation import (
     _as_boolean,
     _as_literal,
+    _as_positive_integer,
     _as_positive_number,
     _as_seed,
     _as_string,
 )
 from .._metadata import _format_random_state
 from .._typing import anndata_checker
-from ._utils import get_pairwise
+from ._utils import get_pairwise, get_representation
+
+
+@overload
+def kmeans(
+    adata: AnnData,
+    n_clusters: int = 8,
+    *,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
+    n_init: int = 10,
+    key_added: str = "kmeans",
+    seed: RandomStateSeed = 0,
+    copy: Literal[False] = False,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def kmeans(
+    adata: AnnData,
+    n_clusters: int = 8,
+    *,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
+    n_init: int = 10,
+    key_added: str = "kmeans",
+    seed: RandomStateSeed = 0,
+    copy: Literal[True],
+    **kwargs: Any,
+) -> AnnData: ...
+
+
+@overload
+def kmeans(
+    adata: AnnData,
+    n_clusters: int = 8,
+    *,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
+    n_init: int = 10,
+    key_added: str = "kmeans",
+    seed: RandomStateSeed = 0,
+    copy: bool = False,
+    **kwargs: Any,
+) -> Optional[AnnData]: ...
+
+
+@anndata_checker
+def kmeans(
+    adata: AnnData,
+    n_clusters: int = 8,
+    *,
+    representation: Optional[str] = "X_pca",
+    n_pcs: Optional[int] = None,
+    n_init: int = 10,
+    key_added: str = "kmeans",
+    seed: RandomStateSeed = 0,
+    copy: bool = False,
+    **kwargs: Any,
+) -> Optional[AnnData]:
+    """
+    Cluster observations with k-means.
+
+    K-means partitions observations into a fixed number of clusters by
+    minimizing within-cluster squared Euclidean distances in an observation
+    representation.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    n_clusters: int (default: 8)
+        Number of clusters to compute.
+    representation: str, optional (default: 'X_pca')
+        Representation key in `adata.obsm`.
+    n_pcs: int, optional
+        Number of representation dimensions to use. If None, use all
+        dimensions from `representation`.
+    n_init: int (default: 10)
+        Number of independent clustering initializations. The solution with
+        the lowest inertia is retained.
+    key_added: str (default: 'kmeans')
+        Column in `adata.obs` where cluster labels are stored.
+    seed: int, np.random.RandomState, np.random or None (default: 0)
+        Random seed or random state used by k-means.
+    copy: bool (default: False)
+        Return a copy instead of modifying `adata`.
+    **kwargs: Any
+        Additional keyword arguments passed to `sklearn.cluster.KMeans`.
+
+    Returns
+    -------
+    AnnData or None
+        If `copy=True`, returns a copy of `adata` with k-means clustering
+        results added. Otherwise, updates `adata` in place and returns None.
+
+        K-means clustering results are stored in:
+
+        - `adata.obs[key_added]`: categorical cluster labels;
+        - `adata.uns[key_added]`: clustering metadata.
+    """
+
+    from sklearn.cluster import KMeans
+
+    KMeansClass = cast(Any, KMeans)
+
+    n_clusters = _as_positive_integer(n_clusters, "n_clusters")
+    if n_pcs is not None:
+        n_pcs = _as_positive_integer(n_pcs, "n_pcs")
+
+    n_init = _as_positive_integer(n_init, "n_init")
+    key_added = _as_string(key_added, "key_added")
+    resolved_random_state = _as_seed(seed)
+
+    if n_clusters > adata.n_obs:
+        raise ValueError(
+            f"invalid argument value for 'n_clusters': "
+            f"expected value smaller than or equal to number of observations "
+            f"({adata.n_obs}) but received {n_clusters!r}"
+        )
+
+    adata = adata.copy() if copy else adata
+    representation_mtx = get_representation(
+        adata,
+        use_rep=representation,
+        n_components=n_pcs,
+    )
+    if sparse.issparse(representation_mtx):
+        representation_mtx = cast(Any, representation_mtx).tocsr()
+    else:
+        representation_mtx = np.asarray(representation_mtx)
+
+    if representation_mtx.ndim != 2:
+        raise ValueError(
+            "invalid representation matrix: expected a two-dimensional matrix"
+        )
+
+    labels = cast(
+        np.ndarray,
+        KMeansClass(
+            n_clusters=n_clusters,
+            n_init=n_init,
+            random_state=resolved_random_state,
+            **kwargs,
+        ).fit_predict(representation_mtx),
+    )
+
+    labels = pd.Categorical([str(cluster) for cluster in labels])
+    adata.obs[key_added] = pd.Series(labels, index=adata.obs_names, name=key_added)
+    adata.uns[key_added] = {
+        "params": {
+            "method": "kmeans",
+            "n_clusters": n_clusters,
+            "representation": representation,
+            "n_pcs": n_pcs,
+            "n_init": n_init,
+            "seed": _format_random_state(seed),
+            **kwargs,
+        }
+    }
+
+    return adata if copy else None
+
+
+@overload
+def louvain(
+    adata: AnnData,
+    resolution: float = 1.0,
+    *,
+    neighbors_key: Optional[str] = "neighbors",
+    obsp: Optional[str] = None,
+    weighted: bool = True,
+    key_added: str = "louvain",
+    seed: RandomStateSeed = 0,
+    copy: Literal[False] = False,
+    **kwargs: Any,
+) -> None: ...
+
+
+@overload
+def louvain(
+    adata: AnnData,
+    resolution: float = 1.0,
+    *,
+    neighbors_key: Optional[str] = "neighbors",
+    obsp: Optional[str] = None,
+    weighted: bool = True,
+    key_added: str = "louvain",
+    seed: RandomStateSeed = 0,
+    copy: Literal[True],
+    **kwargs: Any,
+) -> AnnData: ...
+
+
+@overload
+def louvain(
+    adata: AnnData,
+    resolution: float = 1.0,
+    *,
+    neighbors_key: Optional[str] = "neighbors",
+    obsp: Optional[str] = None,
+    weighted: bool = True,
+    key_added: str = "louvain",
+    seed: RandomStateSeed = 0,
+    copy: bool = False,
+    **kwargs: Any,
+) -> Optional[AnnData]: ...
+
+
+@anndata_checker
+def louvain(
+    adata: AnnData,
+    resolution: float = 1.0,
+    *,
+    neighbors_key: Optional[str] = "neighbors",
+    obsp: Optional[str] = None,
+    weighted: bool = True,
+    key_added: str = "louvain",
+    seed: RandomStateSeed = 0,
+    copy: bool = False,
+    **kwargs: Any,
+) -> Optional[AnnData]:
+    """
+    Cluster observations with the Louvain algorithm.
+
+    Louvain clustering detects communities in an undirected neighborhood graph
+    by optimizing modularity with a multilevel heuristic.
+
+    Parameters
+    ----------
+    adata: AnnData
+        Unimodal annotated data matrix.
+    resolution: float (default: 1.0)
+        Resolution parameter controlling cluster granularity. Higher values
+        usually lead to more clusters.
+    neighbors_key: str, optional (default: 'neighbors')
+        Key in `adata.uns` describing the precomputed neighborhood graph.
+        Louvain reads the graph from
+        `adata.obsp[adata.uns[neighbors_key]["connectivities_key"]]`.
+    obsp: str, optional
+        Key in `adata.obsp` storing the adjacency matrix. If provided, do not
+        specify `neighbors_key`.
+    weighted: bool (default: True)
+        Whether edge weights from the adjacency graph are used.
+    key_added: str (default: 'louvain')
+        Column in `adata.obs` where cluster labels are stored.
+    seed: int, np.random.RandomState, np.random or None (default: 0)
+        Random seed or random state used by Louvain.
+    copy: bool (default: False)
+        Return a copy instead of modifying `adata`.
+    **kwargs: Any
+        Additional keyword arguments passed to `igraph.Graph.community_multilevel`.
+
+    Returns
+    -------
+    AnnData or None
+        If `copy=True`, returns a copy of `adata` with Louvain clustering
+        results added. Otherwise, updates `adata` in place and returns None.
+
+        Louvain clustering results are stored in:
+
+        - `adata.obs[key_added]`: categorical cluster labels;
+        - `adata.uns[key_added]`: clustering metadata.
+
+    References
+    ----------
+    Blondel et al. (2008). Fast unfolding of communities in large networks.
+    Journal of Statistical Mechanics: Theory and Experiment, 2008(10), P10008.
+    """
+
+    igraph = import_module("igraph")
+
+    resolution = _as_positive_number(resolution, "resolution")
+    weighted = _as_boolean(weighted, "weighted")
+    key_added = _as_string(key_added, "key_added")
+    louvain_seed = _seed_to_integer(seed)
+
+    adjacency_key, adjacency = _clustering_adjacency(
+        adata=adata,
+        neighbors_key=neighbors_key,
+        obsp=obsp,
+    )
+
+    graph = _igraph_graph_from_adjacency(igraph, adjacency, directed=True)
+    graph = graph.as_undirected(combine_edges="sum")
+    if weighted:
+        weights = "weight"
+    else:
+        weights = None
+
+    if louvain_seed is None:
+        partition = graph.community_multilevel(
+            weights=weights,
+            resolution=resolution,
+            **kwargs,
+        )
+    else:
+        igraph.set_random_number_generator(random.Random(louvain_seed))
+        try:
+            partition = graph.community_multilevel(
+                weights=weights,
+                resolution=resolution,
+                **kwargs,
+            )
+        finally:
+            igraph.set_random_number_generator(None)
+
+    adata = adata.copy() if copy else adata
+    labels = pd.Categorical([str(cluster) for cluster in partition.membership])
+    adata.obs[key_added] = pd.Series(labels, index=adata.obs_names, name=key_added)
+    adata.uns[key_added] = {
+        "params": {
+            "method": "louvain",
+            "resolution": resolution,
+            "neighbors_key": neighbors_key,
+            "obsp": adjacency_key if obsp is not None else None,
+            "weighted": weighted,
+            "seed": _format_random_state(seed),
+            **kwargs,
+        }
+    }
+
+    return adata if copy else None
 
 
 @overload
@@ -171,30 +496,15 @@ def leiden(
             )
         leiden_iterations = n_iterations
 
-    _as_seed(seed)
-    leiden_seed = None
-    if seed is np.random:
-        leiden_seed = int(np.random.randint(0, np.iinfo(np.int32).max))
-    elif isinstance(seed, numbers.Integral):
-        leiden_seed = int(seed)
-    elif isinstance(seed, np.random.RandomState):
-        leiden_seed = int(seed.randint(0, np.iinfo(np.int32).max))
+    leiden_seed = _seed_to_integer(seed)
 
-    adjacency_key, adjacency = _leiden_adjacency(
+    adjacency_key, adjacency = _clustering_adjacency(
         adata=adata,
         neighbors_key=neighbors_key,
         obsp=obsp,
     )
 
-    adjacency = adjacency.tocoo(copy=True)
-    graph = igraph.Graph(
-        n=adata.n_obs,
-        edges=list(zip(adjacency.row.tolist(), adjacency.col.tolist())),
-        directed=directed,
-    )
-    weights = adjacency.data.astype(float).tolist()
-    if weighted:
-        graph.es["weight"] = weights
+    graph = _igraph_graph_from_adjacency(igraph, adjacency, directed=directed)
 
     partition = leidenalg.find_partition(
         graph,
@@ -225,7 +535,19 @@ def leiden(
     return adata if copy else None
 
 
-def _leiden_adjacency(
+def _seed_to_integer(seed: RandomStateSeed) -> Optional[int]:
+
+    _as_seed(seed)
+    if seed is np.random:
+        return int(np.random.randint(0, np.iinfo(np.int32).max))
+    if isinstance(seed, numbers.Integral):
+        return int(seed)
+    if isinstance(seed, np.random.RandomState):
+        return int(seed.randint(0, np.iinfo(np.int32).max))
+    return None
+
+
+def _clustering_adjacency(
     adata: AnnData,
     neighbors_key: Optional[str],
     obsp: Optional[str],
@@ -262,3 +584,26 @@ def _leiden_adjacency(
         adjacency = cast(Any, adjacency).tocsr(copy=True)
         return adjacency_key, cast(sparse.csr_matrix, adjacency)
     return adjacency_key, sparse.csr_matrix(adjacency)
+
+
+def _igraph_graph_from_adjacency(
+    igraph: Any,
+    adjacency: sparse.csr_matrix,
+    directed: bool,
+) -> Any:
+
+    n_vertices = cast(Tuple[int, int], adjacency.shape)[0]
+    coo_adjacency = cast(Any, adjacency).tocoo(copy=True)
+    graph = igraph.Graph(
+        n=n_vertices,
+        edges=list(
+            zip(
+                coo_adjacency.row.tolist(),
+                coo_adjacency.col.tolist(),
+            )
+        ),
+        directed=directed,
+    )
+    graph.es["weight"] = coo_adjacency.data.astype(float).tolist()
+
+    return graph

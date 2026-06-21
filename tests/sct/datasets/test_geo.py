@@ -64,9 +64,7 @@ def _write_10x_files(directory: Path) -> None:
     )
     _write_gzip(
         directory / "GSM5492245_RNA_genes.tsv.gz",
-        "gene_id_1\tGene1\n"
-        "gene_id_2\tGene2\n"
-        "gene_id_3\tGene3\n",
+        "gene_id_1\tGene1\n" "gene_id_2\tGene2\n" "gene_id_3\tGene3\n",
     )
 
 
@@ -234,8 +232,7 @@ def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
     _write_gzip(sample_dir / "barcodes.tsv.gz", "cell\n")
     _write_gzip(
         sample_dir / "features.tsv.gz",
-        "gene_id_1\tGene\n"
-        "gene_id_2\tGene\n",
+        "gene_id_1\tGene\n" "gene_id_2\tGene\n",
     )
 
     with warnings.catch_warnings(record=True) as records:
@@ -247,8 +244,7 @@ def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
         )
 
     assert not any(
-        "Variable names are not unique" in str(record.message)
-        for record in records
+        "Variable names are not unique" in str(record.message) for record in records
     )
     assert adata.var_names.tolist() == ["Gene", "Gene-1"]
     assert adata.var["symbol"].tolist() == ["Gene", "Gene"]

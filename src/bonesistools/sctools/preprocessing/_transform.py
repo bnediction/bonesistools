@@ -393,9 +393,7 @@ def scale(
 
     expression = None if expression is None else _as_string(expression, "expression")
     representation = (
-        None
-        if representation is None
-        else _as_string(representation, "representation")
+        None if representation is None else _as_string(representation, "representation")
     )
     if expression is not None and representation is not None:
         raise ValueError(

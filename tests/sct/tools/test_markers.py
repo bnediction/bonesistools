@@ -300,6 +300,38 @@ def test_dea_returns_expected_logfoldchanges_with_explicit_background():
     assert np.isnan(observed["g6"])
 
 
+def test_dea_logfoldchanges_support_logged_expression():
+    adata = _toy_dea_adata()
+    adata.layers["log"] = np.log1p(adata.X)
+
+    counts = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        correction=None,
+        alpha=None,
+    ).set_index("feature")
+    logged = bt.sct.tl.dea(
+        adata,
+        groupby="cluster",
+        groups=["A"],
+        background=["B"],
+        method="wilcoxon",
+        expression="log",
+        is_log=True,
+        correction=None,
+        alpha=None,
+    ).set_index("feature")
+
+    pd.testing.assert_series_equal(
+        logged["logfoldchanges"],
+        counts["logfoldchanges"],
+        check_names=False,
+    )
+
+
 def test_dea_background_rest_and_named_background_are_distinct():
     adata = _toy_dea_adata()
 
