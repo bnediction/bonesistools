@@ -48,6 +48,7 @@ from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._metadata import _format_random_state
 from .._typing import (
     AnnData,
+    Matrix,
     Metric,
     ScData,
     Shortest_Path_Method,
@@ -73,10 +74,13 @@ def _kneighbors_distance_matrix(
 
     from sklearn import neighbors as sklearn_neighbors
 
-    representation_mtx = get_representation(
-        scdata,
-        use_rep=use_rep,
-        n_components=n_components,
+    representation_mtx = cast(
+        Matrix,
+        get_representation(
+            scdata,
+            use_rep=use_rep,
+            n_components=n_components,
+        ),
     )
     matrix = sklearn_neighbors.kneighbors_graph(
         X=representation_mtx,
@@ -99,10 +103,13 @@ def _kneighbors_graph_matrices(
     n_jobs: int,
 ) -> Tuple[csr_matrix, csr_matrix]:
 
-    representation_mtx = get_representation(
-        scdata,
-        use_rep=use_rep,
-        n_components=n_components,
+    representation_mtx = cast(
+        Matrix,
+        get_representation(
+            scdata,
+            use_rep=use_rep,
+            n_components=n_components,
+        ),
     )
     if backend == "exact":
         knn_indices, knn_distances = _exact_knn_arrays(
@@ -149,7 +156,7 @@ def _get_pynndescent_transformer() -> Any:
 
 
 def _exact_knn_arrays(
-    representation_mtx: Any,
+    representation_mtx: Matrix,
     n_neighbors: int,
     metric: Metric,
     n_jobs: int,
@@ -163,8 +170,9 @@ def _exact_knn_arrays(
         metric=metric,
         n_jobs=n_jobs,
     )
-    neighbors_model.fit(representation_mtx)
-    knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+    sklearn_representation_mtx = cast(Any, representation_mtx)
+    neighbors_model.fit(sklearn_representation_mtx)
+    knn_distances, knn_indices = neighbors_model.kneighbors(sklearn_representation_mtx)
     return (
         knn_indices.astype(np.int32, copy=False),
         knn_distances.astype(np.float32, copy=False),
@@ -172,7 +180,7 @@ def _exact_knn_arrays(
 
 
 def _pynndescent_knn_arrays(
-    representation_mtx: Any,
+    representation_mtx: Matrix,
     n_neighbors: int,
     metric: Metric,
     seed: RandomStateSeed,
@@ -545,6 +553,7 @@ def neighbors(
 
     Examples
     --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
     >>> bt.sct.tl.neighbors(adata, representation="X_pca")
 
     Returns
@@ -1838,6 +1847,12 @@ def shared_neighbors(
         Key used to store connectivities in `scdata.obsp`.
     copy: bool (default: False)
         Return a copy instead of modifying `scdata`.
+
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
+    >>> bt.sct.tl.shared_neighbors(adata)
 
     Returns
     -------

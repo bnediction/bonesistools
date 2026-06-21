@@ -88,10 +88,10 @@ def mitochondrial_genes(
 
     """
 
-    adata = adata.copy() if copy else adata
-
-    genesyn = create_gene_synonyms()
     axis = _as_anndata_axis(axis, allow_integer=True)
+    adata = adata.copy() if copy else adata
+    genesyn = create_gene_synonyms()
+
     if axis == "obs":
         adata.obs[key] = False
     elif axis == "var":
@@ -184,10 +184,10 @@ def ribosomal_genes(
 
     """
 
-    adata = adata.copy() if copy else adata
-
-    genesyn = create_gene_synonyms()
     axis = _as_anndata_axis(axis, allow_integer=True)
+    adata = adata.copy() if copy else adata
+    genesyn = create_gene_synonyms()
+
     if axis == "obs":
         adata.obs[key] = False
     elif axis == "var":

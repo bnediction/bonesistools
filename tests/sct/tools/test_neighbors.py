@@ -8,7 +8,7 @@ import pytest
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
-from bonesistools.sctools.tools import _classification, _neighbors
+from bonesistools.sctools.tools import _neighbors
 
 
 def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
@@ -338,6 +338,55 @@ def test_neighbors_validates_arguments(mini_adata):
     with pytest.raises(ValueError):
         bt.sct.tl.neighbors(mini_adata, n_neighbors=3, backend=cast(Any, "bad"))
 
+    with pytest.raises(TypeError, match="unsupported argument type for 'n_jobs'"):
+        bt.sct.tl.neighbors(
+            mini_adata,
+            n_neighbors=3,
+            n_jobs=cast(Any, "2"),
+        )
+
+
+def test_sparse_distance_neighbors_are_reordered_and_completed():
+    sparse_distances = csr_matrix(
+        (
+            np.array([0.5, 0.0, 0.8, 0.4, 0.7, 0.0, 0.6], dtype=np.float32),
+            np.array([1, 0, 2, 2, 0, 2, 1], dtype=np.int32),
+            np.array([0, 3, 5, 7], dtype=np.int32),
+        ),
+        shape=(3, 3),
+    )
+
+    indices, distances = _neighbors._knn_arrays_from_sparse_distances(
+        sparse_distances,
+        n_neighbors=2,
+    )
+
+    np.testing.assert_array_equal(
+        indices,
+        np.array([[0, 1], [1, 2], [2, 1]], dtype=np.int32),
+    )
+    np.testing.assert_allclose(
+        distances,
+        np.array([[0.0, 0.5], [0.0, 0.4], [0.0, 0.6]], dtype=np.float32),
+    )
+
+
+def test_sparse_distance_neighbors_reject_short_rows():
+    sparse_distances = csr_matrix(
+        (
+            np.array([0.0, 0.2, 0.0], dtype=np.float32),
+            np.array([0, 1, 1], dtype=np.int32),
+            np.array([0, 2, 3], dtype=np.int32),
+        ),
+        shape=(2, 2),
+    )
+
+    with pytest.raises(ValueError, match="fewer neighbors than expected"):
+        _neighbors._knn_arrays_from_sparse_distances(
+            sparse_distances,
+            n_neighbors=2,
+        )
+
 
 def test_knn_graph_can_use_observation_names(mini_adata):
     graph = bt.sct.tl.knn_graph(
@@ -373,7 +422,48 @@ def test_knn_graph_can_use_observation_names(mini_adata):
     assert set(index_graph.nodes) == set(range(mini_adata.n_obs))
 
 
+def test_knn_graph_forwards_metric_kwargs(mini_adata):
+    graph = bt.sct.tl.knn_graph(
+        mini_adata,
+        n_neighbors=1,
+        use_rep="X_pca",
+        n_components=2,
+        metric="minkowski",
+        p=1,
+        create_using=nx.DiGraph,
+        index_or_name="name",
+    )
+
+    assert {
+        (source, target): data["distance"]
+        for source, target, data in graph.edges(data=True)
+    } == pytest.approx(
+        {
+            ("c1", "c2"): 0.3,
+            ("c2", "c1"): 0.3,
+            ("c3", "c4"): 0.3,
+            ("c4", "c3"): 0.3,
+        }
+    )
+
+
+def test_kneighbors_graph_deprecated_alias(mini_adata):
+    with pytest.warns(FutureWarning, match="kneighbors_graph"):
+        graph = bt.sct.tl.kneighbors_graph(
+            mini_adata,
+            n_neighbors=1,
+            use_rep="X_pca",
+            create_using=nx.DiGraph,
+            index_or_name="name",
+        )
+
+    assert set(graph.nodes) == set(mini_adata.obs_names)
+
+
 def test_knn_graph_rejects_invalid_node_label_mode(mini_adata):
+    with pytest.raises(TypeError, match="missing required argument: 'n_neighbors'"):
+        bt.sct.tl.knn_graph(mini_adata)
+
     with pytest.raises(ValueError, match="invalid argument value for 'index_or_name'"):
         bt.sct.tl.knn_graph(
             mini_adata,
@@ -421,97 +511,3 @@ def test_shared_neighbors_validates_source_graph_and_pruning(mini_adata):
 
     with pytest.raises(ValueError, match="invalid argument value for 'prune_snn'"):
         bt.sct.tl.shared_neighbors(mini_adata, prune_snn=-1)
-
-
-def test_extract_paga_graph_builds_directed_cluster_graph(
-    mini_adata,
-    expected_mini_cluster_barycenters,
-):
-    mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
-
-    graph = bt.sct.tl.extract_paga_graph(
-        mini_adata,
-        obs="cluster",
-        use_rep="X_pca",
-        edges="paga_edges",
-        threshold=0.1,
-    )
-
-    assert set(graph.nodes) == {"A", "B"}
-    assert list(graph.edges) == [("B", "A")]
-    assert np.allclose(graph.nodes["A"]["pos"], expected_mini_cluster_barycenters["A"])
-    assert np.allclose(graph.nodes["B"]["pos"], expected_mini_cluster_barycenters["B"])
-
-    mini_adata.uns["connectivities"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
-    fallback_graph = bt.sct.tl.extract_paga_graph(
-        mini_adata,
-        obs="cluster",
-        use_rep="X_pca",
-        edges="missing",
-        threshold=0.1,
-    )
-
-    assert list(fallback_graph.edges) == [("B", "A")]
-
-
-def test_extract_paga_graph_validates_threshold(mini_adata):
-    mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
-
-    with pytest.raises(KeyError, match="key 'missing' not found in adata.uns"):
-        bt.sct.tl.extract_paga_graph(
-            mini_adata,
-            obs="cluster",
-            use_rep="X_pca",
-            edges="missing",
-        )
-
-    with pytest.raises(TypeError):
-        bt.sct.tl.extract_paga_graph(
-            mini_adata,
-            obs="cluster",
-            use_rep="X_pca",
-            edges="paga_edges",
-            threshold=cast(Any, "bad"),
-        )
-
-    with pytest.raises(ValueError):
-        bt.sct.tl.extract_paga_graph(
-            mini_adata,
-            obs="cluster",
-            use_rep="X_pca",
-            edges="paga_edges",
-            threshold=-0.1,
-        )
-
-
-def test_mitochondrial_and_ribosomal_gene_classification(
-    monkeypatch,
-    mini_adata,
-    fake_gene_synonyms_cls,
-):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
-    mini_adata.var_names = ["mt-Co1", "Rps1", "Other"]
-
-    bt.sct.tl.mitochondrial_genes(mini_adata, key="mt")
-    bt.sct.tl.ribosomal_genes(mini_adata, key="rps")
-
-    assert mini_adata.var["mt"].tolist() == [True, False, False]
-    assert mini_adata.var["rps"].tolist() == [False, True, False]
-
-    obs_adata = mini_adata.copy()
-    obs_adata.obs_names = ["mt-Co1", "Rps1", "Other1", "Other2"]
-
-    bt.sct.tl.mitochondrial_genes(obs_adata, axis="obs", key="mt_obs")
-    with pytest.warns(FutureWarning):
-        bt.sct.tl.ribosomal_genes(obs_adata, axis=0, key="rps_obs")
-
-    assert obs_adata.obs["mt_obs"].tolist() == [True, False, False, False]
-    assert obs_adata.obs["rps_obs"].tolist() == [False, True, False, False]
-
-
-def test_gene_classification_rejects_invalid_axis(mini_adata):
-    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.tl.mitochondrial_genes(mini_adata, axis=cast(Any, "bad"))
-
-    with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
-        bt.sct.tl.ribosomal_genes(mini_adata, axis=cast(Any, "bad"))

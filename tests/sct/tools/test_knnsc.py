@@ -398,6 +398,38 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
             metric=cast(Any, "not-a-metric"),
         )
 
+    with pytest.raises(TypeError, match="missing required argument: 'n_neighbors'"):
+        estimator.fit(mini_adata, cluster_key="cluster")
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported argument type for 'metric_kwargs'",
+    ):
+        estimator.fit(
+            mini_adata,
+            cluster_key="cluster",
+            n_neighbors=5,
+            metric_kwargs=cast(Any, "bad"),
+        )
+
+    non_categorical = mini_adata.copy()
+    non_categorical.obs["cluster"] = non_categorical.obs["cluster"].astype(str)
+
+    with pytest.raises(AttributeError, match="has no attribute 'cat'"):
+        estimator.fit(
+            non_categorical,
+            cluster_key="cluster",
+            n_neighbors=3,
+        )
+
+    with pytest.raises(ValueError, match="no non-empty clusters"):
+        estimator.fit(
+            mini_adata,
+            cluster_key="cluster",
+            n_neighbors=3,
+            min_cluster_size=mini_adata.n_obs + 1,
+        )
+
     with pytest.warns(FutureWarning, match="__init__"):
         deprecated_estimator = bt.sct.tl.KNNSC(
             n_components=cast(Any, 2.0),
@@ -426,6 +458,26 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
 
     with pytest.raises(TypeError, match="missing required argument: 'cluster_key'"):
         estimator.fit(mini_adata, n_neighbors=3)
+
+
+def test_knnsc_deprecated_graph_property_and_class_alias():
+    estimator = bt.sct.tl.KNNSC()
+    graph = nx.Graph()
+    graph.add_edge("c1", "c2", distance=1.0)
+
+    with pytest.warns(FutureWarning, match="kneighbors_graph"):
+        estimator.kneighbors_graph = graph
+
+    with pytest.warns(FutureWarning, match="kneighbors_graph"):
+        returned = estimator.kneighbors_graph
+
+    assert returned is graph
+
+    with pytest.warns(FutureWarning) as warning_records:
+        deprecated = bt.sct.tl.Knnbs(n_neighbors=3)
+
+    assert isinstance(deprecated, bt.sct.tl.KNNSC)
+    assert any("Knnbs" in str(record.message) for record in warning_records)
 
 
 def test_knnsc_fit_stores_params_and_updates_repr(mini_adata):
@@ -551,6 +603,33 @@ def test_knnsc_new_api_names_are_available():
     assert peripheral_only.dropna().to_dict() == {"c1": "A"}
     assert central_only.dropna().to_dict() == {"c3": "B"}
     assert list(central_only.cat.categories) == ["B"]
+
+
+def test_knnsc_reports_empty_and_missing_candidate_clusters():
+    estimator = bt.sct.tl.KNNSC()
+    estimator._obs = pd.Series(
+        pd.Categorical(
+            ["A", "A", "B", "B"],
+            categories=["A", "B"],
+        ),
+        index=["c1", "c2", "c3", "c4"],
+        name="cluster",
+    )
+    estimator._cluster_counts = pd.Series(
+        [2, 2, 0],
+        index=pd.CategoricalIndex(["A", "B", "C"]),
+    )
+    estimator._min_cluster_size = 1
+
+    with pytest.raises(ValueError) as exc_info:
+        estimator._validate_candidate_clusters(
+            ["C", "missing"],
+            argument="peripheral_clusters",
+        )
+
+    message = str(exc_info.value)
+    assert "empty: C" in message
+    assert "not found: missing" in message
 
 
 def test_shared_neighbors_pruning_and_inplace_modes(

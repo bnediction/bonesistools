@@ -309,6 +309,12 @@ def spectral(
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
+    >>> bt.sct.tl.spectral(adata)
+
     Returns
     -------
     AnnData or None
@@ -446,6 +452,12 @@ def umap(
         Number of allocated processors.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
+
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
+    >>> bt.sct.tl.umap(adata)
 
     Returns
     -------
@@ -627,6 +639,11 @@ def tsne(
         Number of allocated processors.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
+
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.tsne(adata, representation="X_pca")
 
     Returns
     -------

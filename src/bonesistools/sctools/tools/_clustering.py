@@ -115,6 +115,11 @@ def kmeans(
     **kwargs: Any
         Additional keyword arguments passed to `sklearn.cluster.KMeans`.
 
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.kmeans(adata, n_clusters=8, representation="X_pca")
+
     Returns
     -------
     AnnData or None
@@ -278,6 +283,12 @@ def louvain(
     **kwargs: Any
         Additional keyword arguments passed to `igraph.Graph.community_multilevel`.
 
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
+    >>> bt.sct.tl.louvain(adata, resolution=1.0)
+
     Returns
     -------
     AnnData or None
@@ -308,8 +319,7 @@ def louvain(
         obsp=obsp,
     )
 
-    graph = _igraph_graph_from_adjacency(igraph, adjacency, directed=True)
-    graph = graph.as_undirected(combine_edges="sum")
+    graph = _undirected_igraph_from_adjacency(igraph, adjacency)
     if weighted:
         weights = "weight"
     else:
@@ -451,6 +461,12 @@ def leiden(
     **kwargs: Any
         Additional keyword arguments passed to `leidenalg.find_partition`.
 
+    Examples
+    --------
+    >>> bt.sct.tl.pca(adata, n_components=50)
+    >>> bt.sct.tl.neighbors(adata, representation="X_pca")
+    >>> bt.sct.tl.leiden(adata, resolution=1.0)
+
     Returns
     -------
     AnnData or None
@@ -504,7 +520,7 @@ def leiden(
         obsp=obsp,
     )
 
-    graph = _igraph_graph_from_adjacency(igraph, adjacency, directed=directed)
+    graph = _igraph_from_adjacency(igraph, adjacency, directed=directed)
 
     partition = leidenalg.find_partition(
         graph,
@@ -586,7 +602,7 @@ def _clustering_adjacency(
     return adjacency_key, sparse.csr_matrix(adjacency)
 
 
-def _igraph_graph_from_adjacency(
+def _igraph_from_adjacency(
     igraph: Any,
     adjacency: sparse.csr_matrix,
     directed: bool,
@@ -605,5 +621,29 @@ def _igraph_graph_from_adjacency(
         directed=directed,
     )
     graph.es["weight"] = coo_adjacency.data.astype(float).tolist()
+
+    return graph
+
+
+def _undirected_igraph_from_adjacency(
+    igraph: Any,
+    adjacency: sparse.csr_matrix,
+) -> Any:
+
+    n_vertices = cast(Tuple[int, int], adjacency.shape)[0]
+    upper = sparse.triu(adjacency, k=1, format="coo")
+    lower = cast(Any, sparse.tril(adjacency, k=-1, format="coo")).T
+    undirected = cast(Any, upper + lower).tocoo()
+    graph = igraph.Graph(
+        n=n_vertices,
+        edges=list(
+            zip(
+                undirected.row.tolist(),
+                undirected.col.tolist(),
+            )
+        ),
+        directed=False,
+    )
+    graph.es["weight"] = undirected.data.astype(float).tolist()
 
     return graph

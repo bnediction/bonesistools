@@ -40,14 +40,11 @@ def nestorowa() -> _AnnData:
     AnnData
         Preprocessed AnnData object containing highly variable genes.
 
-    Notes
-    -----
-    Dataset derived from:
-
-        Nestorowa et al. (2016)
-        "A single-cell resolution map of mouse hematopoietic stem and "
-        "progenitor cell differentiation"
-        Blood 128(8): e20-e31
+    References
+    ----------
+    Nestorowa et al. (2016). A single-cell resolution map of mouse
+    hematopoietic stem and progenitor cell differentiation. Blood, 128(8),
+    e20-e31.
     """
 
     path = _files(__package__) / "nestorowa_hvg.h5ad"

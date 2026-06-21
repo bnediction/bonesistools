@@ -614,25 +614,26 @@ def test_wilcoxon_tests_validates_arguments():
 
 
 def _toy_welch_test_adata() -> ad.AnnData:
+    expression_mtx = np.array(
+        [
+            [1.0, 2.0, 0.0, 5.0],
+            [2.0, 3.0, 0.0, 5.0],
+            [3.0, 4.0, 1.0, 5.0],
+            [4.0, 8.0, 2.0, 5.0],
+            [5.0, 9.0, 2.0, 5.0],
+            [6.0, 10.0, 3.0, 5.0],
+        ],
+        dtype=np.float64,
+    )
     adata = ad.AnnData(
-        X=np.array(
-            [
-                [1.0, 2.0, 0.0, 5.0],
-                [2.0, 3.0, 0.0, 5.0],
-                [3.0, 4.0, 1.0, 5.0],
-                [4.0, 8.0, 2.0, 5.0],
-                [5.0, 9.0, 2.0, 5.0],
-                [6.0, 10.0, 3.0, 5.0],
-            ],
-            dtype=np.float64,
-        ),
+        X=expression_mtx,
         obs=pd.DataFrame(
             {"cluster": pd.Categorical(["A", "A", "A", "B", "B", "B"])},
             index=[f"c{i}" for i in range(6)],
         ),
         var=pd.DataFrame(index=["G1", "G2", "G3", "G4"]),
     )
-    adata.layers["counts"] = csr_matrix(adata.X)
+    adata.layers["counts"] = csr_matrix(expression_mtx)
     return adata
 
 
@@ -649,8 +650,9 @@ def test_welch_tests_returns_expected_fixed_background_statistics():
         correction=None,
     )
 
-    group_mtx = np.asarray(adata.X[:3, :])
-    background_mtx = np.asarray(adata.X[3:, :])
+    expression_mtx = cast(np.ndarray, adata.X)
+    group_mtx = np.asarray(expression_mtx[:3, :])
+    background_mtx = np.asarray(expression_mtx[3:, :])
     mean_group = group_mtx.mean(axis=0, dtype=np.float64)
     mean_background = background_mtx.mean(axis=0, dtype=np.float64)
     variance_group = group_mtx.var(axis=0, ddof=1)
@@ -697,18 +699,19 @@ def test_welch_tests_exposes_primary_statistics_column():
 def test_welch_tests_overestimates_background_variance_like_scanpy():
     from scipy import stats
 
+    expression_mtx = np.array(
+        [
+            [1.0, 2.0],
+            [2.0, 4.0],
+            [5.0, 5.0],
+            [6.0, 7.0],
+            [7.0, 8.0],
+            [8.0, 10.0],
+        ],
+        dtype=np.float64,
+    )
     adata = ad.AnnData(
-        X=np.array(
-            [
-                [1.0, 2.0],
-                [2.0, 4.0],
-                [5.0, 5.0],
-                [6.0, 7.0],
-                [7.0, 8.0],
-                [8.0, 10.0],
-            ],
-            dtype=np.float64,
-        ),
+        X=expression_mtx,
         obs=pd.DataFrame(
             {"cluster": pd.Categorical(["A", "A", "B", "B", "B", "B"])},
             index=[f"c{i}" for i in range(6)],
@@ -725,8 +728,8 @@ def test_welch_tests_overestimates_background_variance_like_scanpy():
         overestimate_variance=True,
     ).loc[adata.var_names]
 
-    group_mtx = np.asarray(adata.X[:2, :])
-    background_mtx = np.asarray(adata.X[2:, :])
+    group_mtx = np.asarray(expression_mtx[:2, :])
+    background_mtx = np.asarray(expression_mtx[2:, :])
     statistics, pvals = stats.ttest_ind_from_stats(
         mean1=group_mtx.mean(axis=0, dtype=np.float64),
         std1=np.sqrt(group_mtx.var(axis=0, ddof=1)),

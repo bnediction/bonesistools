@@ -323,6 +323,15 @@ Format references as compact prose entries:
 Author et al. (year). Title. Journal, volume(issue), pages.
 ```
 
+Use `et al.` for references with three or more authors. For one or two
+authors, cite the listed author names directly:
+
+```text
+Author (year). Title. Journal, volume(issue), pages.
+Author and Author (year). Title. Journal, volume(issue), pages.
+Author et al. (year). Title. Journal, volume(issue), pages.
+```
+
 Prefer one reference per paragraph. Wrap long references only to keep line
 length readable.
 

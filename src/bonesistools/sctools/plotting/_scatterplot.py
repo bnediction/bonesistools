@@ -425,6 +425,8 @@ def __scatterplot_continuous(
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
             cmap=cmap,
+            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
+            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1,
         )
@@ -441,6 +443,8 @@ def __scatterplot_continuous(
             s=kwargs["s"] if "s" in kwargs else 3,
             c=scdata.obs[obs],
             cmap=cmap,
+            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
+            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
             edgecolors="none",
             alpha=kwargs["alpha"] if "alpha" in kwargs else 1,
         )
@@ -610,6 +614,8 @@ def embedding(
           syntax of matplotlib.text
         - background_visible[bool]: specify if background color is visible or
           not in case of 3D plotting
+        - vmin[float]: lower bound for continuous color scaling
+        - vmax[float]: upper bound for continuous color scaling
 
     Returns
     -------

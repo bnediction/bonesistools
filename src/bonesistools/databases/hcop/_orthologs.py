@@ -14,6 +14,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Union,
     cast,
@@ -131,11 +132,84 @@ class Orthologs:
             table=table,
         )
 
+    @overload
+    def __call__(
+        self,
+        data: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> List[str]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: List[str],
+        *args: Any,
+        **kwargs: Any,
+    ) -> List[str]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: Tuple[str, ...],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Tuple[str, ...]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: Set[str],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Set[str]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: Sequence[str],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Sequence[str]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: InteractionList,
+        *args: Any,
+        **kwargs: Any,
+    ) -> InteractionList: ...
+
+    @overload
+    def __call__(
+        self,
+        data: pd.DataFrame,
+        *args: Any,
+        **kwargs: Any,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def __call__(
+        self,
+        data: Graph[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Graph[Any]: ...
+
+    @overload
+    def __call__(
+        self,
+        data: "BooleanNetworkLike",
+        *args: Any,
+        **kwargs: Any,
+    ) -> "BooleanNetworkLike": ...
+
     def __call__(
         self,
         data: Union[
             str,
             Sequence[str],
+            Set[str],
             InteractionList,
             pd.DataFrame,
             Graph[Any],
@@ -143,7 +217,7 @@ class Orthologs:
         ],
         *args: Any,
         **kwargs: Any,
-    ):
+    ) -> Any:
         """
         Translate genes in a supported object.
 
@@ -153,7 +227,8 @@ class Orthologs:
 
         Parameters
         ----------
-        data: str, sequence, InteractionList, DataFrame, Graph or BooleanNetworkLike
+        data: str, sequence, set, InteractionList, DataFrame, Graph or
+            BooleanNetworkLike
             Object containing human gene symbols to translate.
         *args: Any
             Positional arguments forwarded to the selected translation method.
@@ -181,7 +256,11 @@ class Orthologs:
         if (
             isinstance(data, SequenceInstance) and not isinstance(data, str)
         ) or isinstance(data, set):
-            return self.translate_sequence(cast(Sequence[str], data), *args, **kwargs)
+            return self.translate_sequence(
+                cast(Union[Sequence[str], Set[str]], data),
+                *args,
+                **kwargs,
+            )
         if isinstance(data, pd.DataFrame):
             return self.translate_df(data, *args, **kwargs)
         if isinstance(data, Graph):
@@ -190,7 +269,7 @@ class Orthologs:
             return self.translate_bn(data, *args, **kwargs)
         raise TypeError(
             f"unsupported argument type for 'data': "
-            f"expected str, sequence, interaction list, {pd.DataFrame}, {Graph} "
+            f"expected str, sequence, set, interaction list, {pd.DataFrame}, {Graph} "
             f"or Boolean network-like object but received {type(data)}"
         )
 
@@ -257,13 +336,41 @@ class Orthologs:
             return list(self._mapping[gene])
         return [gene] if keep_if_missing else []
 
+    @overload
+    def translate_sequence(
+        self,
+        genes: List[str],
+        keep_if_missing: bool = True,
+    ) -> List[str]: ...
+
+    @overload
+    def translate_sequence(
+        self,
+        genes: Tuple[str, ...],
+        keep_if_missing: bool = True,
+    ) -> Tuple[str, ...]: ...
+
+    @overload
+    def translate_sequence(
+        self,
+        genes: Set[str],
+        keep_if_missing: bool = True,
+    ) -> Set[str]: ...
+
+    @overload
     def translate_sequence(
         self,
         genes: Sequence[str],
         keep_if_missing: bool = True,
-    ) -> Sequence[str]:
+    ) -> Sequence[str]: ...
+
+    def translate_sequence(
+        self,
+        genes: Union[Sequence[str], Set[str]],
+        keep_if_missing: bool = True,
+    ) -> Union[Sequence[str], Set[str]]:
         """
-        Translate a sequence of human gene symbols.
+        Translate a sequence or set of human gene symbols.
 
         Each gene is translated to one target symbol using the deterministic
         HCOP ranking. Missing genes are either kept or removed depending on
@@ -271,15 +378,15 @@ class Orthologs:
 
         Parameters
         ----------
-        genes: sequence of str
+        genes: sequence or set of str
             Human gene symbols to translate.
         keep_if_missing: bool (default: True)
             If True, keep original gene symbols with no ortholog.
 
         Returns
         -------
-        sequence of str
-            Translated sequence, preserving the input sequence type when
+        sequence or set of str
+            Translated values, preserving the input collection type when
             possible.
         """
 

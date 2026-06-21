@@ -15,7 +15,7 @@ from ._classification import mitochondrial_genes, ribosomal_genes
 from ._clustering import kmeans, leiden, louvain
 from ._conversion import anndata_to_dataframe
 from ._embedding import pca, spectral, tsne, umap
-from ._graph import extract_paga_graph, get_paga_graph
+from ._graph import paga
 from ._markers import (
     calculate_logfoldchanges,
     dea,
@@ -62,8 +62,7 @@ __all__ = [
     "tsne",
     "umap",
     "anndata_to_dataframe",
-    "extract_paga_graph",
-    "get_paga_graph",
+    "paga",
     "pairwise_distances",
     "barycenters",
     "regress_out",

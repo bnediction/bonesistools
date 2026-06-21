@@ -26,10 +26,11 @@ from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import art3d
+from scipy import sparse
 
+from ..._validation import _as_non_negative_number
 from ..._warnings import _warn_deprecated
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
-from ..tools import extract_paga_graph
 from ._colors import black
 from ._scatterplot import Colors, embedding
 
@@ -372,8 +373,8 @@ def paga(
     """
     Draw the partition-based graph abstraction (PAGA) graph with Matplotlib.
 
-    To compute the PAGA matrix, run `scanpy.tl.paga`. PAGA can also be
-    computed using scVelo [1]. In this case, use
+    To compute the PAGA matrix, run `bt.sct.tl.paga` or `scanpy.tl.paga`.
+    PAGA can also be computed using scVelo [1]. In this case, use
     `adata.uns[edges] = adata.uns["paga"][edges]` before calling this function.
 
     Parameters
@@ -414,7 +415,7 @@ def paga(
     if ax is None:
         ax = plt.gca()
 
-    paga_graph = extract_paga_graph(
+    paga_graph = _paga_graph(
         adata=adata, obs=obs, use_rep=use_rep, edges=edges, threshold=threshold
     )
     barycenters = {
@@ -447,6 +448,63 @@ def paga(
         return None
 
     return ax
+
+
+def _paga_graph(
+    adata: AnnData,
+    obs: str,
+    use_rep: str,
+    edges: str = "transitions_confidence",
+    threshold: float = 0.01,
+) -> nx.Graph[Any]:
+
+    categories = adata.obs[obs].cat.categories
+    representation_mtx = adata.obsm[use_rep]
+    barycenters = {
+        category: np.nanmean(representation_mtx[adata.obs[obs] == category], axis=0)
+        for category in categories
+    }
+
+    resolved_edges, adjacency = _paga_adjacency(adata, edges)
+    threshold = _as_non_negative_number(threshold, "threshold")
+    if threshold > 0:
+        adjacency.data[adjacency.data < threshold] = 0
+        adjacency.eliminate_zeros()
+
+    if resolved_edges in {"connectivities", "connectivities_tree"}:
+        graph = nx.Graph(cast(Any, adjacency))
+    else:
+        graph = nx.DiGraph(cast(Any, adjacency.T))
+
+    mapping = dict(enumerate(categories))
+    graph = nx.relabel_nodes(graph, mapping)
+    for node in categories:
+        graph.nodes[node]["pos"] = barycenters[node]
+
+    return graph
+
+
+def _paga_adjacency(adata: AnnData, edges: str) -> Tuple[str, sparse.csr_matrix]:
+
+    if edges in adata.uns:
+        resolved_edges = edges
+        adjacency = adata.uns[edges]
+    elif "paga" in adata.uns and edges in adata.uns["paga"]:
+        resolved_edges = edges
+        adjacency = adata.uns["paga"][edges]
+    elif edges == "transitions_confidence" and "paga" in adata.uns:
+        resolved_edges = "connectivities"
+        adjacency = adata.uns["paga"]["connectivities"]
+    elif "connectivities" in adata.uns:
+        resolved_edges = "connectivities"
+        adjacency = adata.uns["connectivities"]
+    else:
+        raise KeyError(f"key {edges!r} not found in adata.uns")
+
+    if sparse.issparse(adjacency):
+        return resolved_edges, cast(Any, adjacency).tocsr(copy=True)
+
+    return resolved_edges, sparse.csr_matrix(adjacency)
 
 
 def add_graph(*args: Any, **kwargs: Any) -> Axes:

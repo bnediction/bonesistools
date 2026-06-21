@@ -386,7 +386,7 @@ class GeneSynonyms:
         self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
         self.__download_gene_info()
-        self.__initialize_mappings(show_warnings=show_warnings)
+        self._initialize_mappings(show_warnings=show_warnings)
 
     def __call__(
         self,
@@ -1038,7 +1038,7 @@ class GeneSynonyms:
         self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
         self.__download_gene_info()
-        self.__initialize_mappings(show_warnings=show_warnings)
+        self._initialize_mappings(show_warnings=show_warnings)
 
     def get_mapping(self):
         """
@@ -1693,7 +1693,7 @@ class GeneSynonyms:
 
         return gene_aliases_mapping
 
-    def __initialize_mappings(self, show_warnings: bool) -> None:
+    def _initialize_mappings(self, show_warnings: bool) -> None:
 
         self.show_warnings = show_warnings
         try:
@@ -1723,6 +1723,10 @@ class GeneSynonyms:
             "ensembl_id",
             *self.databases,
         )
+
+    def __initialize_mappings(self, show_warnings: bool) -> None:
+
+        self._initialize_mappings(show_warnings=show_warnings)
 
     @support_legacy_gene_synonyms_args
     def __conversion_function(

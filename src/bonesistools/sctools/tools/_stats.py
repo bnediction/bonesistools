@@ -281,8 +281,8 @@ def welch_tests(
 
     References
     ----------
-    Wolf, Angerer and Theis (2018). SCANPY: large-scale single-cell gene
-    expression data analysis. Genome Biology, 19(1), 15.
+    Wolf et al. (2018). SCANPY: large-scale single-cell gene expression data
+    analysis. Genome Biology, 19(1), 15.
     """
 
     groupby = _as_string(groupby, "groupby")

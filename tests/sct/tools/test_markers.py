@@ -11,6 +11,7 @@ from scipy.sparse import csr_matrix
 from scipy.stats import hypergeom
 
 import bonesistools as bt
+from bonesistools.sctools.tools._markers import DEA_METHODS
 
 
 def _toy_logfoldchange_adata():
@@ -302,7 +303,8 @@ def test_dea_returns_expected_logfoldchanges_with_explicit_background():
 
 def test_dea_logfoldchanges_support_logged_expression():
     adata = _toy_dea_adata()
-    adata.layers["log"] = np.log1p(adata.X)
+    expression_mtx = cast(np.ndarray, adata.X)
+    adata.layers["log"] = np.log1p(expression_mtx)
 
     counts = bt.sct.tl.dea(
         adata,
@@ -462,7 +464,7 @@ def test_dea_output_schema_is_identical_for_all_methods():
         "logfoldchanges",
     ]
 
-    for method in ["welch", "welch_overestimate", "wilcoxon"]:
+    for method in DEA_METHODS:
         result = bt.sct.tl.dea(
             adata,
             groupby="cluster",
@@ -601,7 +603,7 @@ def test_ora_mapping_and_sequence_signatures_are_equivalent():
     )
     sequence = bt.sct.tl.ora(
         query_set=["g1", "g2"],
-        signatures=[["A", ["g1", "g3"]], ["B", ["g2"]]],
+        signatures=[("A", ["g1", "g3"]), ("B", ["g2"])],
         background=["g1", "g2", "g3", "g4"],
         correction="bonferroni",
     )

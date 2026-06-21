@@ -162,7 +162,7 @@ def _get_expression_with_gene_names(
     """
 
     if expression is None or expression in {"X", ".X"}:
-        expression_mtx = get_expression(adata, var_subset=var_subset, copy=False)
+        expression_mtx: Any = adata.X
         gene_names = adata.var_names
         var = adata.var
         var_label = "adata.var"
@@ -173,31 +173,21 @@ def _get_expression_with_gene_names(
                 "invalid argument value for 'expression': "
                 "adata.raw is required when expression='raw.X'"
             )
-        expression_mtx = get_expression(
-            adata,
-            use_raw=True,
-            var_subset=var_subset,
-            copy=False,
-        )
+        expression_mtx = adata.raw.X
         gene_names = adata.raw.var_names
         var = adata.raw.var
         var_label = "adata.raw.var"
         gene_names_label = "adata.raw.var_names"
     else:
         expression = _as_string(expression, "expression")
-        expression_mtx = get_expression(
-            adata,
-            layer=expression,
-            var_subset=var_subset,
-            copy=False,
-        )
+        expression_mtx = adata.layers[expression]
         gene_names = adata.var_names
         var = adata.var
         var_label = "adata.var"
         gene_names_label = "adata.var_names"
 
     if var_subset is None:
-        return expression_mtx, gene_names
+        return cast(Matrix, expression_mtx), gene_names
 
     if isinstance(var_subset, str):
         if var_subset not in var:
@@ -215,7 +205,7 @@ def _get_expression_with_gene_names(
                 f"invalid argument value for 'var_subset': "
                 f"{var_label}[{var_subset!r}] selects no variables"
             )
-        return expression_mtx, gene_names[mask]
+        return cast(Matrix, expression_mtx[:, mask]), gene_names[mask]
 
     if not isinstance(var_subset, CollectionInstance):
         raise TypeError(
@@ -249,7 +239,8 @@ def _get_expression_with_gene_names(
             f"variable(s) not found in {gene_names_label}: {formatted_missing}"
         )
 
-    return expression_mtx, gene_names[gene_names.isin(variables)]
+    mask = gene_names.isin(variables)
+    return cast(Matrix, expression_mtx[:, mask]), gene_names[mask]
 
 
 def _as_dense_matrix_chunk(expression_mtx: Matrix, start: int, end: int) -> np.ndarray:
@@ -270,6 +261,9 @@ def _as_dense_matrix_chunk(expression_mtx: Matrix, start: int, end: int) -> np.n
     ndarray
         Dense two-dimensional matrix chunk.
     """
+
+    if getattr(expression_mtx, "ndim", 2) != 2:
+        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
 
     matrix_chunk = cast(Any, expression_mtx)[:, start:end]
     dense_chunk = (

@@ -5,9 +5,10 @@ from typing import Iterable, Tuple
 import pytest
 
 import bonesistools as bt
+from bonesistools.boolpy.influence_graph._influence_graph import InfluenceSign
 
 
-def _influence_graph(edges: Iterable[Tuple[str, str, int]]):
+def _influence_graph(edges: Iterable[Tuple[str, str, InfluenceSign]]):
 
     graph = bt.bpy.ig.InfluenceGraph()
 

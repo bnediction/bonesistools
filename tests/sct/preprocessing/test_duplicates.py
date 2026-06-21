@@ -45,12 +45,17 @@ def test_merge_duplicate_vars_returns_independent_copy_without_duplicates():
     assert _dense_list(merged.X) == [[1.0, 2.0], [3.0, 4.0]]
 
     merged.uns["nested"]["value"] = 2
-    merged.obsm["coords"][0, 0] = 10.0
-    merged.obsp["distances"][0, 1] = 5.0
+    merged_coords = cast(np.ndarray, merged.obsm["coords"])
+    merged_distances = cast(np.ndarray, merged.obsp["distances"])
+    coords = cast(np.ndarray, adata.obsm["coords"])
+    distances = cast(np.ndarray, adata.obsp["distances"])
+
+    merged_coords[0, 0] = 10.0
+    merged_distances[0, 1] = 5.0
 
     assert adata.uns["nested"]["value"] == 1
-    assert adata.obsm["coords"][0, 0] == 1.0
-    assert adata.obsp["distances"][0, 1] == 1.0
+    np.testing.assert_array_equal(coords, np.array([[1.0, 2.0], [3.0, 4.0]]))
+    np.testing.assert_array_equal(distances, np.array([[0.0, 1.0], [1.0, 0.0]]))
 
 
 def test_merge_duplicate_vars_preserves_axis_mappings_and_metadata():
@@ -170,12 +175,17 @@ def test_merge_duplicate_vars_varm_nan_handles_bool_and_object_arrays():
     adata.varm["label"] = np.array([["left"], ["right"], ["single"]], dtype=object)
 
     merged = bt.sct.pp.merge_duplicate_vars(adata, varm="nan")
+    flag = cast(np.ndarray, merged.varm["flag"])
+    label = cast(np.ndarray, merged.varm["label"])
 
-    assert merged.varm["flag"].dtype.kind == "f"
-    assert np.isnan(merged.varm["flag"][0, 0])
-    assert merged.varm["flag"][1, 0] == 1.0
-    assert pd.isna(merged.varm["label"][0, 0])
-    assert merged.varm["label"][1, 0] == "single"
+    assert flag.dtype.kind == "f"
+    np.testing.assert_array_equal(np.isnan(flag), np.array([[True], [False]]))
+    np.testing.assert_allclose(flag[1, 0], 1.0)
+    missing_label = cast(float, label[0, 0])
+    single_label = cast(str, label[1, 0])
+
+    assert np.isnan(missing_label)
+    assert single_label == "single"
 
 
 def test_merge_duplicate_vars_validates_strategies_and_deprecated_alias():

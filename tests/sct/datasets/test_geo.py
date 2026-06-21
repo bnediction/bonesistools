@@ -3,10 +3,13 @@
 import gzip
 import warnings
 from pathlib import Path
+from typing import Any, cast
 
 import anndata as ad
 import numpy as np
 import pytest
+from scipy import sparse
+from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.datasets import _geo as geo
@@ -66,6 +69,12 @@ def _write_10x_files(directory: Path) -> None:
         directory / "GSM5492245_RNA_genes.tsv.gz",
         "gene_id_1\tGene1\n" "gene_id_2\tGene2\n" "gene_id_3\tGene3\n",
     )
+
+
+def _as_csr(matrix: Any) -> csr_matrix:
+
+    assert sparse.isspmatrix_csr(matrix)
+    return cast(csr_matrix, matrix)
 
 
 def _write_geo_index(directory: Path) -> None:
@@ -209,7 +218,7 @@ def test_geo_from_geo_uses_cache_without_downloading(monkeypatch, tmp_path):
 
     assert isinstance(adata, ad.AnnData)
     assert adata.shape == (1, 1)
-    assert adata.X.toarray().tolist() == [[7]]
+    assert _as_csr(adata.X).toarray().tolist() == [[7]]
 
 
 def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
@@ -248,7 +257,7 @@ def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
     )
     assert adata.var_names.tolist() == ["Gene", "Gene-1"]
     assert adata.var["symbol"].tolist() == ["Gene", "Gene"]
-    np.testing.assert_array_equal(adata.X.toarray(), np.array([[7, 11]]))
+    np.testing.assert_array_equal(_as_csr(adata.X).toarray(), np.array([[7, 11]]))
 
 
 def test_geo_from_gsm_downloads_and_reads_local_geo_10x_dataset(tmp_path):
@@ -270,7 +279,7 @@ def test_geo_from_gsm_downloads_and_reads_local_geo_10x_dataset(tmp_path):
     assert adata.var_names.tolist() == ["Gene1", "Gene2", "Gene3"]
     assert adata.var["Accession"].tolist() == ["gene_id_1", "gene_id_2", "gene_id_3"]
     np.testing.assert_array_equal(
-        adata.X.toarray(),
+        _as_csr(adata.X).toarray(),
         np.array([[1, 2, 0], [0, 0, 3]]),
     )
     assert adata.uns["geo"] == {

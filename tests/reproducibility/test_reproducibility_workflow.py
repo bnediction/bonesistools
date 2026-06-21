@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -159,7 +159,7 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
         copy=False,
     )
 
-    representation_mtx = adata.obsm["X_pca"][:, :20]
+    representation_mtx = cast(np.ndarray, adata.obsm["X_pca"])[:, :20]
     neighbors_model = NearestNeighbors(
         n_neighbors=15,
         metric="euclidean",
@@ -167,8 +167,8 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
     )
     neighbors_model.fit(representation_mtx)
     knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
-    reference_connectivities = cast(
-        csr_matrix,
+    reference_graph = cast(
+        Any,
         fuzzy_simplicial_set(
             X=representation_mtx,
             n_neighbors=15,
@@ -180,7 +180,11 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
             local_connectivity=1.0,
             apply_set_operations=True,
             verbose=False,
-        )[0].tocsr(),
+        )[0],
+    )
+    reference_connectivities = cast(
+        csr_matrix,
+        reference_graph.tocsr(),
     )
 
     bt.sct.tl.neighbors(

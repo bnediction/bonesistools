@@ -9,18 +9,19 @@ import bonesistools as bt
 
 
 def _toy_binarizer_adata():
+    expression_mtx = np.array(
+        [
+            [8.0, 1.0, 2.0],
+            [9.0, 1.0, 2.0],
+            [10.0, 1.0, 2.0],
+            [1.0, 8.0, 2.0],
+            [1.0, 9.0, 2.0],
+            [1.0, 10.0, 2.0],
+        ],
+        dtype=float,
+    )
     adata = ad.AnnData(
-        X=np.array(
-            [
-                [8.0, 1.0, 2.0],
-                [9.0, 1.0, 2.0],
-                [10.0, 1.0, 2.0],
-                [1.0, 8.0, 2.0],
-                [1.0, 9.0, 2.0],
-                [1.0, 10.0, 2.0],
-            ],
-            dtype=float,
-        ),
+        X=expression_mtx,
         obs=pd.DataFrame(
             {"macrostate": pd.Categorical(["A", "A", "A", "B", "B", "B"])},
             index=["c1", "c2", "c3", "c4", "c5", "c6"],
@@ -30,7 +31,7 @@ def _toy_binarizer_adata():
             index=["up_in_A", "up_in_B", "unchanged"],
         ),
     )
-    adata.layers["log"] = np.log1p(adata.X)
+    adata.layers["log"] = np.log1p(expression_mtx)
     return adata
 
 

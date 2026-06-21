@@ -208,7 +208,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
     genesyn.version = "bundled"
     genesyn.ncbi_file = gene_info
 
-    genesyn._GeneSynonyms__initialize_mappings(show_warnings=False)
+    genesyn._initialize_mappings(show_warnings=False)
 
     assert genesyn.get_gene_id("OFF1") == "1"
     assert genesyn.get_gene_id("Ref1") == "1"
@@ -291,7 +291,7 @@ def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_p
     genesyn.version = "latest"
     genesyn.ncbi_file = gene_info
 
-    genesyn._GeneSynonyms__initialize_mappings(show_warnings=False)
+    genesyn._initialize_mappings(show_warnings=False)
 
     assert genesyn.get_gene_id("AliasA") == "10"
     assert genesyn.get_official_name("10", input_identifier_type="gene_id") == (
@@ -485,7 +485,7 @@ def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch)
     )
     monkeypatch.setattr(
         bt.dbs.ncbi.GeneSynonyms,
-        "_GeneSynonyms__initialize_mappings",
+        "_initialize_mappings",
         fake_initialize,
     )
 
@@ -543,7 +543,7 @@ def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
     )
     monkeypatch.setattr(
         bt.dbs.ncbi.GeneSynonyms,
-        "_GeneSynonyms__initialize_mappings",
+        "_initialize_mappings",
         fake_initialize,
     )
 

@@ -8,6 +8,7 @@ from matplotlib.axes import Axes
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
+from bonesistools.sctools.plotting import _graph as graph_plotting
 
 
 def _add_paga_edges(adata):
@@ -58,6 +59,58 @@ def test_paga_writes_outfile(mini_adata, tmp_path):
 
     assert result is None
     assert outfile.exists()
+
+
+def test_paga_graph_matches_scanpy_transition_orientation(
+    mini_adata,
+    expected_mini_cluster_barycenters,
+):
+    mini_adata.uns["paga_edges"] = csr_matrix([[0.0, 0.2], [0.0, 0.0]])
+
+    graph = graph_plotting._paga_graph(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+        edges="paga_edges",
+        threshold=0.1,
+    )
+
+    assert graph.is_directed()
+    assert set(graph.nodes) == {"A", "B"}
+    assert list(graph.edges) == [("B", "A")]
+    assert np.allclose(graph.nodes["A"]["pos"], expected_mini_cluster_barycenters["A"])
+    assert np.allclose(graph.nodes["B"]["pos"], expected_mini_cluster_barycenters["B"])
+
+
+def test_paga_graph_reads_nested_connectivities_as_undirected(mini_adata):
+    bt.sct.tl.paga(mini_adata, groupby="cluster")
+
+    graph = graph_plotting._paga_graph(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+        edges="connectivities",
+        threshold=0.1,
+    )
+
+    assert not graph.is_directed()
+    assert set(graph.edges) == {("A", "B")}
+
+
+def test_paga_uses_nested_connectivities_after_tools_paga(mini_adata):
+    bt.sct.tl.paga(mini_adata, groupby="cluster")
+
+    fig, ax = plt.subplots()
+    returned_ax = bt.sct.pl.paga(
+        mini_adata,
+        obs="cluster",
+        use_rep="X_pca",
+        threshold=0.1,
+        ax=ax,
+    )
+
+    assert returned_ax is ax
+    plt.close(fig)
 
 
 def test_trajectory_uses_custom_graph_key_and_draws_labels(mini_adata):
