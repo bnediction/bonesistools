@@ -70,16 +70,20 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
 
 def test_neighbors_binary_connectivities_match_sklearn_spectral_graph(mini_adata):
     representation = mini_adata.obsm["X_pca"][:, :2]
-    expected_connectivities = kneighbors_graph(
-        representation,
-        n_neighbors=3,
-        mode="connectivity",
-        metric="euclidean",
-        include_self=True,
-        n_jobs=1,
+    expected_connectivities = cast(
+        csr_matrix,
+        kneighbors_graph(
+            representation,
+            n_neighbors=3,
+            mode="connectivity",
+            metric="euclidean",
+            include_self=True,
+            n_jobs=1,
+        ),
     )
-    expected_connectivities = 0.5 * (
-        expected_connectivities + expected_connectivities.T
+    expected_connectivities = cast(
+        csr_matrix,
+        0.5 * (expected_connectivities + expected_connectivities.T),
     )
 
     bt.sct.tl.neighbors(

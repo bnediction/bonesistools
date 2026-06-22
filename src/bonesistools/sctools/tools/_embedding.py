@@ -514,7 +514,7 @@ def umap(
     n_pcs = cast(Optional[int], neighbor_params.get("n_pcs"))
     representation_mtx = get_representation(
         adata,
-        representation=representation,
+        obsm=representation,
         n_components=n_pcs,
     )
 
@@ -523,7 +523,7 @@ def umap(
     except ImportError as error:
         raise ImportError(
             "umap-learn is required for `bt.sct.tl.umap`. "
-            "Install bonesistools with the sctools extra or install umap-learn."
+            "Install bonesistools with the omics extra or install umap-learn."
         ) from error
 
     find_ab_params = cast(Any, getattr(umap_umap_module, "find_ab_params"))
@@ -697,7 +697,7 @@ def tsne(
     adata = adata.copy() if copy else adata
     representation_mtx = get_representation(
         adata,
-        representation=representation,
+        obsm=representation,
         n_components=n_pcs,
     )
 

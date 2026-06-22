@@ -112,7 +112,7 @@ def pairwise_distances(
     )
     representation_mtx = get_representation(
         adata,
-        representation=representation,
+        obsm=representation,
         n_components=n_components,
     )
 
@@ -180,7 +180,7 @@ def barycenters(
     )
     representation_mtx = get_representation(
         scdata,
-        representation=representation,
+        obsm=representation,
         n_components=n_components,
     )
 

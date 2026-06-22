@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any, cast
+from typing import Any, Dict, cast
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -230,7 +230,7 @@ def test_composition_deprecates_showlegend(mini_adata):
 
 @pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
 def test_composition_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
-    kwargs = {deprecated: {"loc": "upper left"}}
+    kwargs: Dict[str, Any] = {deprecated: {"loc": "upper left"}}
 
     with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
         fig, ax = bt.sct.pl.composition(

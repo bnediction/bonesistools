@@ -225,7 +225,7 @@ def __scatterplot_discrete(
         np.ndarray,
         get_representation(
             scdata,
-            representation=representation,
+            obsm=representation,
             n_components=n_components,
         ),
     )
@@ -366,7 +366,7 @@ def __scatterplot_continuous(
         np.ndarray,
         get_representation(
             scdata,
-            representation=representation,
+            obsm=representation,
             n_components=n_components,
         ),
     )

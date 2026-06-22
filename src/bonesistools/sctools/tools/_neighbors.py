@@ -83,7 +83,7 @@ def _kneighbors_distance_matrix(
         Matrix,
         get_representation(
             scdata,
-            representation=representation,
+            obsm=representation,
             n_components=n_components,
         ),
     )
@@ -113,7 +113,7 @@ def _kneighbors_graph_matrices(
         Matrix,
         get_representation(
             scdata,
-            representation=representation,
+            obsm=representation,
             n_components=n_components,
         ),
     )
@@ -786,7 +786,7 @@ def knn_graph(
 
         representation_mtx = get_representation(
             scdata,
-            representation=representation,
+            obsm=representation,
             n_components=n_components,
         )
         weighted_adjacency_matrix = sklearn_neighbors.kneighbors_graph(
@@ -1273,7 +1273,7 @@ class KNNSC:
 
         representation_mtx = get_representation(
             adata,
-            representation=resolved_representation,
+            obsm=resolved_representation,
             n_components=resolved_n_components,
         )
 
@@ -1324,12 +1324,12 @@ class KNNSC:
                 adata_any = cast(Any, adata)
                 x_representation_mtx = get_representation(
                     adata_any[paired_scc[0], :],
-                    representation=resolved_representation,
+                    obsm=resolved_representation,
                     n_components=resolved_n_components,
                 )
                 y_representation_mtx = get_representation(
                     adata_any[paired_scc[1], :],
-                    representation=resolved_representation,
+                    obsm=resolved_representation,
                     n_components=resolved_n_components,
                 )
                 dists = pairwise_distances(

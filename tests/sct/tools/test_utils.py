@@ -249,13 +249,13 @@ def test_get_representation_truncates_dimensions(mini_adata):
     pca_mtx = cast(np.ndarray, mini_adata.obsm["X_pca"])
     full_representation_mtx = bt.sct.tl.get_representation(
         mini_adata,
-        representation=None,
+        obsm=None,
     )
     representation_mtx = cast(
         np.ndarray,
         bt.sct.tl.get_representation(
             mini_adata,
-            representation="X_pca",
+            obsm="X_pca",
             n_components=2,
         ),
     )
@@ -267,25 +267,21 @@ def test_get_representation_truncates_dimensions(mini_adata):
 
 def test_get_representation_reports_missing_key(mini_adata):
     with pytest.raises(KeyError, match="key 'missing' not found in scdata.obsm"):
-        bt.sct.tl.get_representation(mini_adata, representation="missing")
+        bt.sct.tl.get_representation(mini_adata, obsm="missing")
 
     pca_missing = mini_adata.copy()
     del pca_missing.obsm["X_pca"]
 
     with pytest.raises(KeyError, match="bonesistools.sct.tl.pca"):
-        bt.sct.tl.get_representation(pca_missing, representation=None)
+        bt.sct.tl.get_representation(pca_missing, obsm=None)
 
 
-def test_get_representation_deprecates_obsm_and_use_rep(mini_adata):
+def test_get_representation_deprecates_use_rep(mini_adata):
     pca_mtx = cast(np.ndarray, mini_adata.obsm["X_pca"])
-
-    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
-        obsm_mtx = bt.sct.tl.get_representation(mini_adata, obsm="X_pca")
 
     with pytest.warns(FutureWarning, match="`use_rep` is deprecated"):
         use_rep_mtx = bt.sct.tl.get_representation(mini_adata, use_rep="X_pca")
 
-    assert obsm_mtx is pca_mtx
     assert use_rep_mtx is pca_mtx
 
 

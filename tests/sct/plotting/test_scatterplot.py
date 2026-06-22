@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
-from typing import Any, cast
+from typing import Any, Dict, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.collections import PathCollection
 from matplotlib.colors import ListedColormap, to_rgba
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
@@ -17,6 +18,10 @@ from bonesistools.sctools.plotting import _scatterplot
 bt.sct.pl.set_default_params(tex=False)
 
 ADATA = bt.sct.datasets.nestorowa()
+
+
+def _path_collection(ax: Axes, index: int) -> PathCollection:
+    return cast(PathCollection, ax.collections[index])
 
 
 def test_embedding_plot_with_test_representation():
@@ -141,8 +146,8 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
     )
 
     facecolors = [
-        np.asarray(collection.get_facecolor()[0], dtype=float)
-        for collection in ax.collections
+        np.asarray(_path_collection(ax, index).get_facecolor()[0], dtype=float)
+        for index in range(len(ax.collections))
     ]
 
     assert len(facecolors) == 2
@@ -154,7 +159,10 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
         facecolors[1],
         np.asarray(to_rgba("blue", alpha=1.0), dtype=float),
     )
-    assert [collection.get_sizes()[0] for collection in ax.collections] == [2, 2]
+    assert [
+        _path_collection(ax, index).get_sizes()[0]
+        for index in range(len(ax.collections))
+    ] == [2, 2]
     plt.close(fig)
 
 
@@ -173,8 +181,8 @@ def test_embedding_discrete_accepts_float_alpha(mini_adata):
     )
 
     facecolors = [
-        np.asarray(collection.get_facecolor()[0], dtype=float)
-        for collection in ax.collections
+        np.asarray(_path_collection(ax, index).get_facecolor()[0], dtype=float)
+        for index in range(len(ax.collections))
     ]
 
     np.testing.assert_allclose(facecolors[0][-1], 0.8)
@@ -197,9 +205,9 @@ def test_embedding_discrete_accepts_size_pair(mini_adata):
         s=(3.0, 7.0),
     )
 
-    assert ax.collections[0].get_sizes()[0] == 7.0
-    assert ax.collections[1].get_sizes()[0] == 3.0
-    assert ax.collections[2].get_sizes()[0] == 3.0
+    assert _path_collection(ax, 0).get_sizes()[0] == 7.0
+    assert _path_collection(ax, 1).get_sizes()[0] == 3.0
+    assert _path_collection(ax, 2).get_sizes()[0] == 3.0
     plt.close(fig)
 
 
@@ -217,7 +225,7 @@ def test_embedding_discrete_accepts_alpha_pair(mini_adata):
         alpha=(1.0, 0.15),
     )
 
-    nan_facecolor = np.asarray(ax.collections[0].get_facecolor()[0], dtype=float)
+    nan_facecolor = np.asarray(_path_collection(ax, 0).get_facecolor()[0], dtype=float)
     np.testing.assert_allclose(nan_facecolor[-1], 0.15)
     plt.close(fig)
 
@@ -240,7 +248,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
             mini_adata,
             obs="cluster",
             representation="X_pca",
-            n_components=4,
+            n_components=cast(Any, 4),
         )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'title'"):
@@ -433,7 +441,7 @@ def test_embedding_plot_rejects_unsupported_object_dtype(mini_adata):
 
 @pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
 def test_embedding_plot_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
-    kwargs = {deprecated: {"loc": "upper left"}}
+    kwargs: Dict[str, Any] = {deprecated: {"loc": "upper left"}}
 
     with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
         fig, ax = bt.sct.pl.embedding(

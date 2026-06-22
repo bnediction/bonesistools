@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any, Sequence, cast
+from typing import Any, Dict, Sequence, cast
 
 import anndata as ad
 import matplotlib as mpl
@@ -373,10 +373,10 @@ def test_distribution_deprecates_legacy_show_kwargs(mini_adata, deprecated, valu
 def test_distribution_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
     mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
     mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
-    kwargs = {deprecated: {"loc": "upper left"}}
+    kwargs: Dict[str, Any] = {deprecated: {"loc": "upper left"}}
 
     with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        fig, ax, _ = bt.sct.pl.distribution(
+        result = bt.sct.pl.distribution(
             mini_adata,
             obs="score",
             groupby="cluster",
@@ -384,6 +384,8 @@ def test_distribution_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
             **kwargs,
         )
 
+    assert result is not None
+    fig, ax, _ = result
     assert ax.get_legend() is not None
     plt.close(fig)
 

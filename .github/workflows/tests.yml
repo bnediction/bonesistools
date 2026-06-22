@@ -57,7 +57,7 @@ jobs:
 
       - name: Install package and test dependencies
         run: |
-          pip install -e ".[sctools]"
+          pip install -e ".[omics]"
           pip install pytest
 
       - name: Check reproducibility tests

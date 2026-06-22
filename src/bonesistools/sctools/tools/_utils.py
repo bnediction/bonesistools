@@ -56,6 +56,28 @@ def _resolve_representation_argument(
     return cast(Optional[str], representation)
 
 
+def _resolve_obsm_argument(
+    obsm: Any,
+    use_rep: Any,
+    *,
+    default: Optional[str],
+    stacklevel: int,
+) -> Optional[str]:
+
+    if use_rep is not _UNSET:
+        _warn_deprecated_argument("use_rep", "obsm", stacklevel=stacklevel)
+        if obsm is not _UNSET:
+            raise TypeError(
+                "received both 'obsm' and deprecated 'use_rep'; "
+                "please use only 'obsm'"
+            )
+        obsm = use_rep
+    elif obsm is _UNSET:
+        obsm = default
+
+    return cast(Optional[str], obsm)
+
+
 @anndata_checker
 def get_expression(
     adata: AnnData,
@@ -314,7 +336,7 @@ def _as_dense_matrix_chunk(expression_mtx: Matrix, start: int, end: int) -> np.n
 @overload
 def get_representation(
     scdata: ScData,
-    representation: Optional[str] = "X_pca",
+    obsm: Optional[str] = "X_pca",
     n_components: Optional[int] = None,
 ) -> Matrix: ...
 
@@ -322,10 +344,9 @@ def get_representation(
 @overload
 def get_representation(
     scdata: ScData,
-    representation: Optional[str] = "X_pca",
+    obsm: Optional[str] = "X_pca",
     n_components: Optional[int] = None,
     *,
-    obsm: Any = _UNSET,
     use_rep: Any = _UNSET,
 ) -> Matrix: ...
 
@@ -333,10 +354,9 @@ def get_representation(
 @anndata_or_mudata_checker
 def get_representation(
     scdata: ScData,  # type: ignore
-    representation: Any = _UNSET,
+    obsm: Any = _UNSET,
     n_components: Optional[int] = None,
     *,
-    obsm: Any = _UNSET,
     use_rep: Any = _UNSET,
 ) -> Matrix:
     """
@@ -346,12 +366,10 @@ def get_representation(
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    representation: str (default: "X_pca")
+    obsm: str (default: "X_pca")
         Representation key in `scdata.obsm`.
-    obsm: str, optional
-        Deprecated alias for `representation`.
     use_rep: str, optional
-        Deprecated alias for `representation`.
+        Deprecated alias for `obsm`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
 
@@ -363,32 +381,31 @@ def get_representation(
     Raises
     ------
     KeyError
-        If `representation` is not found in `scdata.obsm`.
+        If `obsm` is not found in `scdata.obsm`.
     """
 
-    representation = _resolve_representation_argument(
-        representation,
+    obsm = _resolve_obsm_argument(
+        obsm,
         use_rep,
         default="X_pca",
         stacklevel=2,
-        obsm=obsm,
     )
-    if representation is None:
-        representation = "X_pca"
+    if obsm is None:
+        obsm = "X_pca"
 
-    if representation not in scdata.obsm:
-        if representation == "X_pca":
+    if obsm not in scdata.obsm:
+        if obsm == "X_pca":
             raise KeyError(
                 "key 'X_pca' not found in scdata.obsm: "
                 "please run bonesistools.sct.tl.pca"
             )
         else:
-            raise KeyError(f"key '{representation}' not found in scdata.obsm")
+            raise KeyError(f"key '{obsm}' not found in scdata.obsm")
 
     if n_components is None:
-        return cast(Matrix, scdata.obsm[representation])
+        return cast(Matrix, scdata.obsm[obsm])
     else:
-        return cast(Matrix, scdata.obsm[representation][:, :n_components])
+        return cast(Matrix, scdata.obsm[obsm][:, :n_components])
 
 
 @anndata_checker

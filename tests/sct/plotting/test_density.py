@@ -78,8 +78,9 @@ def test_density_with_obs_expression_mapping_ax_outfile_and_errors(
     assert returned_fig is fig
     assert returned_ax is ax
     assert ax.get_title() == "kde"
-    assert ax.get_legend() is not None
-    assert ax.get_legend().get_title().get_text() == "groups"
+    legend = ax.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "groups"
     plt.close(fig)
 
     outfile = tmp_path / "kde.png"
@@ -265,8 +266,9 @@ def test_density_deprecates_not_all(mini_adata):
             not_all=True,
     )
 
-    assert ax.get_legend() is not None
-    assert "all" not in [text.get_text() for text in ax.get_legend().texts]
+    legend = ax.get_legend()
+    assert legend is not None
+    assert "all" not in [text.get_text() for text in legend.texts]
     plt.close(fig)
 
     with pytest.warns(FutureWarning, match="`not_all` is deprecated"):

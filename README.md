@@ -134,10 +134,10 @@ Install the latest release:
 pip install bonesistools
 ```
 
-Install the single-cell dependencies:
+Install the omics dependencies:
 
 ```sh
-pip install "bonesistools[sctools]"
+pip install "bonesistools[omics]"
 ```
 
 Install all optional dependencies:
