@@ -10,7 +10,7 @@ from matplotlib.colors import ListedColormap
 from matplotlib.ticker import FormatStrFormatter
 
 from ._colors import (
-    COLORS,
+    CLASSIC_COLORS,
     black,
     blue,
     darkred,
@@ -106,7 +106,7 @@ def set_default_params(tex: bool = True):
     return None
 
 
-cmap = ListedColormap(colors=COLORS, name="default", N=None)
+cmap = ListedColormap(colors=CLASSIC_COLORS, name="default", N=None)
 
 mpl.colormaps.register(cmap)
 

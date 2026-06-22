@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
     Dict,
     Iterator,
     Mapping,
@@ -27,16 +26,18 @@ from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
-from ..._warnings import _warn_deprecated
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import anndata_checker
+from ..tools._utils import _UNSET
 from ._colors import (
-    COLORS,
+    CLASSIC_COLORS,
     QUALITATIVE_COLORS,
     blue,
     generate_colormap,
     gray,
 )
 from ._utils import (
+    _resolve_legend_options,
     colormap_colors,
     figure_from_axes,
     normalize_color,
@@ -47,9 +48,81 @@ from ._utils import (
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 
 
-def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarray:
+def _resolve_feature_argument(feature: Any, gene: Any, *, stacklevel: int) -> str:
 
-    counts = adata[:, gene].layers[layer] if layer else adata[:, gene].X
+    if gene is not _UNSET:
+        _warn_deprecated_argument("gene", "feature", stacklevel=stacklevel)
+        if feature is not _UNSET:
+            raise TypeError(
+                "received both 'feature' and deprecated 'gene'; "
+                "please use only 'feature'"
+            )
+        feature = gene
+
+    if feature is _UNSET:
+        raise TypeError("missing required argument: 'feature'")
+
+    return cast(str, feature)
+
+
+def _resolve_expression_argument(
+    expression: Optional[str],
+    layer: Any,
+    *,
+    stacklevel: int,
+) -> Optional[str]:
+
+    if layer is not _UNSET:
+        _warn_deprecated_argument("layer", "expression", stacklevel=stacklevel)
+        if expression is not None:
+            raise TypeError(
+                "received both 'expression' and deprecated 'layer'; "
+                "please use only 'expression'"
+            )
+        expression = cast(Optional[str], layer)
+
+    return expression
+
+
+def _resolve_clip_outliers_argument(clip_outliers: bool, clip: Any) -> bool:
+
+    if clip is _UNSET:
+        return clip_outliers
+
+    _warn_deprecated_argument("clip", "clip_outliers", stacklevel=3)
+    if clip_outliers is not False:
+        raise TypeError(
+            "received both 'clip_outliers' and deprecated 'clip'; "
+            "please use only 'clip_outliers'"
+        )
+
+    return cast(bool, clip)
+
+
+def _resolve_show_global_argument(show_global: bool, not_all: Any) -> bool:
+
+    if not_all is _UNSET:
+        return show_global
+
+    _warn_deprecated_argument("not_all", "show_global", stacklevel=3)
+    if show_global is not True:
+        raise TypeError(
+            "received both 'show_global' and deprecated 'not_all'; "
+            "please use only 'show_global'"
+        )
+
+    return not cast(bool, not_all)
+
+
+def _counts_vector(
+    adata: AnnData,
+    feature: str,
+    expression: Optional[str],
+) -> np.ndarray:
+
+    counts = (
+        adata[:, feature].layers[expression] if expression else adata[:, feature].X
+    )
 
     if scipy.sparse.issparse(counts):
         counts = cast(Any, counts).toarray()
@@ -60,17 +133,22 @@ def _counts_vector(adata: AnnData, gene: str, layer: Optional[str]) -> np.ndarra
 @overload
 def density(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
-    not_all: bool = False,
-    clip: bool = False,
     colors: Optional[Colors] = None,
-    show_legend: bool = True,
+    show_global: bool = True,
+    clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: None = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     ax: Optional[Axes] = None,
+    outfile: None = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
+    clip: Any = _UNSET,
+    not_all: Any = _UNSET,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]: ...
 
@@ -78,18 +156,22 @@ def density(
 @overload
 def density(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
-    obs: Optional[str] = None,
-    not_all: bool = False,
-    clip: bool = False,
-    colors: Optional[Colors] = None,
-    show_legend: bool = True,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    default_parameters: Optional[Callable[[], None]] = None,
+    feature: Any = _UNSET,
     *,
-    outfile: Path,
+    expression: Optional[str] = None,
+    obs: Optional[str] = None,
+    colors: Optional[Colors] = None,
+    show_global: bool = True,
+    clip_outliers: bool = False,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     ax: Optional[Axes] = None,
+    outfile: Path,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
+    clip: Any = _UNSET,
+    not_all: Any = _UNSET,
     **kwargs: Any,
 ) -> None: ...
 
@@ -97,18 +179,22 @@ def density(
 @overload
 def density(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
-    obs: Optional[str] = None,
-    not_all: bool = False,
-    clip: bool = False,
-    colors: Optional[Colors] = None,
-    show_legend: bool = True,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    default_parameters: Optional[Callable[[], None]] = None,
+    feature: Any = _UNSET,
     *,
-    outfile: Optional[Path] = None,
+    expression: Optional[str] = None,
+    obs: Optional[str] = None,
+    colors: Optional[Colors] = None,
+    show_global: bool = True,
+    clip_outliers: bool = False,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
+    clip: Any = _UNSET,
+    not_all: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]: ...
 
@@ -116,45 +202,61 @@ def density(
 @anndata_checker
 def density(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
-    not_all: bool = False,
-    clip: bool = False,
     colors: Optional[Colors] = None,
-    show_legend: bool = True,
+    show_global: bool = True,
+    clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: Optional[Path] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
+    clip: Any = _UNSET,
+    not_all: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
-    Draw gene-related density function using kernel density estimation.
+    Draw feature-related density function using kernel density estimation.
 
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    gene: str
-        Gene of interest to plot.
-    layer: str, optional
+    feature: str
+        Feature of interest to plot.
+    expression: str, optional
         Layer to use instead of `adata.X`.
     obs: str, optional
         Observation column in `adata.obs` defining groups.
-    not_all: bool (default: False)
-        If True, do not draw density function using all barcodes. Raises an
-        error if True and `obs` is not specified.
-    clip: bool (default: False)
-        If True, clip density between the minimum value and the quantile at 99%.
     colors: Colors (optional, default: None)
         Colors used for density curves.
+    show_global: bool (default: True)
+        If True, draw the density function using all observations.
+    clip_outliers: bool (default: False)
+        If True, clip density between the minimum value and the quantile at 99%.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    default_parameters: Callable (optional, default: None)
-        Function specifying default figure parameters.
+    legend: dict, optional
+        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
+    show_legend: bool (default: True)
+        Draw the legend when `obs` is specified.
+    ax: Axes, optional
+        Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
+    gene: str, optional
+        Deprecated alias for `feature`.
+    layer: str, optional
+        Deprecated alias for `expression`.
+    clip: bool, optional
+        Deprecated alias for `clip_outliers`.
+    not_all: bool, optional
+        Deprecated inverse alias for `show_global`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -173,21 +275,27 @@ def density(
     Raises
     ------
     ValueError
-        If `not_all=True` while `obs` is None.
+        If `show_global=False` while `obs` is None.
     KeyError
         If `obs` is specified but not found in `adata.obs`.
     """
 
-    if obs is None and not_all is True:
+    feature = _resolve_feature_argument(feature, gene, stacklevel=2)
+    expression = _resolve_expression_argument(expression, layer, stacklevel=2)
+    clip_outliers = _resolve_clip_outliers_argument(clip_outliers, clip)
+    show_global = _resolve_show_global_argument(show_global, not_all)
+
+    if obs is None and show_global is False:
         raise ValueError(
-            "invalid argument values for 'obs' and 'not_all': "
-            "expected not_all=False when obs is None"
+            "invalid argument values for 'obs' and 'show_global': "
+            "expected show_global=True when obs is None"
         )
+    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
 
     import seaborn as sns
 
     counts = pd.DataFrame(
-        {"counting": _counts_vector(adata, gene, layer)},
+        {"counting": _counts_vector(adata, feature, expression)},
         index=adata.obs.index,
     )
 
@@ -216,10 +324,10 @@ def density(
     q = np.quantile(counts["counting"], 0.99)
     clip_range = cast(
         Optional[Tuple[float, float]],
-        (float(min(counts["counting"])), float(q)) if clip is True else None,
+        (float(min(counts["counting"])), float(q)) if clip_outliers is True else None,
     )
 
-    if not_all is False:
+    if show_global is True:
         sns.kdeplot(
             data=cast(Any, counts["counting"]),
             ax=ax,
@@ -259,7 +367,9 @@ def density(
             ax.set_title(**title)
 
     if obs and show_legend:
-        ax.legend(loc="upper right")
+        legend_kwargs = {"loc": "upper right"}
+        legend_kwargs.update(legend or {})
+        ax.legend(**legend_kwargs)
 
     (
         ax.xaxis.set_major_formatter(kwargs["formatter"])
@@ -272,9 +382,6 @@ def density(
         else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
     )
 
-    if default_parameters:
-        default_parameters()
-
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")
         plt.close(fig)
@@ -286,14 +393,17 @@ def density(
 @overload
 def cdf(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: None = None,
     ax: Optional[Axes] = None,
+    outfile: None = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]: ...
 
@@ -301,15 +411,17 @@ def cdf(
 @overload
 def cdf(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Path,
     ax: Optional[Axes] = None,
+    outfile: Path,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
     **kwargs: Any,
 ) -> None: ...
 
@@ -317,50 +429,63 @@ def cdf(
 @overload
 def cdf(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]: ...
 
 
 def cdf(
     adata: AnnData,
-    gene: str,
-    layer: Optional[str] = None,
+    feature: Any = _UNSET,
+    *,
+    expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    gene: Any = _UNSET,
+    layer: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
-    Draw gene-related cumulative density function.
+    Draw feature-related cumulative density function.
 
     Parameters
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    gene: str
-        Gene of interest to plot.
-    layer: str, optional
+    feature: str
+        Feature of interest to plot.
+    expression: str, optional
         Layer to use instead of `adata.X`.
     obs: str, optional
         Observation column in `adata.obs` defining groups.
     colors: Colors (optional, default: None)
         Colors used for cumulative density curves.
-    default_parameters: Callable (optional, default: None)
-        Function specifying default figure parameters.
+    legend: dict, optional
+        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
+    show_legend: bool (default: True)
+        Draw the legend when `obs` is specified.
+    ax: Axes, optional
+        Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
+    gene: str, optional
+        Deprecated alias for `feature`.
+    layer: str, optional
+        Deprecated alias for `expression`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -376,6 +501,10 @@ def cdf(
         Figure and axes if `outfile` is None; otherwise None after saving the
         figure.
     """
+    feature = _resolve_feature_argument(feature, gene, stacklevel=2)
+    expression = _resolve_expression_argument(expression, layer, stacklevel=2)
+
+    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
 
     def _ecdf(values):
 
@@ -384,7 +513,7 @@ def cdf(
         return values, y
 
     counts = pd.DataFrame(
-        {"counting": _counts_vector(adata, gene, layer)},
+        {"counting": _counts_vector(adata, feature, expression)},
         index=adata.obs.index,
     )
 
@@ -393,7 +522,9 @@ def cdf(
         if colors is None:
             color_values = [
                 gray,
-                *COLORS[1 : len(adata.obs[obs].astype("category").cat.categories) + 1],
+                *CLASSIC_COLORS[
+                    1 : len(adata.obs[obs].astype("category").cat.categories) + 1
+                ],
             ]
         elif isinstance(colors, Mapping):
             color_values = [
@@ -435,7 +566,9 @@ def cdf(
     if min(counts["counting"]) == 0:
         ax.set_xlim(min(counts["counting"]), max(counts["counting"]) * 1.1)
     if obs and show_legend:
-        ax.legend(loc="upper right")
+        legend_kwargs = {"loc": "upper right"}
+        legend_kwargs.update({} if legend is None else legend)
+        ax.legend(**legend_kwargs)
 
     (
         ax.xaxis.set_major_formatter(kwargs["formatter"])
@@ -447,9 +580,6 @@ def cdf(
         if "formatter" in kwargs
         else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
     )
-
-    if default_parameters:
-        default_parameters()
 
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from collections.abc import Collection as CollectionInstance
-from typing import Any, Optional, Tuple, cast
+from typing import Any, Optional, Tuple, cast, overload
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ from pandas import Index
 from scipy import sparse
 
 from ..._validation import _as_string
+from ..._warnings import _warn_deprecated_argument
 from .._typing import (
     AnnDataAxis,
     Matrix,
@@ -19,6 +20,40 @@ from .._typing import (
     anndata_or_mudata_checker,
 )
 from .._validation import _as_anndata_axis, _as_var_subset
+
+_UNSET = object()
+
+
+def _resolve_representation_argument(
+    representation: Any,
+    use_rep: Any,
+    *,
+    default: Optional[str],
+    stacklevel: int,
+    obsm: Any = _UNSET,
+) -> Optional[str]:
+
+    if obsm is not _UNSET:
+        _warn_deprecated_argument("obsm", "representation", stacklevel=stacklevel)
+        if representation is not _UNSET:
+            raise TypeError(
+                "received both 'representation' and deprecated 'obsm'; "
+                "please use only 'representation'"
+            )
+        representation = obsm
+
+    if use_rep is not _UNSET:
+        _warn_deprecated_argument("use_rep", "representation", stacklevel=stacklevel)
+        if representation is not _UNSET:
+            raise TypeError(
+                "received both 'representation' and deprecated 'use_rep'; "
+                "please use only 'representation'"
+            )
+        representation = use_rep
+    elif representation is _UNSET:
+        representation = default
+
+    return cast(Optional[str], representation)
 
 
 @anndata_checker
@@ -276,11 +311,33 @@ def _as_dense_matrix_chunk(expression_mtx: Matrix, start: int, end: int) -> np.n
     return dense_chunk
 
 
+@overload
+def get_representation(
+    scdata: ScData,
+    representation: Optional[str] = "X_pca",
+    n_components: Optional[int] = None,
+) -> Matrix: ...
+
+
+@overload
+def get_representation(
+    scdata: ScData,
+    representation: Optional[str] = "X_pca",
+    n_components: Optional[int] = None,
+    *,
+    obsm: Any = _UNSET,
+    use_rep: Any = _UNSET,
+) -> Matrix: ...
+
+
 @anndata_or_mudata_checker
 def get_representation(
     scdata: ScData,  # type: ignore
-    use_rep: Optional[str] = "X_pca",
+    representation: Any = _UNSET,
     n_components: Optional[int] = None,
+    *,
+    obsm: Any = _UNSET,
+    use_rep: Any = _UNSET,
 ) -> Matrix:
     """
     Get and optionally truncate an observation representation.
@@ -289,8 +346,12 @@ def get_representation(
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    use_rep: str (default: "X_pca")
+    representation: str (default: "X_pca")
         Representation key in `scdata.obsm`.
+    obsm: str, optional
+        Deprecated alias for `representation`.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
 
@@ -302,31 +363,38 @@ def get_representation(
     Raises
     ------
     KeyError
-        If `use_rep` is not found in `scdata.obsm`.
+        If `representation` is not found in `scdata.obsm`.
     """
 
-    if use_rep is None:
-        use_rep = "X_pca"
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default="X_pca",
+        stacklevel=2,
+        obsm=obsm,
+    )
+    if representation is None:
+        representation = "X_pca"
 
-    if use_rep not in scdata.obsm:
-        if use_rep == "X_pca":
+    if representation not in scdata.obsm:
+        if representation == "X_pca":
             raise KeyError(
                 "key 'X_pca' not found in scdata.obsm: "
                 "please run bonesistools.sct.tl.pca"
             )
         else:
-            raise KeyError(f"key '{use_rep}' not found in scdata.obsm")
+            raise KeyError(f"key '{representation}' not found in scdata.obsm")
 
     if n_components is None:
-        return cast(Matrix, scdata.obsm[use_rep])
+        return cast(Matrix, scdata.obsm[representation])
     else:
-        return cast(Matrix, scdata.obsm[use_rep][:, :n_components])
+        return cast(Matrix, scdata.obsm[representation][:, :n_components])
 
 
 @anndata_checker
 def get_pairwise(
     adata: AnnData,
-    pairwise: str,
+    key: str,
     axis: AnnDataAxis = "obs",
 ) -> Matrix:
     """
@@ -336,11 +404,11 @@ def get_pairwise(
     ----------
     adata: AnnData
         Unimodal annotated data matrix.
-    pairwise: str
+    key: str
         Pairwise matrix key.
     axis: {"obs", "var"} (default: "obs")
         Axis whose pairwise matrix is retrieved. If `"obs"`, read from
-        `adata.obsp[pairwise]`. If `"var"`, read from `adata.varp[pairwise]`.
+        `adata.obsp[key]`. If `"var"`, read from `adata.varp[key]`.
 
     Returns
     -------
@@ -350,9 +418,9 @@ def get_pairwise(
 
     axis = _as_anndata_axis(axis, allow_both=False)
     if axis == "obs":
-        return cast(Matrix, adata.obsp[pairwise])
+        return cast(Matrix, adata.obsp[key])
     else:
-        return cast(Matrix, adata.varp[pairwise])
+        return cast(Matrix, adata.varp[key])
 
 
 @anndata_or_mudata_checker

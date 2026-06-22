@@ -28,9 +28,11 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import art3d
 from scipy import sparse
 
+from ..._compat import Literal
 from ..._validation import _as_non_negative_number
 from ..._warnings import _warn_deprecated
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
+from ..tools._utils import _UNSET, _resolve_representation_argument
 from ._colors import black
 from ._scatterplot import Colors, embedding
 
@@ -38,13 +40,14 @@ from ._scatterplot import Colors, embedding
 @anndata_or_mudata_checker
 def graph_overlay(
     scdata: ScData,  # type: ignore
+    *,
     graph_key: str = "epg",
-    ax: Optional[Axes] = None,
-    n_components: int = 2,
+    n_components: Literal[2, 3] = 2,
     show_labels: bool = False,
     z_offset: float = 0.0,
     label_key: str = "label",
     label_kwargs: Optional[Dict[str, Any]] = None,
+    ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Axes:
     """
@@ -56,8 +59,6 @@ def graph_overlay(
         Unimodal or multimodal annotated data matrix.
     graph_key: str (default: "epg")
         Key pointing to the principal graph stored in `scdata.uns[graph_key]`.
-    ax: Axes, optional
-        Matplotlib axes containing the embedding. If None, use current axes.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
     show_labels: bool (default: False)
@@ -68,6 +69,8 @@ def graph_overlay(
         Node attribute used as label when `show_labels=True`.
     label_kwargs: dict, optional
         Keyword arguments passed to Matplotlib text drawing.
+    ax: Axes, optional
+        Matplotlib axes containing the embedding. If None, use current axes.
     **kwargs: Any
         Keyword arguments passed to graph line drawing.
 
@@ -177,20 +180,21 @@ def graph_overlay(
 def trajectory(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
     graph_key: str = "epg",
-    colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Any] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Any] = None,
-    outfile: None = None,
-    ax: Optional[Axes] = None,
+    n_components: Literal[2, 3] = 2,
+    colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
     graph_z_offset: float = 0.0,
     label_key: str = "label",
+    ax: Optional[Axes] = None,
+    outfile: None = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]: ...
 
@@ -199,21 +203,21 @@ def trajectory(
 def trajectory(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
     graph_key: str = "epg",
-    colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Any] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Any] = None,
-    *,
-    outfile: Path,
-    ax: Optional[Axes] = None,
+    n_components: Literal[2, 3] = 2,
+    colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
     graph_z_offset: float = 0.0,
     label_key: str = "label",
+    ax: Optional[Axes] = None,
+    outfile: Path,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> None: ...
 
@@ -222,21 +226,21 @@ def trajectory(
 def trajectory(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
     graph_key: str = "epg",
-    colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Any] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Any] = None,
-    *,
-    outfile: Optional[Path] = None,
-    ax: Optional[Axes] = None,
+    n_components: Literal[2, 3] = 2,
+    colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
     graph_z_offset: float = 0.0,
     label_key: str = "label",
+    ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]: ...
 
@@ -245,20 +249,21 @@ def trajectory(
 def trajectory(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
     graph_key: str = "epg",
-    colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Any] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Any] = None,
-    outfile: Optional[Path] = None,
-    ax: Optional[Axes] = None,
+    n_components: Literal[2, 3] = 2,
+    colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
     graph_z_offset: float = 0.0,
     label_key: str = "label",
+    ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
@@ -273,34 +278,34 @@ def trajectory(
         Unimodal or multimodal annotated data matrix.
     obs: str
         Observation column in `scdata.obs` defining groups or values.
-    use_rep: str
+    representation: str
         Representation key in `scdata.obsm`.
     graph_key: str (default: "epg")
         Key pointing to the principal graph stored in `scdata.uns[graph_key]`.
-    colors: matplotlib.colors.Colormap, optional
-        Colormap or colors used to draw observations.
-    n_components: 2 or 3 (default: 2)
-        Number of plotted dimensions.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     show_legend: bool (default: True)
         Draw the legend when `scdata.obs[obs]` contains discrete values.
     show_labels: bool (default: False)
         Draw graph node labels.
-    automatic_resize: bool (default: False)
-        Resize figure to accommodate large legends.
-    default_parameters: Callable, optional
-        Function specifying default figure parameters.
-    outfile: Path, optional
-        If specified, save the figure instead of returning it.
-    ax: Axes, optional
-        Existing axes used for drawing.
+    n_components: 2 or 3 (default: 2)
+        Number of plotted dimensions.
+    colors: matplotlib.colors.Colormap, optional
+        Colormap or colors used to draw observations.
     graph: dict, optional
         Keyword arguments passed to graph line drawing.
     graph_z_offset: float (default: 0.0)
         Vertical offset applied to graph lines in 3D.
     label_key: str (default: "label")
         Node attribute used as label when `show_labels=True`.
+    ax: Axes, optional
+        Existing axes used for drawing.
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
+    obsm: str, optional
+        Deprecated alias for `representation`.
     **kwargs: Any
         Keyword arguments passed to `embedding`.
 
@@ -321,21 +326,28 @@ def trajectory(
     and mapping of omics data with STREAM. Nature Communications, 10(1), 1903.
     """
 
-    result = embedding(
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+        obsm=obsm,
+    )
+    if representation is None:
+        raise TypeError("missing required argument: 'representation'")
+
+    fig, drawn_ax = embedding(
         scdata,
         obs=obs,
-        use_rep=use_rep,
+        representation=representation,
         colors=colors,
         n_components=n_components,
         title=title,
         show_legend=show_legend,
-        automatic_resize=automatic_resize,
-        default_parameters=default_parameters,
         outfile=None,
         ax=ax,
         **kwargs,
     )
-    fig, drawn_ax = cast(Tuple[Figure, Axes], result)
 
     graph_overlay(
         scdata,
@@ -361,13 +373,16 @@ def trajectory(
 def paga(
     adata: AnnData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
-    ax: Optional[Axes] = None,
     with_labels: bool = False,
     node_color: Any = black,
+    ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Union[Axes, None]:
     """
@@ -383,20 +398,24 @@ def paga(
         Unimodal annotated data matrix.
     obs: str
         Observation column in `adata.obs` defining groups.
-    use_rep: str
+    representation: str
         Representation key in `adata.obsm`.
     edges: str (default: "transitions_confidence")
         Key in `adata.uns` containing the adjacency matrix.
     threshold: float (default: 0.01)
         Confidence threshold used to prune adjacency values.
-    ax: Axes (optional, default: None)
-        Draw the paga graph in the specified Matplotlib axes.
     with_labels: bool (default: False)
         Add labels on the nodes.
     node_color: Union[Sequence[RGB], cycle, Mapping] (optional, default: None)
         Color specification for graph nodes.
+    ax: Axes (optional, default: None)
+        Draw the paga graph in the specified Matplotlib axes.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
+    obsm: str, optional
+        Deprecated alias for `representation`.
     **kwargs: Any
         Keyword arguments passed to `networkx.draw_networkx`.
 
@@ -412,11 +431,25 @@ def paga(
     through dynamical modeling. Nature Biotechnology, 38(12), 1408-1414.
     """
 
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+        obsm=obsm,
+    )
+    if representation is None:
+        raise TypeError("missing required argument: 'representation'")
+
     if ax is None:
         ax = plt.gca()
 
     paga_graph = _paga_graph(
-        adata=adata, obs=obs, use_rep=use_rep, edges=edges, threshold=threshold
+        adata=adata,
+        obs=obs,
+        representation=representation,
+        edges=edges,
+        threshold=threshold,
     )
     barycenters = {
         node: position[:2]
@@ -453,13 +486,13 @@ def paga(
 def _paga_graph(
     adata: AnnData,
     obs: str,
-    use_rep: str,
+    representation: str,
     edges: str = "transitions_confidence",
     threshold: float = 0.01,
 ) -> nx.Graph[Any]:
 
     categories = adata.obs[obs].cat.categories
-    representation_mtx = adata.obsm[use_rep]
+    representation_mtx = adata.obsm[representation]
     barycenters = {
         category: np.nanmean(representation_mtx[adata.obs[obs] == category], axis=0)
         for category in categories

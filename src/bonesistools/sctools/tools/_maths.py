@@ -21,18 +21,23 @@ from .._typing import (
     anndata_checker,
     anndata_or_mudata_checker,
 )
-from ._utils import get_representation
+from ._utils import (
+    _UNSET,
+    _resolve_representation_argument,
+    get_representation,
+)
 
 
 @overload
 def pairwise_distances(
     adata: AnnData,
     n_components: Optional[int] = None,
-    use_rep: Optional[str] = None,
+    representation: Optional[str] = None,
     metric: Union[Metric, Metric_Function] = "euclidean",
     *,
     key_added: None = None,
     n_jobs: int = 1,
+    use_rep: Any = _UNSET,
     **metric_kwds: Any,
 ) -> np.ndarray: ...
 
@@ -41,11 +46,12 @@ def pairwise_distances(
 def pairwise_distances(
     adata: AnnData,
     n_components: Optional[int] = None,
-    use_rep: Optional[str] = None,
+    representation: Optional[str] = None,
     metric: Union[Metric, Metric_Function] = "euclidean",
     *,
     key_added: str,
     n_jobs: int = 1,
+    use_rep: Any = _UNSET,
     **metric_kwds: Any,
 ) -> None: ...
 
@@ -54,10 +60,11 @@ def pairwise_distances(
 def pairwise_distances(
     adata: AnnData,  # type: ignore
     n_components: Optional[int] = None,
-    use_rep: Optional[str] = None,
+    representation: Any = _UNSET,
     metric: Union[Metric, Metric_Function] = "euclidean",
     key_added: Optional[str] = None,
     n_jobs: int = 1,
+    use_rep: Any = _UNSET,
     **metric_kwds: Any,
 ) -> Union[np.ndarray, None]:
     """
@@ -69,7 +76,7 @@ def pairwise_distances(
         Unimodal annotated data matrix.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
-    use_rep: str, optional
+    representation: str, optional
         Representation key in `adata.obsm`.
     metric: Metric | Metric_Function (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
@@ -80,6 +87,8 @@ def pairwise_distances(
         Number of allocated processors.
     **metric_kwds: Any
         Additional keyword arguments passed to the distance function.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
 
     Returns
     -------
@@ -95,9 +104,15 @@ def pairwise_distances(
 
     from sklearn.metrics import pairwise_distances
 
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+    )
     representation_mtx = get_representation(
         adata,
-        use_rep=use_rep,
+        representation=representation,
         n_components=n_components,
     )
 
@@ -112,7 +127,7 @@ def pairwise_distances(
         adata.obsp[key_added] = distances
         adata.uns[key_added] = {
             "n_components": n_components,
-            "use_rep": use_rep,
+            "representation": representation,
             "metric": metric,
             "metric_kwds": metric_kwds,
         }
@@ -125,8 +140,10 @@ def pairwise_distances(
 def barycenters(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: Optional[str] = None,
+    representation: Any = _UNSET,
     n_components: Optional[int] = None,
+    *,
+    use_rep: Any = _UNSET,
 ) -> Mapping[str, np.ndarray]:
     """
     Calculate cluster barycenters in an embedding space.
@@ -137,10 +154,12 @@ def barycenters(
         Unimodal or multimodal annotated data matrix.
     obs: str
         Categorical observation key in `scdata.obs`.
-    use_rep: str, optional
+    representation: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
 
     Returns
     -------
@@ -153,9 +172,15 @@ def barycenters(
         If `scdata.obs[obs]` does not expose categorical `.cat` access.
     """
 
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+    )
     representation_mtx = get_representation(
         scdata,
-        use_rep=use_rep,
+        representation=representation,
         n_components=n_components,
     )
 

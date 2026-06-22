@@ -25,10 +25,15 @@ from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
-from ..._warnings import _warn_deprecated, _warn_deprecated_argument
+from ..._compat import Literal
+from ..._warnings import _warn_deprecated
 from .._typing import ScData, anndata_or_mudata_checker
 from ..tools import barycenters
-from ..tools._utils import get_representation
+from ..tools._utils import (
+    _UNSET,
+    _resolve_representation_argument,
+    get_representation,
+)
 from ._colors import (
     QUALITATIVE_COLORS,
     generate_colormap,
@@ -36,8 +41,10 @@ from ._colors import (
     lightgray,
 )
 from ._utils import (
+    _resolve_legend_options,
     colormap_colors,
     colors_from_uns,
+    deprecated_bool_kwarg,
     figure_from_axes,
     normalize_color,
     qualitative_color_values,
@@ -52,30 +59,32 @@ Colors = Union[
     Mapping[object, object],
 ]
 ContinuousColors = Union[str, Colormap]
+MarkerParameter = Union[float, Tuple[float, float]]
 
 
-def __deprecated_bool_kwarg(
-    kwargs: Dict[str, Any],
-    old_name: str,
-    new_name: str,
-    new_value: bool,
-    default_value: bool,
-) -> bool:
+def __split_marker_parameter(
+    value: MarkerParameter,
+    name: str,
+) -> Tuple[float, float]:
 
-    if old_name not in kwargs:
-        return new_value
+    if isinstance(value, tuple):
+        if len(value) != 2:
+            raise ValueError(
+                f"invalid argument value for {name!r}: "
+                f"expected a float or a pair of floats but received {value!r}"
+            )
+        return value
 
-    old_value = kwargs.pop(old_name)
+    return value, value
 
-    _warn_deprecated_argument(old_name, new_name, stacklevel=3)
 
-    if new_value != default_value:
-        raise TypeError(
-            f"invalid argument combination: use either '{old_name}' "
-            f"or '{new_name}', not both"
-        )
+def __scatter_alpha(color: object, kwargs: Mapping[str, Any]) -> float:
 
-    return cast(bool, old_value)
+    if "alpha" in kwargs:
+        return cast(float, kwargs["alpha"])
+    if color == lightgray:
+        return 0.3
+    return 1.0
 
 
 def __deprecated_graph_kwarg(
@@ -113,7 +122,7 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
     def wrapper(
         scdata: ScData,  # type: ignore
         obs: str,
-        use_rep: str,
+        representation: str,
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
         ax: Optional[Axes] = None,
@@ -123,7 +132,7 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
         n_components = 2 if n_components is None else n_components
         fig, ax = cast(
             Tuple[Figure, Axes],
-            plot(scdata, obs, use_rep, colors, n_components, ax=ax, **kwargs),
+            plot(scdata, obs, representation, colors, n_components, ax=ax, **kwargs),
         )
 
         if "xlabel" in kwargs:
@@ -183,9 +192,10 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
 def __scatterplot_discrete(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: str,
+    representation: Optional[str] = None,
     colors: Optional[Colors] = None,
     n_components: int = 2,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = False,
     ax: Optional[Axes] = None,
     **kwargs: Any,
@@ -213,7 +223,11 @@ def __scatterplot_discrete(
 
     representation_mtx = cast(
         np.ndarray,
-        get_representation(scdata, use_rep=use_rep, n_components=n_components),
+        get_representation(
+            scdata,
+            representation=representation,
+            n_components=n_components,
+        ),
     )
 
     if ax is None:
@@ -238,7 +252,7 @@ def __scatterplot_discrete(
             ax.scatter(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
                 facecolors=(
                     kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else gray
                 ),
@@ -247,7 +261,7 @@ def __scatterplot_discrete(
                     if "edgecolor" in kwargs["nan"]
                     else "none"
                 ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3,
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
             )
         elif n_components == 3:
             ax3d = cast(Any, ax)
@@ -255,7 +269,7 @@ def __scatterplot_discrete(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
                 representation_mtx[idx, 2],
-                s=kwargs["s"] if "s" in kwargs else 3,
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
                 facecolors=(
                     kwargs["nan"]["facecolors"]
                     if "facecolors" in kwargs["nan"]
@@ -266,7 +280,7 @@ def __scatterplot_discrete(
                     if "edgecolors" in kwargs["nan"]
                     else "none"
                 ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3,
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
             )
 
     color_values = cast(Sequence[object], colors)
@@ -283,14 +297,10 @@ def __scatterplot_discrete(
             ax.scatter(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
-                s=kwargs["s"] if "s" in kwargs else 3,
+                s=kwargs["s"] if "s" in kwargs else 2.0,
                 facecolors=_color,
                 edgecolors="none",
-                alpha=(
-                    kwargs["alpha"]
-                    if "alpha" in kwargs and _color != lightgray
-                    else 0.3
-                ),
+                alpha=__scatter_alpha(_color, kwargs),
                 label=_cluster,
             )
         elif n_components == 3:
@@ -299,44 +309,36 @@ def __scatterplot_discrete(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
                 representation_mtx[idx, 2],
-                s=kwargs["s"] if "s" in kwargs else 3,
+                s=kwargs["s"] if "s" in kwargs else 2.0,
                 facecolors=_color,
                 edgecolors="none",
-                alpha=(
-                    kwargs["alpha"]
-                    if "alpha" in kwargs and _color != lightgray
-                    else 0.3
-                ),
+                alpha=__scatter_alpha(_color, kwargs),
                 label=_cluster,
             )
 
     if show_legend:
         box = ax.get_position()
         ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
-        if "legend_params" in kwargs:
-            kwargs["lgd_params"] = kwargs["legend_params"]
-        if "lgd_params" in kwargs:
-            if (
-                "loc" not in kwargs["lgd_params"]
-                and "bbox_to_anchor" not in kwargs["lgd_params"]
-            ):
+        legend_kwargs = {} if legend is None else dict(legend)
+        if legend_kwargs:
+            if "loc" not in legend_kwargs and "bbox_to_anchor" not in legend_kwargs:
                 if n_components == 3:
                     fig.tight_layout()
                     fig.subplots_adjust(right=0.8)
-                kwargs["lgd_params"]["loc"] = "center left"
-                kwargs["lgd_params"]["bbox_to_anchor"] = (
+                legend_kwargs["loc"] = "center left"
+                legend_kwargs["bbox_to_anchor"] = (
                     (1.04, 0.5) if n_components == 2 else (1.09, 0.5)
                 )
             else:
                 pass
         else:
-            kwargs["lgd_params"] = {"loc": "center left", "bbox_to_anchor": (1.04, 0.5)}
+            legend_kwargs = {"loc": "center left", "bbox_to_anchor": (1.04, 0.5)}
 
         handles, labels = ax.get_legend_handles_labels()
         index = sorted(range(len(labels)), key=lambda idx: labels[idx])
         handles = [handles[i] for i in index]
         labels = [labels[i] for i in index]
-        ax.legend(handles, labels, **kwargs["lgd_params"])
+        ax.legend(handles, labels, **legend_kwargs)
 
     return fig, ax
 
@@ -345,7 +347,7 @@ def __scatterplot_discrete(
 def __scatterplot_continuous(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: str,
+    representation: Optional[str] = None,
     colors: Optional[ContinuousColors] = None,
     n_components: int = 2,
     ax: Optional[Axes] = None,
@@ -362,7 +364,11 @@ def __scatterplot_continuous(
 
     representation_mtx = cast(
         np.ndarray,
-        get_representation(scdata, use_rep=use_rep, n_components=n_components),
+        get_representation(
+            scdata,
+            representation=representation,
+            n_components=n_components,
+        ),
     )
 
     if ax is None:
@@ -385,7 +391,7 @@ def __scatterplot_continuous(
             ax.scatter(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 3,
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
                 facecolors=(
                     kwargs["nan"]["facecolor"]
                     if "facecolor" in kwargs["nan"]
@@ -396,7 +402,7 @@ def __scatterplot_continuous(
                     if "edgecolor" in kwargs["nan"]
                     else "none"
                 ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3,
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
             )
         elif n_components == 3:
             ax3d = cast(Any, ax)
@@ -404,7 +410,7 @@ def __scatterplot_continuous(
                 representation_mtx[idx, 0],
                 representation_mtx[idx, 1],
                 representation_mtx[idx, 2],
-                s=kwargs["s"] if "s" in kwargs else 3,
+                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
                 facecolors=(
                     kwargs["nan"]["facecolors"]
                     if "facecolors" in kwargs["nan"]
@@ -415,20 +421,20 @@ def __scatterplot_continuous(
                     if "edgecolors" in kwargs["nan"]
                     else "none"
                 ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 0.3,
+                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
             )
 
     if n_components == 2:
         sc = ax.scatter(
             representation_mtx[:, 0],
             representation_mtx[:, 1],
-            s=kwargs["s"] if "s" in kwargs else 3,
+            s=kwargs["s"] if "s" in kwargs else 2.0,
             c=scdata.obs[obs],
             cmap=cmap,
             vmin=kwargs["vmin"] if "vmin" in kwargs else None,
             vmax=kwargs["vmax"] if "vmax" in kwargs else None,
             edgecolors="none",
-            alpha=kwargs["alpha"] if "alpha" in kwargs else 1,
+            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
         )
         cb = fig.colorbar(
             sc, shrink=kwargs["colorbar_scale"] if "colorbar_scale" in kwargs else 1
@@ -440,13 +446,13 @@ def __scatterplot_continuous(
             representation_mtx[:, 0],
             representation_mtx[:, 1],
             representation_mtx[:, 2],
-            s=kwargs["s"] if "s" in kwargs else 3,
+            s=kwargs["s"] if "s" in kwargs else 2.0,
             c=scdata.obs[obs],
             cmap=cmap,
             vmin=kwargs["vmin"] if "vmin" in kwargs else None,
             vmax=kwargs["vmax"] if "vmax" in kwargs else None,
             edgecolors="none",
-            alpha=kwargs["alpha"] if "alpha" in kwargs else 1,
+            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
         )
 
     return fig, ax
@@ -455,7 +461,7 @@ def __scatterplot_continuous(
 def __draw_labels(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: str,
+    representation: Optional[str] = None,
     ax: Optional[Axes] = None,
     dim: int = 2,
     **kwargs: Any,
@@ -463,7 +469,7 @@ def __draw_labels(
 
     barycenter_values = cast(
         Dict[object, np.ndarray],
-        barycenters(scdata=scdata, obs=obs, use_rep=use_rep),
+        barycenters(scdata=scdata, obs=obs, representation=representation),
     )
     keys_to_remove = []
     for k, v in barycenter_values.items():
@@ -493,16 +499,20 @@ def __draw_labels(
 def embedding(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
+    n_components: Literal[2, 3] = 2,
+    s: MarkerParameter = (2.0, 2.0),
+    alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: None = None,
     ax: Optional[Axes] = None,
+    outfile: None = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]: ...
 
@@ -511,17 +521,20 @@ def embedding(
 def embedding(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
+    n_components: Literal[2, 3] = 2,
+    s: MarkerParameter = (2.0, 2.0),
+    alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Path,
     ax: Optional[Axes] = None,
+    outfile: Path,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> None: ...
 
@@ -530,17 +543,20 @@ def embedding(
 def embedding(
     scdata: ScData,
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
+    n_components: Literal[2, 3] = 2,
+    s: MarkerParameter = (2.0, 2.0),
+    alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]: ...
 
@@ -549,16 +565,20 @@ def embedding(
 def embedding(
     scdata: ScData,  # type: ignore
     obs: str,
-    use_rep: str,
+    representation: Any = _UNSET,
+    *,
+    n_components: Literal[2, 3] = 2,
+    s: MarkerParameter = (2.0, 2.0),
+    alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
-    n_components: int = 2,
     title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
     show_legend: bool = True,
     show_labels: bool = False,
-    automatic_resize: bool = False,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: Optional[Path] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
+    use_rep: Any = _UNSET,
+    obsm: Any = _UNSET,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
@@ -570,24 +590,37 @@ def embedding(
         Unimodal or multimodal annotated data matrix.
     obs: str
         Observation column in `scdata.obs` defining groups or values.
-    use_rep: str
+    representation: str
         Representation key in `scdata.obsm`.
-    colors: matplotlib.colors.Colormap, optional
-        Colormap or colors used to draw observations.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
+    s: float or tuple[float, float] (default: (2, 2))
+        Marker size. If a pair is provided, the first value applies to valid
+        observations and the second to observations with missing values in
+        `obs`.
+    alpha: float or tuple[float, float] (default: (1, 1))
+        Marker transparency. If a pair is provided, the first value applies to
+        valid observations and the second to observations with missing values
+        in `obs`.
+    colors: matplotlib.colors.Colormap, optional
+        Colormap or colors used to draw observations.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
+    legend: dict, optional
+        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
     show_legend: bool (default: True)
         Draw the legend when `scdata.obs[obs]` contains discrete values.
     show_labels: bool (default: False)
         Draw labels retrieved from `scdata.obs[obs]` on the embedding.
-    automatic_resize: bool (default: False)
-        Resize figure to accommodate large legends.
-    default_parameters: Callable (optional, default: None)
-        Function specifying default figure parameters.
+    ax: matplotlib.axes.Axes, optional
+        Axes on which to draw the embedding. If not provided, create a new
+        figure and axes.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
+    obsm: str, optional
+        Deprecated alias for `representation`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -597,8 +630,6 @@ def embedding(
         - zlabel[str]: set the label for the z-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
           formatter on x-, y- and z-axis
-        - lgd_params[dict]: when show_legend is True, modify legend following
-          the syntax of matplotlib.pyplot.legend
         - tick_params[dict]: change the appearance of ticks, tick labels, and
           gridlines following the syntax of matplotlib.axes.Axes.tick_params
         - xtick_params[dict]: change the appearance of ticks, tick labels, and
@@ -614,6 +645,7 @@ def embedding(
           syntax of matplotlib.text
         - background_visible[bool]: specify if background color is visible or
           not in case of 3D plotting
+        - automatic_resize[bool]: resize figure to accommodate large legends
         - vmin[float]: lower bound for continuous color scaling
         - vmax[float]: upper bound for continuous color scaling
 
@@ -629,21 +661,49 @@ def embedding(
         If `n_components` is not 2 or 3.
     """
 
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+        obsm=obsm,
+    )
+    if representation is None:
+        raise TypeError("missing required argument: 'representation'")
+
     if n_components not in [2, 3]:
         raise ValueError(
             f"invalid argument value for 'n_components': "
             f"expected 2 or 3 but received {n_components!r}"
         )
+    automatic_resize = bool(kwargs.pop("automatic_resize", False))
+    show_legend, legend = _resolve_legend_options(
+        show_legend,
+        legend,
+        kwargs,
+        deprecated_show_name="add_legend",
+    )
+
+    if "alpha" in kwargs:
+        raise TypeError(
+            "invalid argument combination: use either 'alpha' "
+            "or '**kwargs[\"alpha\"]', not both"
+        )
+    if "s" in kwargs:
+        raise TypeError(
+            "invalid argument combination: use either 's' "
+            "or '**kwargs[\"s\"]', not both"
+        )
+    valid_s, missing_s = __split_marker_parameter(s, "s")
+    valid_alpha, missing_alpha = __split_marker_parameter(alpha, "alpha")
+    kwargs["s"] = valid_s
+    kwargs["alpha"] = valid_alpha
+    kwargs.setdefault("nan", {})
+    kwargs["nan"].setdefault("s", missing_s)
+    kwargs["nan"].setdefault("alpha", missing_alpha)
 
     component_number = n_components
-    show_legend = __deprecated_bool_kwarg(
-        kwargs,
-        "add_legend",
-        "show_legend",
-        show_legend,
-        True,
-    )
-    show_labels = __deprecated_bool_kwarg(
+    show_labels = deprecated_bool_kwarg(
         kwargs,
         "add_labels",
         "show_labels",
@@ -665,7 +725,7 @@ def embedding(
         fig, ax = __scatterplot_continuous(
             scdata,
             obs,
-            use_rep,
+            representation,
             cast(Optional[ContinuousColors], colors),
             component_number,
             ax=ax,
@@ -680,9 +740,10 @@ def embedding(
         fig, ax = __scatterplot_discrete(
             scdata,
             obs,
-            use_rep,
+            representation,
             colors,
             component_number,
+            legend=legend,
             ax=ax,
             show_legend=show_legend,
             **kwargs,
@@ -695,7 +756,12 @@ def embedding(
     if show_labels:
         _kwargs = {} if "text" not in kwargs else kwargs["text"]
         __draw_labels(
-            scdata, obs=obs, use_rep=use_rep, ax=ax, dim=component_number, **_kwargs
+            scdata,
+            obs=obs,
+            representation=representation,
+            ax=ax,
+            dim=component_number,
+            **_kwargs,
         )
 
     if draw_deprecated_graph or draw_deprecated_graph_labels:
@@ -715,9 +781,6 @@ def embedding(
 
     if automatic_resize:
         fig.tight_layout(pad=1.2, rect=(0, 0, 0.84, 1))
-
-    if default_parameters:
-        default_parameters()
 
     if title:
         if isinstance(title, str):

@@ -242,8 +242,6 @@ def test_log1p_rejects_invalid_expression_key_added_and_memory(mini_adata):
         bt.sct.pp.log1p(mini_adata, max_memory="1XB")
 
 
-
-
 def _scbolt_reference_normalize(
     adata: ad.AnnData,
     layer: str,
@@ -536,8 +534,6 @@ def test_normalize_rejects_invalid_arguments(mini_adata):
 
     with pytest.raises(TypeError):
         bt.sct.pp.normalize(mini_adata, key_added=cast(Any, object()))
-
-
 
 
 def _expected_scale(

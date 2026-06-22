@@ -28,14 +28,14 @@ def test_embedding_plot_with_test_representation():
     fig, ax = bt.sct.pl.embedding(
         adata,
         obs="cluster",
-        use_rep="X_test",
+        representation="X_test",
         xlabel="X1",
         ylabel="X2",
         figwidth=6,
         s=2,
         alpha=1,
         show_legend=True,
-        lgd_params={
+        legend={
             "title": "clusters",
             "ncol": 1,
             "markerscale": 5,
@@ -56,7 +56,7 @@ def test_embedding_alias_with_test_representation(mini_adata):
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
     )
 
     assert isinstance(fig, Figure)
@@ -71,7 +71,7 @@ def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score_with_nan",
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=3,
         title={"label": "continuous"},
         xlabel="x",
@@ -101,7 +101,7 @@ def test_embedding_plot_discrete_handles_nan_mapping_and_labels(mini_adata):
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="label_with_nan",
-        use_rep="X_pca",
+        representation="X_pca",
         colors={"A": [1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0]},
         show_legend=True,
         show_labels=True,
@@ -121,7 +121,7 @@ def test_embedding_legend_uses_rcparams_fontsize(mini_adata):
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             show_legend=True,
         )
 
@@ -137,7 +137,7 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
     )
 
     facecolors = [
@@ -148,12 +148,77 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
     assert len(facecolors) == 2
     np.testing.assert_allclose(
         facecolors[0],
-        np.asarray(to_rgba("red", alpha=0.3), dtype=float),
+        np.asarray(to_rgba("red", alpha=1.0), dtype=float),
     )
     np.testing.assert_allclose(
         facecolors[1],
-        np.asarray(to_rgba("blue", alpha=0.3), dtype=float),
+        np.asarray(to_rgba("blue", alpha=1.0), dtype=float),
     )
+    assert [collection.get_sizes()[0] for collection in ax.collections] == [2, 2]
+    plt.close(fig)
+
+
+def test_embedding_discrete_accepts_float_alpha(mini_adata):
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["cluster"].astype(object)
+    mini_adata.obs.loc["c4", "label_with_nan"] = np.nan
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["label_with_nan"].astype(
+        "category"
+    )
+
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="label_with_nan",
+        representation="X_pca",
+        alpha=0.8,
+    )
+
+    facecolors = [
+        np.asarray(collection.get_facecolor()[0], dtype=float)
+        for collection in ax.collections
+    ]
+
+    np.testing.assert_allclose(facecolors[0][-1], 0.8)
+    np.testing.assert_allclose(facecolors[1][-1], 0.8)
+    np.testing.assert_allclose(facecolors[2][-1], 0.8)
+    plt.close(fig)
+
+
+def test_embedding_discrete_accepts_size_pair(mini_adata):
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["cluster"].astype(object)
+    mini_adata.obs.loc["c4", "label_with_nan"] = np.nan
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["label_with_nan"].astype(
+        "category"
+    )
+
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="label_with_nan",
+        representation="X_pca",
+        s=(3.0, 7.0),
+    )
+
+    assert ax.collections[0].get_sizes()[0] == 7.0
+    assert ax.collections[1].get_sizes()[0] == 3.0
+    assert ax.collections[2].get_sizes()[0] == 3.0
+    plt.close(fig)
+
+
+def test_embedding_discrete_accepts_alpha_pair(mini_adata):
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["cluster"].astype(object)
+    mini_adata.obs.loc["c4", "label_with_nan"] = np.nan
+    mini_adata.obs["label_with_nan"] = mini_adata.obs["label_with_nan"].astype(
+        "category"
+    )
+
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="label_with_nan",
+        representation="X_pca",
+        alpha=(1.0, 0.15),
+    )
+
+    nan_facecolor = np.asarray(ax.collections[0].get_facecolor()[0], dtype=float)
+    np.testing.assert_allclose(nan_facecolor[-1], 0.15)
     plt.close(fig)
 
 
@@ -163,7 +228,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
     result = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         outfile=outfile,
     )
 
@@ -174,7 +239,7 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
         bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             n_components=4,
         )
 
@@ -182,15 +247,15 @@ def test_embedding_plot_writes_outfile_and_validates_inputs(mini_adata, tmp_path
         bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             title=cast(Any, object()),
         )
 
     with pytest.raises(KeyError):
-        bt.sct.pl.embedding(mini_adata, obs="missing", use_rep="X_pca")
+        bt.sct.pl.embedding(mini_adata, obs="missing", representation="X_pca")
 
     with pytest.raises(KeyError):
-        bt.sct.pl.embedding(mini_adata, obs="cluster", use_rep="missing")
+        bt.sct.pl.embedding(mini_adata, obs="cluster", representation="missing")
 
 
 def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata):
@@ -206,7 +271,7 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
     returned_fig, returned_ax = bt.sct.pl.embedding(
         mini_adata,
         obs="cluster_with_nan",
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=3,
         ax=ax,
         colors={
@@ -214,7 +279,7 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
             "B": np.array([0.0, 0.0, 1.0, 1.0]),
         },
         show_legend=True,
-        legend_params={"loc": "upper left"},
+        legend={"loc": "upper left"},
         tick_params={"labelsize": 6},
         title="discrete 3d",
         nan={"facecolors": "gray", "edgecolors": "none", "alpha": 0.2},
@@ -230,7 +295,6 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
 
 
 def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
-    called = []
     mini_adata.obs["score_with_nan"] = mini_adata.obs["score"].astype(float)
     mini_adata.obs.loc["c1", "score_with_nan"] = np.nan
 
@@ -239,11 +303,10 @@ def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
     returned_fig, returned_ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score_with_nan",
-        use_rep="X_pca",
+        representation="X_pca",
         colors=plt.get_cmap("viridis"),
         n_components=2,
         ax=ax,
-        default_parameters=lambda: called.append(True),
         xlabel=None,
         ylabel=None,
         xtick_params={"labelsize": 5},
@@ -254,7 +317,6 @@ def test_embedding_plot_continuous_2d_colormap_axes_and_defaults(mini_adata):
 
     assert returned_fig is fig
     assert returned_ax is ax
-    assert called == [True]
     assert ax.get_xlabel() == ""
     assert ax.get_ylabel() == ""
     assert len(fig.axes) == 2
@@ -267,8 +329,24 @@ def test_embedding_plot_continuous_accepts_colormap_name(mini_adata):
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="score",
-        use_rep="X_pca",
+        representation="X_pca",
         colors="gnuplot",
+    )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    assert len(fig.axes) == 2
+    plt.close(fig)
+
+
+def test_embedding_plot_continuous_accepts_registered_colormap(mini_adata):
+    mini_adata.obs["score"] = mini_adata.obs["score"].astype(float)
+
+    fig, ax = bt.sct.pl.embedding(
+        mini_adata,
+        obs="score",
+        representation="X_pca",
+        colors=bt.sct.pl.get_colormap("earth"),
     )
 
     assert isinstance(fig, Figure)
@@ -295,12 +373,12 @@ def test_embedding_plot_discrete_3d_default_colors_legend_and_labels(
     fig, ax = bt.sct.pl.embedding(
         mini_adata,
         obs="many_categories",
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=3,
         show_legend=True,
         show_labels=True,
         background_visible=False,
-        lgd_params={"title": "groups"},
+        legend={"title": "groups"},
     )
 
     assert ax.name == "3d"
@@ -324,7 +402,7 @@ def test_embedding_plot_discrete_listed_colormap_skips_unused_category(mini_adat
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster_with_unused",
-            use_rep="X_pca",
+            representation="X_pca",
             colors=ListedColormap(["red", "blue", "green"]),
             show_legend=True,
             show_labels=True,
@@ -349,5 +427,57 @@ def test_embedding_plot_rejects_unsupported_object_dtype(mini_adata):
         bt.sct.pl.embedding(
             mini_adata,
             obs="object_values",
-            use_rep="X_pca",
+            representation="X_pca",
         )
+
+
+@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
+def test_embedding_plot_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
+    kwargs = {deprecated: {"loc": "upper left"}}
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            show_legend=True,
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+
+def test_embedding_plot_deprecates_obsm(mini_adata):
+    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            obsm="X_pca",
+        )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
+        with pytest.raises(TypeError, match="representation.*obsm"):
+            bt.sct.pl.embedding(
+                mini_adata,
+                obs="cluster",
+                representation="X_pca",
+                obsm="X_pca",
+            )
+
+
+def test_embedding_plot_rejects_multiple_legend_kwargs(mini_adata):
+    with pytest.warns(FutureWarning, match="`lgd_params` is deprecated"):
+        with pytest.raises(TypeError, match="lgd_params.*legend"):
+            bt.sct.pl.embedding(
+                mini_adata,
+                obs="cluster",
+                representation="X_pca",
+                show_legend=True,
+                legend={"loc": "upper left"},
+                lgd_params={"loc": "upper right"},
+            )

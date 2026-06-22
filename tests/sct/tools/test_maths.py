@@ -12,7 +12,7 @@ def test_pairwise_distances_returns_or_stores_matrix(
 ):
     distances = bt.sct.tl.pairwise_distances(
         mini_adata,
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=2,
     )
 
@@ -21,19 +21,23 @@ def test_pairwise_distances_returns_or_stores_matrix(
 
     result = bt.sct.tl.pairwise_distances(
         mini_adata,
-        use_rep="X_pca",
+        representation="X_pca",
         key_added="custom_distances",
     )
     assert result is None
     assert "custom_distances" in mini_adata.obsp
-    assert mini_adata.uns["custom_distances"]["use_rep"] == "X_pca"
+    assert mini_adata.uns["custom_distances"]["representation"] == "X_pca"
 
 
 def test_barycenters_returns_cluster_means(
     mini_adata,
     expected_mini_cluster_barycenters,
 ):
-    barycenters = bt.sct.tl.barycenters(mini_adata, obs="cluster", use_rep="X_pca")
+    barycenters = bt.sct.tl.barycenters(
+        mini_adata,
+        obs="cluster",
+        representation="X_pca",
+    )
 
     assert sorted(barycenters) == ["A", "B"]
     assert np.allclose(barycenters["A"], expected_mini_cluster_barycenters["A"])

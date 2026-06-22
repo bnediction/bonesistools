@@ -64,7 +64,7 @@ def test_knn_graph_returns_graph_with_named_nodes():
 
     graph = bt.sct.tl.knn_graph(
         adata,
-        use_rep="X_test",
+        representation="X_test",
         n_components=None,
         n_neighbors=5,
         index_or_name="name",
@@ -85,7 +85,7 @@ def test_knnsc_fits_and_keeps_deprecated_api_compatible():
 
     with pytest.warns(FutureWarning, match="__init__"):
         estimator = bt.sct.tl.KNNSC(
-            use_rep="X_test",
+            representation="X_test",
             n_components=5,
             n_neighbors=5,
         )
@@ -136,7 +136,7 @@ def test_knnsc_fit_reconnects_disconnected_neighbor_graph():
         estimator.fit(
             adata,
             cluster_key="cluster",
-            use_rep="X_toy",
+            representation="X_toy",
             n_components=None,
             n_neighbors=20,
             n_jobs=1,
@@ -188,7 +188,7 @@ def test_knnsc_fit_uses_minimum_cluster_size_for_barycenter_sources():
     estimator.fit(
         adata,
         cluster_key="cluster",
-        use_rep="X_toy",
+        representation="X_toy",
         n_components=None,
         n_neighbors=2,
         min_cluster_size=2,
@@ -231,7 +231,7 @@ def test_knnsc_rejects_requested_clusters_below_minimum_size():
     estimator.fit(
         adata,
         cluster_key="cluster",
-        use_rep="X_toy",
+        representation="X_toy",
         n_components=None,
         n_neighbors=2,
         min_cluster_size=2,
@@ -283,7 +283,7 @@ def test_knnsc_select_central_cells_recovers_nearest_single_cluster_cells():
     estimator.fit(
         adata,
         cluster_key="cluster",
-        use_rep="X_toy",
+        representation="X_toy",
         n_components=None,
         n_neighbors=10,
         n_jobs=1,
@@ -325,7 +325,7 @@ def test_knnsc_select_peripheral_cells_recovers_remote_cells():
         estimator.fit(
             adata,
             cluster_key="cluster",
-            use_rep="X_toy",
+            representation="X_toy",
             n_components=None,
             n_neighbors=16,
             n_jobs=1,
@@ -380,11 +380,14 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
             n_neighbors=5,
         )
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'use_rep'"):
+    with pytest.raises(
+        TypeError,
+        match="unsupported argument type for 'representation'",
+    ):
         estimator.fit(
             mini_adata,
             cluster_key="cluster",
-            use_rep=cast(Any, object()),
+            representation=cast(Any, object()),
             n_neighbors=5,
         )
 
@@ -392,7 +395,7 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
         estimator.fit(
             mini_adata,
             cluster_key="cluster",
-            use_rep=None,
+            representation=None,
             n_components=None,
             n_neighbors=5,
             metric=cast(Any, "not-a-metric"),
@@ -437,7 +440,7 @@ def test_knnsc_validates_init_and_fit_arguments_and_repr(mini_adata):
             metric="cosine",
         )
 
-    assert "KNNSC(use_rep=X_pca, n_components=2, n_neighbors=5" in repr(
+    assert "KNNSC(representation=X_pca, n_components=2, n_neighbors=5" in repr(
         deprecated_estimator
     )
 
@@ -491,7 +494,7 @@ def test_knnsc_fit_stores_params_and_updates_repr(mini_adata):
     estimator.fit(
         mini_adata,
         cluster_key="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=2,
         n_neighbors=3,
         metric="euclidean",
@@ -502,7 +505,7 @@ def test_knnsc_fit_stores_params_and_updates_repr(mini_adata):
 
     assert estimator.params_ == {
         "cluster_key": "cluster",
-        "use_rep": "X_pca",
+        "representation": "X_pca",
         "n_components": 2,
         "n_neighbors": 3,
         "metric": "euclidean",
@@ -511,7 +514,8 @@ def test_knnsc_fit_stores_params_and_updates_repr(mini_adata):
         "method": "dijkstra",
     }
     assert (
-        "KNNSC(cluster_key=cluster, use_rep=X_pca, " "n_components=2, n_neighbors=3"
+        "KNNSC(cluster_key=cluster, representation=X_pca, "
+        "n_components=2, n_neighbors=3"
     ) in repr(estimator)
 
     read_only_attributes = [

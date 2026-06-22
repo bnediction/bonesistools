@@ -23,8 +23,8 @@ def _add_trajectory_graph(adata, graph_key="epg"):
     adata.uns[graph_key] = graph
 
 
-@pytest.mark.parametrize("use_rep", ["X_paga_2d", "X_pca"])
-def test_paga_reuses_axes_with_2d_and_3d_representations(mini_adata, use_rep):
+@pytest.mark.parametrize("representation", ["X_paga_2d", "X_pca"])
+def test_paga_reuses_axes_with_2d_and_3d_representations(mini_adata, representation):
     _add_paga_edges(mini_adata)
     mini_adata.obsm["X_paga_2d"] = mini_adata.obsm["X_pca"][:, :2].copy()
 
@@ -32,7 +32,7 @@ def test_paga_reuses_axes_with_2d_and_3d_representations(mini_adata, use_rep):
     returned_ax = bt.sct.pl.paga(
         mini_adata,
         obs="cluster",
-        use_rep=use_rep,
+        representation=representation,
         edges="paga_edges",
         threshold=0.1,
         ax=ax,
@@ -52,7 +52,7 @@ def test_paga_writes_outfile(mini_adata, tmp_path):
     result = bt.sct.pl.paga(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         edges="paga_edges",
         outfile=outfile,
     )
@@ -70,7 +70,7 @@ def test_paga_graph_matches_scanpy_transition_orientation(
     graph = graph_plotting._paga_graph(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         edges="paga_edges",
         threshold=0.1,
     )
@@ -88,7 +88,7 @@ def test_paga_graph_reads_nested_connectivities_as_undirected(mini_adata):
     graph = graph_plotting._paga_graph(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         edges="connectivities",
         threshold=0.1,
     )
@@ -104,7 +104,7 @@ def test_paga_uses_nested_connectivities_after_tools_paga(mini_adata):
     returned_ax = bt.sct.pl.paga(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         threshold=0.1,
         ax=ax,
     )
@@ -119,7 +119,7 @@ def test_trajectory_uses_custom_graph_key_and_draws_labels(mini_adata):
     fig, ax = bt.sct.pl.trajectory(
         mini_adata,
         obs="cluster",
-        use_rep="X_pca",
+        representation="X_pca",
         graph_key="custom_key",
         show_labels=True,
         graph={"linewidth": 5},
@@ -131,14 +131,42 @@ def test_trajectory_uses_custom_graph_key_and_draws_labels(mini_adata):
     plt.close(fig)
 
 
+def test_trajectory_deprecates_obsm(mini_adata):
+    _add_trajectory_graph(mini_adata)
+
+    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
+        fig, ax = bt.sct.pl.trajectory(
+            mini_adata,
+            obs="cluster",
+            obsm="X_pca",
+        )
+
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
 def test_trajectory_missing_graph_key_raises_clear_key_error(mini_adata):
     with pytest.raises(KeyError, match="missing_graph"):
         bt.sct.pl.trajectory(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             graph_key="missing_graph",
         )
+
+
+def test_paga_deprecates_obsm(mini_adata):
+    _add_paga_edges(mini_adata)
+
+    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
+        ax = bt.sct.pl.paga(
+            mini_adata,
+            obs="cluster",
+            obsm="X_pca",
+            edges="paga_edges",
+        )
+
+    assert isinstance(ax, Axes)
 
 
 def test_embedding_deprecated_graph_arguments_warn_and_route_overlay(mini_adata):
@@ -148,7 +176,7 @@ def test_embedding_deprecated_graph_arguments_warn_and_route_overlay(mini_adata)
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             add_graph=True,
         )
 
@@ -159,7 +187,7 @@ def test_embedding_deprecated_graph_arguments_warn_and_route_overlay(mini_adata)
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
-            use_rep="X_pca",
+            representation="X_pca",
             add_labels_to_graph=True,
         )
 

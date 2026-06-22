@@ -154,7 +154,7 @@ def kmeans(
     adata = adata.copy() if copy else adata
     representation_mtx = get_representation(
         adata,
-        use_rep=representation,
+        representation=representation,
         n_components=n_pcs,
     )
     if sparse.issparse(representation_mtx):

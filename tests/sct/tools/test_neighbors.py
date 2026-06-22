@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
+from sklearn.neighbors import kneighbors_graph
 
 import bonesistools as bt
 from bonesistools.sctools.tools import _neighbors
@@ -52,7 +53,7 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
         "representation": "X_pca",
         "backend": "exact",
         "metric": "euclidean",
-        "connectivity_method": "umap",
+        "connectivity_method": "fuzzy",
         "seed": 0,
     }
     assert np.allclose(
@@ -65,6 +66,36 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
     )
     assert np.all(np.asarray(mini_adata.obsp["connectivities"].sum(axis=0)) > 0)
     assert np.all(np.asarray(mini_adata.obsp["connectivities"].sum(axis=1)) > 0)
+
+
+def test_neighbors_binary_connectivities_match_sklearn_spectral_graph(mini_adata):
+    representation = mini_adata.obsm["X_pca"][:, :2]
+    expected_connectivities = kneighbors_graph(
+        representation,
+        n_neighbors=3,
+        mode="connectivity",
+        metric="euclidean",
+        include_self=True,
+        n_jobs=1,
+    )
+    expected_connectivities = 0.5 * (
+        expected_connectivities + expected_connectivities.T
+    )
+
+    bt.sct.tl.neighbors(
+        mini_adata,
+        n_neighbors=3,
+        representation="X_pca",
+        n_pcs=2,
+        connectivity_method="binary",
+        n_jobs=1,
+    )
+
+    assert mini_adata.uns["neighbors"]["params"]["connectivity_method"] == "binary"
+    np.testing.assert_array_equal(
+        mini_adata.obsp["connectivities"].toarray(),
+        expected_connectivities.toarray(),
+    )
 
 
 def test_neighbors_custom_keys_and_copy(mini_adata):
@@ -338,6 +369,14 @@ def test_neighbors_validates_arguments(mini_adata):
     with pytest.raises(ValueError):
         bt.sct.tl.neighbors(mini_adata, n_neighbors=3, backend=cast(Any, "bad"))
 
+    with pytest.raises(ValueError):
+        bt.sct.tl.neighbors(
+            mini_adata,
+            n_neighbors=3,
+            backend="pynndescent",
+            connectivity_method="binary",
+        )
+
     with pytest.raises(TypeError, match="unsupported argument type for 'n_jobs'"):
         bt.sct.tl.neighbors(
             mini_adata,
@@ -392,7 +431,7 @@ def test_knn_graph_can_use_observation_names(mini_adata):
     graph = bt.sct.tl.knn_graph(
         mini_adata,
         n_neighbors=1,
-        use_rep="X_pca",
+        representation="X_pca",
         create_using=nx.DiGraph,
         index_or_name="name",
     )
@@ -414,7 +453,7 @@ def test_knn_graph_can_use_observation_names(mini_adata):
     index_graph = bt.sct.tl.knn_graph(
         mini_adata,
         n_neighbors=1,
-        use_rep="X_pca",
+        representation="X_pca",
         create_using=nx.DiGraph,
         index_or_name="index",
     )
@@ -426,7 +465,7 @@ def test_knn_graph_forwards_metric_kwargs(mini_adata):
     graph = bt.sct.tl.knn_graph(
         mini_adata,
         n_neighbors=1,
-        use_rep="X_pca",
+        representation="X_pca",
         n_components=2,
         metric="minkowski",
         p=1,
@@ -452,7 +491,7 @@ def test_kneighbors_graph_deprecated_alias(mini_adata):
         graph = bt.sct.tl.kneighbors_graph(
             mini_adata,
             n_neighbors=1,
-            use_rep="X_pca",
+            representation="X_pca",
             create_using=nx.DiGraph,
             index_or_name="name",
         )
@@ -468,7 +507,7 @@ def test_knn_graph_rejects_invalid_node_label_mode(mini_adata):
         bt.sct.tl.knn_graph(
             mini_adata,
             n_neighbors=1,
-            use_rep="X_pca",
+            representation="X_pca",
             index_or_name=cast(Any, "bad"),
         )
 

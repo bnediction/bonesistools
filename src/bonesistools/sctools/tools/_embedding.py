@@ -514,7 +514,7 @@ def umap(
     n_pcs = cast(Optional[int], neighbor_params.get("n_pcs"))
     representation_mtx = get_representation(
         adata,
-        use_rep=representation,
+        representation=representation,
         n_components=n_pcs,
     )
 
@@ -697,7 +697,7 @@ def tsne(
     adata = adata.copy() if copy else adata
     representation_mtx = get_representation(
         adata,
-        use_rep=representation,
+        representation=representation,
         n_components=n_pcs,
     )
 

@@ -247,12 +247,15 @@ def test_as_dense_matrix_chunk_supports_sparse_and_rejects_non_matrix():
 
 def test_get_representation_truncates_dimensions(mini_adata):
     pca_mtx = cast(np.ndarray, mini_adata.obsm["X_pca"])
-    full_representation_mtx = bt.sct.tl.get_representation(mini_adata, use_rep=None)
+    full_representation_mtx = bt.sct.tl.get_representation(
+        mini_adata,
+        representation=None,
+    )
     representation_mtx = cast(
         np.ndarray,
         bt.sct.tl.get_representation(
             mini_adata,
-            use_rep="X_pca",
+            representation="X_pca",
             n_components=2,
         ),
     )
@@ -264,13 +267,26 @@ def test_get_representation_truncates_dimensions(mini_adata):
 
 def test_get_representation_reports_missing_key(mini_adata):
     with pytest.raises(KeyError, match="key 'missing' not found in scdata.obsm"):
-        bt.sct.tl.get_representation(mini_adata, use_rep="missing")
+        bt.sct.tl.get_representation(mini_adata, representation="missing")
 
     pca_missing = mini_adata.copy()
     del pca_missing.obsm["X_pca"]
 
     with pytest.raises(KeyError, match="bonesistools.sct.tl.pca"):
-        bt.sct.tl.get_representation(pca_missing, use_rep=None)
+        bt.sct.tl.get_representation(pca_missing, representation=None)
+
+
+def test_get_representation_deprecates_obsm_and_use_rep(mini_adata):
+    pca_mtx = cast(np.ndarray, mini_adata.obsm["X_pca"])
+
+    with pytest.warns(FutureWarning, match="`obsm` is deprecated"):
+        obsm_mtx = bt.sct.tl.get_representation(mini_adata, obsm="X_pca")
+
+    with pytest.warns(FutureWarning, match="`use_rep` is deprecated"):
+        use_rep_mtx = bt.sct.tl.get_representation(mini_adata, use_rep="X_pca")
+
+    assert obsm_mtx is pca_mtx
+    assert use_rep_mtx is pca_mtx
 
 
 def test_get_pairwise_selects_obsp_and_varp(mini_adata):
@@ -285,7 +301,7 @@ def test_get_pairwise_selects_obsp_and_varp(mini_adata):
     obs_pairwise_mtx = bt.sct.tl.get_pairwise(mini_adata, "connectivities")
     var_pairwise_mtx = bt.sct.tl.get_pairwise(
         mini_adata,
-        "correlations",
+        key="correlations",
         axis="var",
     )
 

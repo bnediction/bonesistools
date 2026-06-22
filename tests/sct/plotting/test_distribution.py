@@ -36,8 +36,8 @@ def test_distribution_without_hue():
         obs="n_counts",
         groupby="label",
         sort="ascending",
-        showpoints=True,
-        showlegend=False,
+        points=True,
+        legend=False,
     )
 
     assert isinstance(fig, Figure)
@@ -61,8 +61,7 @@ def test_distribution_with_hue():
         obs="n_counts",
         groupby="label",
         hue="condition",
-        showpoints=False,
-        showlegend=True,
+        points=False,
     )
 
     assert isinstance(bps, dict)
@@ -84,6 +83,24 @@ def test_distribution_invalid_sort():
             groupby="label",
             sort=cast(Any, "invalid"),
         )
+
+
+def test_distribution_sort_preserve_keeps_category_order(mini_adata):
+    mini_adata.obs["cluster"] = pd.Categorical(
+        mini_adata.obs["cluster"],
+        categories=["B", "A"],
+        ordered=True,
+    )
+
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        sort="preserve",
+    )
+
+    assert [label.get_text() for label in ax.get_xticklabels()] == ["B", "A"]
+    plt.close(fig)
 
 
 def test_distribution_outfile(tmp_path):
@@ -109,8 +126,8 @@ def test_distribution_without_groupby_and_validation_errors(mini_adata):
         mini_adata,
         obs="score",
         title={"label": "score"},
-        showpoints=True,
-        showmedians=False,
+        points=True,
+        show_medians=False,
     )
 
     assert isinstance(fig, Figure)
@@ -136,11 +153,11 @@ def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
         obs="score",
         groupby="cluster",
         hue="condition",
-        box_colors={"ctrl": [1.0, 0.0, 0.0], "stim": [0.0, 0.0, 1.0]},
-        point_colors={"ctrl": [1.0, 0.5, 0.5], "stim": [0.5, 0.5, 1.0]},
-        showpoints=True,
-        showmedians=False,
-        showlegend=True,
+        boxplot={"colors": {"ctrl": [1.0, 0.0, 0.0], "stim": [0.0, 0.0, 1.0]}},
+        points={
+            "colors": {"ctrl": [1.0, 0.5, 0.5], "stim": [0.5, 0.5, 1.0]}
+        },
+        show_medians=False,
     )
 
     assert isinstance(ax, Axes)
@@ -148,6 +165,42 @@ def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
     assert ax.get_legend() is not None
     for bp in bps.values():
         assert all(median.get_linewidth() == 0 for median in _median_lines(bp))
+    plt.close(fig)
+
+    with pytest.raises(TypeError, match="box_colors"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            groupby="cluster",
+            hue="condition",
+            box_colors={"ctrl": "red", "stim": "blue"},
+        )
+
+    with pytest.raises(TypeError, match="point_colors"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            groupby="cluster",
+            hue="condition",
+            point_colors={"ctrl": "pink", "stim": "lightblue"},
+        )
+
+
+def test_distribution_accepts_explicit_legend_kwargs(mini_adata):
+    mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
+    mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
+
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        hue="condition",
+        legend={"title": "condition"},
+    )
+
+    legend = ax.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "condition"
     plt.close(fig)
 
 
@@ -161,8 +214,7 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
         groupby="cluster",
         hue="condition",
         title="score by condition",
-        showpoints=True,
-        showlegend=True,
+        points=True,
     )
 
     assert ax.get_title() == "score by condition"
@@ -197,9 +249,8 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
         obs="score",
         groupby="group",
         hue="hue4",
-        box_colors=box_colors,
-        point_colors=point_colors,
-        showpoints=False,
+        boxplot={"colors": box_colors},
+        points={"colors": point_colors},
     )
 
     assert set(bps) == {"h1", "h2", "h3", "h4"}
@@ -210,7 +261,7 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
         obs="score",
         groupby="group",
         hue="hue4",
-        showpoints=False,
+        points=False,
     )
 
     assert set(bps) == {"h1", "h2", "h3", "h4"}
@@ -221,10 +272,27 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
         obs="score",
         groupby="group",
         hue="hue4",
-        showpoints=True,
+        points=True,
     )
 
     assert set(bps) == {"h1", "h2", "h3", "h4"}
+    plt.close(fig)
+
+
+def test_distribution_accepts_existing_axes(mini_adata):
+    fig, ax = plt.subplots()
+
+    result = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        ax=ax,
+    )
+
+    assert result is not None
+    returned_fig, returned_ax, _ = result
+    assert returned_fig is fig
+    assert returned_ax is ax
     plt.close(fig)
 
 
@@ -260,3 +328,72 @@ def test_distribution_position_and_point_helper_validation():
             groups=(1, 0.2),
             hues=cast(Any, "bad"),
         )
+
+
+def test_distribution_deprecates_showlegend(mini_adata):
+    mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
+    mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
+
+    with pytest.warns(FutureWarning, match="`showlegend` is deprecated"):
+        fig, ax, _ = bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            groupby="cluster",
+            hue="condition",
+            showlegend=False,
+        )
+
+    assert ax.get_legend() is None
+    plt.close(fig)
+
+
+@pytest.mark.parametrize(
+    ("deprecated", "value"),
+    [
+        ("showmedians", False),
+        ("showmeans", True),
+        ("showcaps", False),
+        ("showbox", False),
+        ("showfliers", False),
+        ("showpoints", True),
+    ],
+)
+def test_distribution_deprecates_legacy_show_kwargs(mini_adata, deprecated, value):
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        fig, _, _ = bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            **{deprecated: value},
+        )
+
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
+def test_distribution_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
+    mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
+    mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
+    kwargs = {deprecated: {"loc": "upper left"}}
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        fig, ax, _ = bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            groupby="cluster",
+            hue="condition",
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        with pytest.raises(TypeError, match=f"{deprecated}.*legend"):
+            bt.sct.pl.distribution(
+                mini_adata,
+                obs="score",
+                groupby="cluster",
+                hue="condition",
+                legend={"loc": "upper left"},
+                **kwargs,
+            )

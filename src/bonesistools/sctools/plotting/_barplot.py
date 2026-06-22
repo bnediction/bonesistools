@@ -6,7 +6,6 @@ from collections.abc import Mapping as MappingABC
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
     Dict,
     Iterator,
     Mapping,
@@ -30,6 +29,7 @@ from ..._compat import Literal
 from .._typing import ScData, anndata_or_mudata_checker
 from ._colors import QUALITATIVE_COLORS, generate_colormap
 from ._utils import (
+    _resolve_legend_options,
     colormap_colors,
     colors_from_uns,
     figure_from_axes,
@@ -140,20 +140,21 @@ def composition(
     scdata: ScData,
     obs: str,
     groupby: str,
+    *,
     obs_order: Optional[Sequence[object]] = None,
     group_order: Optional[Sequence[object]] = None,
-    colors: Optional[Colors] = None,
-    group_colors: Optional[Mapping[object, object]] = None,
     normalize: bool = True,
     percent: bool = True,
     dropna: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    showlegend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: None = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
     ax: Optional[Axes] = None,
+    outfile: None = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]: ...
 
@@ -163,21 +164,21 @@ def composition(
     scdata: ScData,
     obs: str,
     groupby: str,
+    *,
     obs_order: Optional[Sequence[object]] = None,
     group_order: Optional[Sequence[object]] = None,
-    colors: Optional[Colors] = None,
-    group_colors: Optional[Mapping[object, object]] = None,
     normalize: bool = True,
     percent: bool = True,
     dropna: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    showlegend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Path,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
     ax: Optional[Axes] = None,
+    outfile: Path,
     **kwargs: Any,
 ) -> None: ...
 
@@ -187,21 +188,21 @@ def composition(
     scdata: ScData,
     obs: str,
     groupby: str,
+    *,
     obs_order: Optional[Sequence[object]] = None,
     group_order: Optional[Sequence[object]] = None,
-    colors: Optional[Colors] = None,
-    group_colors: Optional[Mapping[object, object]] = None,
     normalize: bool = True,
     percent: bool = True,
     dropna: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    showlegend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    *,
-    outfile: Optional[Path] = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]: ...
 
@@ -211,20 +212,21 @@ def composition(
     scdata: ScData,  # type: ignore
     obs: str,
     groupby: str,
+    *,
     obs_order: Optional[Sequence[object]] = None,
     group_order: Optional[Sequence[object]] = None,
-    colors: Optional[Colors] = None,
-    group_colors: Optional[Mapping[object, object]] = None,
     normalize: bool = True,
     percent: bool = True,
     dropna: bool = True,
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Optional[Dict[str, Any]] = None,
+    show_legend: bool = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
-    title: Optional[Union[str, Dict[str, Any]]] = None,
-    showlegend: bool = True,
-    default_parameters: Optional[Callable[[], None]] = None,
-    outfile: Optional[Path] = None,
+    colors: Optional[Colors] = None,
+    group_colors: Optional[Mapping[object, object]] = None,
     ax: Optional[Axes] = None,
+    outfile: Optional[Path] = None,
     **kwargs: Any,
 ) -> Optional[Tuple[Figure, Axes]]:
     """
@@ -242,6 +244,22 @@ def composition(
         Segment order. If None, categorical order or observed order is used.
     group_order: sequence, optional
         Bar order. If None, categorical order or observed order is used.
+    normalize: bool (default: True)
+        Plot proportions within each group instead of raw counts.
+    percent: bool (default: True)
+        Format the y-axis as percentages when `normalize=True`.
+    dropna: bool (default: True)
+        Drop observations with missing `obs` or `groupby` values.
+    title: str or dict, optional
+        Figure title, or keyword arguments passed to `Axes.set_title`.
+    legend: dict, optional
+        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
+    show_legend: bool (default: True)
+        Draw the segment legend.
+    orientation: {"vertical", "horizontal"} (default: "vertical")
+        Draw vertical stacked bars or horizontal stacked bars.
+    width: float (default: 0.8)
+        Bar width.
     colors: colormap name, sequence, colormap or mapping, optional
         Segment colors. If None, `scdata.uns["<obs>_color"]`,
         `scdata.uns["<obs>_colors"]` or a qualitative palette is used.
@@ -249,26 +267,10 @@ def composition(
         Colors applied to group tick labels. If None,
         `scdata.uns["<groupby>_color"]` or `scdata.uns["<groupby>_colors"]` is
         used when available.
-    normalize: bool (default: True)
-        Plot proportions within each group instead of raw counts.
-    percent: bool (default: True)
-        Format the y-axis as percentages when `normalize=True`.
-    dropna: bool (default: True)
-        Drop observations with missing `obs` or `groupby` values.
-    orientation: {"vertical", "horizontal"} (default: "vertical")
-        Draw vertical stacked bars or horizontal stacked bars.
-    width: float (default: 0.8)
-        Bar width.
-    title: str or dict, optional
-        Figure title, or keyword arguments passed to `Axes.set_title`.
-    showlegend: bool (default: True)
-        Draw the segment legend.
-    default_parameters: Callable, optional
-        Function specifying default figure parameters.
-    outfile: Path, optional
-        If specified, save the figure instead of returning it.
     ax: Axes, optional
         Existing axes used for drawing.
+    outfile: Path, optional
+        If specified, save the figure instead of returning it.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
@@ -283,8 +285,6 @@ def composition(
         - tick_params[dict]: change the appearance of ticks, tick labels, and
           gridlines following the syntax of matplotlib.axes.Axes.tick_params
         - bar[dict]: keyword arguments passed to `DataFrame.plot`
-        - legend[dict]: when showlegend is True, modify legend following the
-          syntax of matplotlib.pyplot.legend
 
     Returns
     -------
@@ -306,8 +306,7 @@ def composition(
             f"expected 'vertical' or 'horizontal' but received {orientation!r}"
         )
 
-    if default_parameters:
-        default_parameters()
+    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
 
     data = scdata.obs[[groupby, obs]]
     data = data.dropna() if dropna else data
@@ -406,18 +405,18 @@ def composition(
                 f"expected {str} or {dict} but received {type(title)}"
             )
 
-    legend = ax.get_legend()
+    existing_legend = ax.get_legend()
 
-    if showlegend:
+    if show_legend:
         legend_kwargs = {
             "bbox_to_anchor": (1.0, 0.6),
             "loc": "center left",
             "frameon": False,
         }
-        legend_kwargs.update(kwargs["legend"] if "legend" in kwargs else {})
+        legend_kwargs.update({} if legend is None else legend)
         ax.legend(**legend_kwargs)
-    elif legend is not None:
-        legend.remove()
+    elif existing_legend is not None:
+        existing_legend.remove()
 
     if outfile:
         plt.savefig(outfile, bbox_inches="tight")

@@ -49,7 +49,7 @@ def mini_adata():
         "params": {
             "n_neighbors": 3,
             "n_pcs": 2,
-            "use_rep": "X_pca",
+            "representation": "X_pca",
         },
     }
     adata.obsp["distances"] = csr_matrix(

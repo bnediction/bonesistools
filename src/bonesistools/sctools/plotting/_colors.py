@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import math
-from itertools import cycle
-from typing import Any, Optional, Sequence, cast
+from dataclasses import dataclass
+from itertools import cycle as _cycle
+from types import MappingProxyType
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, cast
 
 import numpy as np
 from matplotlib.colors import Colormap, ListedColormap
 
 from ..._compat import Literal
 from ..._validation import _as_literal, _as_positive_integer
+
+RGB = Sequence[float]
 
 
 def rgb(color):
@@ -63,110 +67,237 @@ def rgb2hex(rgb):
     return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
 
-black = rgb([0, 0, 0])
-white = rgb([255, 255, 255])
-blue = rgb([0, 20, 255])
-red = rgb([255, 80, 50])
-green = rgb([20, 200, 80])
-violet = rgb([255, 51, 255])
-lightgreen = rgb([20, 250, 80])
-coral = rgb([255, 127, 80])
-yellow = rgb([255, 255, 0])
-darkred = rgb([139, 0, 0])
-darkyellow = rgb([204, 204, 0])
-lightyellow = rgb([128, 128, 0])
-darkorange = rgb([255, 105, 0])
-lightorange = rgb([255, 165, 90])
-limegreen = rgb([50, 255, 50])
-pink = rgb([255, 182, 193])
-orchid = rgb([218, 112, 214])
-magenta = rgb([255, 0, 255])
-purple = rgb([128, 0, 128])
-indigo = rgb([75, 0, 130])
-slateblue = rgb([71, 60, 139])
-lightgray = rgb([211, 211, 211])
-gray = rgb([112, 128, 144])
-darkgreen = rgb([0, 100, 0])
-gold = rgb([238, 201, 0])
-orange = rgb([255, 128, 0])
-salmon = rgb([198, 113, 113])
-maroon = rgb([128, 0, 0])
-beet = rgb([142, 56, 142])
-teal = rgb([56, 142, 142])
-olive = rgb([142, 142, 56])
-navy = rgb([0, 0, 128])
-skyblue = rgb([135, 206, 235])
-beige = rgb([255, 255, 204])
-burgundy = rgb([128, 0, 32])
+def _hex2rgb(color: str) -> RGB:
+    if color.startswith("#"):
+        color = color[1:]
+    return rgb([int(color[i : i + 2], 16) for i in range(0, 6, 2)])
 
-COLORS = [
-    blue,
-    red,
-    green,
-    orange,
-    purple,
-    skyblue,
-    teal,
-    pink,
-    magenta,
-    darkgreen,
-    darkorange,
-    darkred,
-    maroon,
-    olive,
-    orchid,
-    beet,
-    indigo,
-    gold,
-    navy,
-    salmon,
-    black,
-    lightgreen,
-    coral,
-    yellow,
-    limegreen,
-    slateblue,
-    darkyellow,
-    darkorange,
-    lightyellow,
-    lightorange,
-    burgundy,
-]
 
-LIGHT_COLORS = [
-    skyblue,
-    red,
-    green,
-    orange,
-    orchid,
-    teal,
-    magenta,
-    violet,
-    olive,
-    beet,
-    indigo,
-    gold,
-    navy,
-    salmon,
-]
+@dataclass(frozen=True)
+class Palette:
+    """
+    Named color palette.
 
-QUALITATIVE_COLORS = [
-    blue,
-    red,
-    green,
-    orange,
-    purple,
-    pink,
-    darkred,
-    darkgreen,
-    gold,
-    indigo,
-    maroon,
-]
+    Parameters
+    ----------
+    name: str
+        Palette name.
+    colors: sequence
+        RGB colors with channels scaled between 0 and 1.
+    """
 
-color_cycle = cycle(COLORS)
+    name: str
+    colors: Sequence[RGB]
 
-bonesis_cm = ListedColormap(colors=COLORS, name="bonesis")
+    @property
+    def hex(self) -> List[str]:
+        """
+        Return palette colors in hexadecimal format.
+        """
+
+        return [rgb2hex(color) for color in self.colors]
+
+    @property
+    def cmap(self) -> ListedColormap:
+        """
+        Return palette as a Matplotlib listed colormap.
+        """
+
+        return ListedColormap(colors=self.colors, name=self.name)
+
+    def cycle(self) -> Iterator[RGB]:
+        """
+        Return an infinite color cycle over the palette.
+        """
+
+        return _cycle(self.colors)
+
+
+HEX_COLORS: Dict[str, str] = {
+    "black": "#000000",
+    "white": "#ffffff",
+    "blue": "#0014ff",
+    "red": "#ff5032",
+    "green": "#14c850",
+    "violet": "#ff33ff",
+    "lightgreen": "#14fa50",
+    "coral": "#ff7f50",
+    "yellow": "#ffff00",
+    "darkyellow": "#cccc00",
+    "lightyellow": "#808000",
+    "darkorange": "#ff6900",
+    "darkred": "#8b0000",
+    "lightorange": "#ffa55a",
+    "limegreen": "#32ff32",
+    "pink": "#ffb6c1",
+    "orchid": "#da70d6",
+    "magenta": "#ff00ff",
+    "purple": "#800080",
+    "indigo": "#4b0082",
+    "slateblue": "#473c8b",
+    "lightgray": "#d3d3d3",
+    "gray": "#708090",
+    "charcoal": "#3a3a3a",
+    "brown": "#8a5a2b",
+    "darkgreen": "#006400",
+    "gold": "#eec900",
+    "amber": "#e6a100",
+    "orange": "#ff8000",
+    "rust": "#b84a2a",
+    "salmon": "#c67171",
+    "maroon": "#800000",
+    "beet": "#8e388e",
+    "plum": "#692a70",
+    "mauve": "#8a4d91",
+    "teal": "#388e8e",
+    "olive": "#8e8e38",
+    "navy": "#000080",
+    "skyblue": "#87ceeb",
+    "beige": "#ffffcc",
+    "burgundy": "#6f1d1b",
+    "sage": "#8a9a32",
+    "moss": "#4f8a5b",
+}
+
+RGB_COLORS: Dict[str, RGB] = {
+    name: _hex2rgb(color) for name, color in HEX_COLORS.items()
+}
+
+black = RGB_COLORS["black"]
+white = RGB_COLORS["white"]
+blue = RGB_COLORS["blue"]
+red = RGB_COLORS["red"]
+green = RGB_COLORS["green"]
+violet = RGB_COLORS["violet"]
+lightgreen = RGB_COLORS["lightgreen"]
+coral = RGB_COLORS["coral"]
+yellow = RGB_COLORS["yellow"]
+darkred = RGB_COLORS["darkred"]
+darkyellow = RGB_COLORS["darkyellow"]
+lightyellow = RGB_COLORS["lightyellow"]
+darkorange = RGB_COLORS["darkorange"]
+lightorange = RGB_COLORS["lightorange"]
+limegreen = RGB_COLORS["limegreen"]
+pink = RGB_COLORS["pink"]
+orchid = RGB_COLORS["orchid"]
+magenta = RGB_COLORS["magenta"]
+purple = RGB_COLORS["purple"]
+indigo = RGB_COLORS["indigo"]
+slateblue = RGB_COLORS["slateblue"]
+lightgray = RGB_COLORS["lightgray"]
+gray = RGB_COLORS["gray"]
+charcoal = RGB_COLORS["charcoal"]
+brown = RGB_COLORS["brown"]
+darkgreen = RGB_COLORS["darkgreen"]
+gold = RGB_COLORS["gold"]
+amber = RGB_COLORS["amber"]
+orange = RGB_COLORS["orange"]
+rust = RGB_COLORS["rust"]
+salmon = RGB_COLORS["salmon"]
+maroon = RGB_COLORS["maroon"]
+beet = RGB_COLORS["beet"]
+plum = RGB_COLORS["plum"]
+mauve = RGB_COLORS["mauve"]
+teal = RGB_COLORS["teal"]
+olive = RGB_COLORS["olive"]
+navy = RGB_COLORS["navy"]
+skyblue = RGB_COLORS["skyblue"]
+beige = RGB_COLORS["beige"]
+burgundy = RGB_COLORS["burgundy"]
+sage = RGB_COLORS["sage"]
+moss = RGB_COLORS["moss"]
+
+def _palette(*names: str) -> List[RGB]:
+    return [RGB_COLORS[name] for name in names]
+
+
+_QUALITATIVE_COLOR_NAMES = (
+    "blue",
+    "red",
+    "green",
+    "orange",
+    "purple",
+    "pink",
+    "darkred",
+    "darkgreen",
+    "gold",
+    "indigo",
+    "maroon",
+)
+
+QUALITATIVE_COLORS = _palette(*_QUALITATIVE_COLOR_NAMES)
+
+CLASSIC_COLORS = _palette(
+    *_QUALITATIVE_COLOR_NAMES,
+    "skyblue",
+    "teal",
+    "magenta",
+    "darkorange",
+    "olive",
+    "orchid",
+    "beet",
+    "navy",
+    "salmon",
+    "black",
+    "lightgreen",
+    "coral",
+    "yellow",
+    "limegreen",
+    "slateblue",
+    "darkyellow",
+    "lightyellow",
+    "lightorange",
+    "burgundy",
+)
+
+LIGHT_COLORS = _palette(
+    "skyblue",
+    "red",
+    "green",
+    "orange",
+    "orchid",
+    "teal",
+    "magenta",
+    "violet",
+    "olive",
+    "beet",
+    "indigo",
+    "gold",
+    "navy",
+    "salmon",
+)
+
+EARTH_COLORS = _palette(
+    "black",
+    "charcoal",
+    "gray",
+    "brown",
+    "plum",
+    "mauve",
+    "burgundy",
+    "darkred",
+    "rust",
+    "orange",
+    "amber",
+    "gold",
+    "sage",
+    "moss",
+    "teal",
+)
+
+_PALETTES: Dict[str, Palette] = {
+    "classic": Palette(name="classic", colors=CLASSIC_COLORS),
+    "light": Palette(name="light", colors=LIGHT_COLORS),
+    "earth": Palette(name="earth", colors=EARTH_COLORS),
+}
+
+PALETTES: Mapping[str, Palette] = MappingProxyType(_PALETTES)
+
+color_cycle = PALETTES["classic"].cycle()
+
+classic_cm = PALETTES["classic"].cmap
+light_cm = PALETTES["light"].cmap
+earth_cm = PALETTES["earth"].cmap
 
 
 def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
@@ -197,57 +328,67 @@ def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
         name="color_type",
     )
 
-    if color in [
-        "black",
-        "white",
-        "blue",
-        "red",
-        "green",
-        "violet",
-        "lightgreen",
-        "coral",
-        "yellow",
-        "darkyellow",
-        "lightyellow",
-        "darkorange",
-        "darkred",
-        "lightorange",
-        "limegreen",
-        "pink",
-        "orchid",
-        "magenta",
-        "purple",
-        "indigo",
-        "slateblue",
-        "lightgray",
-        "gray",
-        "darkgreen",
-        "gold",
-        "orange",
-        "salmon",
-        "maroon",
-        "beet",
-        "teal",
-        "olive",
-        "navy",
-        "skyblue",
-        "beige",
-        "burgundy",
-    ]:
-        if color_type == "rgb":
-            return eval(color)
-        if color_type == "hex":
-            return rgb2hex(eval(color))
-    else:
+    if color not in RGB_COLORS:
         raise ValueError(
             f"invalid argument value for 'color': color not found: {color!r}"
         )
+
+    if color_type == "rgb":
+        return RGB_COLORS[color]
+    if color_type == "hex":
+        return HEX_COLORS[color]
+
+
+def get_palette(name: str) -> Palette:
+    """
+    Return a named palette.
+
+    Parameters
+    ----------
+    name: str
+        Palette name.
+
+    Returns
+    -------
+    Palette
+        Requested color palette.
+
+    Raises
+    ------
+    ValueError
+        If `name` is unknown.
+    """
+
+    if name not in PALETTES:
+        raise ValueError(
+            f"invalid argument value for 'name': palette not found: {name!r}"
+        )
+
+    return PALETTES[name]
+
+
+def get_colormap(name: str) -> ListedColormap:
+    """
+    Return a named palette as a Matplotlib listed colormap.
+
+    Parameters
+    ----------
+    name: str
+        Palette name.
+
+    Returns
+    -------
+    matplotlib.colors.ListedColormap
+        Requested colormap.
+    """
+
+    return get_palette(name).cmap
 
 
 def generate_colormap(
     color_number: int = 80,
     shade_number: Optional[int] = None,
-    cm: Colormap = bonesis_cm,
+    cm: Colormap = classic_cm,
 ) -> ListedColormap:
     """
     Create a colormap from another colormap by adding some new colors.
@@ -258,7 +399,7 @@ def generate_colormap(
         Number of colors in the returned colormap.
     shade_number: int (optional, default: None)
         Number of shades in the returned colormap.
-    cm: matplotlib.colors.Colormap (default: bonesis_cm)
+    cm: matplotlib.colors.Colormap (default: classic_cm)
         Initial colormap to use for creating new colormap.
 
     Returns

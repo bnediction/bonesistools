@@ -54,10 +54,15 @@ from .._typing import (
     Shortest_Path_Method,
     anndata_or_mudata_checker,
 )
-from ._utils import get_representation
+from ._utils import (
+    _UNSET,
+    _resolve_representation_argument,
+    get_representation,
+)
 
 IndexOrName = Literal["index", "name"]
 NeighborBackend = Literal["exact", "pynndescent"]
+NeighborConnectivityMethod = Literal["fuzzy", "binary"]
 _SMOOTH_K_TOLERANCE = 1e-5
 _MIN_K_DIST_SCALE = 0.001
 _NPY_FLOATMAX = np.float32(3.4028235e38)
@@ -65,7 +70,7 @@ _NPY_FLOATMAX = np.float32(3.4028235e38)
 
 def _kneighbors_distance_matrix(
     scdata: ScData,
-    use_rep: Optional[str],
+    representation: Optional[str],
     n_components: Optional[int],
     n_neighbors: int,
     metric: Metric,
@@ -78,7 +83,7 @@ def _kneighbors_distance_matrix(
         Matrix,
         get_representation(
             scdata,
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
         ),
     )
@@ -94,10 +99,11 @@ def _kneighbors_distance_matrix(
 
 def _kneighbors_graph_matrices(
     scdata: ScData,
-    use_rep: Optional[str],
+    representation: Optional[str],
     n_components: Optional[int],
     n_neighbors: int,
     backend: NeighborBackend,
+    connectivity_method: NeighborConnectivityMethod,
     metric: Metric,
     seed: RandomStateSeed,
     n_jobs: int,
@@ -107,7 +113,7 @@ def _kneighbors_graph_matrices(
         Matrix,
         get_representation(
             scdata,
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
         ),
     )
@@ -132,6 +138,23 @@ def _kneighbors_graph_matrices(
         knn_distances=knn_distances,
         n_obs=scdata.n_obs,
     )
+    if connectivity_method == "binary":
+        from sklearn import neighbors as sklearn_neighbors
+
+        connectivities = cast(
+            csr_matrix,
+            sklearn_neighbors.kneighbors_graph(
+                X=representation_mtx,
+                n_neighbors=n_neighbors,
+                mode="connectivity",
+                metric=metric,
+                include_self=True,
+                n_jobs=n_jobs,
+            ),
+        )
+        connectivities = cast(csr_matrix, 0.5 * (connectivities + connectivities.T))
+        return distances, connectivities
+
     connectivities = _umap_connectivities_from_knn(
         knn_indices,
         knn_distances,
@@ -402,7 +425,7 @@ def _umap_connectivities_from_knn(
 
 
 def _normalize_knnsc_configuration(
-    use_rep: Optional[str],
+    representation: Optional[str],
     n_components: Optional[int],
     n_neighbors: Optional[int],
     metric: Optional[Metric],
@@ -412,8 +435,11 @@ def _normalize_knnsc_configuration(
     if n_components is not None:
         n_components = _as_positive_integer(n_components, "n_components")
 
-    resolved_use_rep = "X_pca" if use_rep is None else use_rep
-    resolved_use_rep = _as_string(resolved_use_rep, "use_rep")
+    resolved_representation = "X_pca" if representation is None else representation
+    resolved_representation = _as_string(
+        resolved_representation,
+        "representation",
+    )
 
     if n_neighbors is None:
         raise TypeError("missing required argument: 'n_neighbors'")
@@ -438,7 +464,7 @@ def _normalize_knnsc_configuration(
         )
 
     return (
-        resolved_use_rep,
+        resolved_representation,
         n_components,
         n_neighbors,
         resolved_metric,
@@ -453,6 +479,7 @@ def neighbors(
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     backend: NeighborBackend = "exact",
+    connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -470,6 +497,7 @@ def neighbors(
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     backend: NeighborBackend = "exact",
+    connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -488,6 +516,7 @@ def neighbors(
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     backend: NeighborBackend = "exact",
+    connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -505,6 +534,7 @@ def neighbors(
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
     backend: NeighborBackend = "exact",
+    connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
@@ -531,6 +561,10 @@ def neighbors(
         Neighbor-search backend. If `"exact"`, use scikit-learn brute-force
         exact nearest neighbors. If `"pynndescent"`, use approximate
         PyNNDescent neighbors.
+    connectivity_method: {'fuzzy', 'binary'} (default: 'fuzzy')
+        Method used to convert nearest neighbors into graph connectivities. If
+        `"fuzzy"`, use UMAP fuzzy simplicial-set connectivities. If
+        `"binary"`, use a binary symmetrized k-nearest-neighbor graph.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.
     key_added: str (default: 'neighbors')
@@ -570,6 +604,12 @@ def neighbors(
 
     Notes
     -----
+    UMAP typically relies on fuzzy graph connectivities, whereas spectral
+    embedding methods are commonly applied to binary nearest-neighbor graphs.
+
+    For spectral embedding workflows, `connectivity_method="binary"` is
+    therefore recommended.
+
     PyNNDescent is approximate. Its recall can decrease substantially as the
     embedding dimensionality increases. For PCA representations with many
     components (e.g. 50 PCs or more), the exact backend may be preferable even
@@ -597,6 +637,16 @@ def neighbors(
         choices=get_args(NeighborBackend),
         name="backend",
     )
+    connectivity_method = _as_literal(
+        connectivity_method,
+        choices=get_args(NeighborConnectivityMethod),
+        name="connectivity_method",
+    )
+    if connectivity_method == "binary" and backend != "exact":
+        raise ValueError(
+            "invalid argument combination: "
+            "connectivity_method='binary' requires backend='exact'"
+        )
     representation = (
         "X_pca"
         if representation is None
@@ -639,10 +689,11 @@ def neighbors(
     )
     distances, connectivities = _kneighbors_graph_matrices(
         scdata=scdata,
-        use_rep=representation,
+        representation=representation,
         n_components=n_pcs,
         n_neighbors=n_neighbors,
         backend=backend,
+        connectivity_method=connectivity_method,
         metric=metric,
         seed=seed,
         n_jobs=n_jobs,
@@ -659,7 +710,7 @@ def neighbors(
             "representation": representation,
             "backend": backend,
             "metric": metric,
-            "connectivity_method": "umap",
+            "connectivity_method": connectivity_method,
             "seed": _format_random_state(seed),
         },
     }
@@ -670,7 +721,7 @@ def neighbors(
 @anndata_or_mudata_checker
 def knn_graph(
     scdata: ScData,  # type: ignore
-    use_rep: Optional[str] = None,
+    representation: Any = _UNSET,
     n_components: Optional[int] = None,
     n_neighbors: Optional[int] = None,
     metric: Metric = "euclidean",
@@ -678,6 +729,7 @@ def knn_graph(
     edge_attr: str = "distance",
     index_or_name: IndexOrName = "index",
     n_jobs: int = 1,
+    use_rep: Any = _UNSET,
     **metric_kwargs: Any,
 ) -> Graph[Any]:
     """
@@ -687,7 +739,7 @@ def knn_graph(
     ----------
     scdata: AnnData or MuData
         Unimodal or multimodal annotated data matrix.
-    use_rep: str, optional
+    representation: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
         Number of dimensions to use. If None, use all dimensions.
@@ -705,6 +757,8 @@ def knn_graph(
         Number of allocated processors.
     **metric_kwargs: Any
         Additional keyword arguments passed to the distance function.
+    use_rep: str, optional
+        Deprecated alias for `representation`.
 
     Returns
     -------
@@ -720,12 +774,19 @@ def knn_graph(
     if n_neighbors is None:
         raise TypeError("missing required argument: 'n_neighbors'")
 
+    representation = _resolve_representation_argument(
+        representation,
+        use_rep,
+        default=None,
+        stacklevel=2,
+    )
+
     if metric_kwargs:
         from sklearn import neighbors as sklearn_neighbors
 
         representation_mtx = get_representation(
             scdata,
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
         )
         weighted_adjacency_matrix = sklearn_neighbors.kneighbors_graph(
@@ -739,7 +800,7 @@ def knn_graph(
     else:
         weighted_adjacency_matrix = _kneighbors_distance_matrix(
             scdata=scdata,
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
             n_neighbors=n_neighbors,
             metric=metric,
@@ -807,25 +868,34 @@ class KNNSC:
         _min_cluster_size: int
         _cluster_counts: pd.Series
         _n_neighbors: int
-        _use_rep: str
+        _representation: str
         _n_components: Optional[int]
         _metric: Metric
         _method: Shortest_Path_Method
 
     def __init__(
         self,
-        use_rep: Optional[str] = None,
+        representation: Any = _UNSET,
         n_components: Optional[int] = None,
         n_neighbors: Optional[int] = None,
         metric: Optional[Metric] = None,
+        *,
+        use_rep: Any = _UNSET,
         **metric_kwargs: Any,
     ):
         self._deprecated_init_params: Dict[str, Any] = {}
         self._metric_kwargs: Dict[str, Any] = {}
 
+        representation = _resolve_representation_argument(
+            representation,
+            use_rep,
+            default=None,
+            stacklevel=2,
+        )
+
         if (
             n_neighbors is not None
-            or use_rep is not None
+            or representation is not None
             or n_components is not None
             or metric is not None
             or metric_kwargs
@@ -838,20 +908,20 @@ class KNNSC:
                 stacklevel=2,
             )
             (
-                resolved_use_rep,
+                resolved_representation,
                 resolved_n_components,
                 resolved_n_neighbors,
                 resolved_metric,
                 resolved_metric_kwargs,
             ) = _normalize_knnsc_configuration(
-                use_rep=use_rep,
+                representation=representation,
                 n_components=n_components,
                 n_neighbors=n_neighbors,
                 metric=metric,
                 metric_kwargs=metric_kwargs,
             )
             self._deprecated_init_params = {
-                "use_rep": resolved_use_rep,
+                "representation": resolved_representation,
                 "n_components": resolved_n_components,
                 "n_neighbors": resolved_n_neighbors,
                 "metric": resolved_metric,
@@ -874,7 +944,7 @@ class KNNSC:
             return (
                 f"{self.__class__.__name__}("
                 f"cluster_key={fit_params['cluster_key']}, "
-                f"use_rep={fit_params['use_rep']}, "
+                f"representation={fit_params['representation']}, "
                 f"n_components={fit_params['n_components']}, "
                 f"n_neighbors={fit_params['n_neighbors']}, "
                 f"metric={fit_params['metric']}, "
@@ -888,7 +958,7 @@ class KNNSC:
 
         return (
             f"{self.__class__.__name__}("
-            f"use_rep={self._deprecated_init_params['use_rep']}, "
+            f"representation={self._deprecated_init_params['representation']}, "
             f"n_components={self._deprecated_init_params['n_components']}, "
             f"n_neighbors={self._deprecated_init_params['n_neighbors']}, "
             f"metric={self._deprecated_init_params['metric']}, "
@@ -955,12 +1025,21 @@ class KNNSC:
         return cast(int, self._require_fitted_attribute("_n_neighbors"))
 
     @property
-    def use_rep(self) -> str:
+    def representation(self) -> str:
         """
         Representation key used during fitting.
         """
 
-        return cast(str, self._require_fitted_attribute("_use_rep"))
+        return cast(str, self._require_fitted_attribute("_representation"))
+
+    @property
+    def use_rep(self) -> str:
+        """
+        Deprecated alias for `representation`.
+        """
+
+        _warn_deprecated_argument("use_rep", "representation", stacklevel=2)
+        return self.representation
 
     @property
     def n_components(self) -> Optional[int]:
@@ -1007,7 +1086,7 @@ class KNNSC:
 
         return {
             "cluster_key": self.cluster_key,
-            "use_rep": self.use_rep,
+            "representation": self.representation,
             "n_components": self.n_components,
             "n_neighbors": self.n_neighbors,
             "metric": self.metric,
@@ -1058,7 +1137,7 @@ class KNNSC:
         self,
         adata: AnnData,
         cluster_key: Optional[str] = None,
-        use_rep: Optional[str] = None,
+        representation: Any = _UNSET,
         n_components: Optional[int] = None,
         n_neighbors: Optional[int] = None,
         metric: Optional[Metric] = None,
@@ -1067,6 +1146,7 @@ class KNNSC:
         method: Shortest_Path_Method = "dijkstra",
         *,
         obs: Optional[str] = None,
+        use_rep: Any = _UNSET,
         min_cluster_size: int = 1,
     ) -> None:
         """
@@ -1084,7 +1164,7 @@ class KNNSC:
             Unimodal annotated data matrix.
         cluster_key: str
             Observation column in `adata.obs` defining clusters.
-        use_rep: str, optional (default: "X_pca")
+        representation: str, optional (default: "X_pca")
             Representation key in `adata.obsm`.
         n_components: int, optional
             Number of dimensions to use. If None, use all dimensions.
@@ -1100,6 +1180,8 @@ class KNNSC:
             Algorithm used to compute the shortest path lengths.
         obs: str, optional
             Deprecated alias for `cluster_key`.
+        use_rep: str, optional
+            Deprecated alias for `representation`.
         min_cluster_size: int (default: 1)
             Minimum number of cells required for a non-empty cluster to be used
             as a barycenter source. Smaller clusters remain in the graph but
@@ -1126,11 +1208,18 @@ class KNNSC:
         if cluster_key is None:
             raise TypeError("missing required argument: 'cluster_key'")
 
+        representation = _resolve_representation_argument(
+            representation,
+            use_rep,
+            default=None,
+            stacklevel=2,
+        )
+
         init_params = self._deprecated_init_params
         if n_neighbors is None and "n_neighbors" in init_params:
             n_neighbors = cast(int, init_params["n_neighbors"])
-        if use_rep is None:
-            use_rep = cast(Optional[str], init_params.get("use_rep"))
+        if representation is None:
+            representation = cast(Optional[str], init_params.get("representation"))
         if n_components is None:
             n_components = cast(Optional[int], init_params.get("n_components"))
         if metric is None:
@@ -1141,13 +1230,13 @@ class KNNSC:
             )
 
         (
-            resolved_use_rep,
+            resolved_representation,
             resolved_n_components,
             resolved_n_neighbors,
             resolved_metric,
             resolved_metric_kwargs,
         ) = _normalize_knnsc_configuration(
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
             n_neighbors=n_neighbors,
             metric=metric,
@@ -1183,12 +1272,14 @@ class KNNSC:
             )
 
         representation_mtx = get_representation(
-            adata, use_rep=resolved_use_rep, n_components=resolved_n_components
+            adata,
+            representation=resolved_representation,
+            n_components=resolved_n_components,
         )
 
         _knn_graph = knn_graph(
             adata,
-            use_rep=resolved_use_rep,
+            representation=resolved_representation,
             n_components=resolved_n_components,
             n_neighbors=resolved_n_neighbors,
             metric=resolved_metric,
@@ -1233,12 +1324,12 @@ class KNNSC:
                 adata_any = cast(Any, adata)
                 x_representation_mtx = get_representation(
                     adata_any[paired_scc[0], :],
-                    use_rep=resolved_use_rep,
+                    representation=resolved_representation,
                     n_components=resolved_n_components,
                 )
                 y_representation_mtx = get_representation(
                     adata_any[paired_scc[1], :],
-                    use_rep=resolved_use_rep,
+                    representation=resolved_representation,
                     n_components=resolved_n_components,
                 )
                 dists = pairwise_distances(
@@ -1258,7 +1349,7 @@ class KNNSC:
         self._min_cluster_size = min_cluster_size
         self._cluster_counts = cluster_counts
         self._obs = cast(pd.Series, candidate_obs)
-        self._use_rep = resolved_use_rep
+        self._representation = resolved_representation
         self._n_components = resolved_n_components
         self._n_neighbors = resolved_n_neighbors
         self._metric = resolved_metric
@@ -1704,9 +1795,11 @@ class Knnbs(KNNSC):
     def __init__(
         self,
         n_neighbors: int,
-        use_rep: str = "X_pca",
+        representation: Any = _UNSET,
         n_components: Optional[int] = None,
         metric: Metric = "euclidean",
+        *,
+        use_rep: Any = _UNSET,
         **metric_kwargs: Any,
     ):
         _warn_deprecated(
@@ -1714,9 +1807,18 @@ class Knnbs(KNNSC):
             replacement="`bt.sct.tl.KNNSC`",
             stacklevel=2,
         )
+        representation = cast(
+            str,
+            _resolve_representation_argument(
+                representation,
+                use_rep,
+                default="X_pca",
+                stacklevel=2,
+            ),
+        )
         super().__init__(
             n_neighbors=n_neighbors,
-            use_rep=use_rep,
+            representation=representation,
             n_components=n_components,
             metric=metric,
             **metric_kwargs,
@@ -1898,10 +2000,10 @@ def shared_neighbors(
 
     knn_params = scdata.uns[knn_key]["params"]
     n_pcs = knn_params["n_pcs"]
-    obsm = knn_params.get("representation", knn_params.get("use_rep"))
-    obsm = _as_string(obsm, "representation")
+    representation = knn_params.get("representation", knn_params.get("use_rep"))
+    representation = _as_string(representation, "representation")
 
-    representation_mtx = scdata.obsm[obsm][:, 0:n_pcs]
+    representation_mtx = scdata.obsm[representation][:, 0:n_pcs]
     zeros_ones = snn_graph.toarray()
     zeros_ones[zeros_ones > 0] = 1
 

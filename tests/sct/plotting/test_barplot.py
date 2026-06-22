@@ -65,7 +65,7 @@ def test_composition_can_plot_counts_without_legend(mini_adata):
         obs="batch",
         groupby="cluster",
         normalize=False,
-        showlegend=False,
+        show_legend=False,
         colors={"b1": "red", "b2": "blue"},
     )
 
@@ -86,6 +86,20 @@ def test_composition_legend_uses_rcparams_fontsize(mini_adata):
     legend = ax.get_legend()
     assert legend is not None
     assert [text.get_fontsize() for text in legend.get_texts()] == [7, 7]
+    plt.close(fig)
+
+
+def test_composition_accepts_explicit_legend_kwargs(mini_adata):
+    fig, ax = bt.sct.pl.composition(
+        mini_adata,
+        obs="batch",
+        groupby="cluster",
+        legend={"title": "batch"},
+    )
+
+    legend = ax.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "batch"
     plt.close(fig)
 
 
@@ -140,6 +154,20 @@ def test_composition_accepts_colormap_name(mini_adata):
     plt.close(fig)
 
 
+def test_composition_accepts_registered_colormap(mini_adata):
+    fig, ax = bt.sct.pl.composition(
+        mini_adata,
+        obs="batch",
+        groupby="cluster",
+        colors=bt.sct.pl.get_colormap("earth"),
+    )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    assert len(ax.containers) == 2
+    plt.close(fig)
+
+
 def test_composition_outfile_and_validation(mini_adata, tmp_path):
     mpl.rcParams["text.usetex"] = False
     outfile = tmp_path / "composition.png"
@@ -185,3 +213,42 @@ def test_composition_outfile_and_validation(mini_adata, tmp_path):
             groupby="cluster",
             orientation=cast(Any, "diagonal"),
         )
+
+
+def test_composition_deprecates_showlegend(mini_adata):
+    with pytest.warns(FutureWarning, match="`showlegend` is deprecated"):
+        fig, ax = bt.sct.pl.composition(
+            mini_adata,
+            obs="batch",
+            groupby="cluster",
+            showlegend=False,
+        )
+
+    assert ax.get_legend() is None
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
+def test_composition_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
+    kwargs = {deprecated: {"loc": "upper left"}}
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        fig, ax = bt.sct.pl.composition(
+            mini_adata,
+            obs="batch",
+            groupby="cluster",
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        with pytest.raises(TypeError, match=f"{deprecated}.*legend"):
+            bt.sct.pl.composition(
+                mini_adata,
+                obs="batch",
+                groupby="cluster",
+                legend={"loc": "upper left"},
+                **kwargs,
+            )
