@@ -1,3 +1,0 @@
-include src/bonesistools/databases/hcop/data/*.tsv.gz
-include src/bonesistools/databases/ncbi/data/gi/*.tsv.gz
-include src/bonesistools/sctools/datasets/*.h5ad

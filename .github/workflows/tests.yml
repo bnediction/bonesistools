@@ -41,7 +41,7 @@ jobs:
           pip install ipython pyright
 
       - name: Run pyright
-        run: pyright -p pyrightconfig.ci.json
+        run: pyright -p .
 
   reproducibility:
     name: reproducibility
@@ -91,7 +91,7 @@ jobs:
           - python-version: "3.12"
             test-mode: test
           - python-version: "3.13"
-            test-mode: coverage
+            test-mode: test
 
     steps:
       - uses: actions/checkout@v6
@@ -111,14 +111,10 @@ jobs:
 
       - name: Install test dependencies
         if: matrix.test-mode != 'import'
-        run: pip install pytest pytest-cov
+        run: pip install pytest
 
       - name: Check package import
         run: python -c "import bonesistools"
-
-      - name: Run tests with coverage
-        if: matrix.test-mode == 'coverage'
-        run: pytest --cov=bonesistools --cov-report=xml --cov-report=term-missing
 
       - name: Run tests
         if: matrix.test-mode == 'test'

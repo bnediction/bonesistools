@@ -38,21 +38,16 @@ import bonesistools as bt
 Submodules:
 
 - preprocessing: `bt.sct.pp`
-  - gene name harmonization
-  - metadata transfer utilities
-  - lightweight preprocessing helpers
+  - expression transformations, feature selection, filtering and metadata utilities
 
 - tools: `bt.sct.tl`
-  - K-nearest-neighbor and shared-neighbor graph utilities
-  - marker and log-fold-change analysis
-  - regression and matrix conversion utilities
+  - embeddings, neighborhood graphs, clustering, differential analysis and matrix utilities
 
 - plotting: `bt.sct.pl`
-  - embedding, density, composition and graph visualizations
-  - distribution utilities
+  - visualization helpers for embeddings, trajectories, distributions and summaries
 
 - datasets: `bt.sct.datasets`
-  - packaged reference datasets
+  - packaged and remotely loaded reference datasets
 
 ---
 
@@ -63,19 +58,13 @@ Submodules:
 Submodules:
 
 - Boolean algebra: `bt.bpy.ba`
-  - partial Boolean abstractions and hypercube representations
-  - Boolean differential and predecessor inference utilities
+  - logical objects and transformations for Boolean-state reasoning
 
 - Boolean network: `bt.bpy.bn`
-  - Boolean network manipulation and analysis
-  - fixed-point computation
-  - `.bnet` import/export
+  - Boolean model representation, conversion, analysis and exchange
 
 - influence graph: `bt.bpy.ig`
-  - signed regulatory influence graphs
-  - feedback circuit and SCC analysis
-  - signed interaction scoring from bounded walks
-  - graph compression and visualization utilities
+  - signed regulatory graph construction, comparison, analysis and display
 
 Example:
 
@@ -103,15 +92,13 @@ external resources.
 Submodules:
 
 - NCBI: `bt.dbs.ncbi`
-  - gene synonym harmonization
-  - gene annotation utilities
+  - gene identifier, synonym and annotation utilities
 
 - OmniPath: `bt.dbs.omnipath`
-  - DoRothEA transcription factor interactions
-  - CollecTRI regulatory interaction networks
+  - regulatory interaction datasets
 
 - HCOP: `bt.dbs.hcop`
-  - orthology mappings
+  - orthology resources
 
 Example:
 

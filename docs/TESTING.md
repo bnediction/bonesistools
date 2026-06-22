@@ -5,7 +5,7 @@
 The GitHub CI separates fast local checks from live reproducibility checks:
 
 - `ruff`: linting;
-- `pyright`: static typing with `pyrightconfig.ci.json`;
+- `pyright`: static typing with the `pyproject.toml` configuration;
 - `reproducibility`: live resource checks against deterministic signatures;
 - `pytest (3.7, import)`;
 - `pytest (3.8, import)`;
@@ -13,7 +13,7 @@ The GitHub CI separates fast local checks from live reproducibility checks:
 - `pytest (3.10, test)`;
 - `pytest (3.11, test)`;
 - `pytest (3.12, test)`;
-- `pytest (3.13, coverage)`.
+- `pytest (3.13, test)`.
 
 Python 3.7 to 3.9 are import-only jobs because they mainly protect runtime
 compatibility. Full tests run on newer Python versions.

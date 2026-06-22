@@ -6,7 +6,8 @@ build-backend = "hatchling.build"
 name = "bonesistools"
 description = "Bioinformatics toolkit for upstream and downstream analyses around the BoNesis framework"
 version = "1.2.7"
-license = {file = "LICENSE"}
+license = "CECILL-2.1"
+license-files = ["LICENSE"]
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [
     { name = "Théo Roncalli" },
@@ -116,16 +117,23 @@ target-version = ["py37"]
 [tool.ruff]
 target-version = "py37"
 line-length = 88
-extend-exclude = ["ensemble"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 typing-modules = ["bonesistools._compat"]
 
-[tool.pytest.ini_options]
-norecursedirs = [
-    "tests/reproducibility",
+[tool.pyright]
+typeCheckingMode = "standard"
+include = ["src/bonesistools"]
+exclude = [
+    "**/__pycache__",
+    "**/.*",
+    "**/node_modules",
+    ".git",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "tests",
 ]
-filterwarnings = [
-    "ignore:The NumPy module was reloaded:UserWarning",
-]
+extraPaths = ["src"]
+pythonVersion = "3.13"
