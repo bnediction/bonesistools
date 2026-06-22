@@ -7,7 +7,6 @@ name = "bonesistools"
 description = "Bioinformatics toolkit for upstream and downstream analyses around the BoNesis framework"
 version = "1.2.7"
 license = "CECILL-2.1"
-license-files = ["LICENSE"]
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [
     { name = "Théo Roncalli" },
@@ -67,6 +66,9 @@ keywords = [
     "gene-regulatory-networks",
     "bonesis",
 ]
+
+[project.license-files]
+paths = ["LICENSE"]
 
 [project.optional-dependencies]
 all = [
