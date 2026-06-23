@@ -27,7 +27,6 @@ import bonesistools as bt
 - `bt.sct` — single-cell and multimodal annotated data tools
 - `bt.bpy` — Boolean modelling and graph utilities
 - `bt.dbs` — biological database interfaces
-- `bt.grn` — deprecated alias for `bt.bpy.ig`
 
 ---
 

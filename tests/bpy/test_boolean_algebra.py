@@ -9,34 +9,70 @@ from boolean import BooleanAlgebra, Expression
 import bonesistools as bt
 
 
-def test_partial_boolean_differential_uses_partial_boolean_order():
-    differential = bt.bpy.ba.PartialBooleanDifferential
+def test_kleene_differential_uses_truth_order():
 
     pb0 = bt.bpy.ba.PartialBoolean(0)
     pbstar = bt.bpy.ba.PartialBoolean("*")
     pb1 = bt.bpy.ba.PartialBoolean(1)
 
-    assert differential.differential(pb0, pb0) == 0
-    assert differential.differential(pbstar, pbstar) == 0
-    assert differential.differential(pb1, pb1) == 0
+    assert bt.bpy.ba.diff(pb0, pb0) == 0
+    assert bt.bpy.ba.diff(pbstar, pbstar) == 0
+    assert bt.bpy.ba.diff(pb1, pb1) == 0
 
-    assert differential.differential(pb0, pbstar) == 1
-    assert differential.differential(pbstar, pb1) == 1
-    assert differential.differential(pb0, pb1) == 1
+    assert bt.bpy.ba.diff(pb0, pbstar) == 1
+    assert bt.bpy.ba.diff(pbstar, pb1) == 1
+    assert bt.bpy.ba.diff(pb0, pb1) == 1
 
-    assert differential.differential(pbstar, pb0) == -1
-    assert differential.differential(pb1, pbstar) == -1
-    assert differential.differential(pb1, pb0) == -1
+    assert bt.bpy.ba.diff(pbstar, pb0) == -1
+    assert bt.bpy.ba.diff(pb1, pbstar) == -1
+    assert bt.bpy.ba.diff(pb1, pb0) == -1
 
-    assert differential.differential(False, 0) == 0
-    assert differential.differential(True, 1) == 0
-    assert differential.differential(float("nan"), pbstar) == 0
+    assert bt.bpy.ba.diff(False, 0) == 0
+    assert bt.bpy.ba.diff(True, 1) == 0
+    assert bt.bpy.ba.diff(float("nan"), pbstar) == 0
+
+
+def test_kleene_value_order_and_logical_operators():
+
+    false = bt.bpy.ba.KleeneValue(0)
+    unknown = bt.bpy.ba.KleeneValue("*")
+    true = bt.bpy.ba.KleeneValue(1)
+
+    assert false < unknown < true
+    assert false.rank == 0
+    assert unknown.rank == 1
+    assert true.rank == 2
+
+    assert ~false == true
+    assert ~true == false
+    assert ~unknown == unknown
+
+    assert true.meet(unknown) == unknown
+    assert true.join(unknown) == true
+    assert false.meet(true) == false
+    assert false.join(true) == true
+
+    assert false & unknown == false
+    assert true & unknown == unknown
+    assert unknown & unknown == unknown
+    assert (true & unknown) == true.meet(unknown)
+
+    assert true | unknown == true
+    assert false | unknown == unknown
+    assert unknown | unknown == unknown
+    assert (true | unknown) == true.join(unknown)
+
+    assert unknown.to_partial_boolean() == bt.bpy.ba.PartialBoolean("*")
+
+
+@pytest.mark.parametrize("value", [0, 1, "*"])
+def test_kleene_value_cannot_be_converted_to_bool(value):
+
+    with pytest.raises(TypeError):
+        bool(bt.bpy.ba.KleeneValue(value))
 
 
 def test_static_boolean_algebra_utilities_cannot_be_instantiated():
-    with pytest.raises(TypeError, match="PartialBooleanDifferential"):
-        bt.bpy.ba.PartialBooleanDifferential()
-
     with pytest.raises(TypeError, match="BooleanPredecessorInference"):
         bt.bpy.ba.BooleanPredecessorInference()
 
@@ -223,17 +259,16 @@ def test_predecessor_score_is_zero_without_conclusive_votes():
 
 
 def test_boolean_predecessor_inference_rejects_invalid_inputs():
-    differential = bt.bpy.ba.PartialBooleanDifferential
     inference = bt.bpy.ba.BooleanPredecessorInference
 
     with pytest.raises(ValueError):
-        differential.differential(2, 1)
+        bt.bpy.ba.diff(2, 1)
 
     with pytest.raises(ValueError):
-        differential.differential("0", 1)
+        bt.bpy.ba.diff("0", 1)
 
     with pytest.raises(TypeError):
-        differential.differential(cast(Any, object()), 1)
+        bt.bpy.ba.diff(cast(Any, object()), 1)
 
     with pytest.raises(ValueError):
         inference.pairwise_predecessor_test(1, 1, 0, 1, sign=0)

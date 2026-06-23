@@ -1,45 +1,42 @@
 #!/usr/bin/env python
 
 import math
-from typing import Any, Union
+from typing import Any, FrozenSet, Union
 
 PartialBooleanValue = Union[bool, int, float, str]
 
 
 class PartialBoolean:
     """
-    Partial Boolean value in {0, 1, *}.
+    Partial Boolean powerset abstraction over a Boolean value.
 
-    A PartialBoolean represents a Boolean abstraction where:
-        - 0 denotes an inactive Boolean state,
-        - 1 denotes an active Boolean state,
-        - "*" denotes a free, unspecified or unresolved Boolean state.
+    A PartialBoolean is not a Kleene truth value and does not implement a
+    three-valued logic. It is a powerset abstraction representing a non-empty
+    subset of the Boolean domain B = {0, 1}:
 
-    Two complementary semantics are supported:
+        0   maps to {0}
+        1   maps to {1}
+        *   maps to {0, 1}
 
-        - an ensemble/set-theoretic interpretation through `contains`,
-          where "*" represents the Boolean ensemble:
+    Thus "*" denotes an unspecified, free, or unresolved Boolean value: both
+    Boolean values remain admissible. This is the standard set-theoretic
+    interpretation of Boolean hypercube coordinates.
 
-                * = {0, 1}
+    The induced information lattice is ordered by set inclusion:
 
-          while fixed values only contain themselves;
+        0 < *
+        1 < *
 
-        - a biological ordering interpretation through comparison operators and
-          differential calculus, following the convention:
+    while 0 and 1 are incomparable.
 
-                0 < * < 1
-
-    These semantics are intentionally distinct. In particular, although "*"
-    contains both 0 and 1 from an ensemble perspective, it is neither equal to
-    0 nor to 1.
+    This is an information/generalisation lattice, not a truth lattice. In
+    particular, it is distinct from the Kleene K3 truth lattice 0 < * < 1.
 
     Parameters
     ----------
-    value: bool or int or str
-        Partial Boolean value. Supported values are:
-            - False, 0
-            - True, 1
-            - "*"
+    value: bool, number, str or PartialBoolean
+        Partial Boolean value. Supported values are False, True, 0, 1, NaN and
+        "*".
 
     Raises
     ------
@@ -115,60 +112,60 @@ class PartialBoolean:
 
         return hash(self._value)
 
-    def __lt__(self, other: "PartialBoolean") -> bool:
+    def __lt__(self, other: object) -> bool:
         """
-        Return whether the current partial Boolean value is biologically lower
-        than another one.
+        Test strict inclusion in another PartialBoolean.
 
-        Partial Boolean values follow the biological ordering convention:
+        PartialBoolean values use the set-theoretic order:
 
-            0 < * < 1
+            0 < *
+            1 < *
 
         Examples
         --------
         >>> PartialBoolean(0) < PartialBoolean("*")
         True
 
-        >>> PartialBoolean("*") < PartialBoolean(1)
+        >>> PartialBoolean(1) < PartialBoolean("*")
         True
 
-        >>> PartialBoolean(1) < PartialBoolean(0)
+        >>> PartialBoolean(0) < PartialBoolean(1)
         False
 
         Parameters
         ----------
-        other: PartialBoolean
+        other: object
             Partial Boolean value used for comparison.
 
         Returns
         -------
-        bool
-            Whether the current value is biologically lower than `other`.
+        bool or NotImplemented
+            Whether the current admissible-value set is strictly included in
+            `other`.
         """
 
-        order = {
-            PartialBoolean(0): 0,
-            PartialBoolean(float("nan")): 1,
-            PartialBoolean(1): 2,
-        }
+        other = self._coerce_other(other)
 
-        return order[self] < order[other]
+        if not isinstance(other, PartialBoolean):
+            return NotImplemented
 
-    def __gt__(self, other: "PartialBoolean") -> bool:
+        return self.as_set() < other.as_set()
+
+    def __gt__(self, other: object) -> bool:
         """
-        Return whether the current partial Boolean value is biologically greater
-        than another one.
+        Test strict containment of another PartialBoolean.
 
-        Partial Boolean values follow the biological ordering convention:
+        PartialBoolean values use the set-theoretic order:
 
-            0 < * < 1
+            0 < *
+            1 < *
 
         Examples
         --------
-        >>> PartialBoolean(1) > PartialBoolean("*")
+        >>> PartialBoolean("*") > PartialBoolean(0)
         True
 
-        >>> PartialBoolean("*") > PartialBoolean(0)
+        >>> PartialBoolean("*") > PartialBoolean(1)
         True
 
         >>> PartialBoolean(0) > PartialBoolean(1)
@@ -176,25 +173,30 @@ class PartialBoolean:
 
         Parameters
         ----------
-        other: PartialBoolean
+        other: object
             Partial Boolean value used for comparison.
 
         Returns
         -------
-        bool
-            Whether the current value is biologically greater than `other`.
+        bool or NotImplemented
+            Whether the current admissible-value set strictly contains `other`.
         """
 
-        return other < self
+        other = self._coerce_other(other)
 
-    def __le__(self, other: "PartialBoolean") -> bool:
+        if not isinstance(other, PartialBoolean):
+            return NotImplemented
+
+        return self.as_set() > other.as_set()
+
+    def __le__(self, other: object) -> bool:
         """
-        Return whether the current partial Boolean value is biologically lower
-        than or equal to another one.
+        Test inclusion in another PartialBoolean.
 
-        Partial Boolean values follow the biological ordering convention:
+        PartialBoolean values use the set-theoretic order:
 
-            0 < * < 1
+            0 < *
+            1 < *
 
         Examples
         --------
@@ -204,35 +206,39 @@ class PartialBoolean:
         >>> PartialBoolean("*") <= PartialBoolean("*")
         True
 
-        >>> PartialBoolean(1) <= PartialBoolean(0)
+        >>> PartialBoolean(0) <= PartialBoolean(1)
         False
 
         Parameters
         ----------
-        other: PartialBoolean
+        other: object
             Partial Boolean value used for comparison.
 
         Returns
         -------
-        bool
-            Whether the current value is biologically lower than or equal to
-            `other`.
+        bool or NotImplemented
+            Whether the current admissible-value set is included in `other`.
         """
 
-        return self == other or self < other
+        other = self._coerce_other(other)
 
-    def __ge__(self, other: "PartialBoolean") -> bool:
+        if not isinstance(other, PartialBoolean):
+            return NotImplemented
+
+        return self.as_set() <= other.as_set()
+
+    def __ge__(self, other: object) -> bool:
         """
-        Return whether the current partial Boolean value is biologically greater
-        than or equal to another one.
+        Test containment of another PartialBoolean.
 
-        Partial Boolean values follow the biological ordering convention:
+        PartialBoolean values use the set-theoretic order:
 
-            0 < * < 1
+            0 < *
+            1 < *
 
         Examples
         --------
-        >>> PartialBoolean(1) >= PartialBoolean("*")
+        >>> PartialBoolean("*") >= PartialBoolean(0)
         True
 
         >>> PartialBoolean("*") >= PartialBoolean("*")
@@ -243,17 +249,51 @@ class PartialBoolean:
 
         Parameters
         ----------
-        other: PartialBoolean
+        other: object
             Partial Boolean value used for comparison.
 
         Returns
         -------
-        bool
-            Whether the current value is biologically greater than or equal to
-            `other`.
+        bool or NotImplemented
+            Whether the current admissible-value set contains `other`.
         """
 
-        return self == other or self > other
+        other = self._coerce_other(other)
+
+        if not isinstance(other, PartialBoolean):
+            return NotImplemented
+
+        return self.as_set() >= other.as_set()
+
+    def __contains__(self, other: object) -> bool:
+        """
+        Test whether another partial Boolean value is contained in this value.
+
+        Returns
+        -------
+        bool
+            Whether `other` is contained in the current PartialBoolean.
+        """
+
+        return self.contains(other)
+
+    def to_kleene(self):
+        """
+        Convert to a KleeneValue preserving the external symbol.
+
+        This conversion changes interpretation: `PartialBoolean("*")` means
+        the admissible Boolean set {0, 1}, while `KleeneValue("*")` means an
+        unknown truth value.
+
+        Returns
+        -------
+        KleeneValue
+            Kleene truth value with the same external symbol.
+        """
+
+        from ._kleene import KleeneValue
+
+        return KleeneValue(self._value)
 
     @property
     def value(self) -> Union[int, str]:
@@ -294,11 +334,41 @@ class PartialBoolean:
 
         return self._value == "*"
 
+    def as_set(self) -> FrozenSet[int]:
+        """
+        Return the admissible Boolean values represented by this object.
+
+        Returns
+        -------
+        frozenset
+            `frozenset({0})`, `frozenset({1})` or `frozenset({0, 1})`.
+        """
+
+        if self._value == "*":
+            return frozenset({0, 1})
+
+        if self._value == 0:
+            return frozenset({0})
+
+        return frozenset({1})
+
+    def possibilities(self) -> FrozenSet[int]:
+        """
+        Return the admissible Boolean values represented by this object.
+
+        Returns
+        -------
+        frozenset
+            `frozenset({0})`, `frozenset({1})` or `frozenset({0, 1})`.
+        """
+
+        return self.as_set()
+
     def contains(self, other: object) -> bool:
         """
         Test whether the PartialBoolean contains another partial Boolean value.
 
-        The containment relation follows the combinatorial interpretation:
+        Containment follows set inclusion of admissible Boolean values:
         "*" contains 0, 1 and "*", while fixed values only contain themselves.
 
         Parameters
@@ -313,13 +383,15 @@ class PartialBoolean:
 
         Raises
         ------
+        TypeError
+            If `other` has an unsupported type.
         ValueError
-            If `other` cannot be interpreted as a PartialBoolean value.
+            If `other` has an unsupported value.
         """
 
         other = other if isinstance(other, PartialBoolean) else PartialBoolean(other)
 
-        return self.is_free or self == other
+        return other.as_set() <= self.as_set()
 
     @staticmethod
     def _coerce_value(value: Any) -> Union[int, str]:
@@ -342,6 +414,9 @@ class PartialBoolean:
             If the provided value is not supported.
         """
 
+        if isinstance(value, PartialBoolean):
+            return value.value
+
         if isinstance(value, bool):
             return int(value)
 
@@ -358,3 +433,15 @@ class PartialBoolean:
             "invalid argument value for 'value': "
             f"expected 0, 1, NaN, False, True or '*' but received {value!r}"
         )
+
+    @staticmethod
+    def _coerce_other(other: object) -> Union["PartialBoolean", Any]:
+
+        if isinstance(other, PartialBoolean):
+            return other
+
+        try:
+            return PartialBoolean(other)
+
+        except (TypeError, ValueError):
+            return NotImplemented

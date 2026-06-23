@@ -96,11 +96,11 @@ omics = [
 [tool.hatch.build.targets.sdist]
 ignore-vcs = true
 include = [
-    "*.py",
-    "src/bonesistools/py.typed",
-    "src/bonesistools/databases/hcop/data/*.tsv.gz",
-    "src/bonesistools/databases/ncbi/data/gi/*.tsv.gz",
-    "src/bonesistools/sctools/datasets/*.h5ad",
+    "/LICENSE",
+    "/README.md",
+    "/pyproject.toml",
+    "/src/bonesistools",
+    "/tests",
 ]
 
 [tool.hatch.build.targets.wheel]

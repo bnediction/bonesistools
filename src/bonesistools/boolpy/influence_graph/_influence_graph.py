@@ -324,11 +324,12 @@ class InfluenceGraph(_MultiDiGraphBase):
         `list(...)`.
         """
 
-        candidate = self._plain_graph(self)
-        candidate.add_edges_from(ebunch_to_add, **attr)
-        candidate = type(self)(candidate)
+        candidate = nx.MultiDiGraph()
+        nx.MultiDiGraph.add_edges_from(candidate, ebunch_to_add, **attr)
+        candidate = self._validated_update_graph(candidate)
 
-        self._replace_with_graph(candidate)
+        self._check_update_graph(candidate)
+        self._apply_update_graph(candidate)
 
     def add_weighted_edges_from(self, ebunch_to_add, weight="weight", **attr) -> None:
         """
@@ -434,11 +435,12 @@ class InfluenceGraph(_MultiDiGraphBase):
             If an added edge has no `sign` attribute or an invalid sign value.
         """
 
-        candidate = self._plain_graph(self)
+        candidate = nx.MultiDiGraph()
         nx.MultiDiGraph.update(candidate, edges=edges, nodes=nodes)
-        candidate = type(self)(candidate)
+        candidate = self._validated_update_graph(candidate)
 
-        self._replace_with_graph(candidate)
+        self._check_update_graph(candidate)
+        self._apply_update_graph(candidate)
 
     def rename(self, old: str, new: str) -> None:
         """
@@ -552,8 +554,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             copy=True,
         )
 
-        relabeled = self.copy()
-        relabeled.clear()
+        relabeled = self._empty_like()
         relabeled.graph.update(relabeled_graph.graph)
 
         for node, data in relabeled_graph.nodes(data=True):
@@ -1344,32 +1345,47 @@ class InfluenceGraph(_MultiDiGraphBase):
         if sccs is None:
             sccs = self.strongly_connected_components()
 
+        sccs = list(sccs)
+
         records = []
 
         for marker in markers:
             if marker not in self:
                 continue
 
+            directions = (
+                ["downstream", "upstream"] if direction == "both" else [direction]
+            )
+            distances_by_direction = {}
+
+            for current_direction in directions:
+                if current_direction == "downstream":
+                    search_graph = self.reverse(copy=False)
+                else:
+                    search_graph = self
+
+                distances_by_direction[
+                    current_direction
+                ] = nx.single_source_shortest_path_length(search_graph, marker)
+
             for scc in sccs:
                 scc = frozenset(scc)
 
-                for current_direction in (
-                    ["downstream", "upstream"] if direction == "both" else [direction]
-                ):
-
+                for current_direction in directions:
                     candidate_paths = []
+                    distances = distances_by_direction[current_direction]
+                    reachable_nodes = [node for node in scc if node in distances]
 
-                    for node in scc:
+                    if not reachable_nodes:
+                        continue
+
+                    min_distance = min(distances[node] for node in reachable_nodes)
+
+                    for node in reachable_nodes:
+                        if distances[node] != min_distance:
+                            continue
 
                         if current_direction == "downstream":
-
-                            if not nx.has_path(
-                                self,
-                                node,
-                                marker,
-                            ):
-                                continue
-
                             paths = nx.all_shortest_paths(
                                 self,
                                 source=node,
@@ -1377,14 +1393,6 @@ class InfluenceGraph(_MultiDiGraphBase):
                             )
 
                         else:
-
-                            if not nx.has_path(
-                                self,
-                                marker,
-                                node,
-                            ):
-                                continue
-
                             paths = nx.all_shortest_paths(
                                 self,
                                 source=marker,
@@ -1848,6 +1856,53 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         display(SVG(svg))
 
+    def _empty_like(self) -> "InfluenceGraph":
+        """
+        Return an empty graph preserving the concrete influence graph type.
+        """
+
+        return type(self)()
+
+    def _validated_update_graph(self, graph: Any) -> "InfluenceGraph":
+        """
+        Return a validated graph containing candidate update data only.
+        """
+
+        return type(self)(graph)
+
+    def _check_update_graph(self, graph: "InfluenceGraph") -> None:
+        """
+        Ensure candidate update edges preserve current signed-edge invariants.
+        """
+
+        for source, target, data in graph.edges(data=True):
+            sign = self._normalize_sign(data["sign"])
+
+            if self.has_edge(source, target) and sign in self._edge_signs(
+                source,
+                target,
+            ):
+                raise ValueError(
+                    f"duplicated edge sign for edge "
+                    f"{source!r} -> {target!r} with sign {sign!r}"
+                )
+
+    def _apply_update_graph(self, graph: "InfluenceGraph") -> None:
+        """
+        Apply a prevalidated update graph.
+        """
+
+        self.graph.update(graph.graph)
+        nx.MultiDiGraph.add_nodes_from(
+            self,
+            ((node, data.copy()) for node, data in graph.nodes(data=True)),
+        )
+
+        for source, target, data in graph.edges(data=True):
+            edge_data = data.copy()
+            sign = edge_data.pop("sign")
+            self.add_edge(source, target, sign=sign, **edge_data)
+
     @staticmethod
     def _plain_graph(graph: Any) -> nx.MultiDiGraph[Any]:
         """
@@ -2266,11 +2321,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             has a count outside the valid range.
         """
 
-        candidate = self._plain_graph(self)
-        candidate.add_edges_from(ebunch_to_add, **attr)
-        candidate = type(self)(candidate, total=self.total)
+        candidate = nx.MultiDiGraph()
+        nx.MultiDiGraph.add_edges_from(candidate, ebunch_to_add, **attr)
+        candidate = self._validated_update_graph(candidate)
 
-        self._replace_with_graph(candidate)
+        self._check_update_graph(candidate)
+        self._apply_update_graph(candidate)
 
     def update(
         self,
@@ -2315,11 +2371,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             edge, or has a count outside the valid range.
         """
 
-        candidate = self._plain_graph(self)
+        candidate = nx.MultiDiGraph()
         nx.MultiDiGraph.update(candidate, edges=edges, nodes=nodes)
-        candidate = type(self)(candidate, total=self.total)
+        candidate = self._validated_update_graph(candidate)
 
-        self._replace_with_graph(candidate)
+        self._check_update_graph(candidate)
+        self._apply_update_graph(candidate)
 
     def edge_count(
         self,
@@ -3336,6 +3393,20 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         graph.remove_edges_from(edges_to_remove)
 
         return graph
+
+    def _empty_like(self) -> "AggregatedInfluenceGraph":
+        """
+        Return an empty aggregated graph preserving the current total.
+        """
+
+        return type(self)(total=self.total)
+
+    def _validated_update_graph(self, graph: Any) -> "AggregatedInfluenceGraph":
+        """
+        Return a validated aggregated graph containing candidate update data only.
+        """
+
+        return type(self)(graph, total=self.total)
 
     def _replace_with_graph(self, graph: Any) -> None:
         """

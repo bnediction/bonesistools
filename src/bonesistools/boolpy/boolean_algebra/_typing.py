@@ -19,6 +19,7 @@ from boolean import Expression
 from typing_extensions import TypeGuard as _TypeGuard
 
 from ._boolean import PartialBoolean
+from ._kleene import KleeneValue, KleeneValueLike
 
 BooleanRule = _Union[Expression, bool, int, str]
 
@@ -132,6 +133,38 @@ def is_partial_boolean_like(value: _Any) -> _TypeGuard[PartialBooleanLike]:
 
     try:
         PartialBoolean(value)
+        return True
+
+    except (TypeError, ValueError):
+        return False
+
+
+def is_kleene_value_like(value: _Any) -> _TypeGuard[KleeneValueLike]:
+    """
+    Test whether an object can be coerced into a KleeneValue.
+
+    Examples
+    --------
+    >>> is_kleene_value_like(0)
+    True
+    >>> is_kleene_value_like("*")
+    True
+    >>> is_kleene_value_like(2)
+    False
+
+    Parameters
+    ----------
+    value: Any
+        Object to test.
+
+    Returns
+    -------
+    bool
+        True if `value` can be converted to a KleeneValue.
+    """
+
+    try:
+        KleeneValue(value)
         return True
 
     except (TypeError, ValueError):

@@ -7,6 +7,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -20,11 +21,13 @@ if TYPE_CHECKING:
 
 import copy
 import ctypes
+import gzip
 import inspect
 import re
-import shlex
-import subprocess
+import shutil
 import tempfile
+import urllib.error
+import urllib.request
 import warnings
 from collections import namedtuple
 from collections.abc import Mapping as MappingInstance
@@ -1487,47 +1490,52 @@ class GeneSynonyms:
 
     def __download_full_gene_info(self, outfile: Path) -> None:
 
-        gzip_outfile = Path(f"{outfile}.gz")
         url = FTP_GENE_INFO[self.organism]
-
-        cmd = (
-            f"wget --quiet --show-progress -O {shlex.quote(str(gzip_outfile))} "
-            f"{shlex.quote(url)} && "
-            f"gunzip --quiet --force {shlex.quote(str(gzip_outfile))}"
-        )
+        outfile.parent.mkdir(parents=True, exist_ok=True)
+        temporary_gzip = Path(f"{outfile}.gz.tmp")
+        temporary_outfile = Path(f"{outfile}.tmp")
 
         try:
-            subprocess.run(cmd, shell=True, check=True)
-        except subprocess.CalledProcessError as e:
+            with urllib.request.urlopen(url) as response:
+                with open(temporary_gzip, "wb") as file:
+                    shutil.copyfileobj(response, file)
+
+            with gzip.open(temporary_gzip, "rb") as compressed_file:
+                with open(temporary_outfile, "wb") as file:
+                    shutil.copyfileobj(compressed_file, file)
+
+            temporary_outfile.replace(outfile)
+        except (OSError, urllib.error.URLError) as e:
             raise RuntimeError("failed to download NCBI gene_info file") from e
+        finally:
+            self.__unlink_if_exists(temporary_gzip)
+            self.__unlink_if_exists(temporary_outfile)
 
     def __write_bundled_gene_info_file(self, infile: Path, outfile: Path) -> None:
 
         outfile.parent.mkdir(parents=True, exist_ok=True)
         temporary_outfile = Path(f"{outfile}.tmp")
 
-        awk_script = (
-            'BEGIN {OFS="\\t"; print "gene_id", "official_name", "ncbi_name", '
-            '"synonyms", "dbXrefs", "gene_type"} '
-            "NR>1 {print $2, $11, $3, $5, $6, $10}"
-        )
-        if str(outfile).endswith(".gz"):
-            cmd = (
-                f"{self.__read_gene_info_command(infile)} | "
-                f"awk -F'\\t' '{awk_script}' | gzip -c > "
-                f"{shlex.quote(str(temporary_outfile))}"
-            )
-        else:
-            cmd = (
-                f"{self.__read_gene_info_command(infile)} | "
-                f"awk -F'\\t' '{awk_script}' > "
-                f"{shlex.quote(str(temporary_outfile))}"
-            )
-
         try:
-            subprocess.run(cmd, shell=True, check=True)
+            with self.__open_gene_info_output(outfile, temporary_outfile) as file:
+                file.write(
+                    "\t".join(
+                        [
+                            "gene_id",
+                            "official_name",
+                            "ncbi_name",
+                            "synonyms",
+                            "dbXrefs",
+                            "gene_type",
+                        ]
+                    )
+                    + "\n"
+                )
+                for fields in self.__iter_gene_info_rows(infile, reduced=False):
+                    file.write("\t".join(fields) + "\n")
+
             temporary_outfile.replace(outfile)
-        except subprocess.CalledProcessError as e:
+        except (IndexError, OSError) as e:
             raise RuntimeError("failed to reduce NCBI gene_info file") from e
         finally:
             self.__unlink_if_exists(temporary_outfile)
@@ -1547,24 +1555,6 @@ class GeneSynonyms:
             Mapping structure for gene identifiers and aliases.
         """
 
-        gi_file_cut = Path(f"{gi_file}_cut")
-
-        # Output columns:
-        # gene_id | official_name | ncbi_name | synonyms | dbXrefs | gene_type
-        if self.version == "bundled":
-            awk_script = 'NR>1 {print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6}'
-        else:
-            awk_script = 'NR>1 {print $2 "\t" $11 "\t" $3 "\t" $5 "\t" $6 "\t" $10}'
-
-        cmd = (
-            f"{self.__read_gene_info_command(gi_file)} | "
-            f"awk -F'\\t' '{awk_script}' > {shlex.quote(str(gi_file_cut))}"
-        )
-        try:
-            subprocess.run(cmd, shell=True, check=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError("failed to parse NCBI gene_info file") from e
-
         Identifiers = namedtuple(
             "Identifiers",
             ["official_name", "ncbi_name", "ensembl_id", "databases", "gene_type"],
@@ -1581,30 +1571,30 @@ class GeneSynonyms:
         protected_official_names = set()
 
         try:
-            with open(gi_file_cut, "r") as file:
-                for line in file:
-                    fields = line.rstrip("\n").split("\t")
+            for fields in self.__iter_gene_info_rows(
+                gi_file,
+                reduced=self.version == "bundled",
+            ):
+                gene_id = fields[0]
+                official_name = fields[1]
+                ncbi_name = fields[2]
+                gene_type = fields[5]
+                if official_name == "-":
+                    official_name = ncbi_name
 
-                    gene_id = fields[0]
-                    official_name = fields[1]
-                    ncbi_name = fields[2]
-                    gene_type = fields[5]
-                    if official_name == "-":
-                        official_name = ncbi_name
-
-                    gene_info_rows.append(
-                        (
-                            gene_id,
-                            official_name,
-                            ncbi_name,
-                            fields[3],
-                            fields[4],
-                            gene_type,
-                        )
+                gene_info_rows.append(
+                    (
+                        gene_id,
+                        official_name,
+                        ncbi_name,
+                        fields[3],
+                        fields[4],
+                        gene_type,
                     )
+                )
 
-                    if GENE_TYPE_PRIORITY.get(gene_type, -1) > 0:
-                        protected_official_names.add(official_name.upper())
+                if GENE_TYPE_PRIORITY.get(gene_type, -1) > 0:
+                    protected_official_names.add(official_name.upper())
 
             for (
                 gene_id,
@@ -1686,10 +1676,8 @@ class GeneSynonyms:
                 alias: pointer
                 for alias, (pointer, _) in gene_aliases_mapping["name"].items()
             }
-
-        finally:
-            if gi_file_cut.exists():
-                gi_file_cut.unlink()
+        except (IndexError, OSError) as e:
+            raise RuntimeError("failed to parse NCBI gene_info file") from e
 
         return gene_aliases_mapping
 
@@ -1792,12 +1780,48 @@ class GeneSynonyms:
         return Path(temporary_file.name)
 
     @staticmethod
-    def __read_gene_info_command(gene_info_file: Path) -> str:
+    def __open_gene_info_input(gene_info_file: Path) -> Any:
 
-        quoted_file = shlex.quote(str(gene_info_file))
         if str(gene_info_file).endswith(".gz"):
-            return f"gzip -dc {quoted_file}"
-        return f"cat {quoted_file}"
+            return gzip.open(gene_info_file, "rt", encoding="utf-8")
+        return open(gene_info_file, "r", encoding="utf-8")
+
+    @staticmethod
+    def __open_gene_info_output(outfile: Path, temporary_outfile: Path) -> Any:
+
+        if str(outfile).endswith(".gz"):
+            return gzip.open(temporary_outfile, "wt", encoding="utf-8")
+        return open(temporary_outfile, "w", encoding="utf-8")
+
+    @classmethod
+    def __iter_gene_info_rows(
+        cls,
+        gene_info_file: Path,
+        reduced: bool,
+    ) -> Iterator[Tuple[str, str, str, str, str, str]]:
+
+        with cls.__open_gene_info_input(gene_info_file) as file:
+            next(file, None)
+            for line in file:
+                fields = line.rstrip("\n").split("\t")
+                if reduced:
+                    yield (
+                        fields[0],
+                        fields[1],
+                        fields[2],
+                        fields[3],
+                        fields[4],
+                        fields[5],
+                    )
+                else:
+                    yield (
+                        fields[1],
+                        fields[10],
+                        fields[2],
+                        fields[4],
+                        fields[5],
+                        fields[9],
+                    )
 
     @staticmethod
     def __unlink_if_exists(path: Path) -> None:

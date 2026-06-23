@@ -12,28 +12,19 @@ bpy
     Boolean modelling utilities.
 dbs
     Biological database interfaces.
-grn
-    Deprecated alias for `bpy.ig`.
 
 Credits: BNeDiction; PEPR Santé Numérique 2030.
 """
 
 from __future__ import annotations
 
-import importlib as _importlib
 import sys as _sys
-from types import ModuleType as _ModuleType
-from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import List as _List
 
 from . import boolpy as bpy
 from . import databases as dbs
 from . import sctools as sct
 from ._metadata import package_version as _package_version
-from ._warnings import _warn_deprecated
-
-if _TYPE_CHECKING:
-    from . import grntools as grn
 
 del annotations
 
@@ -45,7 +36,6 @@ __all__ = [
     "sct",
     "bpy",
     "dbs",
-    "grn",
 ]
 
 _sys.modules.update(
@@ -65,22 +55,6 @@ _sys.modules.update(
         for alias in ["ba", "bn", "ig", "pl"]
     }
 )
-
-
-def __getattr__(name: str) -> _ModuleType:
-    if name == "grn":
-        _warn_deprecated(
-            "`bt.grn`",
-            replacement="`bt.bpy.ig`",
-            stacklevel=2,
-        )
-
-        grn = _importlib.import_module(".grntools", __name__)
-        _sys.modules[f"{__name__}.grn"] = grn
-
-        return grn
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def __dir__() -> _List[str]:

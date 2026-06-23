@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import gzip
 import warnings
 from pathlib import Path
 from typing import Any, cast
@@ -244,6 +245,68 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
         "MGI",
     )
     assert not Path(f"{gene_info}_cut").exists()
+
+
+def test_gene_synonyms_reduces_full_gene_info_without_shell_tools(tmp_path):
+    full_gene_info = tmp_path / "full_gene_info.tsv"
+    bundled_gene_info = tmp_path / "bundled_gene_info.tsv.gz"
+    full_gene_info.write_text(
+        "\t".join(
+            [
+                "#tax_id",
+                "GeneID",
+                "Symbol",
+                "LocusTag",
+                "Synonyms",
+                "dbXrefs",
+                "chromosome",
+                "map_location",
+                "description",
+                "type_of_gene",
+                "Symbol_from_nomenclature_authority",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "10090",
+                "10",
+                "RefA",
+                "-",
+                "AliasA|AliasB",
+                "Ensembl:ENSMUSG00000000010|MGI:MGI10",
+                "1",
+                "-",
+                "-",
+                "protein-coding",
+                "OfficialA",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    genesyn = object.__new__(bt.dbs.ncbi.GeneSynonyms)
+    getattr(genesyn, "_GeneSynonyms__write_bundled_gene_info_file")(
+        full_gene_info,
+        bundled_gene_info,
+    )
+
+    with gzip.open(bundled_gene_info, "rt", encoding="utf-8") as file:
+        rows = [line.rstrip("\n").split("\t") for line in file]
+
+    assert rows == [
+        ["gene_id", "official_name", "ncbi_name", "synonyms", "dbXrefs", "gene_type"],
+        [
+            "10",
+            "OfficialA",
+            "RefA",
+            "AliasA|AliasB",
+            "Ensembl:ENSMUSG00000000010|MGI:MGI10",
+            "protein-coding",
+        ],
+    ]
+    assert not Path(f"{bundled_gene_info}.tmp").exists()
 
 
 def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_path):

@@ -7,126 +7,8 @@ from numbers import Number
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from ._boolean import PartialBoolean
+from ._kleene import diff as kleene_diff
 from ._typing import HypercubeLike, PartialBooleanLike
-
-
-class PartialBooleanDifferential:
-    """
-    Discrete differential operator over partial Boolean values.
-
-    This utility class defines a modest discrete differential calculus over
-    partial Boolean values by using the biological ordering convention:
-
-        0 < * < 1
-
-    The differential between two partial Boolean values is defined as:
-
-        d(x1, x2) =  1  if x1 < x2
-                     0  if x1 = x2
-                    -1  if x1 > x2
-
-    This should be understood as a discrete directional comparison, not as a
-    continuous differential calculus. The ordering is intentionally distinct
-    from the ensemble/set-theoretic interpretation of `PartialBoolean.contains`,
-    where "*" represents the Boolean ensemble {0, 1}.
-
-    Examples
-    --------
-    >>> PartialBooleanDifferential.differential(0, 1)
-    1
-
-    >>> PartialBooleanDifferential.differential(1, 0)
-    -1
-
-    >>> PartialBooleanDifferential.differential(0, "*")
-    1
-
-    >>> PartialBooleanDifferential.differential("*", 1)
-    1
-
-    >>> PartialBooleanDifferential.differential("*", "*")
-    0
-    """
-
-    def __init__(self) -> None:
-        raise TypeError(
-            "PartialBooleanDifferential is a static utility class "
-            "and should not be instantiated."
-        )
-
-    @staticmethod
-    def differential(v1: PartialBooleanLike, v2: PartialBooleanLike) -> int:
-        """
-        Return the discrete differential between two partial Boolean values.
-
-        Values are compared according to the biological ordering convention:
-
-            0 < * < 1
-
-        Parameters
-        ----------
-        v1, v2: PartialBooleanLike
-            Values compared after conversion to PartialBoolean.
-
-        Returns
-        -------
-        int
-            Differential from `v1` to `v2`:
-                - 1 if `v1 < v2`,
-                - 0 if `v1 == v2`,
-                - -1 if `v1 > v2`.
-        """
-
-        v1 = PartialBooleanDifferential._coerce_value(v1)
-        v2 = PartialBooleanDifferential._coerce_value(v2)
-
-        if v1 == v2:
-            return 0
-
-        return 1 if v1 < v2 else -1
-
-    @staticmethod
-    def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
-        """
-        Convert a value to a PartialBoolean.
-
-        Parameters
-        ----------
-        value: PartialBooleanLike
-            Value to convert. Supported values are `False`, `True`, `0`, `1`,
-            `NaN`, `"*"` and PartialBoolean values.
-
-        Returns
-        -------
-        PartialBoolean
-            Converted partial Boolean value.
-
-        Raises
-        ------
-        TypeError
-            If `value` has an unsupported type.
-        ValueError
-            If `value` is numeric but not 0, 1 or NaN.
-        """
-
-        try:
-            return value if isinstance(value, PartialBoolean) else PartialBoolean(value)
-
-        except ValueError:
-            if isinstance(value, str):
-                raise
-
-            if isinstance(value, Number):
-                raise ValueError(
-                    "invalid argument value for 'value': "
-                    f"expected 0, 1, False, True, NaN or '*' but received {value!r}"
-                )
-
-            raise TypeError(
-                "unsupported argument type for 'value': "
-                f"expected bool, number, str or PartialBoolean but received "
-                f"{type(value)}"
-            )
 
 
 class BooleanPredecessorInference:
@@ -135,7 +17,7 @@ class BooleanPredecessorInference:
 
     This class implements the scBoolDiff predecessor logic. It combines:
 
-        1. a discrete partial Boolean differential, based on:
+        1. a discrete Kleene truth-order differential, based on:
 
                0 < * < 1
 
@@ -144,6 +26,10 @@ class BooleanPredecessorInference:
                source --sign--> target
 
     to infer whether one partial Boolean configuration may precede another one.
+
+    The predecessor heuristic uses a Kleene truth-order interpretation of
+    partial Boolean symbols to detect qualitative increases/decreases. This is
+    distinct from the hypercube containment semantics used elsewhere.
 
     The method is intended as a regulatory-consistency heuristic. It should not
     be interpreted as a full probabilistic trajectory inference method. Its goal
@@ -232,11 +118,11 @@ class BooleanPredecessorInference:
         target_v1 = BooleanPredecessorInference._coerce_value(target_v1)
         target_v2 = BooleanPredecessorInference._coerce_value(target_v2)
 
-        source_differential = PartialBooleanDifferential.differential(
+        source_differential = kleene_diff(
             source_v1,
             source_v2,
         )
-        target_differential = PartialBooleanDifferential.differential(
+        target_differential = kleene_diff(
             target_v1,
             target_v2,
         )
@@ -408,7 +294,24 @@ class BooleanPredecessorInference:
     @staticmethod
     def _coerce_value(value: PartialBooleanLike) -> PartialBoolean:
 
-        return PartialBooleanDifferential._coerce_value(value)
+        try:
+            return value if isinstance(value, PartialBoolean) else PartialBoolean(value)
+
+        except ValueError:
+            if isinstance(value, str):
+                raise
+
+            if isinstance(value, Number):
+                raise ValueError(
+                    "invalid argument value for 'value': "
+                    f"expected 0, 1, False, True, NaN or '*' but received {value!r}"
+                )
+
+            raise TypeError(
+                "unsupported argument type for 'value': "
+                f"expected bool, number, str or PartialBoolean but received "
+                f"{type(value)}"
+            )
 
     @staticmethod
     def _edge_sign(data: Mapping[str, Any]) -> int:

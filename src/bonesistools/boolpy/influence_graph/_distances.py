@@ -22,19 +22,14 @@ def _signed_edge_set(ig: InfluenceGraph) -> Set[SignedEdge]:
     }
 
 
-def _complete_signed_edge_set(
+def _implicit_hamming_domain_size(
     ig1: InfluenceGraph,
     ig2: InfluenceGraph,
-) -> Set[SignedEdge]:
+) -> int:
 
     nodes = set(ig1.nodes()) | set(ig2.nodes())
 
-    return {
-        (source, target, sign)
-        for source in nodes
-        for target in nodes
-        for sign in [-1, 1]
-    }
+    return 2 * len(nodes) ** 2
 
 
 def _validate_hamming_domain(
@@ -53,18 +48,18 @@ def _validate_hamming_domain(
     return domain_edges
 
 
-def _hamming_domain_edges(
+def _hamming_domain_size(
     ig1: InfluenceGraph,
     ig2: InfluenceGraph,
     edges1: Set[SignedEdge],
     edges2: Set[SignedEdge],
     domain: Optional[InfluenceGraph],
-) -> Set[SignedEdge]:
+) -> int:
 
     if domain is None:
-        return _complete_signed_edge_set(ig1, ig2)
+        return _implicit_hamming_domain_size(ig1, ig2)
 
-    return _validate_hamming_domain(edges1, edges2, domain)
+    return len(_validate_hamming_domain(edges1, edges2, domain))
 
 
 def similarity(
@@ -121,14 +116,14 @@ def similarity(
         return len(intersection) / len(union)
 
     if metric == "hamming":
-        domain_edges = _hamming_domain_edges(ig1, ig2, edges1, edges2, domain)
+        domain_size = _hamming_domain_size(ig1, ig2, edges1, edges2, domain)
 
-        if not domain_edges:
+        if domain_size == 0:
             return 1.0
 
         symmetric_difference = edges1 ^ edges2
 
-        return 1.0 - len(symmetric_difference) / len(domain_edges)
+        return 1.0 - len(symmetric_difference) / domain_size
 
     else:
         raise ValueError(f"unsupported similarity metric: {metric!r}")
@@ -179,14 +174,14 @@ def distance(
         edges1 = _signed_edge_set(ig1)
         edges2 = _signed_edge_set(ig2)
 
-        domain_edges = _hamming_domain_edges(ig1, ig2, edges1, edges2, domain)
+        domain_size = _hamming_domain_size(ig1, ig2, edges1, edges2, domain)
 
-        if not domain_edges:
+        if domain_size == 0:
             return 0.0
 
         symmetric_difference = edges1 ^ edges2
 
-        return len(symmetric_difference) / len(domain_edges)
+        return len(symmetric_difference) / domain_size
 
     else:
         raise ValueError(f"unsupported distance metric: {metric!r}")

@@ -40,7 +40,8 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
     Hypercube ordering corresponds to inclusion of represented configurations:
     a hypercube is smaller than another one when it is more specific, i.e. when
     every configuration it represents is also represented by the other
-    hypercube.
+    hypercube. This is the product order induced by the set-theoretic
+    PartialBoolean order, not a Kleene truth order.
 
     Hypercube behaves as a mutable mapping from component names to
     PartialBoolean values. Accepted values are converted to PartialBoolean
@@ -285,7 +286,7 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
             value1 = self._get_value(component)
             value2 = other._get_value(component)
 
-            if not value2.contains(value1):
+            if value1 not in value2:
                 return False
 
         return True
@@ -1009,7 +1010,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
 
         return HypercubeCollection(self._hypercubes)
 
-    def add(self, hypercube: HypercubeLike) -> None:
+    def add(self, value: HypercubeLike) -> None:
         """
         Add a hypercube to the collection.
 
@@ -1022,20 +1023,20 @@ class HypercubeCollection(MutableSet[Hypercube]):
 
         Parameters
         ----------
-        hypercube: HypercubeLike
+        value: HypercubeLike
             Hypercube-like object to add.
 
         Raises
         ------
         TypeError
-            If `hypercube` cannot be interpreted as a hypercube.
+            If `value` cannot be interpreted as a hypercube.
         ValueError
-            If `hypercube` contains an unsupported PartialBoolean value.
+            If `value` contains an unsupported PartialBoolean value.
         """
 
-        self._hypercubes.add(self._coerce_hypercube(hypercube))
+        self._hypercubes.add(self._coerce_hypercube(value))
 
-    def discard(self, hypercube: HypercubeLike) -> None:
+    def discard(self, value: HypercubeLike) -> None:
         """
         Remove a hypercube from the collection if present.
 
@@ -1050,12 +1051,12 @@ class HypercubeCollection(MutableSet[Hypercube]):
 
         Parameters
         ----------
-        hypercube: HypercubeLike
+        value: HypercubeLike
             Hypercube-like object to remove.
         """
 
         try:
-            hypercube = self._coerce_hypercube(hypercube)
+            hypercube = self._coerce_hypercube(value)
 
         except (TypeError, ValueError):
             return None

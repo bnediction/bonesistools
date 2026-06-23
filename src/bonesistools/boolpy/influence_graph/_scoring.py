@@ -18,7 +18,6 @@ from typing import (
 import networkx as nx
 
 from ..._validation import _as_positive_integer, _as_probability
-from ._algorithms import walks_from
 
 
 @dataclass(frozen=True)
@@ -143,10 +142,9 @@ def interaction_scores_from_walks(
     """
     Estimate signed interaction scores from bounded directed walks.
 
-    Walks are enumerated from each source gene up to `max_depth`. A walk
+    Walks are aggregated from each source gene up to `max_depth`. A walk
     contributes the product of its edge signs multiplied by a length-dependent
-    weight. Parallel signed edges in a MultiDiGraph are expanded into all sign
-    combinations.
+    weight. Parallel signed edges in a MultiDiGraph are counted independently.
 
     Parameters
     ----------
@@ -185,26 +183,60 @@ def interaction_scores_from_walks(
         if source not in graph:
             continue
 
-        for walk in walks_from(graph, source=source, max_depth=max_depth):
-            target = walk[-1]
+        frontier: Dict[str, Dict[int, int]] = {source: {1: 1, -1: 0}}
 
-            if target == source:
-                continue
+        for path_length in range(1, max_depth + 1):
+            next_frontier: Dict[str, Dict[int, int]] = {}
 
-            if target not in gene_set:
-                continue
+            for node, signed_counts in frontier.items():
+                positive_count = signed_counts.get(1, 0)
+                negative_count = signed_counts.get(-1, 0)
 
-            path_length = len(walk) - 1
+                if positive_count == 0 and negative_count == 0:
+                    continue
+
+                for successor in getattr(graph, "successors")(node):
+                    target_counts = next_frontier.setdefault(
+                        successor,
+                        {1: 0, -1: 0},
+                    )
+
+                    for edge_sign in _edge_signs(graph, node, successor):
+                        if edge_sign == 1:
+                            target_counts[1] += positive_count
+                            target_counts[-1] += negative_count
+                        else:
+                            target_counts[1] += negative_count
+                            target_counts[-1] += positive_count
+
+            if not next_frontier:
+                break
+
             weight = _path_weight(path_length, weights)
 
-            for path_sign in _walk_signs(graph, walk):
+            for target, signed_counts in next_frontier.items():
+                if target == source:
+                    continue
+
+                if target not in gene_set:
+                    continue
+
+                positive_count = signed_counts.get(1, 0)
+                negative_count = signed_counts.get(-1, 0)
+                path_number = positive_count + negative_count
+
+                if path_number == 0:
+                    continue
+
                 target_scores = accumulators[source].setdefault(
                     target,
                     {"score": 0.0, "total_weight": 0.0, "path_number": 0},
                 )
-                target_scores["score"] += path_sign * weight
-                target_scores["total_weight"] += weight
-                target_scores["path_number"] += 1
+                target_scores["score"] += (positive_count - negative_count) * weight
+                target_scores["total_weight"] += path_number * weight
+                target_scores["path_number"] += path_number
+
+            frontier = next_frontier
 
     for source, targets in accumulators.items():
         for target, values in targets.items():
