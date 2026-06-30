@@ -2,9 +2,7 @@
 
 from typing import Any
 
-from typing_extensions import Protocol
-
-from ..._compat import Literal
+from typing_extensions import Literal, Protocol
 
 InputIdentifierType = Literal["name", "gene_id", "ensembl_id"]
 OutputIdentifierType = Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"]

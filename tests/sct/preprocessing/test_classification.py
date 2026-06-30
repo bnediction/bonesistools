@@ -23,6 +23,51 @@ def test_gene_classification_marks_variable_names(
     assert mini_adata.var["rps"].tolist() == [False, True, False]
 
 
+def test_gene_classification_uses_requested_organism(
+    monkeypatch,
+    mini_adata,
+    fake_gene_synonyms_cls,
+):
+    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
+
+    bt.sct.pp.mitochondrial_genes(mini_adata, key="mt", organism="human")
+    bt.sct.pp.ribosomal_genes(mini_adata, key="rps", organism="human")
+
+    assert fake_gene_synonyms_cls.organism == "human"
+    assert mini_adata.var["mt"].tolist() == [True, False, False]
+    assert mini_adata.var["rps"].tolist() == [False, True, False]
+
+
+def test_gene_classification_reuses_gene_synonyms(
+    monkeypatch,
+    mini_adata,
+    fake_gene_synonyms_cls,
+):
+    def raise_if_called(**_):
+        raise AssertionError("gene synonym converter should be reused")
+
+    monkeypatch.setattr(_classification, "create_gene_synonyms", raise_if_called)
+    genesyn = fake_gene_synonyms_cls(organism="human")
+    mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
+
+    bt.sct.pp.mitochondrial_genes(
+        mini_adata,
+        key="mt",
+        organism="mouse",
+        genesyn=genesyn,
+    )
+    bt.sct.pp.ribosomal_genes(
+        mini_adata,
+        key="rps",
+        organism="mouse",
+        genesyn=genesyn,
+    )
+
+    assert mini_adata.var["mt"].tolist() == [True, False, False]
+    assert mini_adata.var["rps"].tolist() == [False, True, False]
+
+
 def test_gene_classification_marks_observation_names(
     monkeypatch,
     mini_adata,

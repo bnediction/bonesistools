@@ -33,23 +33,24 @@ from collections import namedtuple
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as SequenceInstance
 from functools import partial, wraps
+from os import PathLike
 from pathlib import Path
 
 import networkx as nx
 from networkx import Graph
 from pandas import DataFrame
 from pandas._typing import Axis
+from typing_extensions import Literal
 
-from ..._compat import Literal, get_args
+from ..._compat import get_args
 from ..._validation import _as_boolean, _as_dataframe_axis
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from ._typing import (
     InputIdentifierType,
-    OutputIdentifierType,
 )
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
-GeneInfoVersion = Union[Literal["bundled", "latest"], str, Path]
+GeneInfoVersion = Union[str, PathLike]
 _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = False
 
 ORGANISMS = Literal[
@@ -321,7 +322,7 @@ class GeneSynonyms:
         Common name of the organism of interest. Supported organisms match the
         NCBI gene_info files listed in `FTP_GENE_INFO`. Common aliases such as
         `"mouse"`, `"human"` and `"escherichia coli"` are accepted.
-    version: "bundled", "latest", str path or Path (default: "bundled")
+    version: "bundled", "latest", date string, str path or PathLike (default: "bundled")
         NCBI gene_info version to load.
 
         If `"bundled"`, use the local organism-specific gene_info file if
@@ -335,7 +336,8 @@ class GeneSynonyms:
         matching local version from `data/gi/versions/<date>/` or
         `data/gi/<organism>_gene_info_<date>.tsv`.
 
-        If a path is provided, load that gene_info file directly.
+        If a path-like object or path string is provided, load that gene_info
+        file directly.
     show_warnings: bool (default: False)
         If True, warn when a requested gene identifier has no correspondence.
 
@@ -450,8 +452,12 @@ class GeneSynonyms:
     def conversion(
         self,
         gene: str,
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
     ) -> Optional[str]:
         """
         Convert gene identifiers into the user-defined alias type.
@@ -506,8 +512,12 @@ class GeneSynonyms:
     def convert_sequence(
         self,
         genes: Sequence[str],
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         keep_if_missing: bool = True,
     ) -> Sequence[str]:
         """
@@ -566,8 +576,12 @@ class GeneSynonyms:
     def convert_interaction_list(
         self,
         interaction_list: InteractionList,
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         keep_if_missing: bool = True,
     ) -> InteractionList:
         """
@@ -623,8 +637,12 @@ class GeneSynonyms:
         self,
         df: DataFrame,
         axis: Axis = 0,
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
@@ -689,8 +707,12 @@ class GeneSynonyms:
     def convert_graph(
         self,
         graph: Graph[Any],
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         copy: bool = True,
     ) -> Union[Graph[Any], None]:
         """
@@ -751,8 +773,12 @@ class GeneSynonyms:
     def convert_bn(
         self,
         bn: "BooleanNetworkLike",
-        input_identifier_type: Union[InputIdentifierType, str] = "name",
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         copy: bool = False,
     ) -> Union["BooleanNetworkLike", None]:
         """
@@ -1001,7 +1027,7 @@ class GeneSynonyms:
         organism: str, optional
             Common name of the organism to load. If None, reload the current
             organism.
-        version: "bundled", "latest", str path or Path, optional
+    version: "bundled", "latest", date string, str path or PathLike, optional
             NCBI gene_info version to load. If None, keep the current version.
         show_warnings: bool (default: False)
             If True, warn when a requested gene identifier has no
@@ -1058,7 +1084,9 @@ class GeneSynonyms:
     def contains(
         self,
         *genes: str,
-        identifier_type: Union[InputIdentifierType, str] = "name",
+        identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
     ) -> List[bool]:
         """
         Test whether gene identifiers are present in the synonym resource.
@@ -1115,7 +1143,9 @@ class GeneSynonyms:
     def find(
         self,
         *genes: str,
-        identifier_type: Union[InputIdentifierType, str] = "name",
+        identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
     ) -> List[str]:
         """
         Return gene identifiers found in the synonym resource.
@@ -1224,7 +1254,11 @@ class GeneSynonyms:
 
     @support_legacy_gene_synonyms_args
     def get_ncbi_name(
-        self, gene: str, input_identifier_type: Union[InputIdentifierType, str] = "name"
+        self,
+        gene: str,
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
     ) -> Optional[str]:
         """
         Return the NCBI reference name for a gene identifier.
@@ -1263,7 +1297,11 @@ class GeneSynonyms:
 
     @support_legacy_gene_synonyms_args
     def get_official_name(
-        self, gene: str, input_identifier_type: Union[InputIdentifierType, str] = "name"
+        self,
+        gene: str,
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
     ) -> Optional[str]:
         """
         Return the official nomenclature name for a gene identifier.
@@ -1399,13 +1437,13 @@ class GeneSynonyms:
 
     def __normalize_gene_info_version(self, version: GeneInfoVersion) -> str:
 
-        if not isinstance(version, (str, Path)):
+        if not isinstance(version, (str, PathLike)):
             raise TypeError(
                 f"unsupported argument type for 'version': "
-                f"expected {str} or {Path} but received {type(version)}"
+                f"expected {str} or {PathLike} but received {type(version)}"
             )
 
-        if isinstance(version, Path):
+        if isinstance(version, PathLike):
             return str(version)
 
         version = version.strip()
@@ -1526,6 +1564,7 @@ class GeneSynonyms:
                             "ncbi_name",
                             "synonyms",
                             "dbXrefs",
+                            "chromosome",
                             "gene_type",
                         ]
                     )
@@ -1557,7 +1596,14 @@ class GeneSynonyms:
 
         Identifiers = namedtuple(
             "Identifiers",
-            ["official_name", "ncbi_name", "ensembl_id", "databases", "gene_type"],
+            [
+                "official_name",
+                "ncbi_name",
+                "ensembl_id",
+                "databases",
+                "chromosome",
+                "gene_type",
+            ],
         )
 
         gene_aliases_mapping = {
@@ -1578,7 +1624,8 @@ class GeneSynonyms:
                 gene_id = fields[0]
                 official_name = fields[1]
                 ncbi_name = fields[2]
-                gene_type = fields[5]
+                chromosome = fields[5]
+                gene_type = fields[6]
                 if official_name == "-":
                     official_name = ncbi_name
 
@@ -1589,6 +1636,7 @@ class GeneSynonyms:
                         ncbi_name,
                         fields[3],
                         fields[4],
+                        chromosome,
                         gene_type,
                     )
                 )
@@ -1602,6 +1650,7 @@ class GeneSynonyms:
                 ncbi_name,
                 synonyms_field,
                 db_xrefs_field,
+                chromosome,
                 gene_type,
             ) in gene_info_rows:
 
@@ -1633,6 +1682,7 @@ class GeneSynonyms:
                     ncbi_name=ncbi_name,
                     ensembl_id=ensembl_id,
                     databases=database_aliases,
+                    chromosome=chromosome,
                     gene_type=gene_type,
                 )
 
@@ -1719,7 +1769,9 @@ class GeneSynonyms:
     @support_legacy_gene_synonyms_args
     def __conversion_function(
         self,
-        output_identifier_type: Union[OutputIdentifierType, str] = "official_name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
         *args: Any,
         **kwargs: Any,
     ) -> Callable[..., Optional[str]]:
@@ -1798,20 +1850,23 @@ class GeneSynonyms:
         cls,
         gene_info_file: Path,
         reduced: bool,
-    ) -> Iterator[Tuple[str, str, str, str, str, str]]:
+    ) -> Iterator[Tuple[str, str, str, str, str, str, str]]:
 
         with cls.__open_gene_info_input(gene_info_file) as file:
             next(file, None)
             for line in file:
                 fields = line.rstrip("\n").split("\t")
                 if reduced:
+                    chromosome = fields[5] if len(fields) > 6 else "-"
+                    gene_type = fields[6] if len(fields) > 6 else fields[5]
                     yield (
                         fields[0],
                         fields[1],
                         fields[2],
                         fields[3],
                         fields[4],
-                        fields[5],
+                        chromosome,
+                        gene_type,
                     )
                 else:
                     yield (
@@ -1820,6 +1875,7 @@ class GeneSynonyms:
                         fields[2],
                         fields[4],
                         fields[5],
+                        fields[6],
                         fields[9],
                     )
 
@@ -1844,7 +1900,7 @@ def genesyn(
     ----------
     organism: str (default: "mouse")
         Common name of the organism of interest.
-    version: "bundled", "latest", str path or Path (default: "bundled")
+    version: "bundled", "latest", date string, str path or PathLike (default: "bundled")
         NCBI gene_info version to load.
     show_warnings: bool (default: False)
         If True, warn when a requested gene identifier has no correspondence.

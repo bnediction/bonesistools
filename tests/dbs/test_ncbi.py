@@ -171,6 +171,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
                 "ncbi_name",
                 "synonyms",
                 "dbXrefs",
+                "chromosome",
                 "gene_type",
             ]
         )
@@ -182,6 +183,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
                 "Ref1",
                 "Alias1",
                 "MGI:MGI1|Ensembl:ENSMUSG00000000001",
+                "1",
                 "protein-coding",
             ]
         )
@@ -193,13 +195,16 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
                 "Ref2",
                 "OFF1|Alias2",
                 "MGI:MGI2",
+                "2",
                 "pseudo",
             ]
         )
         + "\n"
-        + "\t".join(["3", "Low", "LowRef", "Shared", "-", "pseudo"])
+        + "\t".join(["3", "Low", "LowRef", "Shared", "-", "3", "pseudo"])
         + "\n"
-        + "\t".join(["4", "High", "HighRef", "Shared", "MGI:MGI4", "protein-coding"])
+        + "\t".join(
+            ["4", "High", "HighRef", "Shared", "MGI:MGI4", "MT", "protein-coding"]
+        )
         + "\n",
         encoding="utf-8",
     )
@@ -296,13 +301,22 @@ def test_gene_synonyms_reduces_full_gene_info_without_shell_tools(tmp_path):
         rows = [line.rstrip("\n").split("\t") for line in file]
 
     assert rows == [
-        ["gene_id", "official_name", "ncbi_name", "synonyms", "dbXrefs", "gene_type"],
+        [
+            "gene_id",
+            "official_name",
+            "ncbi_name",
+            "synonyms",
+            "dbXrefs",
+            "chromosome",
+            "gene_type",
+        ],
         [
             "10",
             "OfficialA",
             "RefA",
             "AliasA|AliasB",
             "Ensembl:ENSMUSG00000000010|MGI:MGI10",
+            "1",
             "protein-coding",
         ],
     ]

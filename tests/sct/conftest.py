@@ -106,10 +106,21 @@ def expected_mini_snn_connectivities():
 @pytest.fixture
 def fake_gene_synonyms_cls():
     class FakeGeneSynonyms:
+        organism = None
+
         gene_aliases_mapping = {
+            "gene_id": {
+                "mt_gene": SimpleNamespace(chromosome="MT"),
+                "mt_human_gene": SimpleNamespace(chromosome="MT"),
+                "rps_gene": SimpleNamespace(chromosome="1"),
+                "rps_human_gene": SimpleNamespace(chromosome="1"),
+                "other_gene": SimpleNamespace(chromosome="1"),
+            },
             "name": {
                 "mt-Co1": SimpleNamespace(value=b"mt_gene"),
+                "MT-ND1": SimpleNamespace(value=b"mt_human_gene"),
                 "Rps1": SimpleNamespace(value=b"rps_gene"),
+                "RPS1": SimpleNamespace(value=b"rps_human_gene"),
             }
         }
 
@@ -120,13 +131,20 @@ def fake_gene_synonyms_cls():
             "unknown": "unknown",
             "mt-Co1": "mt-Co1",
             "Rps1": "Rps1",
+            "MT-ND1": "MT-ND1",
+            "RPS1": "RPS1",
             "Other": "Other",
         }
         _gene_ids = {
             "mt-Co1": "mt_gene",
+            "MT-ND1": "mt_human_gene",
             "Rps1": "rps_gene",
+            "RPS1": "rps_human_gene",
             "Other": "other_gene",
         }
+
+        def __init__(self, organism="mouse", **_):
+            type(self).organism = organism
 
         def __call__(
             self,

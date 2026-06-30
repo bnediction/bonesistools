@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection as CollectionInstance
-from typing import Any, Optional, Sequence, Tuple, Union, cast, overload
+from typing import Any, Dict, Optional, Sequence, Tuple, Union, cast, overload
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,15 @@ from ..._compat import Literal
 from ..._validation import _as_boolean, _as_positive_integer
 from .._typing import Matrix, anndata_checker
 from ..tools._utils import get_expression
+
+_numba_njit: Any
+_numba_prange: Any
+try:
+    from numba import njit as _numba_njit
+    from numba import prange as _numba_prange
+except ImportError:  # pragma: no cover - optional acceleration dependency
+    _numba_njit = None
+    _numba_prange = range
 
 
 @overload
@@ -123,6 +132,12 @@ def qc(
         If `log1p=True`, matching `log1p_` transformation columns are added,
         such as `log1p_n_features`, `log1p_total`, `log1p_mean`,
         `log1p_median`, `log1p_variance` and `log1p_mad`.
+
+    Notes
+    -----
+    When Numba is installed, top-feature percentages for sparse matrices use a
+    JIT-compiled path. Otherwise, a pure NumPy/Python fallback is used and may
+    differ only by floating-point rounding.
     """
 
     if isinstance(qc_vars, str):
@@ -185,10 +200,13 @@ def qc(
     if resolved_percent_top is not None:
         if any(top > n_features for top in resolved_percent_top):
             raise IndexError("Positions outside range of features.")
-        for top in resolved_percent_top:
-            obs_metrics[f"pct_top{top}_features"] = _percent_top(
-                matrix, top, total_per_obs
-            )
+        top_percentages = _percent_top_by_rank(
+            matrix,
+            resolved_percent_top,
+            total_per_obs,
+        )
+        for top, values in top_percentages.items():
+            obs_metrics[f"pct_top{top}_features"] = values
 
     var = cast(pd.DataFrame, adata.var)
     for qc_var in resolved_qc_vars:
@@ -246,7 +264,7 @@ def _variance_per_feature(matrix: Any) -> np.ndarray:
     else:
         array = np.asarray(matrix)
         total = array.sum(axis=0)
-        squared_total = np.square(array).sum(axis=0)
+        squared_total = np.einsum("ij,ij->j", array, array)
 
     return (squared_total - total * total / n_obs) / (n_obs - 1)
 
@@ -341,23 +359,159 @@ def _percent_top(
     total_per_obs: np.ndarray,
 ) -> np.ndarray:
 
-    if sparse.issparse(matrix):
-        csr_matrix = cast(Any, matrix).tocsr()
-        top_sums = np.zeros(csr_matrix.shape[0], dtype=csr_matrix.dtype)
-        for row in range(csr_matrix.shape[0]):
-            start = csr_matrix.indptr[row]
-            stop = csr_matrix.indptr[row + 1]
-            data = csr_matrix.data[start:stop]
-            if data.size <= top:
-                top_sums[row] = data.sum()
-            else:
-                top_sums[row] = np.partition(data, data.size - top)[-top:].sum()
-    else:
-        array = np.asarray(matrix)
-        partitioned = np.partition(array, array.shape[1] - top, axis=1)
-        top_sums = partitioned[:, -top:].sum(axis=1)
+    return _percent_top_by_rank(matrix, (top,), total_per_obs)[top]
 
-    return _percentage(top_sums, total_per_obs)
+
+def _percent_top_by_rank(
+    matrix: Any,
+    tops: Sequence[int],
+    total_per_obs: np.ndarray,
+) -> Dict[int, np.ndarray]:
+
+    sorted_tops = np.asarray(sorted(tops), dtype=np.int64)
+    if not sparse.issparse(matrix):
+        values = _percent_top_dense(np.asarray(matrix), sorted_tops, total_per_obs)
+        values_by_top = {
+            int(top): values[:, index] * 100
+            for index, top in enumerate(sorted_tops)
+        }
+        return {top: values_by_top[top] for top in tops}
+
+    csr_matrix = cast(Any, matrix).tocsr()
+    if _percent_top_sparse_csr_numba is not None:
+        values = _percent_top_sparse_csr_numba(
+            csr_matrix.data,
+            csr_matrix.indptr,
+            sorted_tops,
+        )
+        values_by_top = {
+            int(top): values[:, index] * 100
+            for index, top in enumerate(sorted_tops)
+        }
+        return {top: values_by_top[top] for top in tops}
+
+    values = _percent_top_sparse_csr(
+        csr_matrix.data,
+        csr_matrix.indptr,
+        sorted_tops,
+    )
+    values_by_top = {
+        int(top): values[:, index] * 100 for index, top in enumerate(sorted_tops)
+    }
+    return {top: values_by_top[top] for top in tops}
+
+
+def _percent_top_dense(
+    matrix: np.ndarray,
+    tops: np.ndarray,
+    total_per_obs: np.ndarray,
+) -> np.ndarray:
+
+    max_top = tops[-1]
+    partitioned = np.partition(matrix, matrix.shape[1] - tops, axis=1)
+    partitioned = partitioned[:, ::-1][:, :max_top]
+    values = np.zeros((matrix.shape[0], tops.size))
+    accumulated = np.zeros(matrix.shape[0])
+    previous = 0
+
+    for index, top in enumerate(tops):
+        accumulated += partitioned[:, previous:top].sum(axis=1)
+        values[:, index] = accumulated
+        previous = top
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return values / total_per_obs[:, None]
+
+
+def _percent_top_sparse_csr(
+    data: np.ndarray,
+    indptr: np.ndarray,
+    tops: np.ndarray,
+) -> np.ndarray:
+
+    tops = np.sort(tops.astype(np.int64))
+    max_top = tops[-1]
+    n_obs = indptr.size - 1
+    sums = np.zeros(n_obs, dtype=data.dtype)
+    partitioned = np.zeros((n_obs, max_top), dtype=data.dtype)
+
+    for row in range(n_obs):
+        start = indptr[row]
+        stop = indptr[row + 1]
+        size = stop - start
+        row_values = data[start:stop]
+        sums[row] = row_values.sum()
+        if size <= max_top:
+            partitioned[row, :size] = row_values
+        else:
+            partitioned[row, :] = -np.partition(-row_values, max_top)[:max_top]
+        partitioned[row, :] = np.partition(partitioned[row, :], max_top - tops)
+
+    partitioned = partitioned[:, ::-1][:, :max_top]
+    values = np.zeros((n_obs, tops.size))
+    accumulated = np.zeros(n_obs, dtype=data.dtype)
+    previous = 0
+
+    for index, top in enumerate(tops):
+        accumulated += partitioned[:, previous:top].sum(axis=1)
+        values[:, index] = accumulated
+        previous = top
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return values / sums.reshape((n_obs, 1))
+
+
+if _numba_njit is None:
+    _percent_top_sparse_csr_numba = None
+else:
+
+    @_numba_njit(cache=True, parallel=True)
+    def _percent_top_sparse_csr_numba(
+        data: np.ndarray,
+        indptr: np.ndarray,
+        tops: np.ndarray,
+    ) -> np.ndarray:
+
+        tops = np.sort(tops.astype(np.int64))
+        max_top = tops[-1]
+        n_obs = indptr.size - 1
+        sums = np.zeros(n_obs, dtype=data.dtype)
+        partitioned = np.zeros((n_obs, max_top), dtype=data.dtype)
+        values = np.empty((n_obs, tops.size), dtype=np.float64)
+
+        for row in _numba_prange(n_obs):
+            start = indptr[row]
+            stop = indptr[row + 1]
+            size = stop - start
+            sums[row] = np.sum(data[start:stop])
+
+            if size <= max_top:
+                for index in range(size):
+                    partitioned[row, index] = data[start + index]
+            else:
+                row_values = data[start:stop]
+                top_values = -np.partition(-row_values, max_top)[:max_top]
+                for index in range(max_top):
+                    partitioned[row, index] = top_values[index]
+
+            partitioned[row, :] = np.partition(
+                partitioned[row, :],
+                max_top - tops,
+            )
+
+        partitioned = partitioned[:, ::-1][:, :max_top]
+        accumulated = np.zeros(n_obs, dtype=data.dtype)
+        previous = 0
+
+        for top_index in range(tops.size):
+            top = tops[top_index]
+            for row in _numba_prange(n_obs):
+                segment_sum = np.sum(partitioned[row, previous:top])
+                accumulated[row] += segment_sum
+                values[row, top_index] = accumulated[row]
+            previous = top
+
+        return values / sums.reshape((n_obs, 1))
 
 
 def _percentage(

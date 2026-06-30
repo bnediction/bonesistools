@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional, overload
+from typing import Any, Optional, overload
 
 from anndata import AnnData
 
@@ -21,6 +21,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: Literal[False] = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> None: ...
 
 
@@ -32,6 +35,8 @@ def mitochondrial_genes(
     axis: AnnDataAxisWithInteger = "var",
     *,
     copy: Literal[True],
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> AnnData: ...
 
 
@@ -42,6 +47,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]: ...
 
 
@@ -52,6 +60,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding mitochondrial proteins.
@@ -73,6 +84,11 @@ def mitochondrial_genes(
         and `"var"`.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
+    organism: str (default: "mouse")
+        Organism used to resolve gene identifiers and mitochondrial aliases.
+    genesyn: GeneSynonyms, optional
+        Existing gene synonym converter. If provided, `organism` is ignored.
+        If None, a converter is created for `organism`.
 
     Returns
     -------
@@ -90,22 +106,24 @@ def mitochondrial_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    genesyn = create_gene_synonyms()
+    genesyn = create_gene_synonyms(organism=organism) if genesyn is None else genesyn
 
     if axis == "obs":
         adata.obs[key] = False
     elif axis == "var":
         adata.var[key] = False
 
-    mt_id = set()
-    for k, v in genesyn.gene_aliases_mapping["name"].items():
-        if k.startswith("mt-"):
-            mt_id.add(v.value.decode())
+    mt_id = {
+        gene_id
+        for gene_id, identifiers in genesyn.gene_aliases_mapping["gene_id"].items()
+        if identifiers.chromosome == "MT"
+    }
 
-    for index in eval(f"adata.{axis}.index"):
+    annotations = adata.obs if axis == "obs" else adata.var
+    for index in annotations.index:
         gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
         if gene_id in mt_id:
-            exec(f"adata.{axis}.at['{index}','{key}'] = True")
+            annotations.at[index, key] = True
 
     return adata if copy else None
 
@@ -117,6 +135,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: Literal[False] = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> None: ...
 
 
@@ -128,6 +149,8 @@ def ribosomal_genes(
     axis: AnnDataAxisWithInteger = "var",
     *,
     copy: Literal[True],
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> AnnData: ...
 
 
@@ -138,6 +161,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]: ...
 
 
@@ -148,6 +174,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding ribosomal proteins.
@@ -169,6 +198,11 @@ def ribosomal_genes(
         and `"var"`.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
+    organism: str (default: "mouse")
+        Organism used to resolve gene identifiers and ribosomal aliases.
+    genesyn: GeneSynonyms, optional
+        Existing gene synonym converter. If provided, `organism` is ignored.
+        If None, a converter is created for `organism`.
 
     Returns
     -------
@@ -186,7 +220,7 @@ def ribosomal_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    genesyn = create_gene_synonyms()
+    genesyn = create_gene_synonyms(organism=organism) if genesyn is None else genesyn
 
     if axis == "obs":
         adata.obs[key] = False
@@ -195,12 +229,13 @@ def ribosomal_genes(
 
     rps_id = set()
     for k, v in genesyn.gene_aliases_mapping["name"].items():
-        if k.startswith(("Rps", "Rpl", "Mrp")):
+        if k.lower().startswith(("rps", "rpl", "mrps", "mrpl")):
             rps_id.add(v.value.decode())
 
-    for index in eval(f"adata.{axis}.index"):
+    annotations = adata.obs if axis == "obs" else adata.var
+    for index in annotations.index:
         gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
         if gene_id in rps_id:
-            exec(f"adata.{axis}.at['{index}','{key}'] = True")
+            annotations.at[index, key] = True
 
     return adata if copy else None

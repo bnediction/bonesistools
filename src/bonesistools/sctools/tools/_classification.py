@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional, overload
+from typing import Any, Optional, overload
 
 from anndata import AnnData
 
@@ -18,6 +18,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: Literal[False] = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> None: ...
 
 
@@ -29,6 +32,8 @@ def mitochondrial_genes(
     axis: AnnDataAxisWithInteger = "var",
     *,
     copy: Literal[True],
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> AnnData: ...
 
 
@@ -39,6 +44,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]: ...
 
 
@@ -48,6 +56,9 @@ def mitochondrial_genes(
     key: str = "mt",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]:
     """
     Deprecated alias for `bt.sct.pp.mitochondrial_genes`.
@@ -69,6 +80,8 @@ def mitochondrial_genes(
             key=key,
             axis=axis,
             copy=copy,
+            organism=organism,
+            genesyn=genesyn,
         )
     finally:
         _preprocessing_classification.create_gene_synonyms = (
@@ -83,6 +96,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: Literal[False] = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> None: ...
 
 
@@ -94,6 +110,8 @@ def ribosomal_genes(
     axis: AnnDataAxisWithInteger = "var",
     *,
     copy: Literal[True],
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> AnnData: ...
 
 
@@ -104,6 +122,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]: ...
 
 
@@ -113,6 +134,9 @@ def ribosomal_genes(
     key: str = "rps",
     axis: AnnDataAxisWithInteger = "var",
     copy: bool = False,
+    *,
+    organism: str = "mouse",
+    genesyn: Optional[Any] = None,
 ) -> Optional[AnnData]:
     """
     Deprecated alias for `bt.sct.pp.ribosomal_genes`.
@@ -134,6 +158,8 @@ def ribosomal_genes(
             key=key,
             axis=axis,
             copy=copy,
+            organism=organism,
+            genesyn=genesyn,
         )
     finally:
         _preprocessing_classification.create_gene_synonyms = (
