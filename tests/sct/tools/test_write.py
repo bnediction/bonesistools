@@ -36,52 +36,16 @@ def test_to_npz_writes_sparse_matrix(mini_adata, tmp_path):
     assert written.nnz == mini_adata.layers["sparse_counts"].nnz
 
 
-def test_to_csv_or_mtx_selects_writer_from_density(mini_adata, tmp_path):
-    bt.sct.tl.to_csv_or_mtx(mini_adata, tmp_path / "dense")
-
-    mini_adata.layers["sparse_counts"] = sparse.csr_matrix(mini_adata.layers["counts"])
-    bt.sct.tl.to_csv_or_mtx(mini_adata, tmp_path / "sparse", layer="sparse_counts")
-
-    assert (tmp_path / "dense.csv").exists()
-    assert (tmp_path / "sparse.mtx").exists()
-
-
-def test_to_csv_or_npz_selects_writer_from_density(mini_adata, tmp_path):
-    bt.sct.tl.to_csv_or_npz(mini_adata, tmp_path / "dense")
-
-    mini_adata.layers["sparse_counts"] = sparse.csr_matrix(mini_adata.layers["counts"])
-    bt.sct.tl.to_csv_or_npz(mini_adata, tmp_path / "sparse", layer="sparse_counts")
-
-    assert (tmp_path / "dense.csv").exists()
-    assert (tmp_path / "sparse.npz").exists()
-
-
 def test_writers_cover_layer_and_sparse_x_branches(mini_adata, tmp_path):
     mini_adata.layers["dense_counts"] = mini_adata.layers["counts"].copy()
 
     bt.sct.tl.to_csv(mini_adata, tmp_path / "dense_layer", layer="dense_counts")
-    bt.sct.tl.to_csv_or_mtx(
-        mini_adata,
-        tmp_path / "auto_dense_layer_mtx",
-        layer="dense_counts",
-    )
-    bt.sct.tl.to_csv_or_npz(
-        mini_adata,
-        tmp_path / "auto_dense_layer_npz",
-        layer="dense_counts",
-    )
 
     mini_adata.X = sparse.csr_matrix(mini_adata.X)
 
     bt.sct.tl.to_mtx(mini_adata, tmp_path / "sparse_x_mtx")
     bt.sct.tl.to_npz(mini_adata, tmp_path / "sparse_x_npz")
-    bt.sct.tl.to_csv_or_mtx(mini_adata, tmp_path / "auto_sparse_x_mtx")
-    bt.sct.tl.to_csv_or_npz(mini_adata, tmp_path / "auto_sparse_x_npz")
 
     assert (tmp_path / "dense_layer.csv").exists()
-    assert (tmp_path / "auto_dense_layer_mtx.csv").exists()
-    assert (tmp_path / "auto_dense_layer_npz.csv").exists()
     assert (tmp_path / "sparse_x_mtx.mtx").exists()
     assert (tmp_path / "sparse_x_npz.npz").exists()
-    assert (tmp_path / "auto_sparse_x_mtx.mtx").exists()
-    assert (tmp_path / "auto_sparse_x_npz.npz").exists()

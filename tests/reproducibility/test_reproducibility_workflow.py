@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import sys
-from pathlib import Path
 from typing import Any, cast
 
 import anndata as ad
@@ -14,9 +12,7 @@ from sklearn.neighbors import NearestNeighbors
 from umap.umap_ import fuzzy_simplicial_set
 
 import bonesistools as bt
-
-sys.path.insert(0, str(Path(__file__).parents[1] / "sct"))
-from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+from tests.sct.toy_data import make_nestorowa_hvg_adata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",

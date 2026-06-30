@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, Sequence, cast
 
 import anndata as ad
@@ -17,9 +15,7 @@ from matplotlib.lines import Line2D
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _distribution
-
-sys.path.insert(0, str(Path(__file__).parents[1]))
-from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+from tests.sct.toy_data import make_nestorowa_hvg_adata
 
 ADATA = make_nestorowa_hvg_adata()
 

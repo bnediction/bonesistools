@@ -4,8 +4,8 @@
 Preprocessing utilities for AnnData objects.
 
 The `pp` namespace contains helpers for filtering observations and variables,
-regressing out covariates, merging annotations and transferring data between
-related AnnData objects.
+annotating features, regressing out covariates, merging annotations and
+transferring data between related AnnData objects.
 """
 
 from typing import Any as _Any
@@ -13,6 +13,10 @@ from typing import List as _List
 
 from ..._warnings import _warn_deprecated
 from ..tools import regress_out as _regress_out
+from ._classification import (
+    mitochondrial_genes,
+    ribosomal_genes,
+)
 from ._duplicates import (
     merge_duplicate_vars,
     var_names_merge_duplicates,
@@ -51,6 +55,8 @@ __all__ = [
     "log1p",
     "scale",
     "qc",
+    "mitochondrial_genes",
+    "ribosomal_genes",
     "hvg",
     "merge",
     "sort_anndata",

@@ -37,8 +37,6 @@ from ._stats import welch_tests, wilcoxon_tests
 from ._utils import get_expression, get_pairwise, get_representation
 from ._write import (
     to_csv,
-    to_csv_or_mtx,
-    to_csv_or_npz,
     to_mtx,
     to_npz,
 )
@@ -69,8 +67,6 @@ __all__ = [
     "welch_tests",
     "wilcoxon_tests",
     "to_csv",
-    "to_csv_or_mtx",
-    "to_csv_or_npz",
     "to_mtx",
     "to_npz",
     "logfoldchanges",

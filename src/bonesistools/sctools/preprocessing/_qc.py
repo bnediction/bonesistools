@@ -11,14 +11,16 @@ from anndata import AnnData
 from scipy import sparse
 
 from ..._compat import Literal
-from ..._validation import _as_boolean, _as_positive_integer, _as_string
-from .._typing import anndata_checker
+from ..._validation import _as_boolean, _as_positive_integer
+from .._typing import Matrix, anndata_checker
+from ..tools._utils import get_expression
 
 
 @overload
 def qc(
     adata: AnnData,
     expression: Optional[str] = None,
+    *,
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
@@ -30,10 +32,10 @@ def qc(
 def qc(
     adata: AnnData,
     expression: Optional[str] = None,
+    *,
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
-    *,
     copy: Literal[True],
 ) -> AnnData: ...
 
@@ -42,6 +44,7 @@ def qc(
 def qc(
     adata: AnnData,
     expression: Optional[str] = None,
+    *,
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
@@ -53,6 +56,7 @@ def qc(
 def qc(
     adata: AnnData,
     expression: Optional[str] = None,
+    *,
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
@@ -121,52 +125,56 @@ def qc(
         `log1p_median`, `log1p_variance` and `log1p_mad`.
     """
 
-    expression = None if expression is None else _as_string(expression, "expression")
-    qc_vars = _as_qc_vars(qc_vars)
-    percent_top = _as_percent_top(percent_top)
+    if isinstance(qc_vars, str):
+        resolved_qc_vars = (qc_vars,)
+    elif not isinstance(qc_vars, CollectionInstance):
+        raise TypeError(
+            f"unsupported argument type for 'qc_vars': "
+            f"expected {str} or a sequence of {str} but received {type(qc_vars)}"
+        )
+    else:
+        resolved_qc_vars = tuple(qc_vars)
+        for qc_var in resolved_qc_vars:
+            if not isinstance(qc_var, str):
+                raise TypeError(
+                    f"unsupported element type in 'qc_vars': "
+                    f"expected {str} but received {type(qc_var)}"
+                )
+
+    if percent_top is None:
+        resolved_percent_top = None
+    elif isinstance(percent_top, str) or not isinstance(
+        percent_top,
+        CollectionInstance,
+    ):
+        raise TypeError(
+            f"unsupported argument type for 'percent_top': "
+            f"expected a sequence of {int} or None but received {type(percent_top)}"
+        )
+    else:
+        resolved_percent_top = tuple(
+            _as_positive_integer(value, "percent_top") for value in percent_top
+        )
+
     log1p = _as_boolean(log1p, "log1p")
     copy = _as_boolean(copy, "copy")
 
     adata = adata.copy() if copy else adata
-    expression_mtx = adata.X if expression is None else adata.layers[expression]
-    obs_metrics, var_metrics = _calculate_qc_metrics(
-        expression_mtx,
-        cast(pd.DataFrame, adata.var),
-        qc_vars=qc_vars,
-        percent_top=percent_top,
-        log1p=log1p,
-    )
-    obs_metrics.index = adata.obs_names
-    var_metrics.index = adata.var_names
-
-    for column in obs_metrics:
-        adata.obs[column] = obs_metrics[column].to_numpy()
-    for column in var_metrics:
-        adata.var[column] = var_metrics[column].to_numpy()
-
-    return adata if copy else None
-
-
-def _calculate_qc_metrics(
-    expression_mtx: Any,
-    var: pd.DataFrame,
-    *,
-    qc_vars: Tuple[str, ...],
-    percent_top: Optional[Tuple[int, ...]],
-    log1p: bool,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-
+    expression_mtx = get_expression(adata, layer=expression, copy=False)
     matrix = (
-        expression_mtx.tocsr() if sparse.issparse(expression_mtx) else expression_mtx
+        cast(Matrix, cast(Any, expression_mtx).tocsr())
+        if sparse.issparse(expression_mtx)
+        else expression_mtx
     )
-    n_obs, n_vars = matrix.shape
+
+    n_obs, n_features = matrix.shape
     total_per_obs = _sum_axis(matrix, axis=1)
     total_per_var = _sum_axis(matrix, axis=0)
-    variance_per_var = _variance_axis0(matrix)
-    median_per_var, mad_per_var = _median_mad_axis0(matrix)
+    variance_per_var = _variance_per_feature(matrix)
+    median_per_var, mad_per_var = _median_mad_per_feature(matrix)
     n_vars_per_obs, n_cells_per_var = _positive_counts(matrix)
 
-    obs_metrics = pd.DataFrame()
+    obs_metrics = pd.DataFrame(index=adata.obs_names)
     obs_metrics["n_features"] = n_vars_per_obs
     if log1p:
         obs_metrics["log1p_n_features"] = np.log1p(n_vars_per_obs)
@@ -174,22 +182,24 @@ def _calculate_qc_metrics(
     if log1p:
         obs_metrics["log1p_total"] = np.log1p(total_per_obs)
 
-    if percent_top is not None:
-        _check_percent_top(percent_top, n_vars)
-        for top in percent_top:
+    if resolved_percent_top is not None:
+        if any(top > n_features for top in resolved_percent_top):
+            raise IndexError("Positions outside range of features.")
+        for top in resolved_percent_top:
             obs_metrics[f"pct_top{top}_features"] = _percent_top(
                 matrix, top, total_per_obs
             )
 
-    for qc_var in qc_vars:
+    var = cast(pd.DataFrame, adata.var)
+    for qc_var in resolved_qc_vars:
         qc_mask = _qc_var_mask(var, qc_var)
-        total_qc = _sum_axis(matrix[:, qc_mask], axis=1)
+        total_qc = _sum_axis(cast(Any, matrix)[:, qc_mask], axis=1)
         obs_metrics[f"total_{qc_var}"] = total_qc
         if log1p:
             obs_metrics[f"log1p_total_{qc_var}"] = np.log1p(total_qc)
         obs_metrics[f"pct_{qc_var}"] = _percentage(total_qc, total_per_obs)
 
-    var_metrics = pd.DataFrame()
+    var_metrics = pd.DataFrame(index=adata.var_names)
     var_metrics["n_barcodes"] = n_cells_per_var
     var_metrics["mean"] = total_per_var / n_obs
     if log1p:
@@ -208,52 +218,15 @@ def _calculate_qc_metrics(
     if log1p:
         var_metrics["log1p_total"] = np.log1p(total_per_var)
 
-    return obs_metrics, var_metrics
+    obs_metrics.index = adata.obs_names
+    var_metrics.index = adata.var_names
 
+    for column in obs_metrics:
+        adata.obs[column] = obs_metrics[column].to_numpy()
+    for column in var_metrics:
+        adata.var[column] = var_metrics[column].to_numpy()
 
-def _as_qc_vars(qc_vars: Union[str, Sequence[str]]) -> Tuple[str, ...]:
-
-    if isinstance(qc_vars, str):
-        return (qc_vars,)
-    if not isinstance(qc_vars, CollectionInstance):
-        raise TypeError(
-            f"unsupported argument type for 'qc_vars': "
-            f"expected {str} or a sequence of {str} but received {type(qc_vars)}"
-        )
-
-    resolved = tuple(qc_vars)
-    for qc_var in resolved:
-        if not isinstance(qc_var, str):
-            raise TypeError(
-                f"unsupported element type in 'qc_vars': "
-                f"expected {str} but received {type(qc_var)}"
-            )
-
-    return resolved
-
-
-def _as_percent_top(
-    percent_top: Optional[Sequence[int]],
-) -> Optional[Tuple[int, ...]]:
-
-    if percent_top is None:
-        return None
-    if isinstance(percent_top, str) or not isinstance(
-        percent_top,
-        CollectionInstance,
-    ):
-        raise TypeError(
-            f"unsupported argument type for 'percent_top': "
-            f"expected a sequence of {int} or None but received {type(percent_top)}"
-        )
-
-    return tuple(_as_positive_integer(value, "percent_top") for value in percent_top)
-
-
-def _check_percent_top(percent_top: Tuple[int, ...], n_vars: int) -> None:
-
-    if any(top > n_vars for top in percent_top):
-        raise IndexError("Positions outside range of features.")
+    return adata if copy else None
 
 
 def _sum_axis(matrix: Any, axis: int) -> np.ndarray:
@@ -261,7 +234,7 @@ def _sum_axis(matrix: Any, axis: int) -> np.ndarray:
     return np.asarray(matrix.sum(axis=axis)).ravel()
 
 
-def _variance_axis0(matrix: Any) -> np.ndarray:
+def _variance_per_feature(matrix: Any) -> np.ndarray:
 
     n_obs = matrix.shape[0]
     if n_obs <= 1:
@@ -278,40 +251,35 @@ def _variance_axis0(matrix: Any) -> np.ndarray:
     return (squared_total - total * total / n_obs) / (n_obs - 1)
 
 
-def _median_mad_axis0(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
+def _median_mad_per_feature(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
 
     if sparse.issparse(matrix):
-        return _sparse_median_mad_axis0(matrix)
+        csc_matrix = cast(Any, matrix).tocsc()
+        n_obs, n_features = csc_matrix.shape
+        medians = np.empty(n_features, dtype=np.float64)
+        mads = np.empty(n_features, dtype=np.float64)
+
+        for column in range(n_features):
+            start = csc_matrix.indptr[column]
+            stop = csc_matrix.indptr[column + 1]
+            data = np.asarray(csc_matrix.data[start:stop])
+            implicit_zeros = n_obs - data.size
+            median = _median_with_implicit_value(data, n_obs, implicit_zeros, 0.0)
+            deviations = np.abs(data - median)
+
+            medians[column] = median
+            mads[column] = _median_with_implicit_value(
+                deviations,
+                n_obs,
+                implicit_zeros,
+                abs(median),
+            )
+
+        return medians, mads
 
     array = np.asarray(matrix)
     medians = np.median(array, axis=0)
     mads = np.median(np.abs(array - medians), axis=0)
-    return medians, mads
-
-
-def _sparse_median_mad_axis0(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
-
-    csc_matrix = matrix.tocsc()
-    n_obs, n_vars = csc_matrix.shape
-    medians = np.empty(n_vars, dtype=np.float64)
-    mads = np.empty(n_vars, dtype=np.float64)
-
-    for column in range(n_vars):
-        start = csc_matrix.indptr[column]
-        stop = csc_matrix.indptr[column + 1]
-        data = np.asarray(csc_matrix.data[start:stop])
-        implicit_zeros = n_obs - data.size
-        median = _median_with_implicit_value(data, n_obs, implicit_zeros, 0.0)
-        deviations = np.abs(data - median)
-
-        medians[column] = median
-        mads[column] = _median_with_implicit_value(
-            deviations,
-            n_obs,
-            implicit_zeros,
-            abs(median),
-        )
-
     return medians, mads
 
 
@@ -374,29 +342,22 @@ def _percent_top(
 ) -> np.ndarray:
 
     if sparse.issparse(matrix):
-        top_sums = _sparse_top_sums(matrix, top)
+        csr_matrix = cast(Any, matrix).tocsr()
+        top_sums = np.zeros(csr_matrix.shape[0], dtype=csr_matrix.dtype)
+        for row in range(csr_matrix.shape[0]):
+            start = csr_matrix.indptr[row]
+            stop = csr_matrix.indptr[row + 1]
+            data = csr_matrix.data[start:stop]
+            if data.size <= top:
+                top_sums[row] = data.sum()
+            else:
+                top_sums[row] = np.partition(data, data.size - top)[-top:].sum()
     else:
         array = np.asarray(matrix)
         partitioned = np.partition(array, array.shape[1] - top, axis=1)
         top_sums = partitioned[:, -top:].sum(axis=1)
 
     return _percentage(top_sums, total_per_obs)
-
-
-def _sparse_top_sums(matrix: Any, top: int) -> np.ndarray:
-
-    matrix = matrix.tocsr()
-    top_sums = np.zeros(matrix.shape[0], dtype=matrix.dtype)
-    for row in range(matrix.shape[0]):
-        start = matrix.indptr[row]
-        stop = matrix.indptr[row + 1]
-        data = matrix.data[start:stop]
-        if data.size <= top:
-            top_sums[row] = data.sum()
-        else:
-            top_sums[row] = np.partition(data, data.size - top)[-top:].sum()
-
-    return top_sums
 
 
 def _percentage(

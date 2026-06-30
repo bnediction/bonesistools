@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -10,9 +8,7 @@ from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.tools import _graph as graph_tools
-
-sys.path.insert(0, str(Path(__file__).parents[1]))
-from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+from tests.sct.toy_data import make_nestorowa_hvg_adata
 
 
 def test_paga_stores_connectivities_tree_and_metadata(mini_adata):

@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
-import sys
 import warnings
-from pathlib import Path
 from typing import Any, cast
 
 import anndata as ad
@@ -12,9 +10,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-
-sys.path.insert(0, str(Path(__file__).parents[1]))
-from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+from tests.sct.toy_data import make_nestorowa_hvg_adata
 
 ADATA = make_nestorowa_hvg_adata()
 

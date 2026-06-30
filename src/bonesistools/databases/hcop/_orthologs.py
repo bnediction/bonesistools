@@ -24,6 +24,7 @@ from typing import (
 import networkx as nx
 import pandas as pd
 from networkx import Graph
+from typing_extensions import Protocol
 
 from ..._compat import Literal
 from ..._validation import _as_positive_integer
@@ -1220,7 +1221,19 @@ def organisms() -> List[str]:
     return list(Orthologs.supported_organisms)
 
 
-def orthologs(
+class _OrthologsCallable(Protocol):
+    def __call__(
+        self,
+        output_organism: str = "mouse",
+        min_evidence: int = 3,
+        version: HcopVersion = "bundled",
+        target_organism: Optional[str] = None,
+    ) -> Orthologs: ...
+
+    def versions(self, output_organism: Optional[str] = None) -> List[str]: ...
+
+
+def _orthologs(
     output_organism: str = "mouse",
     min_evidence: int = 3,
     version: HcopVersion = "bundled",
@@ -1288,4 +1301,5 @@ def _orthologs_versions(output_organism: Optional[str] = None) -> List[str]:
     return Orthologs.versions(output_organism=output_organism)
 
 
-setattr(orthologs, "versions", _orthologs_versions)
+setattr(_orthologs, "versions", _orthologs_versions)
+orthologs: _OrthologsCallable = cast(_OrthologsCallable, _orthologs)

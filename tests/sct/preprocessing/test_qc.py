@@ -33,6 +33,8 @@ def _qc_adata(sparse: bool = False) -> ad.AnnData:
 
 def _assert_expected_qc_metrics(adata: ad.AnnData) -> None:
 
+    obs = cast(pd.DataFrame, adata.obs)
+    var = cast(pd.DataFrame, adata.var)
     expected_obs = pd.DataFrame(
         {
             "n_features": [3, 2, 4],
@@ -75,14 +77,14 @@ def _assert_expected_qc_metrics(adata: ad.AnnData) -> None:
     )
 
     pd.testing.assert_frame_equal(
-        adata.obs.loc[:, expected_obs.columns],
+        obs.loc[:, expected_obs.columns],
         expected_obs,
         check_dtype=False,
         rtol=1e-6,
         atol=1e-6,
     )
     pd.testing.assert_frame_equal(
-        adata.var.loc[:, expected_var.columns],
+        var.loc[:, expected_var.columns],
         expected_var,
         check_dtype=False,
         rtol=1e-6,
@@ -147,10 +149,11 @@ def test_qc_handles_zero_count_observations():
 
     bt.sct.pp.qc(adata, qc_vars=["mito"], percent_top=[1])
 
-    assert np.isnan(adata.obs.loc["zero", "pct_top1_features"])
-    assert np.isnan(adata.obs.loc["zero", "pct_mito"])
-    assert adata.obs.loc["nonzero", "pct_top1_features"] == 100.0
-    assert adata.obs.loc["nonzero", "pct_mito"] == 100.0
+    obs = cast(pd.DataFrame, adata.obs)
+    assert np.isnan(cast(float, obs.loc["zero", "pct_top1_features"]))
+    assert np.isnan(cast(float, obs.loc["zero", "pct_mito"]))
+    assert cast(float, obs.loc["nonzero", "pct_top1_features"]) == 100.0
+    assert cast(float, obs.loc["nonzero", "pct_mito"]) == 100.0
 
 
 def test_qc_sparse_median_and_mad_include_implicit_zeros():

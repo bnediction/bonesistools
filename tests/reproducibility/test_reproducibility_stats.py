@@ -1,17 +1,13 @@
 #!/usr/bin/env python
 
 import os
-import sys
-from pathlib import Path
 
 import anndata as ad
 import pandas as pd
 import pytest
 
 import bonesistools as bt
-
-sys.path.insert(0, str(Path(__file__).parents[1] / "sct"))
-from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+from tests.sct.toy_data import make_nestorowa_hvg_adata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
