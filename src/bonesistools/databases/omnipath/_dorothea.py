@@ -350,18 +350,9 @@ def _load_latest_modern_dorothea(
             hcop_version=hcop_version,
         )
 
-    duplicate_subset = (
-        ["source", "target"]
-        if compatibility
-        else [
-            "source",
-            "target",
-            "sign",
-        ]
-    )
-    return cast(
-        pd.DataFrame,
-        dorothea_db.drop_duplicates(subset=duplicate_subset).reset_index(drop=True),
+    return _deduplicate_dorothea(
+        cast(pd.DataFrame, dorothea_db),
+        compatibility=compatibility,
     )
 
 

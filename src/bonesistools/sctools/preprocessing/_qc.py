@@ -93,11 +93,11 @@ def qc(
         Observation-level metrics are stored in `adata.obs`:
 
         - `adata.obs["n_features"]`: number of detected features;
-        - `adata.obs["total"]`: sum of expression values per observation;
+        - `adata.obs["total"]`: sum of matrix values per observation;
         - `adata.obs[f"pct_top{n}_features"]`: percentage of total expression
           contained in the top `n` most expressed features, for each value in
           `percent_top`;
-        - `adata.obs[f"total_{qc_var}"]`: sum of expression values assigned to
+        - `adata.obs[f"total_{qc_var}"]`: sum of matrix values assigned to
           each variable group listed in `qc_vars`;
         - `adata.obs[f"pct_{qc_var}"]`: percentage of expression assigned to each
           variable group listed in `qc_vars`;
@@ -108,11 +108,13 @@ def qc(
           is detected;
         - `adata.var["mean"]`: mean expression per feature;
         - `adata.var["median"]`: median expression per feature;
-        - `adata.var["variance"]`: sample variance per feature;
-        - `adata.var["mad"]`: median absolute deviation per feature;
+        - `adata.var["variance"]`: sample variance per feature, normalized by
+          `n_barcodes - 1`;
+        - `adata.var["mad"]`: raw median absolute deviation per feature,
+          without normal-consistency scaling;
         - `adata.var["pct_dropout"]`: percentage of observations where the
           feature is not detected;
-        - `adata.var["total"]`: sum of expression values per feature.
+        - `adata.var["total"]`: sum of matrix values per feature.
 
         If `log1p=True`, matching `log1p_` transformation columns are added,
         such as `log1p_n_features`, `log1p_total`, `log1p_mean`,

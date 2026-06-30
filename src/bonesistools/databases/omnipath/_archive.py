@@ -278,6 +278,16 @@ def _deduplicate_dorothea(
             "sign",
         ]
     )
+    if compatibility:
+        sort_columns = ["source", "target"]
+        if "confidence" in dorothea:
+            sort_columns.append("confidence")
+        sort_columns.append("sign")
+        dorothea = cast(
+            pd.DataFrame,
+            dorothea.sort_values(sort_columns, kind="mergesort"),
+        )
+
     return (
         dorothea.drop_duplicates()
         .drop_duplicates(subset=duplicate_subset)

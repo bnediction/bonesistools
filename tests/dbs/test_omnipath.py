@@ -450,7 +450,7 @@ def test_deduplicate_dorothea_can_reproduce_decoupler_compatibility():
     result = _archive._deduplicate_dorothea(dorothea, compatibility=True)
 
     assert result[["source", "target", "sign"]].to_dict("records") == [
-        {"source": "TfA", "target": "GeneA", "sign": 1}
+        {"source": "TfA", "target": "GeneA", "sign": -1}
     ]
 
 
@@ -506,7 +506,7 @@ def test_latest_modern_dorothea_can_reproduce_decoupler_compatibility(monkeypatc
     )
 
     assert result[["source", "target", "sign"]].to_dict("records") == [
-        {"source": "TfA", "target": "GeneA", "sign": 1}
+        {"source": "TfA", "target": "GeneA", "sign": -1}
     ]
 
 
