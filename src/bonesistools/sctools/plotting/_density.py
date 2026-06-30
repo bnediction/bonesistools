@@ -120,9 +120,7 @@ def _counts_vector(
     expression: Optional[str],
 ) -> np.ndarray:
 
-    counts = (
-        adata[:, feature].layers[expression] if expression else adata[:, feature].X
-    )
+    counts = adata[:, feature].layers[expression] if expression else adata[:, feature].X
 
     if scipy.sparse.issparse(counts):
         counts = cast(Any, counts).toarray()

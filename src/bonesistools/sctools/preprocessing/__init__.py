@@ -26,6 +26,7 @@ from ._genename import (
     standardize_gene_identifiers,
 )
 from ._hvg import hvg
+from ._qc import qc
 from ._simple import (
     sort_anndata,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "normalize",
     "log1p",
     "scale",
+    "qc",
     "hvg",
     "merge",
     "sort_anndata",

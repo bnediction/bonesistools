@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import sys
+from pathlib import Path
 from typing import Any, cast
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,15 +15,23 @@ from umap.umap_ import fuzzy_simplicial_set
 
 import bonesistools as bt
 
+sys.path.insert(0, str(Path(__file__).parents[1] / "sct"))
+from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
     reason="requires reproducibility CI mode",
 )
 
 
+def _load_nestorowa_hvg() -> ad.AnnData:
+
+    return make_nestorowa_hvg_adata()
+
+
 def _run_clustering_workflow():
 
-    adata = bt.sct.datasets.nestorowa()
+    adata = _load_nestorowa_hvg()
 
     bt.sct.tl.pca(
         adata,
@@ -151,7 +162,7 @@ def test_clustering_workflow_is_reproducible_across_runs():
 
 def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
 
-    adata = bt.sct.datasets.nestorowa()
+    adata = _load_nestorowa_hvg()
     bt.sct.tl.pca(
         adata,
         n_components=20,
@@ -214,8 +225,8 @@ def test_neighbors_are_reproducible_on_nestorowa(backend):
     if backend == "pynndescent":
         pytest.importorskip("pynndescent")
 
-    first = bt.sct.datasets.nestorowa()
-    second = bt.sct.datasets.nestorowa()
+    first = _load_nestorowa_hvg()
+    second = _load_nestorowa_hvg()
 
     for adata in [first, second]:
         bt.sct.tl.pca(

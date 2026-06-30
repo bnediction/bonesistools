@@ -165,9 +165,7 @@ def hvg(
             stacklevel=2,
         )
 
-    ordered_indices = eligible[
-        np.argsort(-scores[eligible], kind="mergesort")
-    ]
+    ordered_indices = eligible[np.argsort(-scores[eligible], kind="mergesort")]
     selected_indices = ordered_indices[:n_features]
     selected[selected_indices] = True
     ranks[selected_indices] = np.arange(1, selected_indices.size + 1, dtype=float)

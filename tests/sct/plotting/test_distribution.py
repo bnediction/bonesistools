@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+from pathlib import Path
 from typing import Any, Dict, Sequence, cast
 
 import anndata as ad
@@ -16,7 +18,10 @@ from matplotlib.lines import Line2D
 import bonesistools as bt
 from bonesistools.sctools.plotting import _distribution
 
-ADATA = bt.sct.datasets.nestorowa()
+sys.path.insert(0, str(Path(__file__).parents[1]))
+from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+
+ADATA = make_nestorowa_hvg_adata()
 
 
 def _n_counts(adata: ad.AnnData) -> np.ndarray:
@@ -154,9 +159,7 @@ def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
         groupby="cluster",
         hue="condition",
         boxplot={"colors": {"ctrl": [1.0, 0.0, 0.0], "stim": [0.0, 0.0, 1.0]}},
-        points={
-            "colors": {"ctrl": [1.0, 0.5, 0.5], "stim": [0.5, 0.5, 1.0]}
-        },
+        points={"colors": {"ctrl": [1.0, 0.5, 0.5], "stim": [0.5, 0.5, 1.0]}},
         show_medians=False,
     )
 

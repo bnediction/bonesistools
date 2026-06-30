@@ -243,9 +243,7 @@ def __reject_removed_color_arguments(kwargs: Dict[str, Any]) -> None:
         if name not in kwargs:
             continue
 
-        raise TypeError(
-            f"unsupported argument {name!r}: use {replacement} instead"
-        )
+        raise TypeError(f"unsupported argument {name!r}: use {replacement} instead")
 
 
 def __resolve_hue_colors(
@@ -532,9 +530,7 @@ def distribution(
         fig, ax = plt.subplots()
         fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 6)
         fig.set_figwidth(
-            kwargs["figwidth"]
-            if "figwidth" in kwargs
-            else 5 if groupby is None else 8
+            kwargs["figwidth"] if "figwidth" in kwargs else 5 if groupby is None else 8
         )
     else:
         fig = figure_from_axes(ax)
@@ -636,30 +632,34 @@ def distribution(
         box_colors = __resolve_hue_colors(
             box_colors,
             hue_values,
-            [black] * len(hue_values)
-            if show_points is True
-            else cast(
-                Colors,
-                qualitative_color_values(
-                    len(hue_values),
-                    QUALITATIVE_COLORS,
-                    generate_colormap,
-                ),
+            (
+                [black] * len(hue_values)
+                if show_points is True
+                else cast(
+                    Colors,
+                    qualitative_color_values(
+                        len(hue_values),
+                        QUALITATIVE_COLORS,
+                        generate_colormap,
+                    ),
+                )
             ),
         )
         point_colors = __resolve_hue_colors(
             point_colors,
             hue_values,
-            cast(
-                Colors,
-                qualitative_color_values(
-                    len(hue_values),
-                    QUALITATIVE_COLORS,
-                    generate_colormap,
-                ),
-            )
-            if show_points is True
-            else [white] * len(hue_values),
+            (
+                cast(
+                    Colors,
+                    qualitative_color_values(
+                        len(hue_values),
+                        QUALITATIVE_COLORS,
+                        generate_colormap,
+                    ),
+                )
+                if show_points is True
+                else [white] * len(hue_values)
+            ),
         )
 
         if "medianprops" not in boxplot_kwargs:

@@ -1364,9 +1364,9 @@ class InfluenceGraph(_MultiDiGraphBase):
                 else:
                     search_graph = self
 
-                distances_by_direction[
-                    current_direction
-                ] = nx.single_source_shortest_path_length(search_graph, marker)
+                distances_by_direction[current_direction] = (
+                    nx.single_source_shortest_path_length(search_graph, marker)
+                )
 
             for scc in sccs:
                 scc = frozenset(scc)

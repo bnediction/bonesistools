@@ -207,6 +207,7 @@ burgundy = RGB_COLORS["burgundy"]
 sage = RGB_COLORS["sage"]
 moss = RGB_COLORS["moss"]
 
+
 def _palette(*names: str) -> List[RGB]:
     return [RGB_COLORS[name] for name in names]
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import sys
+from pathlib import Path
+
 import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +16,10 @@ from scipy.sparse import csr_matrix
 import bonesistools as bt
 from bonesistools.sctools.plotting import _density
 
-ADATA = bt.sct.datasets.nestorowa()
+sys.path.insert(0, str(Path(__file__).parents[1]))
+from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+
+ADATA = make_nestorowa_hvg_adata()
 
 
 def test_density_returns_matplotlib_objects():
@@ -264,7 +270,7 @@ def test_density_deprecates_not_all(mini_adata):
             feature="g1",
             obs="cluster",
             not_all=True,
-    )
+        )
 
     legend = ax.get_legend()
     assert legend is not None

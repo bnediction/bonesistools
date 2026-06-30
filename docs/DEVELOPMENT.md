@@ -241,6 +241,24 @@ support can follow the same pattern.
 
 ---
 
+## Metric column names
+
+Use stable metric prefixes in AnnData annotations:
+
+* `n_`: cardinality;
+* `total` and `total_`: sum;
+* `mean`: mean;
+* `median`: median;
+* `variance`: variance;
+* `mad`: median absolute deviation;
+* `pct_`: percentage;
+* `log1p_`: log1p transformation.
+
+Prefer full statistical names over abbreviations. For example, use
+`variance` and `log1p_variance`, not `var` and `log1p_var`.
+
+---
+
 ## Fitted objects
 
 Objects that learn state during execution should distinguish between:

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
+import sys
 import warnings
+from pathlib import Path
 from typing import Any, cast
 
 import anndata as ad
@@ -11,7 +13,10 @@ import pytest
 
 import bonesistools as bt
 
-ADATA = bt.sct.datasets.nestorowa()
+sys.path.insert(0, str(Path(__file__).parents[1]))
+from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+
+ADATA = make_nestorowa_hvg_adata()
 
 
 def _set_manual_shortest_path_lengths(estimator):

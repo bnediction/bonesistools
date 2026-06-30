@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+from pathlib import Path
 from typing import Any, Dict, cast
 
 import matplotlib.pyplot as plt
@@ -15,9 +17,12 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 import bonesistools as bt
 from bonesistools.sctools.plotting import _scatterplot
 
+sys.path.insert(0, str(Path(__file__).parents[1]))
+from toy_data import make_nestorowa_hvg_adata  # noqa: E402
+
 bt.sct.pl.set_default_params(tex=False)
 
-ADATA = bt.sct.datasets.nestorowa()
+ADATA = make_nestorowa_hvg_adata()
 
 
 def _path_collection(ax: Axes, index: int) -> PathCollection:
