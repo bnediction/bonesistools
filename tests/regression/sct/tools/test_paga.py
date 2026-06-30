@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.tools import _graph as graph_tools
-from tests.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
 
 
 def test_paga_stores_connectivities_tree_and_metadata(mini_adata):

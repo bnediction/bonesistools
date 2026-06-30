@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-from typing import Any, Optional, overload
+from typing import Any, Optional, cast, overload
 
+import pandas as pd
 from anndata import AnnData
 
 from ..._compat import Literal
@@ -106,7 +107,9 @@ def mitochondrial_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    genesyn = create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+    gene_synonyms: Any = (
+        create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+    )
 
     if axis == "obs":
         adata.obs[key] = False
@@ -115,13 +118,17 @@ def mitochondrial_genes(
 
     mt_id = {
         gene_id
-        for gene_id, identifiers in genesyn.gene_aliases_mapping["gene_id"].items()
+        for gene_id, identifiers in gene_synonyms.gene_aliases_mapping[
+            "gene_id"
+        ].items()
         if identifiers.chromosome == "MT"
     }
 
-    annotations = adata.obs if axis == "obs" else adata.var
+    annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
+        gene_id = gene_synonyms.get_gene_id(
+            gene=index, input_identifier_type=index_type
+        )
         if gene_id in mt_id:
             annotations.at[index, key] = True
 
@@ -220,7 +227,9 @@ def ribosomal_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    genesyn = create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+    gene_synonyms: Any = (
+        create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+    )
 
     if axis == "obs":
         adata.obs[key] = False
@@ -228,13 +237,15 @@ def ribosomal_genes(
         adata.var[key] = False
 
     rps_id = set()
-    for k, v in genesyn.gene_aliases_mapping["name"].items():
+    for k, v in gene_synonyms.gene_aliases_mapping["name"].items():
         if k.lower().startswith(("rps", "rpl", "mrps", "mrpl")):
             rps_id.add(v.value.decode())
 
-    annotations = adata.obs if axis == "obs" else adata.var
+    annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = genesyn.get_gene_id(gene=index, input_identifier_type=index_type)
+        gene_id = gene_synonyms.get_gene_id(
+            gene=index, input_identifier_type=index_type
+        )
         if gene_id in rps_id:
             annotations.at[index, key] = True
 

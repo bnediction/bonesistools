@@ -12,7 +12,7 @@ from sklearn.neighbors import NearestNeighbors
 from umap.umap_ import fuzzy_simplicial_set
 
 import bonesistools as bt
-from tests.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",

@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _density
-from tests.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
 
 ADATA = make_nestorowa_hvg_adata()
 

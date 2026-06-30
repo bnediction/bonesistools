@@ -1,5 +1,18 @@
 # Testing
 
+## Test layout
+
+Tests are separated by question:
+
+- `tests/regression/`: is the software still correct?
+- `tests/reproducibility/`: does the same input produce the same output?
+
+Regression tests contain bug checks, invariants, edge cases, unit tests and
+ordinary behavioral tests. They are the default test suite.
+
+Reproducibility tests are intentionally separate because they can use larger
+data, live resources or deterministic signatures.
+
 ## CI layout
 
 The GitHub CI separates fast local checks from live reproducibility checks:
@@ -35,8 +48,8 @@ The tests do not redistribute restricted upstream data. Instead, they:
 
 For DoRothEA, the tracked files are:
 
-- `tests/dbs/data/dorothea_current_mouse_A.sha256`;
-- `tests/dbs/data/dorothea_legacy_mouse.sha256`.
+- `tests/reproducibility/dorothea_current_mouse_A.sha256`;
+- `tests/reproducibility/dorothea_legacy_mouse.sha256`.
 
 These hashes are small reproducibility sentinels. If one changes, the test
 failure means either:
@@ -45,11 +58,11 @@ failure means either:
 - the resource access or post-processing logic changed;
 - the expected signature must be reviewed and intentionally updated.
 
-The local JSON files in `tests/dbs/data/` are diagnostic artifacts only. They
-must not be modified for normal test updates and must not be committed.
+The local JSON files in `tests/reproducibility/` are diagnostic artifacts only.
+They must not be modified for normal test updates and must not be committed.
 
 Run reproducibility tests explicitly with:
 
 ```bash
-BONESISTOOLS_RUN_REPRODUCIBILITY=1 pytest tests/dbs/test_omnipath_reproducibility.py
+BONESISTOOLS_RUN_REPRODUCIBILITY=1 pytest tests/reproducibility
 ```

@@ -6,7 +6,7 @@ import bonesistools as bt
 
 
 def test_version_matches_pyproject():
-    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
     expected = None
     in_project = False
     for line in pyproject.read_text(encoding="utf-8").splitlines():

@@ -9,6 +9,7 @@ import pytest
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
+from bonesistools.sctools.preprocessing import _qc
 
 
 def _qc_adata(sparse: bool = False) -> ad.AnnData:
@@ -106,6 +107,65 @@ def test_qc_matches_expected_metrics_for_dense_and_sparse_inputs(sparse):
     _assert_expected_qc_metrics(adata)
 
 
+def test_qc_auto_backend_uses_python_fallback_when_numba_is_unavailable(monkeypatch):
+    adata = _qc_adata(sparse=True)
+    monkeypatch.setattr(_qc, "_median_mad_sparse_csc_numba", None)
+    monkeypatch.setattr(_qc, "_percent_top_sparse_csr_numba", None)
+
+    bt.sct.pp.qc(
+        adata,
+        qc_vars=["mito"],
+        percent_top=[1, 2, 4],
+        backend="auto",
+    )
+
+    _assert_expected_qc_metrics(adata)
+
+
+def test_qc_numba_backend_requires_numba(monkeypatch):
+    adata = _qc_adata(sparse=True)
+    monkeypatch.setattr(_qc, "_numba_njit", None)
+
+    with pytest.raises(ImportError, match="backend='numba' requires"):
+        bt.sct.pp.qc(adata, backend="numba")
+
+
+def test_qc_python_and_numba_backends_agree_within_tolerance():
+    if _qc._numba_njit is None:
+        pytest.skip("Numba is not installed")
+
+    python_adata = _qc_adata(sparse=True)
+    numba_adata = _qc_adata(sparse=True)
+
+    bt.sct.pp.qc(
+        python_adata,
+        qc_vars=["mito"],
+        percent_top=[1, 2, 4],
+        backend="python",
+    )
+    bt.sct.pp.qc(
+        numba_adata,
+        qc_vars=["mito"],
+        percent_top=[1, 2, 4],
+        backend="numba",
+    )
+
+    pd.testing.assert_frame_equal(
+        cast(pd.DataFrame, numba_adata.obs),
+        cast(pd.DataFrame, python_adata.obs),
+        check_dtype=False,
+        rtol=1e-5,
+        atol=1e-8,
+    )
+    pd.testing.assert_frame_equal(
+        cast(pd.DataFrame, numba_adata.var),
+        cast(pd.DataFrame, python_adata.var),
+        check_dtype=False,
+        rtol=1e-5,
+        atol=1e-8,
+    )
+
+
 def test_qc_uses_expression_layer_and_can_disable_log_and_top_metrics():
     adata = _qc_adata()
     adata.layers["doubled"] = cast(Any, adata.X).copy() * 2
@@ -179,6 +239,33 @@ def test_qc_sparse_median_and_mad_include_implicit_zeros():
     np.testing.assert_allclose(adata.var["mad"].to_numpy(), [3.0, 0.0, 0.0])
 
 
+def test_qc_sparse_median_and_mad_numba_path_matches_python_fallback(monkeypatch):
+    if _qc._median_mad_sparse_csc_numba is None:
+        pytest.skip("Numba is not installed")
+
+    matrix = csr_matrix(
+        np.array(
+            [
+                [0.0, 0.0, 10.0, 0.0],
+                [0.0, 4.0, 0.0, 2.0],
+                [6.0, 0.0, 0.0, 0.0],
+                [8.0, 0.0, 0.0, 2.0],
+                [0.0, 0.0, 0.0, 5.0],
+            ],
+            dtype=np.float32,
+        )
+    )
+
+    monkeypatch.setattr(_qc, "_median_mad_sparse_csc_numba", None)
+    fallback_median, fallback_mad = _qc._median_mad_per_feature(matrix)
+    monkeypatch.undo()
+
+    numba_median, numba_mad = _qc._median_mad_per_feature(matrix)
+
+    np.testing.assert_array_equal(numba_median, fallback_median)
+    np.testing.assert_array_equal(numba_mad, fallback_mad)
+
+
 def test_qc_validates_arguments():
     adata = _qc_adata()
 
@@ -194,3 +281,6 @@ def test_qc_validates_arguments():
     adata.var["bad"] = ["yes", "no", "yes", "no"]
     with pytest.raises(TypeError, match="unsupported column dtype"):
         bt.sct.pp.qc(adata, qc_vars=["bad"], percent_top=None)
+
+    with pytest.raises(ValueError, match="unsupported backend"):
+        bt.sct.pp.qc(adata, backend=cast(Any, "bad"))

@@ -14,7 +14,7 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 import bonesistools as bt
 from bonesistools.sctools.plotting import _scatterplot
-from tests.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
 
 bt.sct.pl.set_default_params(tex=False)
 

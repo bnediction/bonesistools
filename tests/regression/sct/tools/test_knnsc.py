@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-from tests.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
 
 ADATA = make_nestorowa_hvg_adata()
 

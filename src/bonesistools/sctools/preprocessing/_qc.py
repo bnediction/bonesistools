@@ -33,6 +33,7 @@ def qc(
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
+    backend: Literal["auto", "python", "numba"] = "auto",
     copy: Literal[False] = False,
 ) -> None: ...
 
@@ -45,6 +46,7 @@ def qc(
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
+    backend: Literal["auto", "python", "numba"] = "auto",
     copy: Literal[True],
 ) -> AnnData: ...
 
@@ -57,6 +59,7 @@ def qc(
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
+    backend: Literal["auto", "python", "numba"] = "auto",
     copy: bool = False,
 ) -> Optional[AnnData]: ...
 
@@ -69,6 +72,7 @@ def qc(
     qc_vars: Union[str, Sequence[str]] = (),
     percent_top: Optional[Sequence[int]] = (50, 100, 200, 500),
     log1p: bool = True,
+    backend: Literal["auto", "python", "numba"] = "auto",
     copy: bool = False,
 ) -> Optional[AnnData]:
     """
@@ -89,6 +93,11 @@ def qc(
         is reported. If None, top-rank percentages are not computed.
     log1p: bool (default: True)
         Whether to add log1p-transformed metric columns.
+    backend: {"auto", "python", "numba"} (default: "auto")
+        Backend used for sparse top-feature percentages and sparse median/MAD
+        metrics. If "auto", use the Numba backend when available and otherwise
+        use the reference Python backend. If "python", force the reference
+        implementation. If "numba", require the accelerated Numba backend.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 
@@ -135,9 +144,10 @@ def qc(
 
     Notes
     -----
-    When Numba is installed, top-feature percentages for sparse matrices use a
-    JIT-compiled path. Otherwise, a pure NumPy/Python fallback is used and may
-    differ only by floating-point rounding.
+    The `numba` backend uses JIT-compiled implementations and may produce small
+    floating-point differences relative to the reference backend. Use
+    `backend="python"` for reproducible debugging, and `backend="numba"` to
+    require the accelerated implementation.
     """
 
     if isinstance(qc_vars, str):
@@ -173,6 +183,18 @@ def qc(
 
     log1p = _as_boolean(log1p, "log1p")
     copy = _as_boolean(copy, "copy")
+    if backend not in {"auto", "python", "numba"}:
+        raise ValueError(
+            f"unsupported backend: {backend!r}; "
+            "expected 'auto', 'python' or 'numba'"
+        )
+    if backend == "numba" and _numba_njit is None:
+        raise ImportError(
+            "backend='numba' requires the optional dependency 'numba'. "
+            "Install it with:\n\n"
+            "pip install numba\n\n"
+            "or use backend='python'."
+        )
 
     adata = adata.copy() if copy else adata
     expression_mtx = get_expression(adata, layer=expression, copy=False)
@@ -186,7 +208,7 @@ def qc(
     total_per_obs = _sum_axis(matrix, axis=1)
     total_per_var = _sum_axis(matrix, axis=0)
     variance_per_var = _variance_per_feature(matrix)
-    median_per_var, mad_per_var = _median_mad_per_feature(matrix)
+    median_per_var, mad_per_var = _median_mad_per_feature(matrix, backend=backend)
     n_vars_per_obs, n_cells_per_var = _positive_counts(matrix)
 
     obs_metrics = pd.DataFrame(index=adata.obs_names)
@@ -204,6 +226,7 @@ def qc(
             matrix,
             resolved_percent_top,
             total_per_obs,
+            backend=backend,
         )
         for top, values in top_percentages.items():
             obs_metrics[f"pct_top{top}_features"] = values
@@ -269,10 +292,20 @@ def _variance_per_feature(matrix: Any) -> np.ndarray:
     return (squared_total - total * total / n_obs) / (n_obs - 1)
 
 
-def _median_mad_per_feature(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
+def _median_mad_per_feature(
+    matrix: Any,
+    backend: Literal["auto", "python", "numba"] = "auto",
+) -> Tuple[np.ndarray, np.ndarray]:
 
     if sparse.issparse(matrix):
         csc_matrix = cast(Any, matrix).tocsc()
+        if backend in {"auto", "numba"} and _median_mad_sparse_csc_numba is not None:
+            return _median_mad_sparse_csc_numba(
+                csc_matrix.data.astype(np.float64, copy=False),
+                csc_matrix.indptr.astype(np.int64, copy=False),
+                csc_matrix.shape[0],
+            )
+
         n_obs, n_features = csc_matrix.shape
         medians = np.empty(n_features, dtype=np.float64)
         mads = np.empty(n_features, dtype=np.float64)
@@ -338,6 +371,106 @@ def _kth_with_implicit_value(
     return float(np.partition(upper_values, upper_k)[upper_k])
 
 
+if _numba_njit is None:
+    _median_mad_sparse_csc_numba = None
+else:
+
+    @_numba_njit(cache=True)
+    def _kth_with_implicit_sorted_numba(
+        sorted_values: np.ndarray,
+        k: int,
+        implicit_count: int,
+        implicit_value: float,
+    ) -> float:
+
+        lower_count = 0
+        equal_count_data = 0
+        for value in sorted_values:
+            if value < implicit_value:
+                lower_count += 1
+            elif value == implicit_value:
+                equal_count_data += 1
+
+        equal_count = equal_count_data + implicit_count
+        if k < lower_count:
+            return float(sorted_values[k])
+        if k < lower_count + equal_count:
+            return float(implicit_value)
+
+        upper_k = k - lower_count - equal_count
+        upper_start = lower_count + equal_count_data
+        return float(sorted_values[upper_start + upper_k])
+
+    @_numba_njit(cache=True)
+    def _median_with_implicit_value_numba(
+        values: np.ndarray,
+        size: int,
+        implicit_count: int,
+        implicit_value: float,
+    ) -> float:
+
+        if size == 0:
+            return np.nan
+
+        sorted_values = np.sort(values.copy())
+        lower = (size - 1) // 2
+        upper = size // 2
+        return (
+            _kth_with_implicit_sorted_numba(
+                sorted_values,
+                lower,
+                implicit_count,
+                implicit_value,
+            )
+            + _kth_with_implicit_sorted_numba(
+                sorted_values,
+                upper,
+                implicit_count,
+                implicit_value,
+            )
+        ) / 2
+
+    @_numba_njit(cache=True, parallel=True)
+    def _median_mad_sparse_csc_numba(
+        data: np.ndarray,
+        indptr: np.ndarray,
+        n_obs: int,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+
+        n_features = indptr.size - 1
+        medians = np.empty(n_features, dtype=np.float64)
+        mads = np.empty(n_features, dtype=np.float64)
+
+        for column in _numba_prange(n_features):
+            start = indptr[column]
+            stop = indptr[column + 1]
+            size = stop - start
+            values = np.empty(size, dtype=np.float64)
+            for index in range(size):
+                values[index] = data[start + index]
+
+            implicit_zeros = n_obs - size
+            median = _median_with_implicit_value_numba(
+                values,
+                n_obs,
+                implicit_zeros,
+                0.0,
+            )
+            deviations = np.empty(size, dtype=np.float64)
+            for index in range(size):
+                deviations[index] = abs(values[index] - median)
+
+            medians[column] = median
+            mads[column] = _median_with_implicit_value_numba(
+                deviations,
+                n_obs,
+                implicit_zeros,
+                abs(median),
+            )
+
+        return medians, mads
+
+
 def _positive_counts(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
 
     positive = matrix > 0
@@ -357,15 +490,17 @@ def _percent_top(
     matrix: Any,
     top: int,
     total_per_obs: np.ndarray,
+    backend: Literal["auto", "python", "numba"] = "auto",
 ) -> np.ndarray:
 
-    return _percent_top_by_rank(matrix, (top,), total_per_obs)[top]
+    return _percent_top_by_rank(matrix, (top,), total_per_obs, backend=backend)[top]
 
 
 def _percent_top_by_rank(
     matrix: Any,
     tops: Sequence[int],
     total_per_obs: np.ndarray,
+    backend: Literal["auto", "python", "numba"] = "auto",
 ) -> Dict[int, np.ndarray]:
 
     sorted_tops = np.asarray(sorted(tops), dtype=np.int64)
@@ -378,7 +513,7 @@ def _percent_top_by_rank(
         return {top: values_by_top[top] for top in tops}
 
     csr_matrix = cast(Any, matrix).tocsr()
-    if _percent_top_sparse_csr_numba is not None:
+    if backend in {"auto", "numba"} and _percent_top_sparse_csr_numba is not None:
         values = _percent_top_sparse_csr_numba(
             csr_matrix.data,
             csr_matrix.indptr,
