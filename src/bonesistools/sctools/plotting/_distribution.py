@@ -20,8 +20,9 @@ from typing import (
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import mlab
 from matplotlib.axes._axes import Axes
-from matplotlib.colors import Colormap, ListedColormap
+from matplotlib.colors import Colormap, ListedColormap, is_color_like
 from matplotlib.figure import Figure
 from pandas import Series
 from pandas.core.groupby.generic import SeriesGroupBy
@@ -50,9 +51,17 @@ from ._utils import (
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
 BoxPlots = Mapping[str, Any]
+ViolinPlots = Dict[str, Any]
+SingleDistributionReturn = Union[BoxPlots, ViolinPlots]
 BoxplotReturn = Union[BoxPlots, Dict[object, BoxPlots]]
+ViolinplotReturn = Union[ViolinPlots, Dict[object, ViolinPlots]]
+DistributionReturn = Union[
+    SingleDistributionReturn,
+    Dict[object, SingleDistributionReturn],
+]
 Legend = LegendArgument
 Points = Optional[Union[bool, Dict[str, Any]]]
+ViolinClip = Union[Literal["data"], Tuple[Optional[float], Optional[float]], None]
 
 
 def __get_box_positions(
@@ -118,6 +127,53 @@ def __apply_box_colors(
     for k in bp.keys():
         if k in items:
             plt.setp(bp.get(k), color=color)
+
+    return None
+
+
+def __apply_violin_colors(
+    vp: ViolinPlots,
+    color: object,
+    alpha: float,
+) -> None:
+
+    bodies = cast(Sequence[Any], vp.get("bodies", ()))
+    if is_color_like(color):
+        for body in bodies:
+            body.set_alpha(None)
+            body.set_facecolor(color)
+            body.set_edgecolor(color)
+            body.set_alpha(alpha)
+        for key in ("cbars", "cmins", "cmaxes"):
+            if key in vp:
+                vp[key].set_color(color)
+        if "cmedians" in vp:
+            vp["cmedians"].set_color("C1")
+            vp["cmedians"].set_linestyle("--")
+            vp["cmedians"].set_linewidth(1.0)
+        if "cmeans" in vp:
+            vp["cmeans"].set_color("C2")
+            vp["cmeans"].set_linestyle("--")
+            vp["cmeans"].set_linewidth(1.0)
+        return None
+
+    colors = list(cast(Sequence[object], color))
+    for body, body_color in zip(bodies, colors):
+        body.set_alpha(None)
+        body.set_facecolor(body_color)
+        body.set_edgecolor(body_color)
+        body.set_alpha(alpha)
+    for key in ("cbars", "cmins", "cmaxes"):
+        if key in vp:
+            vp[key].set_color(colors)
+    if "cmedians" in vp:
+        vp["cmedians"].set_color("C1")
+        vp["cmedians"].set_linestyle("--")
+        vp["cmedians"].set_linewidth(1.0)
+    if "cmeans" in vp:
+        vp["cmeans"].set_color("C2")
+        vp["cmeans"].set_linestyle("--")
+        vp["cmeans"].set_linewidth(1.0)
 
     return None
 
@@ -210,32 +266,10 @@ def __resolve_points_argument(
     )
 
 
-def __resolve_boxplot_argument(
-    boxplot: Optional[Dict[str, Any]],
-    kwargs: Dict[str, Any],
-) -> Dict[str, Any]:
-
-    if boxplot is None:
-        boxplot_kwargs: Dict[str, Any] = {}
-    elif isinstance(boxplot, dict):
-        boxplot_kwargs = dict(boxplot)
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'boxplot': "
-            f"expected {dict} or None but received {type(boxplot)}"
-        )
-
-    for name in ("notch", "sym", "patch_artist", "vert"):
-        if name in kwargs:
-            boxplot_kwargs[name] = kwargs.pop(name)
-
-    return boxplot_kwargs
-
-
 def __reject_removed_color_arguments(kwargs: Dict[str, Any]) -> None:
 
     replacements = {
-        "box_colors": "boxplot={'colors': ...}",
+        "box_colors": "colors=...",
         "point_colors": "points={'colors': ...}",
     }
 
@@ -244,6 +278,69 @@ def __reject_removed_color_arguments(kwargs: Dict[str, Any]) -> None:
             continue
 
         raise TypeError(f"unsupported argument {name!r}: use {replacement} instead")
+
+
+def __reject_removed_distribution_arguments(kwargs: Dict[str, Any]) -> None:
+
+    replacements = {
+        "boxplot": "backend-specific keyword arguments",
+        "violin": "backend-specific keyword arguments",
+        "distribution": "backend-specific keyword arguments",
+    }
+
+    for name, replacement in replacements.items():
+        if name not in kwargs:
+            continue
+
+        raise TypeError(f"unsupported argument {name!r}: use {replacement} instead")
+
+
+def __reject_violin_boxplot_kwargs(kwargs: Dict[str, Any]) -> None:
+
+    for name in (
+        "notch",
+        "sym",
+        "patch_artist",
+        "boxitems_to_color",
+        "show_caps",
+        "showcaps",
+        "show_box",
+        "showbox",
+        "show_fliers",
+        "showfliers",
+    ):
+        if name in kwargs:
+            raise ValueError(
+                f"unsupported keyword argument for kind='violin': {name!r}"
+            )
+
+
+def __resolve_shared_bool_argument(
+    kwargs: Dict[str, Any],
+    value: bool,
+    name: str,
+    deprecated_names: Sequence[str],
+) -> Tuple[bool, bool]:
+
+    specified = False
+    if name in kwargs:
+        value = cast(bool, kwargs.pop(name))
+        specified = True
+
+    for deprecated_name in deprecated_names:
+        if deprecated_name not in kwargs:
+            continue
+
+        _warn_deprecated_argument(deprecated_name, name, stacklevel=3)
+        if specified:
+            raise TypeError(
+                f"invalid argument combination: use either '{deprecated_name}' "
+                f"or '{name}', not both"
+            )
+        value = cast(bool, kwargs.pop(deprecated_name))
+        specified = True
+
+    return value, specified
 
 
 def __resolve_hue_colors(
@@ -304,6 +401,251 @@ def __resolve_point_kwargs(
     return resolved_by_hue
 
 
+def __distribution_values(
+    series: Union[Series, SeriesGroupBy],
+    groups: Optional[Sequence[object]],
+) -> Union[Series, Sequence[Series]]:
+
+    if groups is None:
+        return cast(Series, series).dropna()
+
+    grouped_series = cast(SeriesGroupBy, series)
+    return [cast(Series, grouped_series.get_group(group)).dropna() for group in groups]
+
+
+def __draw_box_distribution(
+    ax: Axes,
+    values: Union[Series, Sequence[Series]],
+    positions: np.ndarray,
+    widths: float,
+    kwargs: Dict[str, Any],
+) -> BoxPlots:
+
+    return cast(
+        BoxPlots,
+        ax.boxplot(
+            x=values,
+            positions=positions,
+            widths=widths,
+            **kwargs,
+        ),
+    )
+
+
+def __draw_violin_distribution(
+    ax: Axes,
+    values: Union[Series, Sequence[Series]],
+    positions: np.ndarray,
+    widths: float,
+    kwargs: Dict[str, Any],
+    cut: float,
+    clip: ViolinClip,
+) -> ViolinPlots:
+
+    violin_kwargs = dict(kwargs)
+    violin_widths = violin_kwargs.pop("widths", widths)
+    show_means = violin_kwargs.pop("showmeans", False)
+    show_medians = violin_kwargs.pop("showmedians", False)
+    show_extrema = violin_kwargs.pop("showextrema", True)
+    points = int(violin_kwargs.pop("points", 100))
+    bw_method = violin_kwargs.pop("bw_method", None)
+    quantiles = violin_kwargs.pop("quantiles", None)
+    violin_stats = __violin_stats(
+        values,
+        points=points,
+        bw_method=bw_method,
+        quantiles=quantiles,
+        cut=cut,
+        clip=clip,
+    )
+    violin_plots = cast(
+        ViolinPlots,
+        ax.violin(
+            vpstats=violin_stats,
+            positions=positions,
+            widths=violin_widths,
+            showmeans=show_means,
+            showmedians=show_medians,
+            showextrema=show_extrema,
+            **violin_kwargs,
+        ),
+    )
+    __set_violin_summary_segments(
+        violin_plots,
+        violin_stats,
+        positions=positions,
+        widths=violin_widths,
+        orientation=cast(Optional[str], violin_kwargs.get("orientation")),
+        vert=cast(Optional[bool], violin_kwargs.get("vert")),
+    )
+    return violin_plots
+
+
+def __set_violin_summary_segments(
+    violin_plots: ViolinPlots,
+    violin_stats: Sequence[Dict[str, Any]],
+    *,
+    positions: np.ndarray,
+    widths: object,
+    orientation: Optional[str],
+    vert: Optional[bool],
+) -> None:
+
+    position_values = np.asarray(positions, dtype=float).ravel()
+    width_values = __violin_width_values(widths, n_values=len(position_values))
+    horizontal = orientation == "horizontal" or vert is False
+    summary_keys = {
+        "cmedians": "median",
+        "cmeans": "mean",
+    }
+
+    for artist_key, stats_key in summary_keys.items():
+        if artist_key not in violin_plots:
+            continue
+
+        segments = []
+        for stats, position, width in zip(violin_stats, position_values, width_values):
+            value = float(stats[stats_key])
+            lower = position - width / 2
+            upper = position + width / 2
+            if horizontal:
+                segments.append(np.array([[value, lower], [value, upper]]))
+            else:
+                segments.append(np.array([[lower, value], [upper, value]]))
+
+        violin_plots[artist_key].set_segments(segments)
+    return None
+
+
+def __violin_width_values(
+    widths: object,
+    n_values: int,
+) -> np.ndarray:
+
+    width_values = np.asarray(widths, dtype=float)
+    if width_values.ndim == 0:
+        return np.full(n_values, float(width_values))
+    if len(width_values) != n_values:
+        raise ValueError(
+            "list of violin widths and violin statistics must have the same length"
+        )
+    return width_values
+
+
+def __violin_stats(
+    values: Union[Series, Sequence[Series]],
+    *,
+    points: int,
+    bw_method: Any,
+    quantiles: Optional[Any],
+    cut: float,
+    clip: ViolinClip,
+) -> Sequence[Dict[str, Any]]:
+
+    value_sets = [values] if isinstance(values, Series) else list(values)
+    quantile_sets = __violin_quantiles(quantiles, n_values=len(value_sets))
+    stats = []
+
+    for value_set, quantile_set in zip(value_sets, quantile_sets):
+        observed = np.asarray(cast(Series, value_set).dropna(), dtype=float)
+        if observed.size == 0:
+            raise ValueError("cannot draw violin distribution from empty values")
+
+        lower = float(np.nanmin(observed))
+        upper = float(np.nanmax(observed))
+        clip_lower, clip_upper = __violin_clip_bounds(
+            clip,
+            lower=lower,
+            upper=upper,
+        )
+        if np.all(observed[0] == observed):
+            coords = np.linspace(lower, upper, points)
+            vals = (coords == observed[0]).astype(float)
+        else:
+            kde = mlab.GaussianKDE(observed, bw_method)
+            bandwidth = float(np.sqrt(np.squeeze(kde.covariance)))
+            domain_lower = lower - cut * bandwidth
+            domain_upper = upper + cut * bandwidth
+            if clip_lower is not None:
+                domain_lower = max(domain_lower, clip_lower)
+            if clip_upper is not None:
+                domain_upper = min(domain_upper, clip_upper)
+            if domain_lower > domain_upper:
+                raise ValueError(
+                    "invalid argument value for 'clip': "
+                    "clipped violin range is empty"
+                )
+            coords = np.linspace(domain_lower, domain_upper, points)
+            vals = kde.evaluate(coords)
+
+        value_stats: Dict[str, Any] = {
+            "coords": coords,
+            "vals": vals,
+            "mean": float(np.mean(observed)),
+            "median": float(np.median(observed)),
+            "min": lower,
+            "max": upper,
+            "quantiles": np.percentile(observed, 100 * quantile_set),
+        }
+        stats.append(value_stats)
+
+    return stats
+
+
+def __violin_clip_bounds(
+    clip: ViolinClip,
+    *,
+    lower: float,
+    upper: float,
+) -> Tuple[Optional[float], Optional[float]]:
+
+    if clip == "data":
+        return lower, upper
+    if clip is None:
+        return None, None
+    if isinstance(clip, str):
+        raise ValueError(
+            "invalid argument value for 'clip': "
+            "expected 'data', None, or a 2-length tuple such as (0, None)"
+        )
+    if not isinstance(clip, tuple) or len(clip) != 2:
+        raise TypeError(
+            "unsupported argument type for 'clip': "
+            "expected 'data', None, or a 2-length tuple such as (0, None)"
+        )
+
+    clip_lower = None if clip[0] is None else float(clip[0])
+    clip_upper = None if clip[1] is None else float(clip[1])
+    if clip_lower is not None and clip_upper is not None and clip_lower > clip_upper:
+        raise ValueError(
+            "invalid argument value for 'clip': "
+            f"expected lower <= upper but received {clip}"
+        )
+
+    return clip_lower, clip_upper
+
+
+def __violin_quantiles(
+    quantiles: Optional[Any],
+    n_values: int,
+) -> Sequence[np.ndarray]:
+
+    if quantiles is None:
+        return [np.array([])] * n_values
+
+    quantile_array = np.asarray(quantiles, dtype=float)
+    if quantile_array.ndim == 0:
+        quantile_array = quantile_array.reshape(1)
+    if quantile_array.ndim == 1:
+        return [quantile_array] * n_values
+    if len(quantile_array) != n_values:
+        raise ValueError(
+            "list of violinplot statistics and quantile values must have "
+            "the same length"
+        )
+    return [np.asarray(q, dtype=float) for q in quantile_array]
+
+
 @overload
 def distribution(
     scdata: ScData,
@@ -311,18 +653,28 @@ def distribution(
     *,
     groupby: str,
     hue: str,
+    kind: Literal["box", "violin"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Legend = True,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
     points: Points = None,
-    boxplot: Optional[Dict[str, Any]] = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes, Dict[object, BoxPlots]]: ...
+) -> Tuple[Figure, Axes, DistributionReturn]: ...
 
 
 @overload
@@ -332,18 +684,28 @@ def distribution(
     *,
     groupby: Optional[str] = None,
     hue: None = None,
+    kind: Literal["box", "violin"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Legend = True,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
     points: Points = None,
-    boxplot: Optional[Dict[str, Any]] = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes, BoxPlots]: ...
+) -> Tuple[Figure, Axes, DistributionReturn]: ...
 
 
 @overload
@@ -353,14 +715,24 @@ def distribution(
     *,
     groupby: Optional[str] = None,
     hue: None = None,
+    kind: Literal["box", "violin"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Legend = True,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
     points: Points = None,
-    boxplot: Optional[Dict[str, Any]] = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     **kwargs: Any,
@@ -374,18 +746,28 @@ def distribution(
     *,
     groupby: Optional[str] = None,
     hue: Optional[str] = None,
+    kind: Literal["box", "violin"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Legend = True,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
     points: Points = None,
-    boxplot: Optional[Dict[str, Any]] = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
-) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]: ...
+) -> Optional[Tuple[Figure, Axes, DistributionReturn]]: ...
 
 
 @anndata_or_mudata_checker
@@ -395,18 +777,28 @@ def distribution(
     *,
     groupby: Optional[str] = None,
     hue: Optional[str] = None,
+    kind: Literal["box", "violin"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Legend = True,
     widths: float = 0.5,
     groupby_spacing: float = 0.3,
     hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
     points: Points = None,
-    boxplot: Optional[Dict[str, Any]] = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
-) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]:
+) -> Optional[Tuple[Figure, Axes, DistributionReturn]]:
     """
     Draw a distribution plot for an observation-level variable.
 
@@ -420,8 +812,20 @@ def distribution(
         Observation key used to group values.
     hue: str, optional
         Observation key used to split each group by hue.
+    kind: {"box", "violin"} (default: "box")
+        Distribution representation.
     sort: {"ascending", "descending", "preserve"} (default: "preserve")
         Sort groups by median value or preserve category order.
+    cut: float (default: 2)
+        Tail extension for `kind="violin"` only, expressed in KDE bandwidth
+        units beyond the observed minimum and maximum values. Use `cut=0` to
+        restrict violin bodies to the observed data range. Ignored for
+        `kind="box"`.
+    clip: {"data"}, tuple or None (default: "data")
+        Bounds for the violin KDE evaluation range. With `"data"`, use the
+        observed minimum and maximum values of each violin. Use a tuple such as
+        `clip=(0, None)` for positive observation-level metrics. Use None to
+        leave the KDE range unclipped. Ignored for `kind="box"`.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or dict (default: True)
@@ -429,60 +833,88 @@ def distribution(
         If a dictionary, draw the legend and pass these keyword arguments to
         `Axes.legend`.
     widths: float (default: 0.5)
-        Box width.
+        Distribution width.
     groupby_spacing: float (default: 0.3)
         Spacing between groups.
     hue_spacing: float (default: 0.1)
         Spacing between hues within each group.
+    colors: sequence, iterator, colormap or mapping, optional
+        Distribution colors. When `hue` is specified, colors are mapped to hue
+        values.
+    alpha: float (default: 1.0)
+        Violin body opacity. When points are shown, also used as the default
+        point opacity. Explicit `points={"alpha": ...}` values take precedence.
     points: bool or dict, optional
         If None, draw points only when boxplot fliers are hidden. If True, draw
         points with default scatter parameters. If False, do not draw points. If
         a dictionary, draw points and pass these keyword arguments to
         `Axes.scatter`. Use `points={"colors": ...}` to specify point colors.
-    boxplot: dict, optional
-        Keyword arguments passed to `Axes.boxplot`. Use
-        `boxplot={"colors": ...}` to specify boxplot colors.
+    show_median: bool (default: True)
+        If True, draw the distribution median.
+    show_mean: bool (default: False)
+        If True, draw the distribution mean.
+    figwidth: float, optional
+        Figure width.
+    figheight: float, optional
+        Figure height.
+    xlabel: str, optional
+        X-axis label.
+    ylabel: str, optional
+        Y-axis label.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
     **kwargs: Any
-        Supplemental features for figure plotting:
-        - figheight[float]: specify the figure height
-        - figwidth[float]: specify the figure width
-        - show_medians[bool]: draw median lines in boxplots
-        - show_means[bool]: draw mean markers in boxplots
-        - show_caps[bool]: draw caps at the end of whiskers
-        - show_box[bool]: draw box bodies
-        - show_fliers[bool]: draw flier points
-        - notch[bool]: forwarded to `Axes.boxplot`
-        - sym[str]: forwarded to `Axes.boxplot`
-        - patch_artist[bool]: forwarded to `Axes.boxplot`
-        - vert[bool]: forwarded to `Axes.boxplot`
-        - boxitems_to_color[sequence]: boxplot artist groups colored by
-          `boxplot["colors"]`
+        Additional keyword arguments forwarded to the underlying Matplotlib
+        drawing function (`Axes.boxplot` or `Axes.violin`, depending on
+        `kind`).
 
     Returns
     -------
     tuple
-        Matplotlib figure, axes and boxplot artists.
+        Matplotlib figure, axes and distribution artists.
 
     Raises
     ------
     ValueError
-        If `groupby` and `hue` are inconsistently specified, or if `sort` is
-        not `"ascending"`, `"descending"` or `"preserve"`.
+        If `groupby` and `hue` are inconsistently specified, if `kind` is not
+        `"box"` or `"violin"`, or if `sort` is not `"ascending"`,
+        `"descending"` or `"preserve"`.
     """
 
     __reject_removed_color_arguments(kwargs)
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
-    boxplot_kwargs = __resolve_boxplot_argument(boxplot, kwargs)
-    box_colors = cast(Optional[Colors], boxplot_kwargs.pop("colors", None))
-    show_medians = bool(
-        _resolve_bool_kwarg(kwargs, "show_medians", "showmedians", True)
+    __reject_removed_distribution_arguments(kwargs)
+    if cut < 0:
+        raise ValueError(
+            f"invalid argument value for 'cut': "
+            f"expected a non-negative number but received {cut}"
+        )
+    if not 0 <= alpha <= 1:
+        raise ValueError(
+            f"invalid argument value for 'alpha': "
+            f"expected a value between 0 and 1 but received {alpha}"
+        )
+    kind = cast(
+        Literal["box", "violin"],
+        _as_literal(kind, choices=("box", "violin"), name="kind"),
     )
-    show_means_specified = "show_means" in kwargs or "showmeans" in kwargs
-    show_means = bool(_resolve_bool_kwarg(kwargs, "show_means", "showmeans", False))
+    if kind == "violin":
+        __reject_violin_boxplot_kwargs(kwargs)
+    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
+
+    show_median, show_median_specified = __resolve_shared_bool_argument(
+        kwargs,
+        show_median,
+        "show_median",
+        ("show_medians", "showmedians"),
+    )
+    show_mean, show_mean_specified = __resolve_shared_bool_argument(
+        kwargs,
+        show_mean,
+        "show_mean",
+        ("show_means", "showmeans"),
+    )
     show_caps_specified = "show_caps" in kwargs or "showcaps" in kwargs
     show_caps = bool(_resolve_bool_kwarg(kwargs, "show_caps", "showcaps", True))
     show_box_specified = "show_box" in kwargs or "showbox" in kwargs
@@ -494,43 +926,49 @@ def distribution(
         "showfliers",
         None,
     )
-    if show_fliers is None and "showfliers" in boxplot_kwargs:
-        show_fliers = cast(bool, boxplot_kwargs["showfliers"])
-
+    boxitems_to_color = cast(
+        Optional[Sequence[BoxItem]],
+        kwargs.pop("boxitems_to_color", ("whiskers", "caps", "boxes")),
+    )
     show_points, point_kwargs, show_fliers = __resolve_points_argument(
         points,
         kwargs,
         show_fliers,
     )
     point_colors = cast(Optional[Colors], point_kwargs.pop("colors", None))
+    if show_points:
+        point_kwargs.setdefault("alpha", alpha)
+    distribution_kwargs = dict(kwargs)
+    kwargs.clear()
 
-    if show_means_specified:
-        boxplot_kwargs["showmeans"] = show_means
+    if kind == "box":
+        if show_mean_specified:
+            distribution_kwargs["showmeans"] = show_mean
+        else:
+            distribution_kwargs.setdefault("showmeans", show_mean)
+        if show_caps_specified:
+            distribution_kwargs["showcaps"] = show_caps
+        else:
+            distribution_kwargs.setdefault("showcaps", show_caps)
+        if show_box_specified:
+            distribution_kwargs["showbox"] = show_box
+        else:
+            distribution_kwargs.setdefault("showbox", show_box)
+        if show_fliers_specified:
+            distribution_kwargs["showfliers"] = show_fliers
+        else:
+            distribution_kwargs.setdefault("showfliers", show_fliers)
     else:
-        boxplot_kwargs.setdefault("showmeans", show_means)
-    if show_caps_specified:
-        boxplot_kwargs["showcaps"] = show_caps
-    else:
-        boxplot_kwargs.setdefault("showcaps", show_caps)
-    if show_box_specified:
-        boxplot_kwargs["showbox"] = show_box
-    else:
-        boxplot_kwargs.setdefault("showbox", show_box)
-    if show_fliers_specified:
-        boxplot_kwargs["showfliers"] = show_fliers
-    else:
-        boxplot_kwargs.setdefault("showfliers", show_fliers)
-
-    boxitems_to_color = cast(
-        Optional[Sequence[BoxItem]],
-        kwargs.pop("boxitems_to_color", ("whiskers", "caps", "boxes")),
-    )
+        distribution_kwargs.setdefault("widths", widths)
+        distribution_kwargs["showmeans"] = show_mean
+        distribution_kwargs["showmedians"] = show_median
+        distribution_kwargs.setdefault("showextrema", True)
 
     if ax is None:
         fig, ax = plt.subplots()
-        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 6)
+        fig.set_figheight(6 if figheight is None else figheight)
         fig.set_figwidth(
-            kwargs["figwidth"] if "figwidth" in kwargs else 5 if groupby is None else 8
+            (5 if groupby is None else 8) if figwidth is None else figwidth
         )
     else:
         fig = figure_from_axes(ax)
@@ -600,41 +1038,60 @@ def distribution(
     if hue is None:
         if point_colors is None:
             point_colors = gray
-        bps = cast(
-            BoxPlots,
-            ax.boxplot(
-                x=(
-                    cast(Series, series).dropna()
-                    if groupby is None
-                    else [
-                        cast(SeriesGroupBy, series).get_group(g).dropna()
-                        for g in cast(Sequence[object], groups)
-                    ]
-                ),
+        distribution_values = __distribution_values(
+            cast(Union[Series, SeriesGroupBy], series),
+            None if groups is None else cast(Sequence[object], groups),
+        )
+        if kind == "box":
+            distribution_artists = __draw_box_distribution(
+                ax=ax,
+                values=distribution_values,
                 positions=positions,
                 widths=widths,
-                **boxplot_kwargs,
-            ),
-        )
-        if show_medians is False:
-            for median in cast(Sequence[Any], bps["medians"]):
-                median.set(linewidth=0)
-        if box_colors is not None and boxitems_to_color:
-            __apply_box_colors(
-                bp=bps,
-                color=box_colors,
-                items=boxitems_to_color,
+                kwargs=distribution_kwargs,
             )
+            if show_median is False:
+                for median in cast(Sequence[Any], distribution_artists["medians"]):
+                    median.set(linewidth=0)
+            if colors is not None and boxitems_to_color:
+                __apply_box_colors(
+                    bp=distribution_artists,
+                    color=colors,
+                    items=boxitems_to_color,
+                )
+        else:
+            distribution_artists = __draw_violin_distribution(
+                ax=ax,
+                values=distribution_values,
+                positions=positions,
+                widths=widths,
+                kwargs=distribution_kwargs,
+                cut=cut,
+                clip=clip,
+            )
+            violin_colors = colors
+            if violin_colors is None:
+                violin_colors = cast(
+                    Colors,
+                    qualitative_color_values(
+                        1 if groups is None else len(cast(Sequence[object], groups)),
+                        QUALITATIVE_COLORS,
+                        generate_colormap,
+                    ),
+            )
+            __apply_violin_colors(distribution_artists, violin_colors, alpha=alpha)
+            if groups is None:
+                ax.set_xlim(-widths * 0.65, widths * 0.65)
     else:
-        grouped_bps: Dict[object, BoxPlots] = {}
+        grouped_artists: Dict[object, SingleDistributionReturn] = {}
         hue_values = cast(Sequence[object], hues)
 
-        box_colors = __resolve_hue_colors(
-            box_colors,
+        artist_colors = __resolve_hue_colors(
+            colors,
             hue_values,
             (
                 [black] * len(hue_values)
-                if show_points is True
+                if kind == "box" and show_points is True
                 else cast(
                     Colors,
                     qualitative_color_values(
@@ -649,56 +1106,79 @@ def distribution(
             point_colors,
             hue_values,
             (
-                cast(
-                    Colors,
-                    qualitative_color_values(
-                        len(hue_values),
-                        QUALITATIVE_COLORS,
-                        generate_colormap,
-                    ),
+                (
+                    [white] * len(hue_values)
+                    if kind == "violin"
+                    else cast(
+                        Colors,
+                        qualitative_color_values(
+                            len(hue_values),
+                            QUALITATIVE_COLORS,
+                            generate_colormap,
+                        ),
+                    )
                 )
                 if show_points is True
                 else [white] * len(hue_values)
             ),
         )
 
-        if "medianprops" not in boxplot_kwargs:
-            boxplot_kwargs["medianprops"] = {}
-        if (
-            "color" not in boxplot_kwargs["medianprops"]
-            and boxitems_to_color is not None
-            and "medians" not in boxitems_to_color
-        ):
-            boxplot_kwargs["medianprops"]["color"] = black
+        if kind == "box":
+            if "medianprops" not in distribution_kwargs:
+                distribution_kwargs["medianprops"] = {}
+            if (
+                "color" not in distribution_kwargs["medianprops"]
+                and boxitems_to_color is not None
+                and "medians" not in boxitems_to_color
+            ):
+                distribution_kwargs["medianprops"]["color"] = black
 
         positions_iterator = iter(positions)
         grouped_series_by_hue = cast(Mapping[object, SeriesGroupBy], series)
 
         for h, values in grouped_series_by_hue.items():
-            grouped_bps[h] = cast(
-                BoxPlots,
-                ax.boxplot(
-                    x=[
-                        values.get_group(g).dropna()
-                        for g in cast(Sequence[object], groups)
-                    ],
+            distribution_values = __distribution_values(
+                values,
+                cast(Sequence[object], groups),
+            )
+            if kind == "box":
+                grouped_artists[h] = __draw_box_distribution(
+                    ax=ax,
+                    values=distribution_values,
                     positions=next(positions_iterator),
                     widths=widths,
-                    **boxplot_kwargs,
-                ),
-            )
+                    kwargs=distribution_kwargs,
+                )
+            else:
+                grouped_artists[h] = __draw_violin_distribution(
+                    ax=ax,
+                    values=distribution_values,
+                    positions=next(positions_iterator),
+                    widths=widths,
+                    kwargs=distribution_kwargs,
+                    cut=cut,
+                    clip=clip,
+                )
 
-        if show_medians is False:
-            for bp in grouped_bps.values():
-                for median in cast(Sequence[Any], bp["medians"]):
-                    median.set(linewidth=0)
+        if kind == "box":
+            if show_median is False:
+                for bp in grouped_artists.values():
+                    for median in cast(Sequence[Any], cast(BoxPlots, bp)["medians"]):
+                        median.set(linewidth=0)
 
-        if boxitems_to_color:
+            if boxitems_to_color:
+                for h in hue_values:
+                    __apply_box_colors(
+                        bp=cast(BoxPlots, grouped_artists[h]),
+                        color=cast(Mapping[object, object], artist_colors)[h],
+                        items=boxitems_to_color,
+                    )
+        else:
             for h in hue_values:
-                __apply_box_colors(
-                    bp=grouped_bps[h],
-                    color=cast(Mapping[object, object], box_colors)[h],
-                    items=boxitems_to_color,
+                __apply_violin_colors(
+                    cast(ViolinPlots, grouped_artists[h]),
+                    cast(Mapping[object, object], artist_colors)[h],
+                    alpha=alpha,
                 )
 
         if draw_legend is True:
@@ -708,7 +1188,7 @@ def distribution(
                     mpatches.Patch(
                         edgecolor=cast(
                             Any,
-                            cast(Mapping[object, object], box_colors)[h],
+                            cast(Mapping[object, object], artist_colors)[h],
                         ),
                         facecolor=cast(
                             Any,
@@ -719,7 +1199,7 @@ def distribution(
                 )
             ax.legend(handles=handles, **legend_kwargs)
 
-        bps = grouped_bps
+        distribution_artists = grouped_artists
 
     if show_points:
         resolved_point_kwargs = __resolve_point_kwargs(
@@ -750,15 +1230,23 @@ def distribution(
             axis="x", which="both", bottom=False, top=False, labelbottom=False
         )
 
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")
         plt.close(fig)
         return None
     else:
-        return fig, ax, bps
+        return fig, ax, distribution_artists
 
 
-def boxplot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes, BoxplotReturn]]:
+def boxplot(
+    *args: Any,
+    **kwargs: Any,
+) -> Optional[Tuple[Figure, Axes, DistributionReturn]]:
     """
     Deprecated alias for `distribution`.
     """

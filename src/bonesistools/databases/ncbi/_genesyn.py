@@ -1027,11 +1027,10 @@ class GeneSynonyms:
         organism: str, optional
             Common name of the organism to load. If None, reload the current
             organism.
-    version: "bundled", "latest", date string, str path or PathLike, optional
+        version: "bundled", "latest", date string, str path or PathLike, optional
             NCBI gene_info version to load. If None, keep the current version.
         show_warnings: bool (default: False)
-            If True, warn when a requested gene identifier has no
-            correspondence.
+            If True, warn when a requested gene identifier has no correspondence.
 
         Raises
         ------
@@ -1084,9 +1083,7 @@ class GeneSynonyms:
     def contains(
         self,
         *genes: str,
-        identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
+        identifier_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
     ) -> List[bool]:
         """
         Test whether gene identifiers are present in the synonym resource.
@@ -1143,9 +1140,7 @@ class GeneSynonyms:
     def find(
         self,
         *genes: str,
-        identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
+        identifier_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
     ) -> List[str]:
         """
         Return gene identifiers found in the synonym resource.

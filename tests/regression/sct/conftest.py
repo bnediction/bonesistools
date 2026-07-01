@@ -110,18 +110,28 @@ def fake_gene_synonyms_cls():
 
         gene_aliases_mapping = {
             "gene_id": {
-                "mt_gene": SimpleNamespace(chromosome="MT"),
-                "mt_human_gene": SimpleNamespace(chromosome="MT"),
-                "rps_gene": SimpleNamespace(chromosome="1"),
-                "rps_human_gene": SimpleNamespace(chromosome="1"),
-                "other_gene": SimpleNamespace(chromosome="1"),
+                "mt_gene": SimpleNamespace(
+                    official_name="mt-Co1", chromosome="MT"
+                ),
+                "mt_human_gene": SimpleNamespace(
+                    official_name="MT-ND1", chromosome="MT"
+                ),
+                "rps_gene": SimpleNamespace(official_name="Rps1", chromosome="1"),
+                "rps_human_gene": SimpleNamespace(
+                    official_name="RPS1", chromosome="1"
+                ),
+                "alias_only_gene": SimpleNamespace(
+                    official_name="Lactb", chromosome="1"
+                ),
+                "other_gene": SimpleNamespace(official_name="Other", chromosome="1"),
             },
             "name": {
                 "mt-Co1": SimpleNamespace(value=b"mt_gene"),
                 "MT-ND1": SimpleNamespace(value=b"mt_human_gene"),
                 "Rps1": SimpleNamespace(value=b"rps_gene"),
                 "RPS1": SimpleNamespace(value=b"rps_human_gene"),
-            }
+                "Mrpl56": SimpleNamespace(value=b"alias_only_gene"),
+            },
         }
 
         _official_names = {
@@ -133,6 +143,8 @@ def fake_gene_synonyms_cls():
             "Rps1": "Rps1",
             "MT-ND1": "MT-ND1",
             "RPS1": "RPS1",
+            "Mrpl56": "Lactb",
+            "Lactb": "Lactb",
             "Other": "Other",
         }
         _gene_ids = {
@@ -140,6 +152,8 @@ def fake_gene_synonyms_cls():
             "MT-ND1": "mt_human_gene",
             "Rps1": "rps_gene",
             "RPS1": "rps_human_gene",
+            "Mrpl56": "alias_only_gene",
+            "Lactb": "alias_only_gene",
             "Other": "other_gene",
         }
 

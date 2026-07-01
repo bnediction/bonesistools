@@ -185,8 +185,7 @@ def qc(
     copy = _as_boolean(copy, "copy")
     if backend not in {"auto", "python", "numba"}:
         raise ValueError(
-            f"unsupported backend: {backend!r}; "
-            "expected 'auto', 'python' or 'numba'"
+            f"unsupported backend: {backend!r}; " "expected 'auto', 'python' or 'numba'"
         )
     if backend == "numba" and _numba_njit is None:
         raise ImportError(
@@ -507,8 +506,7 @@ def _percent_top_by_rank(
     if not sparse.issparse(matrix):
         values = _percent_top_dense(np.asarray(matrix), sorted_tops, total_per_obs)
         values_by_top = {
-            int(top): values[:, index] * 100
-            for index, top in enumerate(sorted_tops)
+            int(top): values[:, index] * 100 for index, top in enumerate(sorted_tops)
         }
         return {top: values_by_top[top] for top in tops}
 
@@ -520,8 +518,7 @@ def _percent_top_by_rank(
             sorted_tops,
         )
         values_by_top = {
-            int(top): values[:, index] * 100
-            for index, top in enumerate(sorted_tops)
+            int(top): values[:, index] * 100 for index, top in enumerate(sorted_tops)
         }
         return {top: values_by_top[top] for top in tops}
 

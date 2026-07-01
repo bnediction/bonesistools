@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.axes import Axes
-from matplotlib.colors import ListedColormap
+from matplotlib.collections import PathCollection
+from matplotlib.colors import ListedColormap, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
@@ -128,7 +129,7 @@ def test_distribution_without_groupby_and_validation_errors(mini_adata):
         obs="score",
         title={"label": "score"},
         points=True,
-        show_medians=False,
+        show_median=False,
     )
 
     assert isinstance(fig, Figure)
@@ -154,9 +155,9 @@ def test_distribution_with_hue_custom_colors_and_hidden_medians(mini_adata):
         obs="score",
         groupby="cluster",
         hue="condition",
-        boxplot={"colors": {"ctrl": [1.0, 0.0, 0.0], "stim": [0.0, 0.0, 1.0]}},
+        colors={"ctrl": [1.0, 0.0, 0.0], "stim": [0.0, 0.0, 1.0]},
         points={"colors": {"ctrl": [1.0, 0.5, 0.5], "stim": [0.5, 0.5, 1.0]}},
-        show_medians=False,
+        show_median=False,
     )
 
     assert isinstance(ax, Axes)
@@ -248,7 +249,7 @@ def test_distribution_hue_defaults_and_listed_colormaps(mini_adata, monkeypatch)
         obs="score",
         groupby="group",
         hue="hue4",
-        boxplot={"colors": box_colors},
+        colors=box_colors,
         points={"colors": point_colors},
     )
 
@@ -293,6 +294,340 @@ def test_distribution_accepts_existing_axes(mini_adata):
     assert returned_fig is fig
     assert returned_ax is ax
     plt.close(fig)
+
+
+def test_distribution_violin_without_hue(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        colors=["red", "blue"],
+        showextrema=False,
+    )
+
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    assert "bodies" in artists
+    assert len(artists["bodies"]) == mini_adata.obs["cluster"].nunique()
+    assert "cbars" not in artists
+    body = artists["bodies"][0]
+    np.testing.assert_allclose(body.get_facecolor()[0][:3], to_rgba("red")[:3])
+    assert body.get_facecolor()[0][3] == 1.0
+    plt.close(fig)
+
+
+def test_distribution_violin_without_hue_uses_default_palette(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        showextrema=False,
+    )
+
+    expected_colors = _distribution.QUALITATIVE_COLORS[: len(artists["bodies"])]
+    for body, color in zip(artists["bodies"], expected_colors):
+        np.testing.assert_allclose(body.get_facecolor()[0][:3], to_rgba(color)[:3])
+        assert body.get_facecolor()[0][3] == 1.0
+
+    assert "cmedians" in artists
+    np.testing.assert_allclose(
+        artists["cmedians"].get_colors(),
+        [to_rgba("C1")],
+    )
+    assert all(pattern is not None for _, pattern in artists["cmedians"].get_linestyle())
+    np.testing.assert_allclose(artists["cmedians"].get_linewidths(), [1.0])
+    np.testing.assert_allclose(
+        artists["cmedians"].get_segments(),
+        [
+            [[-0.25, 0.4], [0.25, 0.4]],
+            [[0.55, 0.5], [1.05, 0.5]],
+        ],
+    )
+
+    plt.close(fig)
+
+
+def test_distribution_violin_accepts_alpha(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        alpha=0.5,
+        showextrema=False,
+    )
+
+    for body in artists["bodies"]:
+        assert body.get_facecolor()[0][3] == 0.5
+
+    plt.close(fig)
+
+
+def test_distribution_violin_mean_matches_boxplot_style(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        widths=0.5,
+        show_mean=True,
+        showextrema=False,
+    )
+
+    assert "cmeans" in artists
+    np.testing.assert_allclose(
+        artists["cmeans"].get_colors(),
+        [to_rgba("C2")],
+    )
+    assert all(pattern is not None for _, pattern in artists["cmeans"].get_linestyle())
+    np.testing.assert_allclose(artists["cmeans"].get_linewidths(), [1.0])
+    np.testing.assert_allclose(
+        artists["cmeans"].get_segments(),
+        [
+            [[-0.25, 0.4], [0.25, 0.4]],
+            [[0.55, 0.5], [1.05, 0.5]],
+        ],
+    )
+
+    plt.close(fig)
+
+
+def test_distribution_single_violin_sets_width_relative_xlim(mini_adata):
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        kind="violin",
+        widths=0.5,
+        showextrema=False,
+    )
+
+    np.testing.assert_allclose(ax.get_xlim(), (-0.325, 0.325))
+
+    plt.close(fig)
+
+
+def test_distribution_points_use_alpha(mini_adata):
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        points=True,
+        alpha=0.4,
+    )
+
+    points = [c for c in ax.collections if isinstance(c, PathCollection)]
+    assert len(points) == 1
+    assert points[0].get_alpha() == 0.4
+
+    plt.close(fig)
+
+
+def test_distribution_points_explicit_alpha_takes_precedence(mini_adata):
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        points={"alpha": 0.2},
+        alpha=0.8,
+    )
+
+    points = [c for c in ax.collections if isinstance(c, PathCollection)]
+    assert len(points) == 1
+    assert points[0].get_alpha() == 0.2
+
+    plt.close(fig)
+
+
+def test_distribution_violin_default_clip_uses_observed_range(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        showextrema=False,
+    )
+
+    groups = mini_adata.obs["cluster"].cat.categories
+    for body, group in zip(artists["bodies"], groups):
+        observed = mini_adata.obs.loc[mini_adata.obs["cluster"] == group, "score"]
+        vertices = body.get_paths()[0].vertices
+        np.testing.assert_allclose(vertices[:, 1].min(), observed.min())
+        np.testing.assert_allclose(vertices[:, 1].max(), observed.max())
+
+    plt.close(fig)
+
+
+def test_distribution_violin_clip_none_extends_kde_range(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        clip=None,
+        showextrema=False,
+    )
+
+    groups = mini_adata.obs["cluster"].cat.categories
+    for body, group in zip(artists["bodies"], groups):
+        observed = mini_adata.obs.loc[mini_adata.obs["cluster"] == group, "score"]
+        vertices = body.get_paths()[0].vertices
+        assert vertices[:, 1].min() < observed.min()
+        assert vertices[:, 1].max() > observed.max()
+
+    plt.close(fig)
+
+
+def test_distribution_violin_cut_zero_uses_observed_range(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        cut=0,
+        showextrema=False,
+    )
+
+    groups = mini_adata.obs["cluster"].cat.categories
+    for body, group in zip(artists["bodies"], groups):
+        observed = mini_adata.obs.loc[mini_adata.obs["cluster"] == group, "score"]
+        vertices = body.get_paths()[0].vertices
+        np.testing.assert_allclose(vertices[:, 1].min(), observed.min())
+        np.testing.assert_allclose(vertices[:, 1].max(), observed.max())
+
+    plt.close(fig)
+
+
+def test_distribution_violin_clip_limits_kde_range(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        clip=(0, None),
+        showextrema=False,
+    )
+
+    for body in artists["bodies"]:
+        vertices = body.get_paths()[0].vertices
+        np.testing.assert_allclose(vertices[:, 1].min(), 0.0)
+
+    plt.close(fig)
+
+
+def test_distribution_box_accepts_backend_kwargs(mini_adata):
+    fig, _, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        notch=True,
+    )
+
+    assert "boxes" in artists
+    plt.close(fig)
+
+
+def test_distribution_violin_with_points(mini_adata):
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        points=True,
+    )
+
+    assert "bodies" in artists
+    assert any(isinstance(collection, PathCollection) for collection in ax.collections)
+    plt.close(fig)
+
+
+def test_distribution_violin_with_hue_legend_and_colors(mini_adata):
+    mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
+    mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
+
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        hue="condition",
+        kind="violin",
+        colors={"ctrl": "red", "stim": "blue"},
+        legend={"title": "condition"},
+    )
+
+    assert set(artists) == {"ctrl", "stim"}
+    assert ax.get_legend() is not None
+    assert ax.get_legend().get_title().get_text() == "condition"
+    ctrl_body = cast(_distribution.ViolinPlots, artists["ctrl"])["bodies"][0]
+    stim_body = cast(_distribution.ViolinPlots, artists["stim"])["bodies"][0]
+    np.testing.assert_allclose(ctrl_body.get_facecolor()[0][:3], to_rgba("red")[:3])
+    np.testing.assert_allclose(stim_body.get_facecolor()[0][:3], to_rgba("blue")[:3])
+    plt.close(fig)
+
+
+def test_distribution_violin_outfile(tmp_path, mini_adata):
+    mpl.rcParams["text.usetex"] = False
+    outfile = tmp_path / "violin.png"
+
+    result = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        outfile=outfile,
+    )
+
+    assert result is None
+    assert outfile.exists()
+
+
+def test_distribution_explicit_figure_arguments(mini_adata):
+    fig, ax, _ = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        figwidth=4.0,
+        figheight=3.0,
+        xlabel="cluster",
+        ylabel="score",
+    )
+
+    assert fig.get_figwidth() == 4.0
+    assert fig.get_figheight() == 3.0
+    assert ax.get_xlabel() == "cluster"
+    assert ax.get_ylabel() == "score"
+    plt.close(fig)
+
+
+def test_distribution_validates_kind_and_backend_arguments(mini_adata):
+    with pytest.raises(ValueError, match="invalid argument value for 'kind'"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            kind=cast(Any, "density"),
+        )
+
+    with pytest.raises(TypeError, match="boxplot"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            boxplot={"notch": True},
+        )
+
+    with pytest.raises(TypeError, match="violin"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            kind="violin",
+            violin={"showextrema": False},
+        )
+
+    with pytest.raises(ValueError, match="unsupported keyword argument"):
+        bt.sct.pl.distribution(
+            mini_adata,
+            obs="score",
+            kind="violin",
+            notch=True,
+        )
 
 
 def test_distribution_position_and_point_helper_validation():

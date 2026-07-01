@@ -68,6 +68,19 @@ def test_gene_classification_reuses_gene_synonyms(
     assert mini_adata.var["rps"].tolist() == [False, True, False]
 
 
+def test_ribosomal_gene_classification_uses_official_symbols(
+    monkeypatch,
+    mini_adata,
+    fake_gene_synonyms_cls,
+):
+    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    mini_adata.var_names = ["Rps1", "Mrpl56", "Lactb"]
+
+    bt.sct.pp.ribosomal_genes(mini_adata, key="rps")
+
+    assert mini_adata.var["rps"].tolist() == [True, False, False]
+
+
 def test_gene_classification_marks_observation_names(
     monkeypatch,
     mini_adata,

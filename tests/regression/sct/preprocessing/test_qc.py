@@ -46,9 +46,7 @@ def _assert_expected_qc_metrics(adata: ad.AnnData) -> None:
             "pct_top2_features": [500.0 / 6.0, 100.0, 50.0],
             "pct_top4_features": [100.0, 100.0, 100.0],
             "total_mito": np.array([4.0, 0.0, 4.0], dtype=np.float32),
-            "log1p_total_mito": np.log1p(
-                np.array([4.0, 0.0, 4.0], dtype=np.float32)
-            ),
+            "log1p_total_mito": np.log1p(np.array([4.0, 0.0, 4.0], dtype=np.float32)),
             "pct_mito": np.array([200.0 / 3.0, 0.0, 50.0], dtype=np.float32),
         },
         index=["c1", "c2", "c3"],
@@ -57,9 +55,7 @@ def _assert_expected_qc_metrics(adata: ad.AnnData) -> None:
         {
             "n_barcodes": [2, 2, 2, 3],
             "mean": np.array([1.0, 7.0 / 3.0, 5.0 / 3.0, 5.0 / 3.0]),
-            "log1p_mean": np.log1p(
-                np.array([1.0, 7.0 / 3.0, 5.0 / 3.0, 5.0 / 3.0])
-            ),
+            "log1p_mean": np.log1p(np.array([1.0, 7.0 / 3.0, 5.0 / 3.0, 5.0 / 3.0])),
             "variance": np.array([1.0, 19.0 / 3.0, 7.0 / 3.0, 1.0 / 3.0]),
             "log1p_variance": np.log1p(
                 np.array([1.0, 19.0 / 3.0, 7.0 / 3.0, 1.0 / 3.0])
@@ -70,9 +66,7 @@ def _assert_expected_qc_metrics(adata: ad.AnnData) -> None:
             "log1p_mad": np.log1p(np.array([1.0, 2.0, 1.0, 0.0])),
             "pct_dropout": [100.0 / 3.0, 100.0 / 3.0, 100.0 / 3.0, 0.0],
             "total": np.array([3.0, 7.0, 5.0, 5.0], dtype=np.float32),
-            "log1p_total": np.log1p(
-                np.array([3.0, 7.0, 5.0, 5.0], dtype=np.float32)
-            ),
+            "log1p_total": np.log1p(np.array([3.0, 7.0, 5.0, 5.0], dtype=np.float32)),
         },
         index=["g1", "g2", "g3", "g4"],
     )

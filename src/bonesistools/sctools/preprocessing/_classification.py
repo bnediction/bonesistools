@@ -206,7 +206,8 @@ def ribosomal_genes(
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
     organism: str (default: "mouse")
-        Organism used to resolve gene identifiers and ribosomal aliases.
+        Organism used to resolve gene identifiers and ribosomal official
+        symbols.
     genesyn: GeneSynonyms, optional
         Existing gene synonym converter. If provided, `organism` is ignored.
         If None, a converter is created for `organism`.
@@ -236,10 +237,15 @@ def ribosomal_genes(
     elif axis == "var":
         adata.var[key] = False
 
-    rps_id = set()
-    for k, v in gene_synonyms.gene_aliases_mapping["name"].items():
-        if k.lower().startswith(("rps", "rpl", "mrps", "mrpl")):
-            rps_id.add(v.value.decode())
+    rps_id = {
+        gene_id
+        for gene_id, identifiers in gene_synonyms.gene_aliases_mapping[
+            "gene_id"
+        ].items()
+        if getattr(identifiers, "official_name", "")
+        .lower()
+        .startswith(("rps", "rpl", "mrps", "mrpl"))
+    }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
