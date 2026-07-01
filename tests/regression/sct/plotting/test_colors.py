@@ -10,18 +10,32 @@ import bonesistools as bt
 
 
 def test_rgb_and_rgb2hex_convert_channels():
-    assert bt.sct.pl.rgb([0, 128, 255]) == [0.0, 128 / 255, 1.0]
+    assert bt.sct.pl.rgb([0, 128, 255]) == (0.0, 128 / 255, 1.0)
+    assert bt.sct.pl.rgba([0, 128, 255], alpha=0.5) == [
+        0.0,
+        128 / 255,
+        1.0,
+        0.5,
+    ]
+    assert bt.sct.pl.rgba([0.0, 0.5, 1.0]) == [0.0, 0.5, 1.0, 1.0]
+    assert bt.sct.pl.rgba("red", alpha=0.5) == [1.0, 0.0, 0.0, 0.5]
     assert bt.sct.pl.rgb2hex([1.0, 0.5, 0.0]) == "#ff8000"
     assert bt.sct.pl.rgb2hex([255, 128, 0]) == "#ff8000"
 
 
-def test_rgb2hex_rejects_non_numeric_channels():
+def test_rgb2hex_and_rgba_reject_invalid_channels():
     with pytest.raises(TypeError, match="unsupported argument type for 'rgb'"):
         bt.sct.pl.rgb2hex(["red", 0, 0])
+    with pytest.raises(TypeError, match="unsupported argument type for 'color'"):
+        bt.sct.pl.rgba(cast(Any, ["red", 0, 0]))
+    with pytest.raises(ValueError, match="expected 3 RGB channels"):
+        bt.sct.pl.rgba([0, 0, 0, 0])
+    with pytest.raises(ValueError, match="expected value between 0 and 1"):
+        bt.sct.pl.rgba([0, 0, 0], alpha=2.0)
 
 
 def test_get_color_returns_rgb_or_hex_and_rejects_invalid_values():
-    assert bt.sct.pl.get_color("black") == [0.0, 0.0, 0.0]
+    assert bt.sct.pl.get_color("black") == (0.0, 0.0, 0.0)
     assert bt.sct.pl.get_color("black", color_type="hex") == "#000000"
     assert bt.sct.pl.get_color("charcoal", color_type="hex") == "#3a3a3a"
     assert bt.sct.pl.get_color("burgundy", color_type="hex") == "#6f1d1b"

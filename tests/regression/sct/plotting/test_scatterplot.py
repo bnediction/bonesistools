@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
-from matplotlib.colors import ListedColormap, to_rgba
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 
@@ -154,11 +154,11 @@ def test_embedding_discrete_uses_colors_from_uns(mini_adata):
     assert len(facecolors) == 2
     np.testing.assert_allclose(
         facecolors[0],
-        np.asarray(to_rgba("red", alpha=1.0), dtype=float),
+        np.asarray(bt.sct.pl.rgba("red", alpha=1.0), dtype=float),
     )
     np.testing.assert_allclose(
         facecolors[1],
-        np.asarray(to_rgba("blue", alpha=1.0), dtype=float),
+        np.asarray(bt.sct.pl.rgba("blue", alpha=1.0), dtype=float),
     )
     assert [
         _path_collection(ax, index).get_sizes()[0]

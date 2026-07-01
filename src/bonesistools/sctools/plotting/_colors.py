@@ -6,18 +6,31 @@ import math
 from dataclasses import dataclass
 from itertools import cycle as _cycle
 from types import MappingProxyType
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, cast
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 import numpy as np
 from matplotlib.colors import Colormap, ListedColormap
+from matplotlib.colors import to_rgba as _to_rgba
 
 from ..._compat import Literal
-from ..._validation import _as_literal, _as_positive_integer
+from ..._validation import _as_literal, _as_positive_integer, _as_probability
 
-RGB = Sequence[float]
+RGB = Tuple[float, float, float]
+RGBLike = Sequence[float]
 
 
-def rgb(color):
+def rgb(color: RGBLike) -> RGB:
     """
     Convert 0-255 RGB channels to 0-1 RGB channels.
 
@@ -28,14 +41,46 @@ def rgb(color):
 
     Returns
     -------
-    list
+    tuple
         RGB channels scaled to the 0-1 range.
     """
 
-    return list(map(lambda x: x / 255, color))
+    r, g, b = _as_rgb_channels(color)
+    return (r / 255, g / 255, b / 255)
 
 
-def rgb2hex(rgb):
+def rgba(color: Union[str, RGBLike], alpha: Optional[float] = None) -> List[float]:
+    """
+    Return an RGBA color.
+
+    Parameters
+    ----------
+    color: str or RGB
+        Color specification. RGB sequences in the 0-1 range are kept as-is.
+        RGB sequences outside that range are interpreted as 0-255 channels and
+        converted with `rgb`. Strings are interpreted by Matplotlib.
+    alpha: float, optional
+        Alpha channel in the 0-1 range. If None, use the input color alpha or
+        1.0 for RGB sequences.
+
+    Returns
+    -------
+    list
+        RGBA channels scaled to the 0-1 range.
+    """
+
+    resolved_alpha = None if alpha is None else _as_probability(alpha, "alpha")
+    if isinstance(color, str):
+        return list(_to_rgba(color, alpha=resolved_alpha))
+
+    channels = _as_rgb_channels(color)
+    if not all(0 <= x <= 1 for x in channels):
+        channels = rgb(channels)
+
+    return list(channels) + [1.0 if resolved_alpha is None else resolved_alpha]
+
+
+def rgb2hex(rgb: RGBLike) -> str:
     """
     Convert color from RGB format to hexadecimal format.
 
@@ -71,6 +116,24 @@ def _hex2rgb(color: str) -> RGB:
     if color.startswith("#"):
         color = color[1:]
     return rgb([int(color[i : i + 2], 16) for i in range(0, 6, 2)])
+
+
+def _as_rgb_channels(color: RGBLike) -> RGB:
+    try:
+        r, g, b = color
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "invalid argument value for 'color': "
+            f"expected 3 RGB channels but received {color!r}"
+        ) from exc
+
+    if not all(isinstance(x, (int, float)) for x in (r, g, b)):
+        raise TypeError(
+            f"unsupported argument type for 'color': "
+            f"expected numeric values but received {[type(x) for x in (r, g, b)]}"
+        )
+
+    return float(r), float(g), float(b)
 
 
 @dataclass(frozen=True)

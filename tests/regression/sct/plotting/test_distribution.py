@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
-from matplotlib.colors import ListedColormap, to_rgba
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
@@ -312,7 +312,7 @@ def test_distribution_violin_without_hue(mini_adata):
     assert len(artists["bodies"]) == mini_adata.obs["cluster"].nunique()
     assert "cbars" not in artists
     body = artists["bodies"][0]
-    np.testing.assert_allclose(body.get_facecolor()[0][:3], to_rgba("red")[:3])
+    np.testing.assert_allclose(body.get_facecolor()[0][:3], bt.sct.pl.rgba("red")[:3])
     assert body.get_facecolor()[0][3] == 1.0
     plt.close(fig)
 
@@ -328,13 +328,16 @@ def test_distribution_violin_without_hue_uses_default_palette(mini_adata):
 
     expected_colors = _distribution.QUALITATIVE_COLORS[: len(artists["bodies"])]
     for body, color in zip(artists["bodies"], expected_colors):
-        np.testing.assert_allclose(body.get_facecolor()[0][:3], to_rgba(color)[:3])
+        np.testing.assert_allclose(
+            body.get_facecolor()[0][:3],
+            bt.sct.pl.rgba(color)[:3],
+        )
         assert body.get_facecolor()[0][3] == 1.0
 
     assert "cmedians" in artists
     np.testing.assert_allclose(
         artists["cmedians"].get_colors(),
-        [to_rgba("C1")],
+        [bt.sct.pl.rgba("C1")],
     )
     assert all(
         pattern is not None for _, pattern in artists["cmedians"].get_linestyle()
@@ -381,7 +384,7 @@ def test_distribution_violin_mean_matches_boxplot_style(mini_adata):
     assert "cmeans" in artists
     np.testing.assert_allclose(
         artists["cmeans"].get_colors(),
-        [to_rgba("C2")],
+        [bt.sct.pl.rgba("C2")],
     )
     assert all(pattern is not None for _, pattern in artists["cmeans"].get_linestyle())
     np.testing.assert_allclose(artists["cmeans"].get_linewidths(), [1.0])
@@ -557,12 +560,19 @@ def test_distribution_violin_with_hue_legend_and_colors(mini_adata):
     )
 
     assert set(artists) == {"ctrl", "stim"}
-    assert ax.get_legend() is not None
-    assert ax.get_legend().get_title().get_text() == "condition"
+    legend = ax.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "condition"
     ctrl_body = cast(_distribution.ViolinPlots, artists["ctrl"])["bodies"][0]
     stim_body = cast(_distribution.ViolinPlots, artists["stim"])["bodies"][0]
-    np.testing.assert_allclose(ctrl_body.get_facecolor()[0][:3], to_rgba("red")[:3])
-    np.testing.assert_allclose(stim_body.get_facecolor()[0][:3], to_rgba("blue")[:3])
+    np.testing.assert_allclose(
+        ctrl_body.get_facecolor()[0][:3],
+        bt.sct.pl.rgba("red")[:3],
+    )
+    np.testing.assert_allclose(
+        stim_body.get_facecolor()[0][:3],
+        bt.sct.pl.rgba("blue")[:3],
+    )
     plt.close(fig)
 
 

@@ -30,6 +30,7 @@ from ._colors import (
     light_cm,
     rgb,
     rgb2hex,
+    rgba,
 )
 from ._density import cdf, density, ecdf_plot, kde_plot
 from ._distribution import boxplot, distribution
@@ -53,6 +54,7 @@ __all__ = [
     "kde_plot",
     "ecdf_plot",
     "rgb",
+    "rgba",
     "rgb2hex",
     "get_color",
     "get_palette",

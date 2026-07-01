@@ -57,7 +57,7 @@ BoxplotReturn = Union[BoxPlots, Dict[object, BoxPlots]]
 ViolinplotReturn = Union[ViolinPlots, Dict[object, ViolinPlots]]
 DistributionReturn = Union[
     SingleDistributionReturn,
-    Dict[object, SingleDistributionReturn],
+    Mapping[object, SingleDistributionReturn],
 ]
 Legend = LegendArgument
 Points = Optional[Union[bool, Dict[str, Any]]]
@@ -653,7 +653,7 @@ def distribution(
     *,
     groupby: str,
     hue: str,
-    kind: Literal["box", "violin"] = "box",
+    kind: Literal["box"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
     cut: float = 2,
     clip: ViolinClip = "data",
@@ -674,7 +674,7 @@ def distribution(
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes, DistributionReturn]: ...
+) -> Tuple[Figure, Axes, Dict[object, BoxPlots]]: ...
 
 
 @overload
@@ -684,7 +684,7 @@ def distribution(
     *,
     groupby: Optional[str] = None,
     hue: None = None,
-    kind: Literal["box", "violin"] = "box",
+    kind: Literal["box"] = "box",
     sort: Literal["ascending", "descending", "preserve"] = "preserve",
     cut: float = 2,
     clip: ViolinClip = "data",
@@ -705,7 +705,69 @@ def distribution(
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
-) -> Tuple[Figure, Axes, DistributionReturn]: ...
+) -> Tuple[Figure, Axes, BoxPlots]: ...
+
+
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    *,
+    groupby: str,
+    hue: str,
+    kind: Literal["violin"],
+    sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Legend = True,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
+    points: Points = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    ax: Optional[Axes] = None,
+    outfile: None = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes, Dict[object, ViolinPlots]]: ...
+
+
+@overload
+def distribution(
+    scdata: ScData,
+    obs: str,
+    *,
+    groupby: Optional[str] = None,
+    hue: None = None,
+    kind: Literal["violin"],
+    sort: Literal["ascending", "descending", "preserve"] = "preserve",
+    cut: float = 2,
+    clip: ViolinClip = "data",
+    title: Optional[Union[str, Dict[str, Any]]] = None,
+    legend: Legend = True,
+    widths: float = 0.5,
+    groupby_spacing: float = 0.3,
+    hue_spacing: float = 0.1,
+    colors: Optional[Colors] = None,
+    alpha: float = 1.0,
+    points: Points = None,
+    show_median: bool = True,
+    show_mean: bool = False,
+    figwidth: Optional[float] = None,
+    figheight: Optional[float] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    ax: Optional[Axes] = None,
+    outfile: None = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes, ViolinPlots]: ...
 
 
 @overload
