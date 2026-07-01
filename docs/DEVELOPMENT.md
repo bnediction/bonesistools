@@ -21,6 +21,17 @@ local types close to their implementation.
 AnnData-specific aliases such as `AnnDataAxis` and `AnnDataAxisWithBoth` live
 in `sctools/_typing.py`.
 
+Avoid creating aliases for short, readable type annotations in public APIs.
+Prefer writing the annotation directly so users can understand the signature
+from `help(...)` without looking up an alias elsewhere:
+
+```python
+legend: Union[bool, Mapping[str, Any]]
+```
+
+Only introduce a public-facing alias when the type is long enough to obscure
+the signature or when the alias names a real domain concept.
+
 ### `_validation.py`
 
 Centralized argument validation and normalization helpers.
@@ -144,6 +155,52 @@ fits the API:
 
 Do not reorder parameters mechanically when it would create noisy diffs or
 break a stable public API without a clear benefit.
+
+---
+
+## Plotting APIs
+
+### Legends
+
+Plotting functions should expose one legend parameter:
+
+```python
+legend=True
+```
+
+Use:
+
+* `legend=False` to disable the legend;
+* `legend=True` to draw it with default Matplotlib parameters;
+* `legend={...}` or any other mapping to forward keyword arguments to
+  `Axes.legend`.
+
+Avoid adding separate `show_legend` parameters. During migrations, deprecated
+`show_legend`/`showlegend` compatibility keywords must be ignored after
+emitting a warning; `legend` remains the only authoritative parameter.
+
+For plotting elements that can be both enabled and styled, prefer the same
+polymorphic pattern:
+
+```python
+median=True
+mean=False
+```
+
+Use `False` to disable the element, `True` to draw it with defaults, and a
+mapping to draw it with forwarded artist properties. Avoid adding paired
+`show_*` parameters when a single domain-level parameter can express both
+activation and customization.
+
+Document the forwarding target explicitly for each mapping form. For example:
+
+* `legend={...}` is forwarded to `Axes.legend`;
+* `labels={...}` is forwarded to `Axes.text`;
+* `points={...}` is forwarded to `Axes.scatter`;
+* `median={...}` is forwarded to `medianprops` for boxplots and applied to
+  `cmedians` for violins;
+* `mean={...}` is forwarded to `meanprops` for boxplots and applied to
+  `cmeans` for violins.
 
 ---
 

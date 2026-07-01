@@ -121,13 +121,62 @@ def test_trajectory_uses_custom_graph_key_and_draws_labels(mini_adata):
         obs="cluster",
         representation="X_pca",
         graph_key="custom_key",
-        show_labels=True,
+        labels=True,
         graph={"linewidth": 5},
     )
 
     assert len(ax.lines) == 1
     assert ax.lines[0].get_linewidth() == 5
     assert {text.get_text() for text in ax.texts} == {"N1", "N2"}
+    plt.close(fig)
+
+
+def test_trajectory_labels_accept_artist_kwargs(mini_adata):
+    _add_trajectory_graph(mini_adata, graph_key="custom_key")
+
+    fig, ax = bt.sct.pl.trajectory(
+        mini_adata,
+        obs="cluster",
+        representation="X_pca",
+        graph_key="custom_key",
+        labels={"fontsize": 6},
+    )
+
+    assert {text.get_text() for text in ax.texts} == {"N1", "N2"}
+    assert {text.get_fontsize() for text in ax.texts} == {6}
+    plt.close(fig)
+
+
+def test_trajectory_deprecates_show_labels(mini_adata):
+    _add_trajectory_graph(mini_adata)
+
+    with pytest.warns(FutureWarning, match="`show_labels` is deprecated"):
+        fig, ax = bt.sct.pl.trajectory(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            show_labels=True,
+        )
+
+    assert {text.get_text() for text in ax.texts} == {"N1", "N2"}
+    plt.close(fig)
+
+
+def test_graph_overlay_deprecates_label_kwargs(mini_adata):
+    _add_trajectory_graph(mini_adata)
+
+    fig, ax = plt.subplots()
+    with pytest.warns(FutureWarning, match="`label_kwargs` is deprecated"):
+        returned_ax = bt.sct.pl.graph_overlay(
+            mini_adata,
+            graph_key="epg",
+            labels=True,
+            label_kwargs={"fontsize": 6},
+            ax=ax,
+        )
+
+    assert returned_ax is ax
+    assert {text.get_fontsize() for text in ax.texts} == {6}
     plt.close(fig)
 
 

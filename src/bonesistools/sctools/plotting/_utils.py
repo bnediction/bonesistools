@@ -2,18 +2,9 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping as MappingABC
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from matplotlib.axes._axes import Axes
@@ -22,8 +13,6 @@ from matplotlib.figure import Figure
 
 from ..._warnings import _warn_deprecated_argument
 from .._typing import ScData
-
-LegendArgument = Union[bool, Dict[str, Any]]
 
 
 def set_window_title(fig: Figure, title: str) -> None:
@@ -106,22 +95,23 @@ def rename_deprecated_kwarg(
 
 
 def _resolve_legend_argument(
-    legend: LegendArgument,
+    legend: Union[bool, Mapping[str, Any]],
     kwargs: Dict[str, Any],
     *,
     stacklevel: int = 3,
 ) -> Tuple[bool, Dict[str, Any]]:
-    for deprecated_name in ("showlegend", "show_legend"):
+    for deprecated_name in ("showlegend", "show_legend", "add_legend"):
         if deprecated_name not in kwargs:
             continue
 
-        _warn_deprecated_argument(deprecated_name, "legend", stacklevel=stacklevel)
-        if legend is not True:
-            raise TypeError(
-                f"invalid argument combination: use either '{deprecated_name}' "
-                "or 'legend', not both"
-            )
-        legend = bool(kwargs.pop(deprecated_name))
+        kwargs.pop(deprecated_name)
+        warnings.warn(
+            f"'{deprecated_name}' is deprecated and has no effect. "
+            "Use the 'legend' parameter instead. "
+            f"'{deprecated_name}' will be removed in bonesistools 2.0.0.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
 
     for deprecated_name in ("lgd_params", "legend_params"):
         if deprecated_name not in kwargs:
@@ -137,55 +127,45 @@ def _resolve_legend_argument(
 
     if isinstance(legend, bool):
         return legend, {}
-    if isinstance(legend, dict):
+    if isinstance(legend, MappingABC):
         return True, dict(legend)
 
     raise TypeError(
         f"unsupported argument type for 'legend': "
-        f"expected {bool} or {dict} but received {type(legend)}"
+        f"expected {bool} or {Mapping} but received {type(legend)}"
     )
 
 
-def _resolve_legend_options(
-    show_legend: bool,
-    legend: Optional[Dict[str, Any]],
+def _resolve_toggle_mapping_argument(
+    value: Union[bool, Mapping[str, Any]],
     kwargs: Dict[str, Any],
     *,
-    deprecated_show_name: str = "showlegend",
+    name: str,
+    deprecated_names: Sequence[str] = (),
+    default: bool = False,
     stacklevel: int = 3,
-) -> Tuple[bool, Optional[Dict[str, Any]]]:
-    show_legend = cast(
-        bool,
-        _resolve_bool_kwarg(
-            kwargs,
-            "show_legend",
-            deprecated_show_name,
-            show_legend,
-            stacklevel=stacklevel,
-        ),
-    )
-
-    for deprecated_name in ("lgd_params", "legend_params"):
+) -> Tuple[bool, Dict[str, Any]]:
+    for deprecated_name in deprecated_names:
         if deprecated_name not in kwargs:
             continue
 
-        _warn_deprecated_argument(deprecated_name, "legend", stacklevel=stacklevel)
-        if legend is not None:
+        _warn_deprecated_argument(deprecated_name, name, stacklevel=stacklevel)
+        if value != default:
             raise TypeError(
                 f"invalid argument combination: use either '{deprecated_name}' "
-                "or 'legend', not both"
+                f"or '{name}', not both"
             )
-        legend = cast(Dict[str, Any], kwargs.pop(deprecated_name))
+        value = cast(Union[bool, Mapping[str, Any]], kwargs.pop(deprecated_name))
 
-    if "legend" in kwargs:
-        if legend is not None:
-            raise TypeError(
-                "invalid argument combination: use either deprecated "
-                "'lgd_params'/'legend_params' or 'legend', not both"
-            )
-        legend = cast(Dict[str, Any], kwargs.pop("legend"))
+    if isinstance(value, bool):
+        return value, {}
+    if isinstance(value, MappingABC):
+        return True, dict(value)
 
-    return show_legend, legend
+    raise TypeError(
+        f"unsupported argument type for {name!r}: "
+        f"expected {bool} or {Mapping} but received {type(value)}"
+    )
 
 
 def colormap_colors(colors: object) -> Sequence[object]:

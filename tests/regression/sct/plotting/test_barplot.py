@@ -65,7 +65,7 @@ def test_composition_can_plot_counts_without_legend(mini_adata):
         obs="batch",
         groupby="cluster",
         normalize=False,
-        show_legend=False,
+        legend=False,
         colors={"b1": "red", "b2": "blue"},
     )
 
@@ -215,13 +215,33 @@ def test_composition_outfile_and_validation(mini_adata, tmp_path):
         )
 
 
-def test_composition_deprecates_showlegend(mini_adata):
-    with pytest.warns(FutureWarning, match="`showlegend` is deprecated"):
+@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend"])
+@pytest.mark.parametrize("value", [False, True])
+def test_composition_deprecates_show_legend_without_effect(
+    mini_adata,
+    deprecated,
+    value,
+):
+    kwargs = {deprecated: value}
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
         fig, ax = bt.sct.pl.composition(
             mini_adata,
             obs="batch",
             groupby="cluster",
-            showlegend=False,
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+        fig, ax = bt.sct.pl.composition(
+            mini_adata,
+            obs="batch",
+            groupby="cluster",
+            legend=False,
+            **kwargs,
         )
 
     assert ax.get_legend() is None

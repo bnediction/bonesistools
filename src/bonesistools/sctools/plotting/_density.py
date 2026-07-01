@@ -37,7 +37,7 @@ from ._colors import (
     gray,
 )
 from ._utils import (
-    _resolve_legend_options,
+    _resolve_legend_argument,
     colormap_colors,
     figure_from_axes,
     normalize_color,
@@ -139,8 +139,7 @@ def density(
     show_global: bool = True,
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: None = None,
     gene: Any = _UNSET,
@@ -162,8 +161,7 @@ def density(
     show_global: bool = True,
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Path,
     gene: Any = _UNSET,
@@ -185,8 +183,7 @@ def density(
     show_global: bool = True,
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -208,8 +205,7 @@ def density(
     show_global: bool = True,
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -239,10 +235,13 @@ def density(
         If True, clip density between the minimum value and the quantile at 99%.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    legend: dict, optional
-        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
-    show_legend: bool (default: True)
-        Draw the legend when `obs` is specified.
+    legend: bool or mapping (default: True)
+        Legend configuration. False disables the legend. True draws the legend
+        using default Matplotlib parameters. If a mapping is provided, it is
+        forwarded as keyword arguments to `Axes.legend`.
+    show_legend: bool, optional
+        Deprecated. This parameter has no effect and will be removed in
+        bonesistools 2.0.0. Use `legend` instead.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
@@ -288,7 +287,7 @@ def density(
             "invalid argument values for 'obs' and 'show_global': "
             "expected show_global=True when obs is None"
         )
-    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
+    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
 
     import seaborn as sns
 
@@ -364,9 +363,7 @@ def density(
             set_window_title(fig, title["label"])
             ax.set_title(**title)
 
-    if obs and show_legend:
-        legend_kwargs = {"loc": "upper right"}
-        legend_kwargs.update(legend or {})
+    if obs and draw_legend:
         ax.legend(**legend_kwargs)
 
     (
@@ -396,8 +393,7 @@ def cdf(
     expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: None = None,
     gene: Any = _UNSET,
@@ -414,8 +410,7 @@ def cdf(
     expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Path,
     gene: Any = _UNSET,
@@ -432,8 +427,7 @@ def cdf(
     expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -449,8 +443,7 @@ def cdf(
     expression: Optional[str] = None,
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -472,10 +465,13 @@ def cdf(
         Observation column in `adata.obs` defining groups.
     colors: Colors (optional, default: None)
         Colors used for cumulative density curves.
-    legend: dict, optional
-        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
-    show_legend: bool (default: True)
-        Draw the legend when `obs` is specified.
+    legend: bool or mapping (default: True)
+        Legend configuration. False disables the legend. True draws the legend
+        using default Matplotlib parameters. If a mapping is provided, it is
+        forwarded as keyword arguments to `Axes.legend`.
+    show_legend: bool, optional
+        Deprecated. This parameter has no effect and will be removed in
+        bonesistools 2.0.0. Use `legend` instead.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
@@ -502,7 +498,7 @@ def cdf(
     feature = _resolve_feature_argument(feature, gene, stacklevel=2)
     expression = _resolve_expression_argument(expression, layer, stacklevel=2)
 
-    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
+    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
 
     def _ecdf(values):
 
@@ -563,9 +559,7 @@ def cdf(
 
     if min(counts["counting"]) == 0:
         ax.set_xlim(min(counts["counting"]), max(counts["counting"]) * 1.1)
-    if obs and show_legend:
-        legend_kwargs = {"loc": "upper right"}
-        legend_kwargs.update({} if legend is None else legend)
+    if obs and draw_legend:
         ax.legend(**legend_kwargs)
 
     (

@@ -26,7 +26,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 
 from ..._compat import Literal
-from ..._warnings import _warn_deprecated
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_or_mudata_checker
 from ..tools import barycenters
 from ..tools._utils import (
@@ -41,10 +41,10 @@ from ._colors import (
     lightgray,
 )
 from ._utils import (
-    _resolve_legend_options,
+    _resolve_legend_argument,
+    _resolve_toggle_mapping_argument,
     colormap_colors,
     colors_from_uns,
-    deprecated_bool_kwarg,
     figure_from_axes,
     normalize_color,
     qualitative_color_values,
@@ -195,8 +195,8 @@ def __scatterplot_discrete(
     representation: Optional[str] = None,
     colors: Optional[Colors] = None,
     n_components: int = 2,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = False,
+    legend: Optional[Mapping[str, Any]] = None,
+    draw_legend: bool = False,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
@@ -316,23 +316,10 @@ def __scatterplot_discrete(
                 label=_cluster,
             )
 
-    if show_legend:
+    if draw_legend:
         box = ax.get_position()
         ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
         legend_kwargs = {} if legend is None else dict(legend)
-        if legend_kwargs:
-            if "loc" not in legend_kwargs and "bbox_to_anchor" not in legend_kwargs:
-                if n_components == 3:
-                    fig.tight_layout()
-                    fig.subplots_adjust(right=0.8)
-                legend_kwargs["loc"] = "center left"
-                legend_kwargs["bbox_to_anchor"] = (
-                    (1.04, 0.5) if n_components == 2 else (1.09, 0.5)
-                )
-            else:
-                pass
-        else:
-            legend_kwargs = {"loc": "center left", "bbox_to_anchor": (1.04, 0.5)}
 
         handles, labels = ax.get_legend_handles_labels()
         index = sorted(range(len(labels)), key=lambda idx: labels[idx])
@@ -506,9 +493,8 @@ def embedding(
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     ax: Optional[Axes] = None,
     outfile: None = None,
     use_rep: Any = _UNSET,
@@ -528,9 +514,8 @@ def embedding(
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     ax: Optional[Axes] = None,
     outfile: Path,
     use_rep: Any = _UNSET,
@@ -550,9 +535,8 @@ def embedding(
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     use_rep: Any = _UNSET,
@@ -572,9 +556,8 @@ def embedding(
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     use_rep: Any = _UNSET,
@@ -606,12 +589,20 @@ def embedding(
         Colormap or colors used to draw observations.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    legend: dict, optional
-        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
-    show_legend: bool (default: True)
-        Draw the legend when `scdata.obs[obs]` contains discrete values.
-    show_labels: bool (default: False)
-        Draw labels retrieved from `scdata.obs[obs]` on the embedding.
+    legend: bool or mapping (default: True)
+        Legend configuration. False disables the legend. True draws the legend
+        using default Matplotlib parameters. If a mapping is provided, it is
+        forwarded as keyword arguments to `Axes.legend`.
+    show_legend: bool, optional
+        Deprecated. This parameter has no effect and will be removed in
+        bonesistools 2.0.0. Use `legend` instead.
+    labels: bool or mapping (default: False)
+        Label configuration. False disables labels. True draws labels
+        retrieved from `scdata.obs[obs]` using default Matplotlib text
+        parameters. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.text`.
+    show_labels: bool, optional
+        Deprecated alias for `labels`.
     ax: matplotlib.axes.Axes, optional
         Axes on which to draw the embedding. If not provided, create a new
         figure and axes.
@@ -677,11 +668,13 @@ def embedding(
             f"expected 2 or 3 but received {n_components!r}"
         )
     automatic_resize = bool(kwargs.pop("automatic_resize", False))
-    show_legend, legend = _resolve_legend_options(
-        show_legend,
-        legend,
+    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs, stacklevel=2)
+    draw_labels, label_kwargs = _resolve_toggle_mapping_argument(
+        labels,
         kwargs,
-        deprecated_show_name="add_legend",
+        name="labels",
+        deprecated_names=("show_labels", "add_labels"),
+        stacklevel=2,
     )
 
     if "alpha" in kwargs:
@@ -703,13 +696,6 @@ def embedding(
     kwargs["nan"].setdefault("alpha", missing_alpha)
 
     component_number = n_components
-    show_labels = deprecated_bool_kwarg(
-        kwargs,
-        "add_labels",
-        "show_labels",
-        show_labels,
-        False,
-    )
     draw_deprecated_graph = __deprecated_graph_kwarg(
         kwargs,
         "add_graph",
@@ -718,7 +704,7 @@ def embedding(
     draw_deprecated_graph_labels = __deprecated_graph_kwarg(
         kwargs,
         "add_labels_to_graph",
-        "bt.sct.pl.trajectory(..., show_labels=...)",
+        "bt.sct.pl.trajectory(..., labels=...)",
     )
 
     if pd.api.types.is_float_dtype(scdata.obs[obs]):
@@ -743,9 +729,9 @@ def embedding(
             representation,
             colors,
             component_number,
-            legend=legend,
+            legend=legend_kwargs,
             ax=ax,
-            show_legend=show_legend,
+            draw_legend=draw_legend,
             **kwargs,
         )
     else:
@@ -753,15 +739,20 @@ def embedding(
             f"unsupported dtype for observation {obs!r}: " f"{scdata.obs[obs].dtype!r}"
         )
 
-    if show_labels:
-        _kwargs = {} if "text" not in kwargs else kwargs["text"]
+    if draw_labels:
+        if "text" in kwargs:
+            _warn_deprecated_argument("text", "labels", stacklevel=2)
+            label_kwargs = {
+                **cast(Mapping[str, Any], kwargs.pop("text")),
+                **label_kwargs,
+            }
         __draw_labels(
             scdata,
             obs=obs,
             representation=representation,
             ax=ax,
             dim=component_number,
-            **_kwargs,
+            **label_kwargs,
         )
 
     if draw_deprecated_graph or draw_deprecated_graph_labels:
@@ -773,9 +764,8 @@ def embedding(
             scdata,
             ax=ax,
             n_components=component_number,
-            show_labels=draw_deprecated_graph_labels,
+            labels=draw_deprecated_graph_labels,
             z_offset=kwargs["graph_z_offset"] if "graph_z_offset" in kwargs else 0.0,
-            label_kwargs=kwargs["text"] if "text" in kwargs else None,
             **_kwargs,
         )
 

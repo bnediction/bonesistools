@@ -46,6 +46,7 @@ def set_default_params(tex: bool = True):
     mpl.rcParams["text.usetex"] = tex
     mpl.rcParams["lines.linewidth"] = 1.5
     mpl.rcParams["legend.fontsize"] = 12
+    mpl.rcParams["legend.markerscale"] = 3
 
     mpl.rc(
         "axes",

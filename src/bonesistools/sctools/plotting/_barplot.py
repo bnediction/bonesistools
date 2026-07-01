@@ -29,7 +29,7 @@ from ..._compat import Literal
 from .._typing import ScData, anndata_or_mudata_checker
 from ._colors import QUALITATIVE_COLORS, generate_colormap
 from ._utils import (
-    _resolve_legend_options,
+    _resolve_legend_argument,
     colormap_colors,
     colors_from_uns,
     figure_from_axes,
@@ -147,8 +147,7 @@ def composition(
     percent: bool = True,
     dropna: bool = True,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
     colors: Optional[Colors] = None,
@@ -171,8 +170,7 @@ def composition(
     percent: bool = True,
     dropna: bool = True,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
     colors: Optional[Colors] = None,
@@ -195,8 +193,7 @@ def composition(
     percent: bool = True,
     dropna: bool = True,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
     colors: Optional[Colors] = None,
@@ -219,8 +216,7 @@ def composition(
     percent: bool = True,
     dropna: bool = True,
     title: Optional[Union[str, Dict[str, Any]]] = None,
-    legend: Optional[Dict[str, Any]] = None,
-    show_legend: bool = True,
+    legend: Union[bool, Mapping[str, Any]] = True,
     orientation: Orientation = "vertical",
     width: float = 0.8,
     colors: Optional[Colors] = None,
@@ -252,10 +248,13 @@ def composition(
         Drop observations with missing `obs` or `groupby` values.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    legend: dict, optional
-        Keyword arguments passed to `Axes.legend` when `show_legend=True`.
-    show_legend: bool (default: True)
-        Draw the segment legend.
+    legend: bool or mapping (default: True)
+        Legend configuration. False disables the legend. True draws the legend
+        using default Matplotlib parameters. If a mapping is provided, it is
+        forwarded as keyword arguments to `Axes.legend`.
+    show_legend: bool, optional
+        Deprecated. This parameter has no effect and will be removed in
+        bonesistools 2.0.0. Use `legend` instead.
     orientation: {"vertical", "horizontal"} (default: "vertical")
         Draw vertical stacked bars or horizontal stacked bars.
     width: float (default: 0.8)
@@ -306,7 +305,7 @@ def composition(
             f"expected 'vertical' or 'horizontal' but received {orientation!r}"
         )
 
-    show_legend, legend = _resolve_legend_options(show_legend, legend, kwargs)
+    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
 
     data = scdata.obs[[groupby, obs]]
     data = data.dropna() if dropna else data
@@ -407,13 +406,7 @@ def composition(
 
     existing_legend = ax.get_legend()
 
-    if show_legend:
-        legend_kwargs = {
-            "bbox_to_anchor": (1.0, 0.6),
-            "loc": "center left",
-            "frameon": False,
-        }
-        legend_kwargs.update({} if legend is None else legend)
+    if draw_legend:
         ax.legend(**legend_kwargs)
     elif existing_legend is not None:
         existing_legend.remove()

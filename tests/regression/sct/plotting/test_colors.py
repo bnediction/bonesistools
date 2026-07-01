@@ -25,7 +25,7 @@ def test_rgb_and_rgb2hex_convert_channels():
 
 def test_rgb2hex_and_rgba_reject_invalid_channels():
     with pytest.raises(TypeError, match="unsupported argument type for 'rgb'"):
-        bt.sct.pl.rgb2hex(["red", 0, 0])
+        bt.sct.pl.rgb2hex(cast(Any, ["red", 0, 0]))
     with pytest.raises(TypeError, match="unsupported argument type for 'color'"):
         bt.sct.pl.rgba(cast(Any, ["red", 0, 0]))
     with pytest.raises(ValueError, match="expected 3 RGB channels"):

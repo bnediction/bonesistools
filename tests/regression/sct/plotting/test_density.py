@@ -27,7 +27,7 @@ def test_density_returns_matplotlib_objects():
         feature=feature,
         xlabel="count",
         ylabel="density",
-        show_legend=True,
+        legend=True,
     )
 
     assert isinstance(fig, Figure)
@@ -45,7 +45,7 @@ def test_cdf_returns_matplotlib_objects():
         feature=feature,
         xlabel="count",
         ylabel="ECDF",
-        show_legend=True,
+        legend=True,
     )
 
     assert isinstance(fig, Figure)
@@ -175,7 +175,7 @@ def test_cdf_uses_mapping_colors_for_groups(mini_adata):
         feature="g1",
         obs="cluster",
         colors={"A": "red", "B": "blue"},
-        show_legend=True,
+        legend=True,
     )
 
     assert ax.get_legend() is not None
@@ -284,13 +284,34 @@ def test_density_deprecates_not_all(mini_adata):
 
 
 @pytest.mark.parametrize("function", [bt.sct.pl.density, bt.sct.pl.cdf])
-def test_density_functions_deprecate_showlegend(mini_adata, function):
-    with pytest.warns(FutureWarning, match="`showlegend` is deprecated"):
+@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend"])
+@pytest.mark.parametrize("value", [False, True])
+def test_density_functions_deprecate_show_legend_without_effect(
+    mini_adata,
+    function,
+    deprecated,
+    value,
+):
+    kwargs = {deprecated: value}
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
         fig, ax = function(
             mini_adata,
             feature="g1",
             obs="cluster",
-            showlegend=False,
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+        fig, ax = function(
+            mini_adata,
+            feature="g1",
+            obs="cluster",
+            legend=False,
+            **kwargs,
         )
 
     assert ax.get_legend() is None

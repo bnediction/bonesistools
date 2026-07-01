@@ -30,11 +30,12 @@ from scipy import sparse
 
 from ..._compat import Literal
 from ..._validation import _as_non_negative_number
-from ..._warnings import _warn_deprecated
+from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
 from ..tools._utils import _UNSET, _resolve_representation_argument
 from ._colors import black
 from ._scatterplot import Colors, embedding
+from ._utils import _resolve_toggle_mapping_argument
 
 
 @anndata_or_mudata_checker
@@ -43,10 +44,10 @@ def graph_overlay(
     *,
     graph_key: str = "epg",
     n_components: Literal[2, 3] = 2,
-    show_labels: bool = False,
+    labels: Union[bool, Mapping[str, Any]] = False,
     z_offset: float = 0.0,
     label_key: str = "label",
-    label_kwargs: Optional[Dict[str, Any]] = None,
+    label_kwargs: Optional[Mapping[str, Any]] = None,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Axes:
@@ -61,14 +62,16 @@ def graph_overlay(
         Key pointing to the principal graph stored in `scdata.uns[graph_key]`.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
-    show_labels: bool (default: False)
-        Draw graph node labels.
+    labels: bool or mapping (default: False)
+        Label configuration. False disables graph node labels. True draws
+        labels with default Matplotlib text parameters. If a mapping is
+        provided, it is forwarded as keyword arguments to `Axes.text`.
     z_offset: float (default: 0.0)
         Vertical offset applied to graph lines in 3D.
     label_key: str (default: "label")
-        Node attribute used as label when `show_labels=True`.
+        Node attribute used as label when labels are drawn.
     label_kwargs: dict, optional
-        Keyword arguments passed to Matplotlib text drawing.
+        Deprecated alias for `labels`.
     ax: Axes, optional
         Matplotlib axes containing the embedding. If None, use current axes.
     **kwargs: Any
@@ -89,6 +92,22 @@ def graph_overlay(
     Chen et al. (2019). Single-cell trajectories reconstruction, exploration
     and mapping of omics data with STREAM. Nature Communications, 10(1), 1903.
     """
+
+    draw_labels, label_text_kwargs = _resolve_toggle_mapping_argument(
+        labels,
+        kwargs,
+        name="labels",
+        deprecated_names=("show_labels",),
+        stacklevel=2,
+    )
+    if label_kwargs is not None:
+        _warn_deprecated_argument("label_kwargs", "labels", stacklevel=2)
+        if label_text_kwargs:
+            raise TypeError(
+                "invalid argument combination: use either 'label_kwargs' "
+                "or 'labels', not both"
+            )
+        label_text_kwargs = dict(label_kwargs)
 
     if n_components not in (2, 3):
         raise ValueError(
@@ -143,9 +162,9 @@ def graph_overlay(
 
         ax.add_line(line)
 
-    if show_labels:
+    if draw_labels:
         text_kwargs = {"verticalalignment": "bottom"}
-        text_kwargs.update({} if label_kwargs is None else label_kwargs)
+        text_kwargs.update(label_text_kwargs)
         label_graph = (
             cast(nx.Graph, scdata.uns["flat_tree"])
             if graph_key == "epg" and "flat_tree" in scdata.uns
@@ -184,8 +203,8 @@ def trajectory(
     *,
     graph_key: str = "epg",
     title: Optional[Any] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     n_components: Literal[2, 3] = 2,
     colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
@@ -207,8 +226,8 @@ def trajectory(
     *,
     graph_key: str = "epg",
     title: Optional[Any] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     n_components: Literal[2, 3] = 2,
     colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
@@ -230,8 +249,8 @@ def trajectory(
     *,
     graph_key: str = "epg",
     title: Optional[Any] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     n_components: Literal[2, 3] = 2,
     colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
@@ -253,8 +272,8 @@ def trajectory(
     *,
     graph_key: str = "epg",
     title: Optional[Any] = None,
-    show_legend: bool = True,
-    show_labels: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = True,
+    labels: Union[bool, Mapping[str, Any]] = False,
     n_components: Literal[2, 3] = 2,
     colors: Optional[Colors] = None,
     graph: Optional[Dict[str, Any]] = None,
@@ -270,7 +289,7 @@ def trajectory(
     Draw an embedding and overlay a principal trajectory graph.
 
     The graph is read from `scdata.uns[graph_key]`, then drawn on the same axes
-    as the cell embedding. Use `show_labels=True` to draw graph node labels.
+    as the cell embedding. Use `labels=True` to draw graph node labels.
 
     Parameters
     ----------
@@ -284,10 +303,20 @@ def trajectory(
         Key pointing to the principal graph stored in `scdata.uns[graph_key]`.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
-    show_legend: bool (default: True)
-        Draw the legend when `scdata.obs[obs]` contains discrete values.
-    show_labels: bool (default: False)
-        Draw graph node labels.
+    legend: bool or mapping (default: True)
+        Legend configuration forwarded to `embedding`. False disables the
+        legend. True draws the legend using default Matplotlib parameters. If a
+        mapping is provided, it is forwarded as keyword arguments to
+        `Axes.legend`.
+    show_legend: bool, optional
+        Deprecated. This parameter has no effect and will be removed in
+        bonesistools 2.0.0. Use `legend` instead.
+    labels: bool or mapping (default: False)
+        Label configuration for graph node labels. False disables labels. True
+        draws labels with default Matplotlib text parameters. If a mapping is
+        provided, it is forwarded as keyword arguments to `Axes.text`.
+    show_labels: bool, optional
+        Deprecated alias for `labels`.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
     colors: matplotlib.colors.Colormap, optional
@@ -297,7 +326,7 @@ def trajectory(
     graph_z_offset: float (default: 0.0)
         Vertical offset applied to graph lines in 3D.
     label_key: str (default: "label")
-        Node attribute used as label when `show_labels=True`.
+        Node attribute used as label when `labels=True`.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
@@ -335,6 +364,18 @@ def trajectory(
     )
     if representation is None:
         raise TypeError("missing required argument: 'representation'")
+    draw_graph_labels, graph_label_kwargs = _resolve_toggle_mapping_argument(
+        labels,
+        kwargs,
+        name="labels",
+        deprecated_names=("show_labels",),
+        stacklevel=2,
+    )
+    graph_labels: Union[bool, Mapping[str, Any]] = (
+        graph_label_kwargs
+        if draw_graph_labels and graph_label_kwargs
+        else draw_graph_labels
+    )
 
     fig, drawn_ax = embedding(
         scdata,
@@ -343,7 +384,7 @@ def trajectory(
         colors=colors,
         n_components=n_components,
         title=title,
-        show_legend=show_legend,
+        legend=legend,
         outfile=None,
         ax=ax,
         **kwargs,
@@ -354,10 +395,9 @@ def trajectory(
         graph_key=graph_key,
         ax=drawn_ax,
         n_components=n_components,
-        show_labels=show_labels,
+        labels=graph_labels,
         z_offset=graph_z_offset,
         label_key=label_key,
-        label_kwargs=cast(Optional[Dict[str, Any]], kwargs.get("text")),
         **({} if graph is None else graph),
     )
 

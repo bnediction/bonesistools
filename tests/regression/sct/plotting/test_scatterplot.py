@@ -40,7 +40,6 @@ def test_embedding_plot_with_test_representation():
         figwidth=6,
         s=2,
         alpha=1,
-        show_legend=True,
         legend={
             "title": "clusters",
             "ncol": 1,
@@ -109,10 +108,9 @@ def test_embedding_plot_discrete_handles_nan_mapping_and_labels(mini_adata):
         obs="label_with_nan",
         representation="X_pca",
         colors={"A": [1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0]},
-        show_legend=True,
-        show_labels=True,
+        legend=True,
+        labels={"fontsize": 8},
         automatic_resize=True,
-        text={"fontsize": 8},
     )
 
     assert isinstance(fig, Figure)
@@ -128,12 +126,75 @@ def test_embedding_legend_uses_rcparams_fontsize(mini_adata):
             mini_adata,
             obs="cluster",
             representation="X_pca",
-            show_legend=True,
+            legend=True,
         )
 
     legend = ax.get_legend()
     assert legend is not None
     assert [text.get_fontsize() for text in legend.get_texts()] == [7, 7]
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend", "add_legend"])
+@pytest.mark.parametrize("value", [False, True])
+def test_embedding_deprecates_show_legend_without_effect(
+    mini_adata,
+    deprecated,
+    value,
+):
+    kwargs = {deprecated: value}
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            **kwargs,
+        )
+
+    assert ax.get_legend() is not None
+    plt.close(fig)
+
+    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            legend=False,
+            **kwargs,
+        )
+
+    assert ax.get_legend() is None
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("deprecated", ["show_labels", "add_labels"])
+def test_embedding_deprecates_label_boolean_aliases(mini_adata, deprecated):
+    kwargs: Dict[str, Any] = {deprecated: True}
+
+    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            **kwargs,
+        )
+
+    assert {text.get_text() for text in ax.texts} == {"A", "B"}
+    plt.close(fig)
+
+
+def test_embedding_deprecates_text_label_kwargs(mini_adata):
+    with pytest.warns(FutureWarning, match="`text` is deprecated"):
+        fig, ax = bt.sct.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            labels=True,
+            text={"fontsize": 6},
+        )
+
+    assert {text.get_fontsize() for text in ax.texts} == {6}
     plt.close(fig)
 
 
@@ -287,7 +348,6 @@ def test_embedding_plot_discrete_3d_reuses_axes_and_customizes_ticks(mini_adata)
             "A": np.array([1.0, 0.0, 0.0, 1.0]),
             "B": np.array([0.0, 0.0, 1.0, 1.0]),
         },
-        show_legend=True,
         legend={"loc": "upper left"},
         tick_params={"labelsize": 6},
         title="discrete 3d",
@@ -384,8 +444,7 @@ def test_embedding_plot_discrete_3d_default_colors_legend_and_labels(
         obs="many_categories",
         representation="X_pca",
         n_components=3,
-        show_legend=True,
-        show_labels=True,
+        labels=True,
         background_visible=False,
         legend={"title": "groups"},
     )
@@ -413,9 +472,8 @@ def test_embedding_plot_discrete_listed_colormap_skips_unused_category(mini_adat
             obs="cluster_with_unused",
             representation="X_pca",
             colors=ListedColormap(["red", "blue", "green"]),
-            show_legend=True,
-            show_labels=True,
-            text={"verticalalignment": "bottom"},
+            legend=True,
+            labels={"verticalalignment": "bottom"},
         )
 
     handles, labels = ax.get_legend_handles_labels()
@@ -449,7 +507,6 @@ def test_embedding_plot_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
             mini_adata,
             obs="cluster",
             representation="X_pca",
-            show_legend=True,
             **kwargs,
         )
 
@@ -486,7 +543,6 @@ def test_embedding_plot_rejects_multiple_legend_kwargs(mini_adata):
                 mini_adata,
                 obs="cluster",
                 representation="X_pca",
-                show_legend=True,
                 legend={"loc": "upper left"},
                 lgd_params={"loc": "upper right"},
             )
