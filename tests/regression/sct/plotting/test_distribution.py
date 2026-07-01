@@ -336,7 +336,9 @@ def test_distribution_violin_without_hue_uses_default_palette(mini_adata):
         artists["cmedians"].get_colors(),
         [to_rgba("C1")],
     )
-    assert all(pattern is not None for _, pattern in artists["cmedians"].get_linestyle())
+    assert all(
+        pattern is not None for _, pattern in artists["cmedians"].get_linestyle()
+    )
     np.testing.assert_allclose(artists["cmedians"].get_linewidths(), [1.0])
     np.testing.assert_allclose(
         artists["cmedians"].get_segments(),

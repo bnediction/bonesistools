@@ -110,16 +110,12 @@ def fake_gene_synonyms_cls():
 
         gene_aliases_mapping = {
             "gene_id": {
-                "mt_gene": SimpleNamespace(
-                    official_name="mt-Co1", chromosome="MT"
-                ),
+                "mt_gene": SimpleNamespace(official_name="mt-Co1", chromosome="MT"),
                 "mt_human_gene": SimpleNamespace(
                     official_name="MT-ND1", chromosome="MT"
                 ),
                 "rps_gene": SimpleNamespace(official_name="Rps1", chromosome="1"),
-                "rps_human_gene": SimpleNamespace(
-                    official_name="RPS1", chromosome="1"
-                ),
+                "rps_human_gene": SimpleNamespace(official_name="RPS1", chromosome="1"),
                 "alias_only_gene": SimpleNamespace(
                     official_name="Lactb", chromosome="1"
                 ),

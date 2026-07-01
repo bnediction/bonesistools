@@ -1078,7 +1078,7 @@ def distribution(
                         QUALITATIVE_COLORS,
                         generate_colormap,
                     ),
-            )
+                )
             __apply_violin_colors(distribution_artists, violin_colors, alpha=alpha)
             if groups is None:
                 ax.set_xlim(-widths * 0.65, widths * 0.65)
