@@ -25,13 +25,17 @@ def test_density_returns_matplotlib_objects():
     fig, ax = bt.sct.pl.density(
         adata,
         feature=feature,
-        xlabel="count",
-        ylabel="density",
+        xlabel={"label": "count", "fontsize": 13},
+        ylabel={"label": "density", "fontsize": 14},
         legend=True,
     )
 
     assert isinstance(fig, Figure)
     assert isinstance(ax, Axes)
+    assert ax.get_xlabel() == "count"
+    assert ax.get_ylabel() == "density"
+    assert ax.xaxis.label.get_fontsize() == 13
+    assert ax.yaxis.label.get_fontsize() == 14
     plt.close(fig)
 
 
@@ -153,7 +157,7 @@ def test_cdf_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
         expression="sparse_counts",
         obs="cluster",
         xlabel=None,
-        ylabel="ecdf",
+        ylabel={"label": "ecdf", "fontsize": 13},
         ax=ax,
     )
 
@@ -161,6 +165,7 @@ def test_cdf_with_obs_mapping_ax_outfile(mini_adata, tmp_path):
     assert returned_ax is ax
     assert ax.get_xlabel() == ""
     assert ax.get_ylabel() == "ecdf"
+    assert ax.yaxis.label.get_fontsize() == 13
     assert ax.get_legend() is not None
     plt.close(fig)
 
@@ -284,66 +289,17 @@ def test_density_deprecates_not_all(mini_adata):
 
 
 @pytest.mark.parametrize("function", [bt.sct.pl.density, bt.sct.pl.cdf])
-@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend"])
-@pytest.mark.parametrize("value", [False, True])
 def test_density_functions_deprecate_show_legend_without_effect(
     mini_adata,
     function,
-    deprecated,
-    value,
 ):
-    kwargs = {deprecated: value}
-
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+    with pytest.warns(DeprecationWarning, match="'show_legend' is deprecated"):
         fig, ax = function(
             mini_adata,
             feature="g1",
             obs="cluster",
-            **kwargs,
+            show_legend=False,
         )
 
     assert ax.get_legend() is not None
     plt.close(fig)
-
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
-        fig, ax = function(
-            mini_adata,
-            feature="g1",
-            obs="cluster",
-            legend=False,
-            **kwargs,
-        )
-
-    assert ax.get_legend() is None
-    plt.close(fig)
-
-
-@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
-@pytest.mark.parametrize("function", [bt.sct.pl.density, bt.sct.pl.cdf])
-def test_density_functions_deprecate_legacy_legend_kwargs(
-    mini_adata,
-    function,
-    deprecated,
-):
-    kwargs = {deprecated: {"loc": "lower left"}}
-
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        fig, ax = function(
-            mini_adata,
-            feature="g1",
-            obs="cluster",
-            **kwargs,
-        )
-
-    assert ax.get_legend() is not None
-    plt.close(fig)
-
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        with pytest.raises(TypeError, match=f"{deprecated}.*legend"):
-            function(
-                mini_adata,
-                feature="g1",
-                obs="cluster",
-                legend={"loc": "upper right"},
-                **kwargs,
-            )

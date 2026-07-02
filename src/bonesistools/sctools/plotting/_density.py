@@ -42,6 +42,7 @@ from ._utils import (
     figure_from_axes,
     normalize_color,
     qualitative_color_values,
+    set_axis_label,
     set_window_title,
 )
 
@@ -140,6 +141,8 @@ def density(
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     gene: Any = _UNSET,
@@ -162,6 +165,8 @@ def density(
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     gene: Any = _UNSET,
@@ -184,6 +189,8 @@ def density(
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -206,6 +213,8 @@ def density(
     clip_outliers: bool = False,
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -239,27 +248,20 @@ def density(
         Legend configuration. False disables the legend. True draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
-    show_legend: bool, optional
-        Deprecated. This parameter has no effect and will be removed in
-        bonesistools 2.0.0. Use `legend` instead.
+    xlabel: str or mapping, optional
+        X-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_xlabel` and must contain a `label` key.
+    ylabel: str or mapping, optional
+        Y-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_ylabel` and must contain a `label` key.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    gene: str, optional
-        Deprecated alias for `feature`.
-    layer: str, optional
-        Deprecated alias for `expression`.
-    clip: bool, optional
-        Deprecated alias for `clip_outliers`.
-    not_all: bool, optional
-        Deprecated inverse alias for `show_global`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
-        - xlabel[str]: set the label for the x-axis
-        - ylabel[str]: set the label for the y-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
           formatter on x- and y-axis
 
@@ -287,7 +289,7 @@ def density(
             "invalid argument values for 'obs' and 'show_global': "
             "expected show_global=True when obs is None"
         )
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
+    legend = _resolve_legend_argument(legend, kwargs)
 
     import seaborn as sns
 
@@ -350,10 +352,10 @@ def density(
                 label=_cluster,
             )
 
-    if "xlabel" in kwargs:
-        ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])
-    if "ylabel" in kwargs:
-        ax.set_ylabel("" if kwargs["ylabel"] is None else kwargs["ylabel"])
+    if xlabel is not None:
+        set_axis_label(ax, "xlabel", xlabel)
+    if ylabel is not None:
+        set_axis_label(ax, "ylabel", ylabel)
 
     if title:
         if isinstance(title, str):
@@ -363,8 +365,11 @@ def density(
             set_window_title(fig, title["label"])
             ax.set_title(**title)
 
-    if obs and draw_legend:
-        ax.legend(**legend_kwargs)
+    if obs:
+        if legend is True:
+            ax.legend()
+        elif legend is not False:
+            ax.legend(**legend)
 
     (
         ax.xaxis.set_major_formatter(kwargs["formatter"])
@@ -394,6 +399,8 @@ def cdf(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     gene: Any = _UNSET,
@@ -411,6 +418,8 @@ def cdf(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     gene: Any = _UNSET,
@@ -428,6 +437,8 @@ def cdf(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -444,6 +455,8 @@ def cdf(
     obs: Optional[str] = None,
     colors: Optional[Colors] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     gene: Any = _UNSET,
@@ -469,23 +482,20 @@ def cdf(
         Legend configuration. False disables the legend. True draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
-    show_legend: bool, optional
-        Deprecated. This parameter has no effect and will be removed in
-        bonesistools 2.0.0. Use `legend` instead.
+    xlabel: str or mapping, optional
+        X-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_xlabel` and must contain a `label` key.
+    ylabel: str or mapping, optional
+        Y-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_ylabel` and must contain a `label` key.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    gene: str, optional
-        Deprecated alias for `feature`.
-    layer: str, optional
-        Deprecated alias for `expression`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
-        - xlabel[str]: set the label for the x-axis
-        - ylabel[str]: set the label for the y-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
           formatter on x- and y-axis
 
@@ -498,7 +508,7 @@ def cdf(
     feature = _resolve_feature_argument(feature, gene, stacklevel=2)
     expression = _resolve_expression_argument(expression, layer, stacklevel=2)
 
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
+    legend = _resolve_legend_argument(legend, kwargs)
 
     def _ecdf(values):
 
@@ -552,15 +562,18 @@ def cdf(
             x, y = _ecdf(_counts)
             ax.step(x, y, where="post", color=_color, label=_cluster)
 
-    if "xlabel" in kwargs:
-        ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])
-    if "ylabel" in kwargs:
-        ax.set_ylabel("" if kwargs["ylabel"] is None else kwargs["ylabel"])
+    if xlabel is not None:
+        set_axis_label(ax, "xlabel", xlabel)
+    if ylabel is not None:
+        set_axis_label(ax, "ylabel", ylabel)
 
     if min(counts["counting"]) == 0:
         ax.set_xlim(min(counts["counting"]), max(counts["counting"]) * 1.1)
-    if obs and draw_legend:
-        ax.legend(**legend_kwargs)
+    if obs:
+        if legend is True:
+            ax.legend()
+        elif legend is not False:
+            ax.legend(**legend)
 
     (
         ax.xaxis.set_major_formatter(kwargs["formatter"])

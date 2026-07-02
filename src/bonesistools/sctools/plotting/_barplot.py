@@ -34,6 +34,7 @@ from ._utils import (
     colors_from_uns,
     figure_from_axes,
     qualitative_color_values,
+    set_axis_label,
     set_window_title,
 )
 
@@ -152,6 +153,8 @@ def composition(
     width: float = 0.8,
     colors: Optional[Colors] = None,
     group_colors: Optional[Mapping[object, object]] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
@@ -175,6 +178,8 @@ def composition(
     width: float = 0.8,
     colors: Optional[Colors] = None,
     group_colors: Optional[Mapping[object, object]] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     **kwargs: Any,
@@ -198,6 +203,8 @@ def composition(
     width: float = 0.8,
     colors: Optional[Colors] = None,
     group_colors: Optional[Mapping[object, object]] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
@@ -221,6 +228,8 @@ def composition(
     width: float = 0.8,
     colors: Optional[Colors] = None,
     group_colors: Optional[Mapping[object, object]] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
@@ -252,9 +261,6 @@ def composition(
         Legend configuration. False disables the legend. True draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
-    show_legend: bool, optional
-        Deprecated. This parameter has no effect and will be removed in
-        bonesistools 2.0.0. Use `legend` instead.
     orientation: {"vertical", "horizontal"} (default: "vertical")
         Draw vertical stacked bars or horizontal stacked bars.
     width: float (default: 0.8)
@@ -266,6 +272,12 @@ def composition(
         Colors applied to group tick labels. If None,
         `scdata.uns["<groupby>_color"]` or `scdata.uns["<groupby>_colors"]` is
         used when available.
+    xlabel: str or mapping, optional
+        X-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_xlabel` and must contain a `label` key.
+    ylabel: str or mapping, optional
+        Y-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_ylabel` and must contain a `label` key.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
@@ -274,8 +286,6 @@ def composition(
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
-        - xlabel[str]: set the label for the x-axis
-        - ylabel[str]: set the label for the y-axis
         - xlim[tuple]: set x-axis limits with `Axes.set_xlim`
         - ylim[tuple]: set y-axis limits with `Axes.set_ylim`
         - labelsize[float]: set the tick-label size when `tick_params` is not
@@ -305,7 +315,7 @@ def composition(
             f"expected 'vertical' or 'horizontal' but received {orientation!r}"
         )
 
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
+    legend = _resolve_legend_argument(legend, kwargs)
 
     data = scdata.obs[[groupby, obs]]
     data = data.dropna() if dropna else data
@@ -353,8 +363,8 @@ def composition(
         **bar_kwargs,
     )
 
-    ax.set_xlabel(kwargs["xlabel"] if "xlabel" in kwargs else "")
-    ax.set_ylabel(kwargs["ylabel"] if "ylabel" in kwargs else "")
+    set_axis_label(ax, "xlabel", xlabel)
+    set_axis_label(ax, "ylabel", ylabel)
 
     if normalize and percent:
         if orientation == "vertical":
@@ -406,8 +416,10 @@ def composition(
 
     existing_legend = ax.get_legend()
 
-    if draw_legend:
-        ax.legend(**legend_kwargs)
+    if legend is True:
+        ax.legend()
+    elif legend is not False:
+        ax.legend(**legend)
     elif existing_legend is not None:
         existing_legend.remove()
 

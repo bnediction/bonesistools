@@ -79,9 +79,9 @@ def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
         representation="X_pca",
         n_components=3,
         title={"label": "continuous"},
-        xlabel="x",
+        xlabel={"label": "x", "fontsize": 13},
         ylabel="y",
-        zlabel="z",
+        zlabel={"label": "z", "fontsize": 14},
         background_visible=False,
         s=8,
     )
@@ -93,6 +93,8 @@ def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
     assert ax.get_xlabel() == "x"
     assert ax.get_ylabel() == "y"
     assert ax.get_zlabel() == "z"
+    assert ax.xaxis.label.get_fontsize() == 13
+    assert ax.zaxis.label.get_fontsize() == 14
     plt.close(fig)
 
 
@@ -136,14 +138,11 @@ def test_embedding_legend_uses_rcparams_fontsize(mini_adata):
 
 
 @pytest.mark.parametrize("deprecated", ["showlegend", "show_legend", "add_legend"])
-@pytest.mark.parametrize("value", [False, True])
-def test_embedding_deprecates_show_legend_without_effect(
+def test_embedding_deprecates_show_legend_aliases_without_effect(
     mini_adata,
     deprecated,
-    value,
 ):
-    kwargs = {deprecated: value}
-
+    kwargs: Dict[str, Any] = {deprecated: False}
     with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
@@ -155,13 +154,15 @@ def test_embedding_deprecates_show_legend_without_effect(
     assert ax.get_legend() is not None
     plt.close(fig)
 
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+
+def test_embedding_deprecated_show_legend_does_not_override_legend(mini_adata):
+    with pytest.warns(DeprecationWarning, match="'show_legend' is deprecated"):
         fig, ax = bt.sct.pl.embedding(
             mini_adata,
             obs="cluster",
             representation="X_pca",
             legend=False,
-            **kwargs,
+            show_legend=True,
         )
 
     assert ax.get_legend() is None

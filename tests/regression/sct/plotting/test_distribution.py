@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from types import MappingProxyType
-from typing import Any, Dict, Sequence, cast
+from typing import Any, Sequence, cast
 
 import anndata as ad
 import matplotlib as mpl
@@ -49,6 +49,11 @@ def test_distribution_without_hue():
     assert "boxes" in bps
     assert "medians" in bps
     assert len(bps["boxes"]) == adata.obs["label"].nunique()
+    assert bps["groups"] == list(adata.obs["label"].cat.categories)
+    np.testing.assert_allclose(
+        bps["positions"],
+        np.arange(adata.obs["label"].nunique()) * 0.8,
+    )
     plt.close(fig)
 
 
@@ -72,6 +77,7 @@ def test_distribution_with_hue():
     for condition in adata.obs["condition"].cat.categories:
         assert "boxes" in bps[condition]
         assert len(bps[condition]["boxes"]) == adata.obs["label"].nunique()
+        assert bps[condition]["groups"] == list(adata.obs["label"].cat.categories)
     plt.close(fig)
 
 
@@ -348,7 +354,6 @@ def test_distribution_violin_without_hue(mini_adata):
         groupby="cluster",
         kind="violin",
         colors=["red", "blue"],
-        showextrema=False,
     )
 
     assert isinstance(fig, Figure)
@@ -368,7 +373,6 @@ def test_distribution_violin_without_hue_uses_default_palette(mini_adata):
         obs="score",
         groupby="cluster",
         kind="violin",
-        showextrema=False,
     )
 
     expected_colors = _distribution.QUALITATIVE_COLORS[: len(artists["bodies"])]
@@ -382,7 +386,7 @@ def test_distribution_violin_without_hue_uses_default_palette(mini_adata):
     assert "cmedians" in artists
     np.testing.assert_allclose(
         artists["cmedians"].get_colors(),
-        [bt.sct.pl.rgba("C1")],
+        [bt.sct.pl.rgba("black")],
     )
     assert all(
         pattern is not None for _, pattern in artists["cmedians"].get_linestyle()
@@ -406,7 +410,6 @@ def test_distribution_violin_accepts_alpha(mini_adata):
         groupby="cluster",
         kind="violin",
         alpha=0.5,
-        showextrema=False,
     )
 
     for body in artists["bodies"]:
@@ -423,7 +426,6 @@ def test_distribution_violin_mean_matches_boxplot_style(mini_adata):
         kind="violin",
         widths=0.5,
         mean=True,
-        showextrema=False,
     )
 
     assert "cmeans" in artists
@@ -442,6 +444,22 @@ def test_distribution_violin_mean_matches_boxplot_style(mini_adata):
             [[0.55, 0.5], [1.05, 0.5]],
         ],
     )
+
+    plt.close(fig)
+
+
+def test_distribution_violin_accepts_showextrema(mini_adata):
+    fig, _, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        kind="violin",
+        showextrema=True,
+    )
+
+    assert "cbars" in artists
+    assert "cmins" in artists
+    assert "cmaxes" in artists
 
     plt.close(fig)
 
@@ -477,7 +495,6 @@ def test_distribution_violin_summary_statistics_accept_artist_kwargs(mini_adata)
         kind="violin",
         median={"color": "tab:red", "linewidth": 2.0},
         mean={"color": "tab:green", "linewidth": 3.0},
-        showextrema=False,
     )
 
     assert "cmedians" in artists
@@ -666,6 +683,7 @@ def test_distribution_violin_with_hue_legend_and_colors(mini_adata):
         hue="condition",
         kind="violin",
         colors={"ctrl": "red", "stim": "blue"},
+        alpha=0.5,
         legend={"title": "condition"},
     )
 
@@ -683,6 +701,49 @@ def test_distribution_violin_with_hue_legend_and_colors(mini_adata):
         stim_body.get_facecolor()[0][:3],
         bt.sct.pl.rgba("blue")[:3],
     )
+    legend_handles = cast(Sequence[Any], legend.legend_handles)
+    np.testing.assert_allclose(
+        legend_handles[0].get_facecolor(),
+        ctrl_body.get_facecolor()[0],
+    )
+    np.testing.assert_allclose(
+        legend_handles[1].get_facecolor(),
+        stim_body.get_facecolor()[0],
+    )
+    np.testing.assert_allclose(
+        legend_handles[0].get_edgecolor(),
+        ctrl_body.get_edgecolor()[0],
+    )
+    np.testing.assert_allclose(
+        legend_handles[1].get_edgecolor(),
+        stim_body.get_edgecolor()[0],
+    )
+    plt.close(fig)
+
+
+def test_distribution_violin_with_hue_skips_empty_group_combinations(mini_adata):
+    mini_adata.obs["condition"] = pd.Categorical(
+        ["ctrl", "stim", "ctrl", "ctrl"],
+        categories=["ctrl", "stim"],
+    )
+
+    fig, ax, artists = bt.sct.pl.distribution(
+        mini_adata,
+        obs="score",
+        groupby="cluster",
+        hue="condition",
+        kind="violin",
+        colors={"ctrl": "red", "stim": "blue"},
+    )
+
+    assert set(artists) == {"ctrl", "stim"}
+    ctrl_artists = cast(_distribution.ViolinPlots, artists["ctrl"])
+    stim_artists = cast(_distribution.ViolinPlots, artists["stim"])
+    assert len(ctrl_artists["bodies"]) == 2
+    assert len(stim_artists["bodies"]) == 1
+    assert ctrl_artists["groups"] == ["A", "B"]
+    assert stim_artists["groups"] == ["A"]
+    assert ax.get_legend() is not None
     plt.close(fig)
 
 
@@ -709,14 +770,16 @@ def test_distribution_explicit_figure_arguments(mini_adata):
         groupby="cluster",
         figwidth=4.0,
         figheight=3.0,
-        xlabel="cluster",
-        ylabel="score",
+        xlabel={"label": "cluster", "fontsize": 13},
+        ylabel={"label": "score", "fontsize": 14},
     )
 
     assert fig.get_figwidth() == 4.0
     assert fig.get_figheight() == 3.0
     assert ax.get_xlabel() == "cluster"
     assert ax.get_ylabel() == "score"
+    assert ax.xaxis.label.get_fontsize() == 13
+    assert ax.yaxis.label.get_fontsize() == 14
     plt.close(fig)
 
 
@@ -786,40 +849,20 @@ def test_distribution_position_and_point_helper_validation():
         )
 
 
-@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend"])
-@pytest.mark.parametrize("value", [False, True])
-def test_distribution_deprecates_show_legend_without_effect(
-    mini_adata,
-    deprecated,
-    value,
-):
+def test_distribution_deprecates_show_legend_without_effect(mini_adata):
     mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
     mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
-    kwargs = {deprecated: value}
 
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+    with pytest.warns(DeprecationWarning, match="'show_legend' is deprecated"):
         fig, ax, _ = bt.sct.pl.distribution(
             mini_adata,
             obs="score",
             groupby="cluster",
             hue="condition",
-            **kwargs,
+            show_legend=False,
         )
 
     assert ax.get_legend() is not None
-    plt.close(fig)
-
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
-        fig, ax, _ = bt.sct.pl.distribution(
-            mini_adata,
-            obs="score",
-            groupby="cluster",
-            hue="condition",
-            legend=False,
-            **kwargs,
-        )
-
-    assert ax.get_legend() is None
     plt.close(fig)
 
 
@@ -849,19 +892,17 @@ def test_distribution_deprecates_legacy_show_kwargs(mini_adata, deprecated, valu
     plt.close(fig)
 
 
-@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
-def test_distribution_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
+def test_distribution_deprecates_legacy_legend_kwargs(mini_adata):
     mini_adata.obs["condition"] = ["ctrl", "stim", "ctrl", "stim"]
     mini_adata.obs["condition"] = mini_adata.obs["condition"].astype("category")
-    kwargs: Dict[str, Any] = {deprecated: {"loc": "upper left"}}
 
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
+    with pytest.warns(FutureWarning, match="`legend_params` is deprecated"):
         result = bt.sct.pl.distribution(
             mini_adata,
             obs="score",
             groupby="cluster",
             hue="condition",
-            **kwargs,
+            legend_params={"loc": "upper left"},
         )
 
     assert result is not None
@@ -869,13 +910,13 @@ def test_distribution_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
     assert ax.get_legend() is not None
     plt.close(fig)
 
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        with pytest.raises(TypeError, match=f"{deprecated}.*legend"):
+    with pytest.warns(FutureWarning, match="`legend_params` is deprecated"):
+        with pytest.raises(TypeError, match="legend_params.*legend"):
             bt.sct.pl.distribution(
                 mini_adata,
                 obs="score",
                 groupby="cluster",
                 hue="condition",
                 legend={"loc": "upper left"},
-                **kwargs,
+                legend_params={"loc": "upper right"},
             )

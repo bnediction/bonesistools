@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -109,14 +109,16 @@ def test_composition_horizontal_orientation(mini_adata):
         obs="batch",
         groupby="cluster",
         orientation="horizontal",
-        xlabel="proportion",
-        ylabel="cluster",
+        xlabel={"label": "proportion", "fontsize": 13},
+        ylabel={"label": "cluster", "fontsize": 14},
         group_colors={"A": "tab:red", "B": "tab:blue"},
     )
 
     assert _bar_container(ax, 0).patches[0].get_width() == 0.5
     assert ax.get_xlabel() == "proportion"
     assert ax.get_ylabel() == "cluster"
+    assert ax.xaxis.label.get_fontsize() == 13
+    assert ax.yaxis.label.get_fontsize() == 14
     assert ax.get_xlim() == (0.0, 1.0)
     assert ax.get_yticklabels()[0].get_color() == "tab:red"
     plt.close(fig)
@@ -215,60 +217,14 @@ def test_composition_outfile_and_validation(mini_adata, tmp_path):
         )
 
 
-@pytest.mark.parametrize("deprecated", ["showlegend", "show_legend"])
-@pytest.mark.parametrize("value", [False, True])
-def test_composition_deprecates_show_legend_without_effect(
-    mini_adata,
-    deprecated,
-    value,
-):
-    kwargs = {deprecated: value}
-
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
+def test_composition_deprecates_show_legend_without_effect(mini_adata):
+    with pytest.warns(DeprecationWarning, match="'show_legend' is deprecated"):
         fig, ax = bt.sct.pl.composition(
             mini_adata,
             obs="batch",
             groupby="cluster",
-            **kwargs,
+            show_legend=False,
         )
 
     assert ax.get_legend() is not None
     plt.close(fig)
-
-    with pytest.warns(DeprecationWarning, match=f"'{deprecated}' is deprecated"):
-        fig, ax = bt.sct.pl.composition(
-            mini_adata,
-            obs="batch",
-            groupby="cluster",
-            legend=False,
-            **kwargs,
-        )
-
-    assert ax.get_legend() is None
-    plt.close(fig)
-
-
-@pytest.mark.parametrize("deprecated", ["lgd_params", "legend_params"])
-def test_composition_deprecates_legacy_legend_kwargs(mini_adata, deprecated):
-    kwargs: Dict[str, Any] = {deprecated: {"loc": "upper left"}}
-
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        fig, ax = bt.sct.pl.composition(
-            mini_adata,
-            obs="batch",
-            groupby="cluster",
-            **kwargs,
-        )
-
-    assert ax.get_legend() is not None
-    plt.close(fig)
-
-    with pytest.warns(FutureWarning, match=f"`{deprecated}` is deprecated"):
-        with pytest.raises(TypeError, match=f"{deprecated}.*legend"):
-            bt.sct.pl.composition(
-                mini_adata,
-                obs="batch",
-                groupby="cluster",
-                legend={"loc": "upper left"},
-                **kwargs,
-            )

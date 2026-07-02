@@ -48,6 +48,7 @@ from ._utils import (
     figure_from_axes,
     normalize_color,
     qualitative_color_values,
+    set_axis_label,
     set_window_title,
 )
 
@@ -117,6 +118,18 @@ def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
     )
 
 
+def __discrete_category_values(series: pd.Series) -> Sequence[object]:
+    categorical = series.astype("category")
+    values = list(categorical.cat.categories)
+    if isinstance(series.dtype, pd.CategoricalDtype) and series.cat.ordered:
+        return values
+
+    try:
+        return sorted(values)
+    except TypeError:
+        return sorted(values, key=lambda value: str(value))
+
+
 def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
 
     def wrapper(
@@ -136,13 +149,11 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
         )
 
         if "xlabel" in kwargs:
-            ax.set_xlabel("" if kwargs["xlabel"] is None else kwargs["xlabel"])
+            set_axis_label(ax, "xlabel", kwargs["xlabel"])
         if "ylabel" in kwargs:
-            ax.set_ylabel("" if kwargs["ylabel"] is None else kwargs["ylabel"])
+            set_axis_label(ax, "ylabel", kwargs["ylabel"])
         if "zlabel" in kwargs and n_components > 2:
-            cast(Any, ax).set_zlabel(
-                "" if kwargs["zlabel"] is None else kwargs["zlabel"]
-            )
+            set_axis_label(ax, "zlabel", kwargs["zlabel"])
 
         if "tick_params" in kwargs:
             ax.tick_params(**kwargs["tick_params"])
@@ -195,17 +206,13 @@ def __scatterplot_discrete(
     representation: Optional[str] = None,
     colors: Optional[Colors] = None,
     n_components: int = 2,
-    legend: Optional[Mapping[str, Any]] = None,
-    draw_legend: bool = False,
+    legend: Union[bool, Mapping[str, Any]] = False,
     ax: Optional[Axes] = None,
     **kwargs: Any,
 ) -> Tuple[Figure, Axes]:
 
-    categories = set(scdata.obs[obs].unique()) & set(
-        scdata.obs[obs].astype("category").cat.categories
-    )
-
-    category_values = list(scdata.obs[obs].astype("category").cat.categories)
+    category_values = __discrete_category_values(scdata.obs[obs])
+    categories = set(scdata.obs[obs].unique()) & set(category_values)
 
     if colors is None:
         colors = colors_from_uns(scdata, obs, category_values)
@@ -285,9 +292,7 @@ def __scatterplot_discrete(
 
     color_values = cast(Sequence[object], colors)
 
-    for _cluster, _color in zip(
-        scdata.obs[obs].astype("category").cat.categories, color_values
-    ):
+    for _cluster, _color in zip(category_values, color_values):
         _color = normalize_color(_color)
 
         if _cluster not in categories:
@@ -316,16 +321,15 @@ def __scatterplot_discrete(
                 label=_cluster,
             )
 
-    if draw_legend:
+    if legend is not False:
         box = ax.get_position()
         ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
-        legend_kwargs = {} if legend is None else dict(legend)
 
         handles, labels = ax.get_legend_handles_labels()
-        index = sorted(range(len(labels)), key=lambda idx: labels[idx])
-        handles = [handles[i] for i in index]
-        labels = [labels[i] for i in index]
-        ax.legend(handles, labels, **legend_kwargs)
+        if legend is True:
+            ax.legend(handles, labels)
+        else:
+            ax.legend(handles, labels, **dict(legend))
 
     return fig, ax
 
@@ -495,6 +499,9 @@ def embedding(
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
     labels: Union[bool, Mapping[str, Any]] = False,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    zlabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     use_rep: Any = _UNSET,
@@ -516,6 +523,9 @@ def embedding(
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
     labels: Union[bool, Mapping[str, Any]] = False,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    zlabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     use_rep: Any = _UNSET,
@@ -537,6 +547,9 @@ def embedding(
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
     labels: Union[bool, Mapping[str, Any]] = False,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    zlabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     use_rep: Any = _UNSET,
@@ -558,6 +571,9 @@ def embedding(
     title: Optional[Union[str, Dict[str, Any]]] = None,
     legend: Union[bool, Mapping[str, Any]] = True,
     labels: Union[bool, Mapping[str, Any]] = False,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    zlabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     use_rep: Any = _UNSET,
@@ -593,32 +609,30 @@ def embedding(
         Legend configuration. False disables the legend. True draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
-    show_legend: bool, optional
-        Deprecated. This parameter has no effect and will be removed in
-        bonesistools 2.0.0. Use `legend` instead.
     labels: bool or mapping (default: False)
         Label configuration. False disables labels. True draws labels
         retrieved from `scdata.obs[obs]` using default Matplotlib text
         parameters. If a mapping is provided, it is forwarded as keyword
         arguments to `Axes.text`.
-    show_labels: bool, optional
-        Deprecated alias for `labels`.
+    xlabel: str or mapping, optional
+        X-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_xlabel` and must contain a `label` key.
+    ylabel: str or mapping, optional
+        Y-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_ylabel` and must contain a `label` key.
+    zlabel: str or mapping, optional
+        Z-axis label for three-dimensional embeddings. If a mapping is
+        provided, it is forwarded as keyword arguments to `Axes.set_zlabel` and
+        must contain a `label` key.
     ax: matplotlib.axes.Axes, optional
         Axes on which to draw the embedding. If not provided, create a new
         figure and axes.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    use_rep: str, optional
-        Deprecated alias for `representation`.
-    obsm: str, optional
-        Deprecated alias for `representation`.
     **kwargs: Any
         Supplemental features for figure plotting:
         - figheight[float]: specify the figure height
         - figwidth[float]: specify the figure width
-        - xlabel[str]: set the label for the x-axis
-        - ylabel[str]: set the label for the y-axis
-        - zlabel[str]: set the label for the z-axis
         - formatter[matplotlib.ticker.FormatStrFormatter]: specify the major
           formatter on x-, y- and z-axis
         - tick_params[dict]: change the appearance of ticks, tick labels, and
@@ -632,8 +646,6 @@ def embedding(
         - ztick_params[dict]: change the appearance of ticks, tick labels, and
           gridlines on z-axis following the syntax of
           matplotlib.axes.Axes.tick_params
-        - text[dict]: change the appearance of text in figure following the
-          syntax of matplotlib.text
         - background_visible[bool]: specify if background color is visible or
           not in case of 3D plotting
         - automatic_resize[bool]: resize figure to accommodate large legends
@@ -668,7 +680,7 @@ def embedding(
             f"expected 2 or 3 but received {n_components!r}"
         )
     automatic_resize = bool(kwargs.pop("automatic_resize", False))
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs, stacklevel=2)
+    legend = _resolve_legend_argument(legend, kwargs, stacklevel=2)
     draw_labels, label_kwargs = _resolve_toggle_mapping_argument(
         labels,
         kwargs,
@@ -694,6 +706,12 @@ def embedding(
     kwargs.setdefault("nan", {})
     kwargs["nan"].setdefault("s", missing_s)
     kwargs["nan"].setdefault("alpha", missing_alpha)
+    if xlabel is not None:
+        kwargs["xlabel"] = xlabel
+    if ylabel is not None:
+        kwargs["ylabel"] = ylabel
+    if zlabel is not None:
+        kwargs["zlabel"] = zlabel
 
     component_number = n_components
     draw_deprecated_graph = __deprecated_graph_kwarg(
@@ -729,9 +747,8 @@ def embedding(
             representation,
             colors,
             component_number,
-            legend=legend_kwargs,
+            legend=legend,
             ax=ax,
-            draw_legend=draw_legend,
             **kwargs,
         )
     else:

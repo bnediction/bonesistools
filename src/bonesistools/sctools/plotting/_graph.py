@@ -308,15 +308,10 @@ def trajectory(
         legend. True draws the legend using default Matplotlib parameters. If a
         mapping is provided, it is forwarded as keyword arguments to
         `Axes.legend`.
-    show_legend: bool, optional
-        Deprecated. This parameter has no effect and will be removed in
-        bonesistools 2.0.0. Use `legend` instead.
     labels: bool or mapping (default: False)
         Label configuration for graph node labels. False disables labels. True
         draws labels with default Matplotlib text parameters. If a mapping is
         provided, it is forwarded as keyword arguments to `Axes.text`.
-    show_labels: bool, optional
-        Deprecated alias for `labels`.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
     colors: matplotlib.colors.Colormap, optional
@@ -331,10 +326,6 @@ def trajectory(
         Existing axes used for drawing.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    use_rep: str, optional
-        Deprecated alias for `representation`.
-    obsm: str, optional
-        Deprecated alias for `representation`.
     **kwargs: Any
         Keyword arguments passed to `embedding`.
 
@@ -452,10 +443,6 @@ def paga(
         Draw the paga graph in the specified Matplotlib axes.
     outfile: Path, optional
         If specified, save the figure instead of returning it.
-    use_rep: str, optional
-        Deprecated alias for `representation`.
-    obsm: str, optional
-        Deprecated alias for `representation`.
     **kwargs: Any
         Keyword arguments passed to `networkx.draw_networkx`.
 

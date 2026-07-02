@@ -46,12 +46,13 @@ from ._utils import (
     colormap_colors,
     figure_from_axes,
     qualitative_color_values,
+    set_axis_label,
     set_window_title,
 )
 
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 BoxItem = Literal["whiskers", "caps", "boxes", "medians", "fliers", "means"]
-BoxPlots = Mapping[str, Any]
+BoxPlots = Dict[str, Any]
 ViolinPlots = Dict[str, Any]
 SingleDistributionReturn = Union[BoxPlots, ViolinPlots]
 BoxplotReturn = Union[BoxPlots, Dict[object, BoxPlots]]
@@ -147,7 +148,7 @@ def __apply_violin_colors(
             if key in vp:
                 vp[key].set_color(color)
         if "cmedians" in vp:
-            vp["cmedians"].set_color("C1")
+            vp["cmedians"].set_color(black)
             vp["cmedians"].set_linestyle("--")
             vp["cmedians"].set_linewidth(1.0)
         if "cmeans" in vp:
@@ -166,7 +167,7 @@ def __apply_violin_colors(
         if key in vp:
             vp[key].set_color(colors)
     if "cmedians" in vp:
-        vp["cmedians"].set_color("C1")
+        vp["cmedians"].set_color(black)
         vp["cmedians"].set_linestyle("--")
         vp["cmedians"].set_linewidth(1.0)
     if "cmeans" in vp:
@@ -422,7 +423,14 @@ def __distribution_values(
         return cast(Series, series).dropna()
 
     grouped_series = cast(SeriesGroupBy, series)
-    return [cast(Series, grouped_series.get_group(group)).dropna() for group in groups]
+    empty = cast(Series, grouped_series.obj).iloc[0:0]
+    values = []
+    for group in groups:
+        try:
+            values.append(cast(Series, grouped_series.get_group(group)).dropna())
+        except KeyError:
+            values.append(empty)
+    return values
 
 
 def __draw_box_distribution(
@@ -431,9 +439,10 @@ def __draw_box_distribution(
     positions: np.ndarray,
     widths: float,
     kwargs: Dict[str, Any],
+    labels: Optional[Sequence[object]] = None,
 ) -> BoxPlots:
 
-    return cast(
+    box_plots = cast(
         BoxPlots,
         ax.boxplot(
             x=values,
@@ -442,6 +451,10 @@ def __draw_box_distribution(
             **kwargs,
         ),
     )
+    box_plots["positions"] = np.asarray(positions, dtype=float).ravel()
+    if labels is not None:
+        box_plots["groups"] = list(labels)
+    return box_plots
 
 
 def __draw_violin_distribution(
@@ -452,6 +465,7 @@ def __draw_violin_distribution(
     kwargs: Dict[str, Any],
     cut: float,
     clip: ViolinClip,
+    labels: Optional[Sequence[object]] = None,
 ) -> ViolinPlots:
 
     violin_kwargs = dict(kwargs)
@@ -462,11 +476,24 @@ def __draw_violin_distribution(
     points = int(violin_kwargs.pop("points", 100))
     bw_method = violin_kwargs.pop("bw_method", None)
     quantiles = violin_kwargs.pop("quantiles", None)
-    violin_stats = __violin_stats(
+    (
+        violin_values,
+        violin_positions,
+        violin_widths,
+        violin_quantiles,
+        violin_labels,
+    ) = __nonempty_violin_inputs(
         values,
+        positions=positions,
+        widths=violin_widths,
+        quantiles=quantiles,
+        labels=labels,
+    )
+    violin_stats = __violin_stats(
+        violin_values,
         points=points,
         bw_method=bw_method,
-        quantiles=quantiles,
+        quantiles=violin_quantiles,
         cut=cut,
         clip=clip,
     )
@@ -474,7 +501,7 @@ def __draw_violin_distribution(
         ViolinPlots,
         ax.violin(
             vpstats=violin_stats,
-            positions=positions,
+            positions=violin_positions,
             widths=violin_widths,
             showmeans=show_means,
             showmedians=show_medians,
@@ -485,12 +512,64 @@ def __draw_violin_distribution(
     __set_violin_summary_segments(
         violin_plots,
         violin_stats,
-        positions=positions,
+        positions=violin_positions,
         widths=violin_widths,
         orientation=cast(Optional[str], violin_kwargs.get("orientation")),
         vert=cast(Optional[bool], violin_kwargs.get("vert")),
     )
+    violin_plots["positions"] = violin_positions
+    if violin_labels is not None:
+        violin_plots["groups"] = violin_labels
     return violin_plots
+
+
+def __nonempty_violin_inputs(
+    values: Union[Series, Sequence[Series]],
+    *,
+    positions: np.ndarray,
+    widths: object,
+    quantiles: Optional[Any],
+    labels: Optional[Sequence[object]],
+) -> Tuple[
+    Sequence[Series],
+    np.ndarray,
+    np.ndarray,
+    Sequence[np.ndarray],
+    Optional[Sequence[object]],
+]:
+
+    value_sets = [values] if isinstance(values, Series) else list(values)
+    position_values = np.asarray(positions, dtype=float).ravel()
+    width_values = __violin_width_values(widths, n_values=len(position_values))
+    quantile_sets = __violin_quantiles(quantiles, n_values=len(value_sets))
+    label_values = None if labels is None else list(labels)
+
+    if len(value_sets) != len(position_values):
+        raise ValueError(
+            "list of violin values and violin positions must have the same length"
+        )
+    if label_values is not None and len(label_values) != len(value_sets):
+        raise ValueError(
+            "list of violin labels and violin values must have the same length"
+        )
+
+    keep_indices = [
+        index
+        for index, value_set in enumerate(value_sets)
+        if len(cast(Series, value_set).dropna()) > 0
+    ]
+    if not keep_indices:
+        raise ValueError("cannot draw violin distribution from empty values")
+
+    return (
+        [cast(Series, value_sets[index]) for index in keep_indices],
+        position_values[keep_indices],
+        width_values[keep_indices],
+        [quantile_sets[index] for index in keep_indices],
+        None
+        if label_values is None
+        else [label_values[index] for index in keep_indices],
+    )
 
 
 def __set_violin_summary_segments(
@@ -681,8 +760,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
@@ -712,8 +791,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
@@ -743,8 +822,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
@@ -774,8 +853,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: None = None,
     **kwargs: Any,
@@ -805,8 +884,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Path,
     **kwargs: Any,
@@ -836,8 +915,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
@@ -867,8 +946,8 @@ def distribution(
     mean: Union[bool, Mapping[str, Any]] = False,
     figwidth: Optional[float] = None,
     figheight: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
+    xlabel: Optional[Union[str, Mapping[str, Any]]] = None,
+    ylabel: Optional[Union[str, Mapping[str, Any]]] = None,
     ax: Optional[Axes] = None,
     outfile: Optional[Path] = None,
     **kwargs: Any,
@@ -936,10 +1015,12 @@ def distribution(
         Figure width.
     figheight: float, optional
         Figure height.
-    xlabel: str, optional
-        X-axis label.
-    ylabel: str, optional
-        Y-axis label.
+    xlabel: str or mapping, optional
+        X-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_xlabel` and must contain a `label` key.
+    ylabel: str or mapping, optional
+        Y-axis label. If a mapping is provided, it is forwarded as keyword
+        arguments to `Axes.set_ylabel` and must contain a `label` key.
     ax: Axes, optional
         Existing axes used for drawing.
     outfile: Path, optional
@@ -982,7 +1063,7 @@ def distribution(
     )
     if kind == "violin":
         __reject_violin_boxplot_kwargs(kwargs)
-    draw_legend, legend_kwargs = _resolve_legend_argument(legend, kwargs)
+    legend = _resolve_legend_argument(legend, kwargs)
 
     draw_median, median_kwargs = _resolve_toggle_mapping_argument(
         median,
@@ -1050,7 +1131,7 @@ def distribution(
         distribution_kwargs.setdefault("widths", widths)
         distribution_kwargs["showmeans"] = draw_mean
         distribution_kwargs["showmedians"] = draw_median
-        distribution_kwargs.setdefault("showextrema", True)
+        distribution_kwargs.setdefault("showextrema", False)
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -1137,6 +1218,7 @@ def distribution(
                 positions=positions,
                 widths=widths,
                 kwargs=distribution_kwargs,
+                labels=None if groups is None else cast(Sequence[object], groups),
             )
             if draw_median is False:
                 for median_artist in cast(
@@ -1164,6 +1246,7 @@ def distribution(
                 kwargs=distribution_kwargs,
                 cut=cut,
                 clip=clip,
+                labels=None if groups is None else cast(Sequence[object], groups),
             )
             violin_colors = colors
             if violin_colors is None:
@@ -1249,6 +1332,7 @@ def distribution(
                     positions=next(positions_iterator),
                     widths=widths,
                     kwargs=distribution_kwargs,
+                    labels=cast(Sequence[object], groups),
                 )
             else:
                 grouped_artists[h] = __draw_violin_distribution(
@@ -1259,6 +1343,7 @@ def distribution(
                     kwargs=distribution_kwargs,
                     cut=cut,
                     clip=clip,
+                    labels=cast(Sequence[object], groups),
                 )
 
         if kind == "box":
@@ -1296,23 +1381,32 @@ def distribution(
                     mean=mean_kwargs,
                 )
 
-        if draw_legend is True:
+        if legend is not False:
             handles = []
             for h in hue_values:
+                if kind == "violin":
+                    bodies = cast(
+                        Sequence[Any],
+                        cast(ViolinPlots, grouped_artists[h])["bodies"],
+                    )
+                    legend_edgecolor = bodies[0].get_edgecolor()[0]
+                    legend_facecolor = bodies[0].get_facecolor()[0]
+                else:
+                    legend_edgecolor = cast(Mapping[object, object], artist_colors)[
+                        h
+                    ]
+                    legend_facecolor = cast(Mapping[object, object], point_colors)[h]
                 handles.append(
                     mpatches.Patch(
-                        edgecolor=cast(
-                            Any,
-                            cast(Mapping[object, object], artist_colors)[h],
-                        ),
-                        facecolor=cast(
-                            Any,
-                            cast(Mapping[object, object], point_colors)[h],
-                        ),
+                        edgecolor=cast(Any, legend_edgecolor),
+                        facecolor=cast(Any, legend_facecolor),
                         label=h,
                     )
                 )
-            ax.legend(handles=handles, **legend_kwargs)
+            if legend is True:
+                ax.legend(handles=handles)
+            else:
+                ax.legend(handles=handles, **legend)
 
         distribution_artists = grouped_artists
 
@@ -1346,9 +1440,9 @@ def distribution(
         )
 
     if xlabel is not None:
-        ax.set_xlabel(xlabel)
+        set_axis_label(ax, "xlabel", xlabel)
     if ylabel is not None:
-        ax.set_ylabel(ylabel)
+        set_axis_label(ax, "ylabel", ylabel)
 
     if outfile:
         fig.savefig(outfile, bbox_inches="tight")

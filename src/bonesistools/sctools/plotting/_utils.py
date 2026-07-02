@@ -26,6 +26,61 @@ def figure_from_axes(ax: Axes) -> Figure:
     return cast(Figure, ax.figure)
 
 
+def set_axis_label(
+    ax: Any,
+    name: str,
+    value: Optional[Union[str, Mapping[str, Any]]],
+) -> None:
+    if not name.endswith("label"):
+        raise ValueError(
+            f"invalid argument value for 'name': "
+            f"expected an axis label name but received {name!r}"
+        )
+
+    setter = getattr(ax, f"set_{name}")
+    if value is None:
+        setter("")
+        return None
+
+    if isinstance(value, str):
+        setter(value)
+        return None
+
+    if not isinstance(value, MappingABC):
+        raise TypeError(
+            f"unsupported argument type for {name!r}: "
+            f"expected {str}, {Mapping} or {None} but received {type(value)}"
+        )
+
+    label_kwargs = dict(value)
+    if "label" in label_kwargs:
+        label = label_kwargs.pop("label")
+        if name in label_kwargs:
+            raise TypeError(
+                f"invalid argument combination for {name!r}: "
+                f"use either 'label' or {name!r}, not both"
+            )
+    elif name in label_kwargs:
+        label = label_kwargs.pop(name)
+    else:
+        raise ValueError(
+            f"invalid argument value for {name!r}: "
+            "expected mapping with a 'label' key"
+        )
+
+    if label is None:
+        setter("", **label_kwargs)
+        return None
+    if not isinstance(label, str):
+        raise TypeError(
+            f"unsupported label type for {name!r}: "
+            f"expected {str} or {None} but received {type(label)}"
+        )
+
+    setter(label, **label_kwargs)
+    return None
+
+
 def deprecated_bool_kwarg(
     kwargs: Dict[str, Any],
     old_name: str,
@@ -99,7 +154,7 @@ def _resolve_legend_argument(
     kwargs: Dict[str, Any],
     *,
     stacklevel: int = 3,
-) -> Tuple[bool, Dict[str, Any]]:
+) -> Union[bool, Dict[str, Any]]:
     for deprecated_name in ("showlegend", "show_legend", "add_legend"):
         if deprecated_name not in kwargs:
             continue
@@ -126,9 +181,9 @@ def _resolve_legend_argument(
         legend = cast(Dict[str, Any], kwargs.pop(deprecated_name))
 
     if isinstance(legend, bool):
-        return legend, {}
+        return legend
     if isinstance(legend, MappingABC):
-        return True, dict(legend)
+        return dict(legend)
 
     raise TypeError(
         f"unsupported argument type for 'legend': "
