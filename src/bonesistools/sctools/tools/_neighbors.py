@@ -196,9 +196,9 @@ def _exact_knn_arrays(
     sklearn_representation_mtx = cast(Any, representation_mtx)
     neighbors_model.fit(sklearn_representation_mtx)
     knn_distances, knn_indices = neighbors_model.kneighbors(sklearn_representation_mtx)
-    return (
-        knn_indices.astype(np.int32, copy=False),
-        knn_distances.astype(np.float32, copy=False),
+    return _sort_knn_arrays(
+        knn_indices=knn_indices.astype(np.int32, copy=False),
+        knn_distances=knn_distances.astype(np.float32, copy=False),
     )
 
 
@@ -246,9 +246,12 @@ def _knn_arrays_from_sparse_distances(
 
         rows = np.arange(indices.shape[0])
         if np.all((indices[:, 0] == rows) & (distances[:, 0] == 0.0)):
-            return (
-                indices[:, :n_neighbors].astype(np.int32, copy=False),
-                distances[:, :n_neighbors].astype(np.float32, copy=False),
+            return _sort_knn_arrays(
+                knn_indices=indices[:, :n_neighbors].astype(np.int32, copy=False),
+                knn_distances=distances[:, :n_neighbors].astype(
+                    np.float32,
+                    copy=False,
+                ),
             )
 
     return _knn_arrays_from_sparse_distances_slow(
@@ -304,7 +307,28 @@ def _knn_arrays_from_sparse_distances_slow(
         knn_indices[row, :] = indices[:n_neighbors]
         knn_distances[row, :] = distances[:n_neighbors]
 
-    return knn_indices, knn_distances
+    return _sort_knn_arrays(knn_indices=knn_indices, knn_distances=knn_distances)
+
+
+def _sort_knn_arrays(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
+    self_order = np.where(knn_indices == rows, 0, 1)
+    order = np.lexsort(
+        (
+            knn_indices,
+            knn_distances,
+            self_order,
+        ),
+        axis=1,
+    )
+    return (
+        np.take_along_axis(knn_indices, order, axis=1),
+        np.take_along_axis(knn_distances, order, axis=1),
+    )
 
 
 def _sparse_distances_from_knn(

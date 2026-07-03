@@ -414,6 +414,49 @@ def test_sparse_distance_neighbors_are_reordered_and_completed():
     )
 
 
+def test_knn_arrays_are_sorted_canonically():
+    indices = np.array(
+        [
+            [3, 0, 1, 2],
+            [2, 0, 1, 3],
+        ],
+        dtype=np.int32,
+    )
+    distances = np.array(
+        [
+            [0.5, 0.0, 0.5, 0.2],
+            [0.7, 0.1, 0.0, 0.1],
+        ],
+        dtype=np.float32,
+    )
+
+    sorted_indices, sorted_distances = _neighbors._sort_knn_arrays(
+        knn_indices=indices,
+        knn_distances=distances,
+    )
+
+    np.testing.assert_array_equal(
+        sorted_indices,
+        np.array(
+            [
+                [0, 2, 1, 3],
+                [1, 0, 3, 2],
+            ],
+            dtype=np.int32,
+        ),
+    )
+    np.testing.assert_allclose(
+        sorted_distances,
+        np.array(
+            [
+                [0.0, 0.2, 0.5, 0.5],
+                [0.0, 0.1, 0.1, 0.7],
+            ],
+            dtype=np.float32,
+        ),
+    )
+
+
 def test_sparse_distance_neighbors_reject_short_rows():
     sparse_distances = csr_matrix(
         (
