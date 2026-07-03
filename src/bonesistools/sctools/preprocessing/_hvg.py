@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import warnings
+from dataclasses import dataclass
 from typing import Any, Optional, Tuple, cast, overload
 
 import numpy as np
@@ -18,12 +19,21 @@ from ..._validation import (
     _as_positive_number,
     _as_string,
 )
-from .._stats import _column_mean_variance
 from .._typing import anndata_checker
 from ..tools._utils import get_expression
 
 HVGMethod = Literal["loess"]
 HVG_METHODS: Tuple[HVGMethod, ...] = ("loess",)
+
+
+@dataclass(frozen=True)
+class _StandardizedExpression:
+
+    n_obs: int
+    means: np.ndarray
+    regularized_std: np.ndarray
+    clipped_sum: np.ndarray
+    squared_sum: np.ndarray
 
 
 @overload
@@ -145,19 +155,10 @@ def hvg(
     if len(expression_mtx.shape) != 2:
         raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
 
-    means, variances = _column_mean_variance(expression_mtx)
-    expected_variances = _loess_fit(means, variances, span=span)
-    scores = _normalized_variance_score(
-        expression_mtx,
-        means,
-        expected_variances,
-    )
+    scores = _loess_fit(expression_mtx, span=span)
+    ordered_indices = _order_by_score(scores)
 
-    selected = np.zeros(adata.n_vars, dtype=bool)
-    ranks = np.full(adata.n_vars, np.nan, dtype=float)
-
-    eligible = np.flatnonzero(np.isfinite(scores))
-    n_eligible = int(eligible.size)
+    n_eligible = int(ordered_indices.size)
     if n_eligible < n_features:
         warnings.warn(
             f"Requested {n_features} highly variable features, but only "
@@ -166,10 +167,16 @@ def hvg(
             stacklevel=2,
         )
 
-    ordered_indices = eligible[np.argsort(-scores[eligible], kind="mergesort")]
-    selected_indices = ordered_indices[:n_features]
-    selected[selected_indices] = True
-    ranks[selected_indices] = np.arange(1, selected_indices.size + 1, dtype=float)
+    selected = _select_features(
+        ordered_indices,
+        n_features=n_features,
+        n_vars=adata.n_vars,
+    )
+    ranks = _assign_feature_ranks(
+        ordered_indices,
+        n_features=n_features,
+        n_vars=adata.n_vars,
+    )
 
     adata.var[key_added] = selected
     adata.var[f"{key_added}_rank"] = ranks
@@ -190,9 +197,98 @@ def hvg(
 
 
 def _loess_fit(
+    matrix: Any,
+    *,
+    span: float,
+) -> np.ndarray:
+
+    mean = _compute_mean(matrix)
+    variance = _compute_variance(matrix, mean)
+    trend = _compute_loess_trend(mean, variance, span=span)
+    std = _compute_regularized_std(trend)
+    standardized = _standardize(matrix, mean, std)
+    score = _compute_normalized_variance(standardized)
+
+    return score
+
+
+def _compute_mean(matrix: Any) -> np.ndarray:
+
+    n_obs = int(matrix.shape[0])
+    if sparse.issparse(matrix):
+        sums = np.asarray(matrix.sum(axis=0)).ravel().astype(np.float64, copy=False)
+
+        return sums / n_obs
+
+    dense_matrix = cast(np.ndarray, matrix)
+
+    return np.asarray(dense_matrix.mean(axis=0, dtype=np.float64)).ravel()
+
+
+def _compute_variance(
+    matrix: Any,
+    mean: Optional[np.ndarray] = None,
+) -> np.ndarray:
+
+    if mean is None:
+        mean = _compute_mean(matrix)
+
+    n_obs = int(matrix.shape[0])
+    n_vars = int(matrix.shape[1])
+    if sparse.issparse(matrix):
+        sparse_format = getattr(matrix, "format", None)
+        if sparse_format == "csr":
+            squared_sums = np.bincount(
+                matrix.indices,
+                weights=matrix.data * matrix.data,
+                minlength=n_vars,
+            )
+        elif sparse_format == "csc":
+            squared_sums = np.zeros(n_vars, dtype=np.float64)
+            nonempty_columns = np.diff(matrix.indptr) > 0
+            if np.any(nonempty_columns):
+                starts = matrix.indptr[:-1][nonempty_columns]
+                data = np.asarray(matrix.data, dtype=np.float64)
+                squared_sums[nonempty_columns] = np.add.reduceat(
+                    data * data,
+                    starts,
+                )
+        else:
+            return _compute_variance(
+                matrix.tocsr(),
+                mean=mean,
+            )
+        mean_squares = squared_sums / n_obs
+    else:
+        dense_matrix = cast(np.ndarray, matrix)
+        squared_matrix = np.multiply(dense_matrix, dense_matrix)
+        mean_squares = np.asarray(
+            squared_matrix.mean(axis=0, dtype=np.float64)
+        ).ravel()
+
+    variances = np.maximum(mean_squares - mean**2, 0)
+    if n_obs > 1:
+        variances *= n_obs / (n_obs - 1)
+    return variances
+
+
+def _compute_dispersion(
+    mean: np.ndarray,
+    variance: np.ndarray,
+) -> np.ndarray:
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dispersion = variance / mean
+    dispersion[~np.isfinite(dispersion)] = np.nan
+
+    return dispersion
+
+
+def _compute_loess_trend(
     means: np.ndarray,
     variances: np.ndarray,
-    span: float = 0.3,
+    *,
+    span: float,
 ) -> np.ndarray:
 
     try:
@@ -216,18 +312,23 @@ def _loess_fit(
     return cast(np.ndarray, 10**log_expected_variances)
 
 
-def _normalized_variance_score(
-    matrix: Any,
-    means: np.ndarray,
-    expected_variances: np.ndarray,
-) -> np.ndarray:
+def _compute_regularized_std(trend: np.ndarray) -> np.ndarray:
 
-    n_obs = int(matrix.shape[0])
-    expected_variances = np.maximum(
-        np.asarray(expected_variances, dtype=np.float64),
+    trend = np.maximum(
+        np.asarray(trend, dtype=np.float64),
         np.finfo(np.float64).eps,
     )
-    regularized_std = np.sqrt(expected_variances)
+
+    return np.sqrt(trend)
+
+
+def _standardize(
+    matrix: Any,
+    means: np.ndarray,
+    regularized_std: np.ndarray,
+) -> _StandardizedExpression:
+
+    n_obs = int(matrix.shape[0])
     clip_values = means + regularized_std * np.sqrt(n_obs)
 
     if sparse.issparse(matrix):
@@ -245,8 +346,62 @@ def _normalized_variance_score(
         np.square(counts, out=counts)
         squared_sum = counts.sum(axis=0)
 
+    return _StandardizedExpression(
+        n_obs=n_obs,
+        means=means,
+        regularized_std=regularized_std,
+        clipped_sum=clipped_sum,
+        squared_sum=squared_sum,
+    )
+
+
+def _compute_normalized_variance(
+    standardized: _StandardizedExpression,
+) -> np.ndarray:
+
+    n_obs = standardized.n_obs
+    means = standardized.means
+    regularized_std = standardized.regularized_std
+    clipped_sum = standardized.clipped_sum
+    squared_sum = standardized.squared_sum
+
     denominator = (n_obs - 1) * np.square(regularized_std)
     numerator = n_obs * np.square(means) + squared_sum - 2 * clipped_sum * means
     scores = numerator / denominator
     scores[denominator == 0] = np.nan
     return scores
+
+
+def _order_by_score(scores: np.ndarray) -> np.ndarray:
+
+    eligible = np.flatnonzero(np.isfinite(scores))
+
+    return eligible[np.argsort(-scores[eligible], kind="mergesort")]
+
+
+def _select_features(
+    ordered_indices: np.ndarray,
+    *,
+    n_features: int,
+    n_vars: int,
+) -> np.ndarray:
+
+    selected = np.zeros(n_vars, dtype=bool)
+    selected_indices = ordered_indices[:n_features]
+    selected[selected_indices] = True
+
+    return selected
+
+
+def _assign_feature_ranks(
+    ordered_indices: np.ndarray,
+    *,
+    n_features: int,
+    n_vars: int,
+) -> np.ndarray:
+
+    ranks = np.full(n_vars, np.nan, dtype=float)
+    selected_indices = ordered_indices[:n_features]
+    ranks[selected_indices] = np.arange(1, selected_indices.size + 1, dtype=float)
+
+    return ranks
