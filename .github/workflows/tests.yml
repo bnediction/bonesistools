@@ -70,8 +70,31 @@ jobs:
             tests/reproducibility/test_reproducibility_workflow.py \
             -q
 
-  pytest:
-    name: pytest (${{ matrix.python-version }}, ${{ matrix.test-mode }})
+  golden:
+    name: golden
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install package with all extras
+        run: pip install -e ".[all]"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Check golden tests
+        env:
+          BONESISTOOLS_RUN_GOLDEN: "1"
+        run: pytest tests/golden -q
+
+  regression:
+    name: ${{ matrix.label }} (${{ matrix.python-version }})
     runs-on: ubuntu-22.04
 
     strategy:
@@ -80,18 +103,25 @@ jobs:
         include:
           - python-version: "3.7"
             test-mode: import
+            label: import
           - python-version: "3.8"
             test-mode: import
+            label: import
           - python-version: "3.9"
             test-mode: import
+            label: import
           - python-version: "3.10"
             test-mode: test
+            label: regression
           - python-version: "3.11"
             test-mode: test
+            label: regression
           - python-version: "3.12"
             test-mode: test
+            label: regression
           - python-version: "3.13"
             test-mode: test
+            label: regression
 
     steps:
       - uses: actions/checkout@v6

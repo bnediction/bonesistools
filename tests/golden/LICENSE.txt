@@ -1,0 +1,13 @@
+Golden test data licenses
+=========================
+
+pbmc3k.h5ad
+-----------
+
+Source: 10x Genomics, 3k PBMCs from a Healthy Donor.
+URL: https://www.10xgenomics.com/datasets/3-k-pbm-cs-from-a-healthy-donor-1-standard-1-1-0
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+The bundled AnnData file was generated from the 10x Genomics PBMC3k filtered
+gene-barcode matrix using `bt.sct.datasets.load("pbmc3k")` and stored with
+HDF5 gzip compression.

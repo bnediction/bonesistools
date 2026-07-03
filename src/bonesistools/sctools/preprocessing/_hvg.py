@@ -89,12 +89,13 @@ def hvg(
     n_features: int (default: 2000)
         Maximum number of highly variable features to select.
     method: {'loess'} (default: 'loess')
-        HVG scoring method. The `"loess"` method fits the mean-variance trend
-        using LOESS and requires the optional `scikit-misc` dependency. It
-        reproduces the highly variable feature selection strategy introduced in
-        Seurat v3 [1]. Features are scored by the variance of regularized
-        standardized expression values, following the Seurat v3 clipping and
-        standardization procedure.
+        Method used to score highly variable features.
+
+        The `loess` method reproduces the Seurat v3 highly variable
+        feature selection strategy: LOESS-regularized mean-variance trend
+        estimation, followed by clipping, standardization of expression
+        values using the regularized standard deviation, and ranking by
+        normalized variance scores [1].
     span: float (default: 0.3)
         LOESS smoothing span. Must be greater than 0 and smaller than or equal
         to 1.

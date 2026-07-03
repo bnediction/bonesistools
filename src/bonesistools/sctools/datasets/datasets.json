@@ -1,0 +1,26 @@
+{
+  "nestorowa": {
+    "description": "Single-cell RNA sequencing dataset of mouse hematopoietic stem and progenitor cells (HSPCs).",
+    "organism": "Mus musculus",
+    "tissue": "bone marrow",
+    "technology": "Smart-seq2",
+    "cells": 1656,
+    "genes": 46078,
+    "source": "NCBI GEO (GSE81682)",
+    "license": "not specified",
+    "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE81682",
+    "citation": "Nestorowa et al. (2016). A single-cell resolution map of mouse hematopoietic stem and progenitor cell differentiation. Blood, 128(8), e20-e31."
+  },
+  "pbmc3k": {
+    "description": "Single-cell RNA sequencing dataset of peripheral blood mononuclear cells (PBMCs) from a healthy donor.",
+    "organism": "Homo sapiens",
+    "tissue": "peripheral blood",
+    "technology": "10x Chromium Single Cell 3'",
+    "cells": 2700,
+    "genes": 32738,
+    "source": "10x Genomics",
+    "license": "CC BY 4.0",
+    "url": "https://www.10xgenomics.com/datasets/3-k-pbm-cs-from-a-healthy-donor-1-standard-1-1-0",
+    "citation": "Zheng et al. (2017). Massively parallel digital transcriptional profiling of single cells. Nature Communications, 8(1), 14049. https://doi.org/10.1038/ncomms14049"
+  }
+}

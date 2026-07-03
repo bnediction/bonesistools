@@ -139,6 +139,59 @@ instead of `axis`.
 
 ---
 
+## Dataset registry
+
+Built-in single-cell datasets are registered in `bt.sct.datasets` through a
+small Python loader registry and a JSON metadata file:
+
+* `_DATASET_LOADERS`: maps dataset names to loader functions;
+* `datasets.json`: stores public metadata only.
+
+Keep `datasets.json` descriptive. Do not store loader functions or
+implementation objects in it.
+
+Each dataset entry should define:
+
+* `description`: concise dataset description;
+* `organism`: scientific organism name, for example `"Mus musculus"`;
+* `tissue`: tissue or sample source in lower case;
+* `technology`: assay or platform name;
+* observation count fields, usually `cells`;
+* feature count fields with explicit biological names, such as `genes` or
+  `peaks`;
+* `source`: source provider or accession;
+* `license`: license string, or `"not specified"` when no license is provided;
+* `url`: a single canonical user-facing URL with dataset metadata, not
+  necessarily the technical download URL;
+* `citation`: publication or dataset citation, or `"not specified"` when no
+  citation is provided.
+
+Use concrete feature names instead of a generic `features` field. For example,
+a scRNA-seq dataset should use `genes`, while a chromatin accessibility dataset
+may use `peaks`. Multimodal datasets may define several feature-count fields,
+such as both `genes` and `peaks`.
+
+Example:
+
+```json
+{
+    "nestorowa": {
+        "description": "Single-cell RNA sequencing dataset of mouse hematopoietic stem and progenitor cells.",
+        "organism": "Mus musculus",
+        "tissue": "bone marrow",
+        "technology": "Smart-seq2",
+        "cells": 1656,
+        "genes": 46078,
+        "source": "NCBI GEO (GSE81682)",
+        "license": "not specified",
+        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE81682",
+        "citation": "..."
+    }
+}
+```
+
+---
+
 ## Public parameter order
 
 Public functions should use a consistent parameter hierarchy when it naturally
@@ -552,9 +605,23 @@ Do not add global ignores. Use local ignores only with a short reason.
 Prefer full test files or the standard test suite over highly targeted
 pytest invocations with coverage.
 
+Tests are split by CI policy and purpose:
+
+* `tests/regression`: ordinary correctness tests run by default and across the
+  supported Python matrix;
+* `tests/golden`: golden-output tests run only in a canonical environment with
+  Python 3.13 and `BONESISTOOLS_RUN_GOLDEN=1`;
+* `tests/reproducibility`: reproducibility tests run only in the dedicated
+  reproducibility job.
+
 For computational functions, use small synthetic inputs with known expected
 results. Expected values should come from reasoning independent of the
 implementation.
+
+Golden files are frozen test resources, not tests. Store them under
+`tests/golden` and update them only when an intentional algorithmic change or
+bug fix changes the expected behavior. See `docs/TESTING.md` for the golden
+acceptance-test update procedure.
 
 When testing warnings or errors, prefer checking the warning/error type and the
 behavior. Avoid asserting exact message strings unless the message itself is

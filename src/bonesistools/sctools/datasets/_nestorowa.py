@@ -6,9 +6,8 @@ Utilities for loading the Nestorowa hematopoiesis dataset.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -60,7 +59,8 @@ _CLUSTER_LABEL_FALLBACKS = {
 }
 
 
-def nestorowa(
+def _load_nestorowa(
+    cache_dir: Optional[Path] = None,
     quiet: bool = False,
 ) -> AnnData:
     """
@@ -92,11 +92,13 @@ def nestorowa(
     """
 
     quiet = _as_boolean(quiet, "quiet")
+    if cache_dir is None:
+        raise ValueError("missing Nestorowa cache directory")
 
-    with tempfile.TemporaryDirectory(prefix="bonesistools-nestorowa-") as directory:
-        paths = _nestorowa_files(Path(directory))
-        _download_nestorowa_files(paths, quiet=quiet)
-        return _read_full_nestorowa(paths)
+    paths = _nestorowa_files(cache_dir)
+    _download_nestorowa_files(paths, quiet=quiet)
+
+    return _read_full_nestorowa(paths)
 
 
 def _download_nestorowa_files(paths: Dict[str, Path], quiet: bool) -> None:
@@ -131,8 +133,8 @@ def _read_full_nestorowa(paths: Dict[str, Path]) -> AnnData:
     metadata, label_counts = _resolve_cell_metadata(cell_types, cluster_ids)
 
     adata = AnnData(X=csr_matrix(read_counts.to_numpy()))
-    adata.obs_names = read_counts.index.astype(str)
-    adata.var_names = read_counts.columns.astype(str)
+    adata.obs_names = read_counts.index.astype(str).tolist()
+    adata.var_names = read_counts.columns.astype(str).tolist()
 
     adata.obs["label"] = metadata.loc[adata.obs_names, "label"].astype("category")
     adata.obs["clusters"] = _numeric_cluster_categories(cluster_ids).loc[

@@ -112,8 +112,15 @@ benchmarks/results/
 !tests/
 !tests/data/
 !tests/data/*.h5ad
+!tests/golden/
+!tests/golden/**/*.py
+!tests/golden/**/*.md
+!tests/golden/**/*.txt
+!tests/golden/**/*.h5ad
+!tests/golden/**/*.npz
 tests/dbs/data/*.json
 tests/reproducibility/*.json
 !src/bonesistools/sctools/datasets/
+!src/bonesistools/sctools/datasets/*.json
 !src/bonesistools/sctools/datasets/*.h5ad
 scripts/

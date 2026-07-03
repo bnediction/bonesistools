@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, TextIO, Tuple, Union, cast
 from urllib.error import URLError
 from urllib.parse import unquote, urljoin
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pandas as pd
 import scipy.io
@@ -31,6 +31,7 @@ PathInput = Union[str, os.PathLike]
 _GEO_FTP_BASE = "https://ftp.ncbi.nlm.nih.gov/geo"
 _GSM_PATTERN = re.compile(r"^GSM[0-9]+$")
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_DOWNLOAD_HEADERS = {"User-Agent": "bonesistools"}
 _SUPPLEMENTARY_SUFFIXES = (
     "_matrix.mtx.gz",
     "_barcodes.tsv.gz",
@@ -75,6 +76,10 @@ def from_geo(
     quiet: bool (default: False)
         Whether to suppress download progress messages.
 
+    Examples
+    --------
+    >>> adata = bt.sct.datasets.from_geo("GSM4138110")
+
     Returns
     -------
     AnnData
@@ -88,10 +93,6 @@ def from_geo(
     -----
     Currently only GSM supplementary datasets following the standard 10x
     matrix/barcodes/features layout are supported.
-
-    Examples
-    --------
-    >>> adata = bt.sct.datasets.from_geo("GSM4138110")
     """
 
     if not isinstance(accession, str):
@@ -245,7 +246,7 @@ def _download(
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary_output = Path(f"{output}.tmp")
     try:
-        with urlopen(url) as response:
+        with urlopen(Request(url, headers=_DOWNLOAD_HEADERS)) as response:
             total_header = response.headers.get("Content-Length")
             total = int(total_header) if total_header is not None else None
             downloaded = 0

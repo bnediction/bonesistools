@@ -46,7 +46,17 @@ Submodules:
   - visualization helpers for embeddings, trajectories, distributions and summaries
 
 - datasets: `bt.sct.datasets`
-  - packaged and remotely loaded reference datasets
+  - registered single-cell example datasets loaded with `bt.sct.datasets.load(...)`
+
+Example:
+
+```python
+bt.sct.datasets.available()
+bt.sct.datasets.info("pbmc3k")
+adata = bt.sct.datasets.load("pbmc3k")
+adata = bt.sct.datasets.load("nestorowa")
+bt.sct.datasets.clear("pbmc3k")
+```
 
 ---
 

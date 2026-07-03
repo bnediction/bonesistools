@@ -2,16 +2,19 @@
 
 import gzip
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 import anndata as ad
 import numpy as np
 import pandas as pd
+import pytest
 from scipy import sparse
+from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 from bonesistools import sct
 from bonesistools.sctools.datasets import _nestorowa as nestorowa_module
+from bonesistools.sctools.datasets import _registry as registry_module
 
 
 def _write_gzip(path: Path, text: str) -> None:
@@ -71,6 +74,13 @@ def _patch_gene_mapping(monkeypatch) -> None:
     )
 
 
+def _as_csr(matrix: Any) -> csr_matrix:
+
+    assert sparse.isspmatrix_csr(matrix)
+
+    return cast(csr_matrix, matrix)
+
+
 def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
     source_dir = tmp_path / "source"
     _write_nestorowa_fixture(source_dir)
@@ -94,7 +104,7 @@ def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
     }
 
     np.testing.assert_array_equal(
-        adata.X.toarray(),
+        _as_csr(adata.X).toarray(),
         np.array(
             [
                 [1, 0],
@@ -103,12 +113,12 @@ def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
             ],
         ),
     )
-    assert sparse.issparse(adata.X)
     assert len(adata.layers) == 0
 
 
-def test_nestorowa_downloads_to_temporary_directories(monkeypatch, tmp_path):
+def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
     _patch_gene_mapping(monkeypatch)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
     fixture_dir = tmp_path / "fixtures"
     _write_nestorowa_fixture(fixture_dir)
     downloaded: List[str] = []
@@ -124,15 +134,54 @@ def test_nestorowa_downloads_to_temporary_directories(monkeypatch, tmp_path):
 
     monkeypatch.setattr(nestorowa_module, "_download", fake_download)
 
-    first = bt.sct.datasets.nestorowa(quiet=True)
-    second = bt.sct.datasets.nestorowa(quiet=True)
+    first = bt.sct.datasets.load("nestorowa", quiet=True)
+    second = bt.sct.datasets.load("nestorowa", quiet=True)
 
     assert first.shape == (3, 2)
     assert second.shape == (3, 2)
+    assert first.obs["label"].astype(str).tolist() == ["HSC", "CMP", "HSC"]
+    np.testing.assert_array_equal(
+        _as_csr(first.X).toarray(),
+        _as_csr(second.X).toarray(),
+    )
     expected_urls = [url for _, url in nestorowa_module._NESTOROWA_URLS.values()]
-    assert downloaded == expected_urls + expected_urls
-    assert len(set(download_directories)) == 2
-    assert not any(directory.exists() for directory in download_directories)
+    assert downloaded == expected_urls
+    assert set(download_directories) == {
+        registry_module._dataset_cache_dir("nestorowa")
+    }
+    assert registry_module._dataset_cache_dir("nestorowa").exists()
+
+
+def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
+    _patch_gene_mapping(monkeypatch)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    fixture_dir = tmp_path / "fixtures"
+    _write_nestorowa_fixture(fixture_dir)
+
+    def fake_download(url: str, output: Path, quiet: bool = False) -> None:
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes((fixture_dir / output.name).read_bytes())
+
+    monkeypatch.setattr(nestorowa_module, "_download", fake_download)
+
+    with pytest.warns(DeprecationWarning, match="datasets.load"):
+        adata = bt.sct.datasets.nestorowa(quiet=True)
+    loaded = bt.sct.datasets.load("nestorowa", quiet=True)
+
+    assert adata.shape == (3, 2)
+    assert adata.obs["label"].astype(str).tolist() == loaded.obs["label"].astype(
+        str
+    ).tolist()
+    np.testing.assert_array_equal(
+        _as_csr(adata.X).toarray(),
+        _as_csr(loaded.X).toarray(),
+    )
+
+
+def test_datasets_load_unknown_lists_available_datasets():
+    with pytest.raises(ValueError, match="nestorowa.*pbmc3k|pbmc3k.*nestorowa"):
+        bt.sct.datasets.load("unknown")
 
 
 def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
