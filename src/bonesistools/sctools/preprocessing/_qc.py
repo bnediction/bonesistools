@@ -369,9 +369,9 @@ def _kth_with_implicit_value(
     return float(np.partition(upper_values, upper_k)[upper_k])
 
 
-if _numba_njit is None:
+if _numba_njit is None:  # pragma: no cover - import-time optional dependency branch
     _median_mad_sparse_csc_numba = None
-else:
+else:  # pragma: no cover - Numba-compiled code is exercised but not line-traced
 
     @_numba_njit(cache=True)
     def _kth_with_implicit_sorted_numba(
@@ -594,9 +594,9 @@ def _percent_top_sparse_csr(
         return values / sums.reshape((n_obs, 1))
 
 
-if _numba_njit is None:
+if _numba_njit is None:  # pragma: no cover - import-time optional dependency branch
     _percent_top_sparse_csr_numba = None
-else:
+else:  # pragma: no cover - Numba-compiled code is exercised but not line-traced
 
     @_numba_njit(cache=True, parallel=True)
     def _percent_top_sparse_csr_numba(

@@ -65,6 +65,44 @@ def test_kleene_value_order_and_logical_operators():
     assert unknown.to_partial_boolean() == bt.bpy.ba.PartialBoolean("*")
 
 
+def test_kleene_value_representation_hashing_and_unknown_property():
+    unknown = bt.bpy.ba.KleeneValue("*")
+
+    assert repr(unknown) == "KleeneValue('*')"
+    assert str(unknown) == "*"
+    assert hash(unknown) == hash("*")
+    assert unknown.is_unknown is True
+    assert bt.bpy.ba.KleeneValue(0).is_unknown is False
+    assert unknown in {bt.bpy.ba.KleeneValue("*")}
+
+
+def test_kleene_value_invalid_comparisons_return_not_implemented():
+    value = bt.bpy.ba.KleeneValue(0)
+    other = object()
+
+    assert value.__eq__(other) is NotImplemented
+    assert value.__ne__(other) is NotImplemented
+    assert value.__lt__(other) is NotImplemented
+    assert value.__le__(other) is NotImplemented
+    assert value.__gt__(other) is NotImplemented
+    assert value.__ge__(other) is NotImplemented
+
+
+def test_kleene_value_valid_inequality_methods():
+    false = bt.bpy.ba.KleeneValue(0)
+    true = bt.bpy.ba.KleeneValue(1)
+
+    assert false.__ne__(true) is True
+    assert true.__gt__(false) is True
+
+
+def test_kleene_meet_and_join_module_wrappers():
+    assert bt.bpy.ba.meet(1, "*") == bt.bpy.ba.KleeneValue("*")
+    assert bt.bpy.ba.meet(0, 1) == bt.bpy.ba.KleeneValue(0)
+    assert bt.bpy.ba.join(0, "*") == bt.bpy.ba.KleeneValue("*")
+    assert bt.bpy.ba.join(0, 1) == bt.bpy.ba.KleeneValue(1)
+
+
 @pytest.mark.parametrize("value", [0, 1, "*"])
 def test_kleene_value_cannot_be_converted_to_bool(value):
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import builtins
 from typing import Any, cast
 
 import networkx as nx
@@ -414,6 +415,45 @@ def test_sparse_distance_neighbors_are_reordered_and_completed():
     )
 
 
+def test_sparse_distance_neighbors_move_self_neighbor_before_equal_distances():
+    sparse_distances = csr_matrix(
+        (
+            np.array([0.0, 0.0, 0.2, 0.0, 0.2], dtype=np.float32),
+            np.array([1, 0, 0, 1, 0], dtype=np.int32),
+            np.array([0, 3, 5], dtype=np.int32),
+        ),
+        shape=(2, 2),
+    )
+
+    indices, distances = _neighbors._knn_arrays_from_sparse_distances(
+        sparse_distances,
+        n_neighbors=2,
+    )
+
+    np.testing.assert_array_equal(
+        indices,
+        np.array([[0, 1], [1, 0]], dtype=np.int32),
+    )
+    np.testing.assert_allclose(
+        distances,
+        np.array([[0.0, 0.0], [0.0, 0.2]], dtype=np.float32),
+    )
+
+
+def test_pynndescent_backend_reports_missing_optional_dependency(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pynndescent":
+            raise ImportError("missing pynndescent")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ImportError, match="backend='pynndescent' requires"):
+        _neighbors._get_pynndescent_transformer()
+
+
 def test_knn_arrays_are_sorted_canonically():
     indices = np.array(
         [
@@ -531,6 +571,41 @@ def test_knn_graph_forwards_metric_kwargs(mini_adata):
             ("c4", "c3"): 0.3,
         }
     )
+
+
+def test_knn_graph_supports_legacy_networkx_sparse_matrix_constructor(
+    mini_adata,
+    monkeypatch,
+):
+    from_scipy_sparse_array = _neighbors.nx.from_scipy_sparse_array
+    calls = []
+
+    def from_scipy_sparse_matrix(matrix, create_using, edge_attribute):
+        calls.append(edge_attribute)
+        return from_scipy_sparse_array(
+            matrix,
+            create_using=create_using,
+            edge_attribute=edge_attribute,
+        )
+
+    monkeypatch.delattr(_neighbors.nx, "from_scipy_sparse_array")
+    monkeypatch.setattr(
+        _neighbors.nx,
+        "from_scipy_sparse_matrix",
+        from_scipy_sparse_matrix,
+        raising=False,
+    )
+
+    graph = bt.sct.tl.knn_graph(
+        mini_adata,
+        n_neighbors=1,
+        representation="X_pca",
+        create_using=nx.DiGraph,
+        index_or_name="index",
+    )
+
+    assert calls == ["distance"]
+    assert graph.number_of_edges() == mini_adata.n_obs
 
 
 def test_kneighbors_graph_deprecated_alias(mini_adata):

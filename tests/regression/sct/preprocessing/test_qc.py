@@ -210,6 +210,58 @@ def test_qc_handles_zero_count_observations():
     assert cast(float, obs.loc["nonzero", "pct_mito"]) == 100.0
 
 
+def test_qc_single_observation_has_undefined_feature_variance():
+    adata = ad.AnnData(
+        X=np.array([[1.0, 0.0, 3.0]], dtype=np.float32),
+        obs=pd.DataFrame(index=["cell"]),
+        var=pd.DataFrame(index=["g1", "g2", "g3"]),
+    )
+
+    bt.sct.pp.qc(adata, percent_top=None)
+
+    np.testing.assert_array_equal(adata.var["n_barcodes"].to_numpy(), [1, 0, 1])
+    assert np.isnan(adata.var["variance"].to_numpy()).all()
+
+
+def test_qc_implicit_zero_median_helper_handles_empty_and_ordered_regions():
+    assert np.isnan(
+        _qc._median_with_implicit_value(
+            np.array([], dtype=np.float64),
+            size=0,
+            implicit_count=0,
+            implicit_value=0.0,
+        )
+    )
+
+    values = np.array([-2.0, -1.0, 3.0, 5.0])
+
+    assert _qc._kth_with_implicit_value(values, 0, 2, 0.0) == -2.0
+    assert _qc._kth_with_implicit_value(values, 2, 2, 0.0) == 0.0
+    assert _qc._kth_with_implicit_value(values, 5, 2, 0.0) == 5.0
+
+
+def test_qc_percent_top_single_rank_helper_matches_expected_fraction():
+    matrix = csr_matrix(
+        np.array(
+            [
+                [1.0, 4.0, 0.0],
+                [2.0, 0.0, 6.0],
+            ],
+            dtype=np.float32,
+        )
+    )
+    total_per_barcode = np.asarray(matrix.sum(axis=1)).ravel()
+
+    values = _qc._percent_top(
+        matrix,
+        top=2,
+        total_per_barcode=total_per_barcode,
+        backend="python",
+    )
+
+    np.testing.assert_allclose(values, [100.0, 100.0])
+
+
 def test_qc_sparse_median_and_mad_include_implicit_zeros():
     adata = ad.AnnData(
         X=csr_matrix(
@@ -266,8 +318,14 @@ def test_qc_validates_arguments():
     with pytest.raises(IndexError, match="Positions outside range of features"):
         bt.sct.pp.qc(adata, percent_top=[5])
 
+    with pytest.raises(TypeError, match="unsupported element type in 'qc_vars'"):
+        bt.sct.pp.qc(adata, qc_vars=["mito", cast(Any, 1)], percent_top=None)
+
     with pytest.raises(TypeError, match="unsupported argument type for 'qc_vars'"):
         bt.sct.pp.qc(adata, qc_vars=cast(Any, 1), percent_top=None)
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'percent_top'"):
+        bt.sct.pp.qc(adata, percent_top=cast(Any, "1"))
 
     with pytest.raises(KeyError):
         bt.sct.pp.qc(adata, qc_vars=["missing"], percent_top=None)

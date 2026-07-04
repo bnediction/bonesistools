@@ -11,6 +11,52 @@ from scipy.sparse import csr_matrix
 import bonesistools as bt
 
 
+def test_sort_anndata_reorders_observations_and_variables_stably():
+    adata = ad.AnnData(
+        X=np.array(
+            [
+                [1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0],
+            ]
+        ),
+        obs=pd.DataFrame({"batch": ["b", "a", "c"]}, index=["cell2", "cell1", "cell3"]),
+        var=pd.DataFrame({"kind": ["z", "x", "y"]}, index=["gene3", "gene1", "gene2"]),
+    )
+
+    result = bt.sct.pp.sort_anndata(adata, on="both")
+
+    assert result is None
+    assert adata.obs_names.tolist() == ["cell1", "cell2", "cell3"]
+    assert adata.var_names.tolist() == ["gene1", "gene2", "gene3"]
+    np.testing.assert_array_equal(
+        adata.X,
+        np.array(
+            [
+                [5.0, 6.0, 4.0],
+                [2.0, 3.0, 1.0],
+                [8.0, 9.0, 7.0],
+            ]
+        ),
+    )
+
+
+def test_sort_anndata_copy_preserves_input_and_can_sort_one_axis():
+    adata = ad.AnnData(
+        X=np.array([[1.0, 2.0], [3.0, 4.0]]),
+        obs=pd.DataFrame(index=["cell2", "cell1"]),
+        var=pd.DataFrame(index=["gene2", "gene1"]),
+    )
+
+    copied = bt.sct.pp.sort_anndata(adata, on="obs", copy=True)
+
+    assert copied is not None
+    assert adata.obs_names.tolist() == ["cell2", "cell1"]
+    assert adata.var_names.tolist() == ["gene2", "gene1"]
+    assert copied.obs_names.tolist() == ["cell1", "cell2"]
+    assert copied.var_names.tolist() == ["gene2", "gene1"]
+
+
 def test_filter_obs_and_filter_var_subset_in_place(mini_adata):
     bt.sct.pp.filter_obs(mini_adata, "score", lambda values: values > 0.15)
     bt.sct.pp.filter_var(mini_adata, "kind", lambda values: values == "keep")

@@ -252,3 +252,24 @@ def test_neighbors_are_reproducible_on_nestorowa(backend):
         cast(csr_matrix, second.obsp["connectivities"]),
     )
     _assert_same_value(first.uns["neighbors"], second.uns["neighbors"])
+
+
+def test_qc_numba_backend_is_reproducible_on_nestorowa():
+
+    pytest.importorskip("numba")
+
+    first = _load_nestorowa_hvg()
+    second = _load_nestorowa_hvg()
+    first.X = csr_matrix(first.X)
+    second.X = csr_matrix(second.X)
+
+    for adata in [first, second]:
+        bt.sct.pp.qc(
+            adata,
+            percent_top=[10, 20, 50],
+            backend="numba",
+            copy=False,
+        )
+
+    assert cast(pd.DataFrame, first.obs).equals(cast(pd.DataFrame, second.obs))
+    assert cast(pd.DataFrame, first.var).equals(cast(pd.DataFrame, second.var))

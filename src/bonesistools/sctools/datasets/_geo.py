@@ -354,7 +354,7 @@ def _format_bytes(size: float) -> str:
             return f"{value:.2f}{unit}"
         value /= 1024
 
-    return f"{value:.2f}T"
+    return f"{value:.2f}T"  # pragma: no cover - defensive fallback
 
 
 def _format_duration(seconds: float) -> str:
@@ -421,7 +421,11 @@ def _read_10x_mtx(
     feature_path: Path,
 ) -> AnnData:
 
-    counts = sparse.csr_matrix(scipy.io.mmread(str(matrix_path)))
+    try:
+        matrix = scipy.io.mmread(str(matrix_path), spmatrix=True)
+    except TypeError:
+        matrix = scipy.io.mmread(str(matrix_path))
+    counts = sparse.csr_matrix(matrix)
     obs_names = pd.Index(
         _read_table(barcodes_path).iloc[:, 0].astype(str),
         name=None,
