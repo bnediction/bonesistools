@@ -21,6 +21,8 @@ from ..._validation import (
 from .._stats import _column_mean_variance
 from .._typing import anndata_checker
 
+ScaleMatrixSlot = Literal["X", "layer", "obsm"]
+
 
 @overload
 def normalize(
@@ -104,7 +106,7 @@ def normalize(
     copy = _as_boolean(copy, "copy")
 
     adata = adata.copy() if copy else adata
-    matrix = adata.X if expression is None else adata.layers[expression]
+    matrix = _read_expression_matrix(adata, expression)
 
     if sparse.issparse(matrix):
         normalized_matrix = cast(csr_matrix, cast(Any, matrix).tocsr(copy=True))
@@ -131,12 +133,12 @@ def normalize(
         counts = counts + (counts == 0)
         np.true_divide(normalized_matrix, counts[:, None], out=normalized_matrix)
 
-    if key_added is not None:
-        adata.layers[key_added] = normalized_matrix
-    elif expression is None:
-        adata.X = normalized_matrix
-    else:
-        adata.layers[expression] = normalized_matrix
+    _write_expression_matrix(
+        adata,
+        normalized_matrix,
+        expression=expression,
+        key_added=key_added,
+    )
 
     return adata if copy else None
 
@@ -235,7 +237,7 @@ def log1p(
     copy = _as_boolean(copy, "copy")
 
     adata = adata.copy() if copy else adata
-    matrix = adata.X if expression is None else adata.layers[expression]
+    matrix = _read_expression_matrix(adata, expression)
     log_base = math.log(base)
 
     if sparse.issparse(matrix):
@@ -284,12 +286,12 @@ def log1p(
             if log_base != 1.0:
                 np.true_divide(chunk, log_base, out=chunk)
 
-    if key_added is not None:
-        adata.layers[key_added] = transformed_matrix
-    elif expression is None:
-        adata.X = transformed_matrix
-    else:
-        adata.layers[expression] = transformed_matrix
+    _write_expression_matrix(
+        adata,
+        transformed_matrix,
+        expression=expression,
+        key_added=key_added,
+    )
 
     return adata if copy else None
 
@@ -409,18 +411,11 @@ def scale(
     copy = _as_boolean(copy, "copy")
 
     adata = adata.copy() if copy else adata
-    if representation is not None:
-        matrix = adata.obsm[representation]
-        slot = "obsm"
-        source_key = representation
-    elif expression is not None:
-        matrix = adata.layers[expression]
-        slot = "layer"
-        source_key = expression
-    else:
-        matrix = adata.X
-        slot = "X"
-        source_key = None
+    matrix, slot, source_key = _read_scale_matrix(
+        adata,
+        expression=expression,
+        representation=representation,
+    )
 
     if sparse.issparse(matrix):
         sparse_matrix = cast(Any, matrix)
@@ -476,16 +471,73 @@ def scale(
         adata.var["mean"] = means
         adata.var["std"] = stds
 
-    if key_added is not None:
-        if slot == "obsm":
-            adata.obsm[key_added] = scaled_matrix
-        else:
-            adata.layers[key_added] = scaled_matrix
-    elif slot == "obsm":
-        adata.obsm[cast(str, source_key)] = scaled_matrix
-    elif slot == "layer":
-        adata.layers[cast(str, source_key)] = scaled_matrix
-    else:
-        adata.X = scaled_matrix
+    _write_scale_matrix(
+        adata,
+        scaled_matrix,
+        slot=slot,
+        source_key=source_key,
+        key_added=key_added,
+    )
 
     return adata if copy else None
+
+
+def _read_expression_matrix(
+    adata: AnnData,
+    expression: Optional[str],
+) -> Any:
+
+    return adata.X if expression is None else adata.layers[expression]
+
+
+def _write_expression_matrix(
+    adata: AnnData,
+    matrix: Any,
+    *,
+    expression: Optional[str],
+    key_added: Optional[str],
+) -> None:
+
+    if key_added is not None:
+        adata.layers[key_added] = matrix
+    elif expression is None:
+        adata.X = matrix
+    else:
+        adata.layers[expression] = matrix
+
+
+def _read_scale_matrix(
+    adata: AnnData,
+    *,
+    expression: Optional[str],
+    representation: Optional[str],
+) -> Tuple[Any, ScaleMatrixSlot, Optional[str]]:
+
+    if representation is not None:
+        return adata.obsm[representation], "obsm", representation
+    if expression is not None:
+        return adata.layers[expression], "layer", expression
+
+    return adata.X, "X", None
+
+
+def _write_scale_matrix(
+    adata: AnnData,
+    matrix: Any,
+    *,
+    slot: ScaleMatrixSlot,
+    source_key: Optional[str],
+    key_added: Optional[str],
+) -> None:
+
+    if key_added is not None:
+        if slot == "obsm":
+            adata.obsm[key_added] = matrix
+        else:
+            adata.layers[key_added] = matrix
+    elif slot == "obsm":
+        adata.obsm[cast(str, source_key)] = matrix
+    elif slot == "layer":
+        adata.layers[cast(str, source_key)] = matrix
+    else:
+        adata.X = matrix

@@ -45,6 +45,8 @@ QC_VAR_COLUMNS = (
 HVG_N_FEATURES = 2000
 PCA_N_COMPONENTS = 50
 N_NEIGHBORS = 15
+EMBEDDING_N_COMPONENTS = 2
+TSNE_N_ITER = 300
 
 
 def load_pbmc3k() -> ad.AnnData:
@@ -116,6 +118,56 @@ def run_workflow() -> Dict[str, Dict[str, Any]]:
         n_jobs=1,
     )
     outputs["neighbors"] = _collect_neighbors(adata)
+
+    bt.sct.tl.neighbors(
+        adata,
+        n_neighbors=N_NEIGHBORS,
+        representation="X_pca",
+        n_pcs=PCA_N_COMPONENTS,
+        backend="exact",
+        connectivity_method="binary",
+        metric="euclidean",
+        key_added="spectral_neighbors",
+        distances_key="spectral_distances",
+        connectivities_key="spectral_connectivities",
+        seed=0,
+        n_jobs=1,
+    )
+    bt.sct.tl.spectral(
+        adata,
+        n_components=EMBEDDING_N_COMPONENTS,
+        neighbors_key="spectral_neighbors",
+        eigen_solver="arpack",
+        key_added="X_spectral",
+        seed=0,
+        n_jobs=1,
+    )
+    outputs["spectral"] = _collect_embedding(adata, "X_spectral")
+
+    bt.sct.tl.umap(
+        adata,
+        n_components=EMBEDDING_N_COMPONENTS,
+        neighbors_key="neighbors",
+        n_iter=500,
+        init_pos="spectral",
+        key_added="X_umap",
+        seed=0,
+        n_jobs=1,
+    )
+    outputs["umap"] = _collect_embedding(adata, "X_umap")
+
+    bt.sct.tl.tsne(
+        adata,
+        representation="X_pca",
+        n_pcs=PCA_N_COMPONENTS,
+        n_components=EMBEDDING_N_COMPONENTS,
+        n_iter=TSNE_N_ITER,
+        perplexity=30.0,
+        key_added="X_tsne",
+        seed=0,
+        n_jobs=1,
+    )
+    outputs["tsne"] = _collect_embedding(adata, "X_tsne")
 
     return outputs
 
@@ -201,6 +253,16 @@ def _collect_neighbors(adata: ad.AnnData) -> Dict[str, Any]:
         "connectivities_indices": connectivities.indices,
         "connectivities_indptr": connectivities.indptr,
         "connectivities_shape": np.asarray(connectivities.shape, dtype=np.int64),
+    }
+
+
+def _collect_embedding(
+    adata: ad.AnnData,
+    key: str,
+) -> Dict[str, Any]:
+
+    return {
+        "embedding": np.asarray(adata.obsm[key]),
     }
 
 

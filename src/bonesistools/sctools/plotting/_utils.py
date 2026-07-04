@@ -6,10 +6,12 @@ import warnings
 from collections.abc import Mapping as MappingABC
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union, cast
 
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.figure import Figure
+from matplotlib.ticker import FormatStrFormatter
 
 from ..._warnings import _warn_deprecated_argument
 from .._typing import ScData
@@ -22,8 +24,38 @@ def set_window_title(fig: Figure, title: str) -> None:
         manager.set_window_title(title)
 
 
-def figure_from_axes(ax: Axes) -> Figure:
-    return cast(Figure, ax.figure)
+def save_figure(fig: Figure, outfile: Any) -> bool:
+    if outfile is None:
+        return False
+
+    fig.savefig(outfile, bbox_inches="tight")
+    plt.close(fig)
+    return True
+
+
+def set_title(
+    fig: Figure,
+    ax: Axes,
+    title: Optional[Union[str, Mapping[str, Any]]],
+) -> None:
+    if title is None:
+        return None
+
+    if isinstance(title, str):
+        set_window_title(fig, title)
+        ax.set_title(title)
+        return None
+
+    if isinstance(title, MappingABC):
+        title_kwargs = dict(title)
+        set_window_title(fig, title_kwargs["label"])
+        ax.set_title(**title_kwargs)
+        return None
+
+    raise TypeError(
+        f"unsupported argument type for 'title': "
+        f"expected {str} or {Mapping} but received {type(title)}"
+    )
 
 
 def set_axis_label(
@@ -78,6 +110,43 @@ def set_axis_label(
         )
 
     setter(label, **label_kwargs)
+    return None
+
+
+def set_axis_formatters(
+    ax: Axes,
+    formatter: Optional[Any] = None,
+    *,
+    n_components: int = 2,
+) -> None:
+    resolved_formatter = FormatStrFormatter("%g") if formatter is None else formatter
+    ax.xaxis.set_major_formatter(resolved_formatter)
+    ax.yaxis.set_major_formatter(resolved_formatter)
+    if n_components == 3:
+        cast(Any, ax).zaxis.set_major_formatter(resolved_formatter)
+
+
+def apply_legend(
+    ax: Axes,
+    legend: Union[bool, Mapping[str, Any]],
+    *,
+    handles: Optional[Sequence[Any]] = None,
+    labels: Optional[Sequence[Any]] = None,
+    remove: bool = False,
+) -> None:
+    if legend is False:
+        if remove:
+            existing_legend = ax.get_legend()
+            if existing_legend is not None:
+                existing_legend.remove()
+        return None
+
+    legend_kwargs = {} if legend is True else dict(legend)
+    if handles is None or labels is None:
+        ax.legend(**legend_kwargs)
+    else:
+        ax.legend(handles, labels, **legend_kwargs)
+
     return None
 
 

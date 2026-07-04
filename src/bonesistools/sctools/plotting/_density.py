@@ -24,7 +24,6 @@ from anndata import AnnData
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
-from matplotlib.ticker import FormatStrFormatter
 
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import anndata_checker
@@ -38,12 +37,14 @@ from ._colors import (
 )
 from ._utils import (
     _resolve_legend_argument,
+    apply_legend,
     colormap_colors,
-    figure_from_axes,
     normalize_color,
     qualitative_color_values,
+    save_figure,
+    set_axis_formatters,
     set_axis_label,
-    set_window_title,
+    set_title,
 )
 
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
@@ -318,7 +319,7 @@ def density(
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = figure_from_axes(ax)
+        fig = cast(Figure, ax.figure)
 
     q = np.quantile(counts["counting"], 0.99)
     clip_range = cast(
@@ -357,37 +358,17 @@ def density(
     if ylabel is not None:
         set_axis_label(ax, "ylabel", ylabel)
 
-    if title:
-        if isinstance(title, str):
-            set_window_title(fig, title)
-            ax.set_title(title)
-        elif isinstance(title, dict):
-            set_window_title(fig, title["label"])
-            ax.set_title(**title)
+    set_title(fig, ax, title)
 
     if obs:
-        if legend is True:
-            ax.legend()
-        elif legend is not False:
-            ax.legend(**legend)
+        apply_legend(ax, legend)
 
-    (
-        ax.xaxis.set_major_formatter(kwargs["formatter"])
-        if "formatter" in kwargs
-        else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-    )
-    (
-        ax.yaxis.set_major_formatter(kwargs["formatter"])
-        if "formatter" in kwargs
-        else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
-    )
+    set_axis_formatters(ax, kwargs.get("formatter"))
 
-    if outfile:
-        fig.savefig(outfile, bbox_inches="tight")
-        plt.close(fig)
+    if save_figure(fig, outfile):
         return None
-    else:
-        return fig, ax
+
+    return fig, ax
 
 
 @overload
@@ -552,7 +533,7 @@ def cdf(
     if ax is None:
         fig, ax = plt.subplots()
     else:
-        fig = figure_from_axes(ax)
+        fig = cast(Figure, ax.figure)
 
     x, y = _ecdf(counts["counting"])
     ax.step(x, y, where="post", color=color_values[0], label="all")
@@ -570,28 +551,14 @@ def cdf(
     if min(counts["counting"]) == 0:
         ax.set_xlim(min(counts["counting"]), max(counts["counting"]) * 1.1)
     if obs:
-        if legend is True:
-            ax.legend()
-        elif legend is not False:
-            ax.legend(**legend)
+        apply_legend(ax, legend)
 
-    (
-        ax.xaxis.set_major_formatter(kwargs["formatter"])
-        if "formatter" in kwargs
-        else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-    )
-    (
-        ax.yaxis.set_major_formatter(kwargs["formatter"])
-        if "formatter" in kwargs
-        else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
-    )
+    set_axis_formatters(ax, kwargs.get("formatter"))
 
-    if outfile:
-        fig.savefig(outfile, bbox_inches="tight")
-        plt.close(fig)
+    if save_figure(fig, outfile):
         return None
-    else:
-        return fig, ax
+
+    return fig, ax
 
 
 def kde_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:

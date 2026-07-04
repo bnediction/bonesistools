@@ -35,7 +35,7 @@ from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
 from ..tools._utils import _UNSET, _resolve_representation_argument
 from ._colors import black
 from ._scatterplot import Colors, embedding
-from ._utils import _resolve_toggle_mapping_argument
+from ._utils import _resolve_toggle_mapping_argument, save_figure
 
 
 @anndata_or_mudata_checker
@@ -392,9 +392,7 @@ def trajectory(
         **({} if graph is None else graph),
     )
 
-    if outfile:
-        plt.savefig(outfile, bbox_inches="tight")
-        plt.close(fig)
+    if save_figure(fig, outfile):
         return None
 
     return fig, drawn_ax
@@ -502,9 +500,7 @@ def paga(
         **kwargs,
     )
 
-    if outfile:
-        plt.savefig(outfile, bbox_inches="tight")
-        plt.close()
+    if save_figure(cast(Figure, ax.figure), outfile):
         return None
 
     return ax

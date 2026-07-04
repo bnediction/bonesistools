@@ -28,6 +28,24 @@ CORRECTION_METHODS: Tuple[CorrectionMethod, ...] = (
     "benjamini-hochberg",
     "bonferroni",
 )
+WILCOXON_RESULT_COLUMNS = [
+    "group",
+    "statistics",
+    "pvals",
+    "pvals_adj",
+    "u_statistics",
+    "sum_ranks",
+]
+WELCH_RESULT_COLUMNS = [
+    "group",
+    "statistics",
+    "pvals",
+    "pvals_adj",
+    "mean_group",
+    "mean_background",
+    "variance_group",
+    "variance_background",
+]
 
 
 def _adjust_pvalues(
@@ -131,7 +149,6 @@ def wilcoxon_tests(
         - `sum_ranks`: sum of target-group ranks.
     """
 
-    groupby = _as_string(groupby, "groupby")
     correction = _as_literal(
         correction,
         choices=CORRECTION_METHODS,
@@ -143,24 +160,17 @@ def wilcoxon_tests(
         None if max_memory is None else _as_memory_size(max_memory, "max_memory")
     )
 
-    expression_mtx, gene_names = _get_expression_with_gene_names(
+    expression_mtx, gene_names, labels = _get_test_expression_and_labels(
         adata,
+        groupby,
         expression,
         var_subset,
     )
-    if len(expression_mtx.shape) != 2:
-        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
-
-    labels = cast(pd.Series, adata.obs[groupby])
-    background_groups = _resolve_background_groups(labels, background)
-    target_groups = _resolve_groups(labels, groups, background_groups)
-    if background_groups is not None:
-        overlap = set(target_groups) & set(background_groups)
-        if overlap:
-            raise ValueError(
-                "invalid argument combination: target groups and background groups "
-                f"must be disjoint, but overlap on {sorted(overlap)!r}"
-            )
+    target_groups, background_groups = _resolve_target_and_background_groups(
+        labels,
+        groups,
+        background,
+    )
 
     if background_groups is None:
         results = _wilcoxon_tests_rest(
@@ -184,29 +194,7 @@ def wilcoxon_tests(
             correction=correction,
         )
 
-    if not results:
-        return pd.DataFrame(
-            columns=cast(
-                Any,
-                [
-                    "group",
-                    "statistics",
-                    "pvals",
-                    "pvals_adj",
-                    "u_statistics",
-                    "sum_ranks",
-                ],
-            )
-        )
-
-    df = pd.concat(results, axis=0)
-    df = df[["group", "statistics", "pvals", "pvals_adj", "u_statistics", "sum_ranks"]]
-    df.index.name = "names"
-
-    return cast(
-        pd.DataFrame,
-        cast(Any, df).sort_values(by=["group", "pvals"], kind="mergesort"),
-    )
+    return _format_wilcoxon_results(results)
 
 
 @anndata_checker
@@ -285,7 +273,6 @@ def welch_tests(
     analysis. Genome Biology, 19(1), 15.
     """
 
-    groupby = _as_string(groupby, "groupby")
     correction = _as_literal(
         correction,
         choices=CORRECTION_METHODS,
@@ -300,24 +287,17 @@ def welch_tests(
         None if max_memory is None else _as_memory_size(max_memory, "max_memory")
     )
 
-    expression_mtx, gene_names = _get_expression_with_gene_names(
+    expression_mtx, gene_names, labels = _get_test_expression_and_labels(
         adata,
+        groupby,
         expression,
         var_subset,
     )
-    if len(expression_mtx.shape) != 2:
-        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
-
-    labels = cast(pd.Series, adata.obs[groupby])
-    background_groups = _resolve_background_groups(labels, background)
-    target_groups = _resolve_groups(labels, groups, background_groups)
-    if background_groups is not None:
-        overlap = set(target_groups) & set(background_groups)
-        if overlap:
-            raise ValueError(
-                "invalid argument combination: target groups and background groups "
-                f"must be disjoint, but overlap on {sorted(overlap)!r}"
-            )
+    target_groups, background_groups = _resolve_target_and_background_groups(
+        labels,
+        groups,
+        background,
+    )
 
     if background_groups is None:
         results = _welch_tests_rest(
@@ -341,36 +321,73 @@ def welch_tests(
             max_memory=max_memory_bytes,
         )
 
-    if not results:
-        return pd.DataFrame(
-            columns=cast(
-                Any,
-                [
-                    "group",
-                    "statistics",
-                    "pvals",
-                    "pvals_adj",
-                    "mean_group",
-                    "mean_background",
-                    "variance_group",
-                    "variance_background",
-                ],
+    return _format_welch_results(results)
+
+
+def _get_test_expression_and_labels(
+    adata: AnnData,
+    groupby: str,
+    expression: Optional[str],
+    var_subset: VarSubset,
+) -> Tuple[Matrix, Index, pd.Series]:
+
+    groupby = _as_string(groupby, "groupby")
+    expression_mtx, gene_names = _get_expression_with_gene_names(
+        adata,
+        expression,
+        var_subset,
+    )
+    if len(expression_mtx.shape) != 2:
+        raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
+
+    return expression_mtx, gene_names, cast(pd.Series, adata.obs[groupby])
+
+
+def _resolve_target_and_background_groups(
+    labels: pd.Series,
+    groups: Union[Literal["all"], Sequence[Any]],
+    background: Union[Literal["rest"], Sequence[Any]],
+) -> Tuple[Sequence[Any], Optional[Sequence[Any]]]:
+
+    background_groups = _resolve_background_groups(labels, background)
+    target_groups = _resolve_groups(labels, groups, background_groups)
+    if background_groups is not None:
+        overlap = set(target_groups) & set(background_groups)
+        if overlap:
+            raise ValueError(
+                "invalid argument combination: target groups and background groups "
+                f"must be disjoint, but overlap on {sorted(overlap)!r}"
             )
-        )
+
+    return target_groups, background_groups
+
+
+def _format_wilcoxon_results(results: Sequence[pd.DataFrame]) -> pd.DataFrame:
+
+    return _select_group_test_columns_and_sort_by_pvalue(
+        results,
+        WILCOXON_RESULT_COLUMNS,
+    )
+
+
+def _format_welch_results(results: Sequence[pd.DataFrame]) -> pd.DataFrame:
+
+    return _select_group_test_columns_and_sort_by_pvalue(
+        results,
+        WELCH_RESULT_COLUMNS,
+    )
+
+
+def _select_group_test_columns_and_sort_by_pvalue(
+    results: Sequence[pd.DataFrame],
+    columns: Sequence[str],
+) -> pd.DataFrame:
+
+    if not results:
+        return pd.DataFrame(columns=cast(Any, list(columns)))
 
     df = pd.concat(results, axis=0)
-    df = df[
-        [
-            "group",
-            "statistics",
-            "pvals",
-            "pvals_adj",
-            "mean_group",
-            "mean_background",
-            "variance_group",
-            "variance_background",
-        ]
-    ]
+    df = df[list(columns)]
     df.index.name = "names"
 
     return cast(

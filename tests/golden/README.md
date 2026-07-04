@@ -32,6 +32,9 @@ tests/golden/
         hvg_loess.npz
         pca.npz
         neighbors.npz
+        spectral.npz
+        umap.npz
+        tsne.npz
 ```
 
 The files are test resources, not source data loaders. Tests in this directory
@@ -77,7 +80,10 @@ PBMC3k preprocessing workflow:
 * `qc.npz`: observation-level and variable-level QC columns;
 * `hvg_loess.npz`: HVG mask, ranks, scores and selected feature names;
 * `pca.npz`: PCA embedding, selected loadings and explained variance;
-* `neighbors.npz`: sparse distance and connectivity graph arrays.
+* `neighbors.npz`: sparse distance and fuzzy connectivity graph arrays;
+* `spectral.npz`: spectral embedding computed from binary neighbors;
+* `umap.npz`: UMAP embedding computed from fuzzy neighbors;
+* `tsne.npz`: t-SNE embedding computed from the PCA representation.
 
 Regenerate these files intentionally with:
 

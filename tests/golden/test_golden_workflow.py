@@ -73,5 +73,13 @@ def test_golden_workflow_matches_expected_outputs(golden_outputs, name):
             rtol=1e-10,
             atol=1e-12,
         )
+    elif name in {"spectral", "tsne", "umap"}:
+        assert_close_arrays(
+            result,
+            expected,
+            ("embedding",),
+            rtol=1e-6,
+            atol=1e-6,
+        )
     else:
         raise AssertionError(f"unexpected golden output: {name}")

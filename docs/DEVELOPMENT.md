@@ -160,10 +160,10 @@ Each dataset entry should define:
 * feature count fields with explicit biological names, such as `genes` or
   `peaks`;
 * `source`: source provider or accession;
-* `license`: license string, or `"not specified"` when no license is provided;
+* `license`: license string, or `"Not specified"` when no license is provided;
 * `url`: a single canonical user-facing URL with dataset metadata, not
   necessarily the technical download URL;
-* `citation`: publication or dataset citation, or `"not specified"` when no
+* `citation`: publication or dataset citation, or `"Not specified"` when no
   citation is provided.
 
 Use concrete feature names instead of a generic `features` field. For example,
@@ -176,16 +176,16 @@ Example:
 ```json
 {
     "nestorowa": {
-        "description": "Single-cell RNA sequencing dataset of mouse hematopoietic stem and progenitor cells.",
+        "description": "Single-cell RNA sequencing dataset of mouse hematopoietic stem and progenitor cells (HSPCs).",
         "organism": "Mus musculus",
         "tissue": "bone marrow",
         "technology": "Smart-seq2",
         "cells": 1656,
         "genes": 46078,
         "source": "NCBI GEO (GSE81682)",
-        "license": "not specified",
+        "license": "Not specified",
         "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE81682",
-        "citation": "..."
+        "citation": "Nestorowa et al. (2016). A single-cell resolution map of mouse hematopoietic stem and progenitor cell differentiation. Blood, 128(8), e20-e31."
     }
 }
 ```

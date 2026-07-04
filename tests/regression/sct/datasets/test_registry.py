@@ -130,7 +130,7 @@ def test_datasets_info_nestorowa_contains_source_license_and_counts_url():
     assert metadata["cells"] == 1656
     assert metadata["genes"] == 46078
     assert metadata["source"] == "NCBI GEO (GSE81682)"
-    assert metadata["license"] == "not specified"
+    assert metadata["license"] == "Not specified"
     assert str(metadata["url"]).endswith("acc=GSE81682")
 
 

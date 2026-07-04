@@ -7,7 +7,7 @@
     "cells": 1656,
     "genes": 46078,
     "source": "NCBI GEO (GSE81682)",
-    "license": "not specified",
+    "license": "Not specified",
     "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE81682",
     "citation": "Nestorowa et al. (2016). A single-cell resolution map of mouse hematopoietic stem and progenitor cell differentiation. Blood, 128(8), e20-e31."
   },

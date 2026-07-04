@@ -30,12 +30,13 @@ from .._typing import ScData, anndata_or_mudata_checker
 from ._colors import QUALITATIVE_COLORS, generate_colormap
 from ._utils import (
     _resolve_legend_argument,
+    apply_legend,
     colormap_colors,
     colors_from_uns,
-    figure_from_axes,
     qualitative_color_values,
+    save_figure,
     set_axis_label,
-    set_window_title,
+    set_title,
 )
 
 Colors = Union[
@@ -46,94 +47,6 @@ Colors = Union[
     Mapping[object, object],
 ]
 Orientation = Literal["vertical", "horizontal"]
-
-
-def __ordered_values(
-    series: pd.Series,
-    order: Optional[Sequence[object]],
-) -> Sequence[object]:
-
-    if order is not None:
-        return list(order)
-
-    if isinstance(series.dtype, pd.CategoricalDtype):
-        return list(series.cat.categories)
-
-    return list(pd.unique(series.dropna()))
-
-
-def __index_from_values(values: Sequence[object], name: str) -> pd.Index:
-
-    return pd.Index(np.asarray(list(values), dtype=object), name=name)
-
-
-def __normalize_colors(
-    colors: Optional[Colors],
-    values: Sequence[object],
-    scdata: ScData,
-    uns_key: str,
-) -> Sequence[object]:
-
-    if colors is None:
-        colors = colors_from_uns(scdata, uns_key, values)
-
-    if colors is None:
-        colors = qualitative_color_values(
-            len(values),
-            QUALITATIVE_COLORS,
-            generate_colormap,
-        )
-
-    if isinstance(colors, ListedColormap):
-        colors = colormap_colors(colors)
-
-    if isinstance(colors, str):
-        colors = plt.get_cmap(colors)
-
-    if isinstance(colors, Colormap):
-        positions = np.linspace(0, 1, len(values))
-        return cast(Sequence[object], colors(positions))
-
-    if isinstance(colors, MappingABC):
-        missing = [value for value in values if value not in colors]
-
-        if missing:
-            raise KeyError(f"missing colors for values: {missing!r}")
-
-        return [colors[value] for value in values]
-
-    color_values = list(cast(Sequence[object], colors))
-
-    if len(color_values) < len(values):
-        raise ValueError(
-            f"invalid argument value for 'colors': "
-            f"expected at least {len(values)} colors but received {len(color_values)}"
-        )
-
-    return color_values[0 : len(values)]
-
-
-def __apply_ticklabel_colors(
-    ax: Axes,
-    colors: Optional[Mapping[object, object]],
-    orientation: Orientation,
-) -> None:
-
-    if colors is None:
-        return None
-
-    ticklabels = (
-        ax.get_xticklabels() if orientation == "vertical" else ax.get_yticklabels()
-    )
-
-    for ticklabel in ticklabels:
-        value = ticklabel.get_text()
-
-        if value in colors:
-            ticklabel.set_color(cast(Any, colors[value]))
-            ticklabel.set_fontweight("bold")
-
-    return None
 
 
 @overload
@@ -317,41 +230,17 @@ def composition(
 
     legend = _resolve_legend_argument(legend, kwargs)
 
-    data = scdata.obs[[groupby, obs]]
-    data = data.dropna() if dropna else data
-
-    groups = __ordered_values(scdata.obs[groupby], group_order)
-    segments = __ordered_values(scdata.obs[obs], obs_order)
-
-    counts = pd.crosstab(data[groupby], data[obs])
-    counts = counts.reindex(
-        index=__index_from_values(groups, groupby),
-        columns=__index_from_values(segments, obs),
-        fill_value=0,
+    table, groups, segments = __composition_table(
+        scdata,
+        obs=obs,
+        groupby=groupby,
+        obs_order=obs_order,
+        group_order=group_order,
+        dropna=dropna,
+        normalize=normalize,
     )
-
-    if normalize:
-        totals = counts.sum(axis=1)
-        empty_groups = list(totals[totals == 0].index)
-
-        if empty_groups:
-            raise ValueError(
-                f"cannot normalize composition for empty groups: {empty_groups!r}"
-            )
-
-        table = counts.div(totals, axis=0)
-    else:
-        table = counts
-
     color_values = __normalize_colors(colors, segments, scdata, obs)
-
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.subplots()
-        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 3)
-        fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6)
-    else:
-        fig = figure_from_axes(ax)
+    fig, ax = __composition_figure(ax, kwargs)
 
     bar_kwargs = kwargs["bar"] if "bar" in kwargs else {}
     table.plot(
@@ -362,6 +251,89 @@ def composition(
         ax=ax,
         **bar_kwargs,
     )
+
+    __set_composition_axes(
+        ax,
+        normalize=normalize,
+        percent=percent,
+        orientation=orientation,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        kwargs=kwargs,
+    )
+
+    if group_colors is None:
+        group_colors = colors_from_uns(scdata, groupby, groups)
+    __apply_ticklabel_colors(ax, group_colors, orientation)
+    set_title(fig, ax, title)
+    apply_legend(ax, legend, remove=True)
+
+    if save_figure(fig, outfile):
+        return None
+
+    return fig, ax
+
+
+def __composition_table(
+    scdata: ScData,
+    *,
+    obs: str,
+    groupby: str,
+    obs_order: Optional[Sequence[object]],
+    group_order: Optional[Sequence[object]],
+    dropna: bool,
+    normalize: bool,
+) -> Tuple[pd.DataFrame, Sequence[object], Sequence[object]]:
+
+    data = scdata.obs[[groupby, obs]]
+    data = data.dropna() if dropna else data
+
+    groups = __ordered_values(scdata.obs[groupby], group_order)
+    segments = __ordered_values(scdata.obs[obs], obs_order)
+    counts = pd.crosstab(data[groupby], data[obs])
+    counts = counts.reindex(
+        index=__index_from_values(groups, groupby),
+        columns=__index_from_values(segments, obs),
+        fill_value=0,
+    )
+
+    if not normalize:
+        return counts, groups, segments
+
+    totals = counts.sum(axis=1)
+    empty_groups = list(totals[totals == 0].index)
+    if empty_groups:
+        raise ValueError(
+            f"cannot normalize composition for empty groups: {empty_groups!r}"
+        )
+    return counts.div(totals, axis=0), groups, segments
+
+
+def __composition_figure(
+    ax: Optional[Axes],
+    kwargs: Mapping[str, Any],
+) -> Tuple[Figure, Axes]:
+
+    if ax is not None:
+        return cast(Figure, ax.figure), ax
+
+    fig = plt.figure()
+    ax = fig.subplots()
+    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 3)
+    fig.set_figwidth(kwargs["figwidth"] if "figwidth" in kwargs else 6)
+    return fig, ax
+
+
+def __set_composition_axes(
+    ax: Axes,
+    *,
+    normalize: bool,
+    percent: bool,
+    orientation: Orientation,
+    xlabel: Optional[Union[str, Mapping[str, Any]]],
+    ylabel: Optional[Union[str, Mapping[str, Any]]],
+    kwargs: Mapping[str, Any],
+) -> None:
 
     set_axis_label(ax, "xlabel", xlabel)
     set_axis_label(ax, "ylabel", ylabel)
@@ -396,36 +368,92 @@ def composition(
     )
     for ticklabel in ticklabels:
         ticklabel.set_rotation(rotation)
+    return None
 
-    if group_colors is None:
-        group_colors = colors_from_uns(scdata, groupby, groups)
-    __apply_ticklabel_colors(ax, group_colors, orientation)
 
-    if title:
-        if isinstance(title, str):
-            set_window_title(fig, title)
-            ax.set_title(title)
-        elif isinstance(title, dict):
-            set_window_title(fig, title["label"])
-            ax.set_title(**title)
-        else:
-            raise TypeError(
-                f"unsupported argument type for 'title': "
-                f"expected {str} or {dict} but received {type(title)}"
-            )
+def __ordered_values(
+    series: pd.Series,
+    order: Optional[Sequence[object]],
+) -> Sequence[object]:
 
-    existing_legend = ax.get_legend()
+    if order is not None:
+        return list(order)
 
-    if legend is True:
-        ax.legend()
-    elif legend is not False:
-        ax.legend(**legend)
-    elif existing_legend is not None:
-        existing_legend.remove()
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return list(series.cat.categories)
 
-    if outfile:
-        plt.savefig(outfile, bbox_inches="tight")
-        plt.close(fig)
+    return list(pd.unique(series.dropna()))
+
+
+def __index_from_values(values: Sequence[object], name: str) -> pd.Index:
+
+    return pd.Index(np.asarray(list(values), dtype=object), name=name)
+
+
+def __normalize_colors(
+    colors: Optional[Colors],
+    values: Sequence[object],
+    scdata: ScData,
+    uns_key: str,
+) -> Sequence[object]:
+
+    if colors is None:
+        colors = colors_from_uns(scdata, uns_key, values)
+
+    if colors is None:
+        colors = qualitative_color_values(
+            len(values),
+            QUALITATIVE_COLORS,
+            generate_colormap,
+        )
+
+    if isinstance(colors, ListedColormap):
+        colors = colormap_colors(colors)
+
+    if isinstance(colors, str):
+        colors = plt.get_cmap(colors)
+
+    if isinstance(colors, Colormap):
+        positions = np.linspace(0, 1, len(values))
+        return cast(Sequence[object], colors(positions))
+
+    if isinstance(colors, MappingABC):
+        missing = [value for value in values if value not in colors]
+
+        if missing:
+            raise KeyError(f"missing colors for values: {missing!r}")
+
+        return [colors[value] for value in values]
+
+    color_values = list(cast(Sequence[object], colors))
+
+    if len(color_values) < len(values):
+        raise ValueError(
+            f"invalid argument value for 'colors': "
+            f"expected at least {len(values)} colors but received {len(color_values)}"
+        )
+
+    return color_values[0 : len(values)]
+
+
+def __apply_ticklabel_colors(
+    ax: Axes,
+    colors: Optional[Mapping[object, object]],
+    orientation: Orientation,
+) -> None:
+
+    if colors is None:
         return None
 
-    return fig, ax
+    ticklabels = (
+        ax.get_xticklabels() if orientation == "vertical" else ax.get_yticklabels()
+    )
+
+    for ticklabel in ticklabels:
+        value = ticklabel.get_text()
+
+        if value in colors:
+            ticklabel.set_color(cast(Any, colors[value]))
+            ticklabel.set_fontweight("bold")
+
+    return None

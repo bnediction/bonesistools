@@ -203,20 +203,23 @@ def qc(
         else expression_mtx
     )
 
-    n_obs, n_features = matrix.shape
-    total_per_obs = _sum_axis(matrix, axis=1)
-    total_per_var = _sum_axis(matrix, axis=0)
-    variance_per_var = _variance_per_feature(matrix)
-    median_per_var, mad_per_var = _median_mad_per_feature(matrix, backend=backend)
-    n_vars_per_obs, n_cells_per_var = _positive_counts(matrix)
+    n_barcodes, n_features = matrix.shape
+    total_per_barcode = _sum_axis(matrix, axis=1)
+    total_per_feature = _sum_axis(matrix, axis=0)
+    variance_per_feature = _variance_per_feature(matrix)
+    median_per_feature, mad_per_feature = _median_mad_per_feature(
+        matrix,
+        backend=backend,
+    )
+    n_features_per_barcode, n_barcodes_per_feature = _positive_counts(matrix)
 
     obs_metrics = pd.DataFrame(index=adata.obs_names)
-    obs_metrics["n_features"] = n_vars_per_obs
+    obs_metrics["n_features"] = n_features_per_barcode
     if log1p:
-        obs_metrics["log1p_n_features"] = np.log1p(n_vars_per_obs)
-    obs_metrics["total"] = total_per_obs
+        obs_metrics["log1p_n_features"] = np.log1p(n_features_per_barcode)
+    obs_metrics["total"] = total_per_barcode
     if log1p:
-        obs_metrics["log1p_total"] = np.log1p(total_per_obs)
+        obs_metrics["log1p_total"] = np.log1p(total_per_barcode)
 
     if resolved_percent_top is not None:
         if any(top > n_features for top in resolved_percent_top):
@@ -224,7 +227,7 @@ def qc(
         top_percentages = _percent_top_by_rank(
             matrix,
             resolved_percent_top,
-            total_per_obs,
+            total_per_barcode,
             backend=backend,
         )
         for top, values in top_percentages.items():
@@ -237,26 +240,22 @@ def qc(
         obs_metrics[f"total_{qc_var}"] = total_qc
         if log1p:
             obs_metrics[f"log1p_total_{qc_var}"] = np.log1p(total_qc)
-        obs_metrics[f"pct_{qc_var}"] = _percentage(total_qc, total_per_obs)
+        obs_metrics[f"pct_{qc_var}"] = _percentage(total_qc, total_per_barcode)
 
     var_metrics = pd.DataFrame(index=adata.var_names)
-    var_metrics["n_barcodes"] = n_cells_per_var
-    var_metrics["mean"] = total_per_var / n_obs
+    var_metrics["n_barcodes"] = n_barcodes_per_feature
+    var_metrics["mean"] = total_per_feature / n_barcodes
+    var_metrics["variance"] = variance_per_feature
+    var_metrics["median"] = median_per_feature
+    var_metrics["mad"] = mad_per_feature
+    var_metrics["pct_dropout"] = 100 * (1 - n_barcodes_per_feature / n_barcodes)
+    var_metrics["total"] = total_per_feature
+
     if log1p:
-        var_metrics["log1p_mean"] = np.log1p(var_metrics["mean"].to_numpy())
-    var_metrics["variance"] = variance_per_var
-    if log1p:
-        var_metrics["log1p_variance"] = np.log1p(variance_per_var)
-    var_metrics["median"] = median_per_var
-    if log1p:
-        var_metrics["log1p_median"] = np.log1p(median_per_var)
-    var_metrics["mad"] = mad_per_var
-    if log1p:
-        var_metrics["log1p_mad"] = np.log1p(mad_per_var)
-    var_metrics["pct_dropout"] = 100 * (1 - n_cells_per_var / n_obs)
-    var_metrics["total"] = total_per_var
-    if log1p:
-        var_metrics["log1p_total"] = np.log1p(total_per_var)
+        for column in ("mean", "variance", "median", "mad", "total"):
+            var_metrics[f"log1p_{column}"] = np.log1p(
+                var_metrics[column].to_numpy()
+            )
 
     obs_metrics.index = adata.obs_names
     var_metrics.index = adata.var_names
@@ -488,23 +487,25 @@ def _positive_counts(matrix: Any) -> Tuple[np.ndarray, np.ndarray]:
 def _percent_top(
     matrix: Any,
     top: int,
-    total_per_obs: np.ndarray,
+    total_per_barcode: np.ndarray,
     backend: Literal["auto", "python", "numba"] = "auto",
 ) -> np.ndarray:
 
-    return _percent_top_by_rank(matrix, (top,), total_per_obs, backend=backend)[top]
+    return _percent_top_by_rank(matrix, (top,), total_per_barcode, backend=backend)[
+        top
+    ]
 
 
 def _percent_top_by_rank(
     matrix: Any,
     tops: Sequence[int],
-    total_per_obs: np.ndarray,
+    total_per_barcode: np.ndarray,
     backend: Literal["auto", "python", "numba"] = "auto",
 ) -> Dict[int, np.ndarray]:
 
     sorted_tops = np.asarray(sorted(tops), dtype=np.int64)
     if not sparse.issparse(matrix):
-        values = _percent_top_dense(np.asarray(matrix), sorted_tops, total_per_obs)
+        values = _percent_top_dense(np.asarray(matrix), sorted_tops, total_per_barcode)
         values_by_top = {
             int(top): values[:, index] * 100 for index, top in enumerate(sorted_tops)
         }
@@ -536,7 +537,7 @@ def _percent_top_by_rank(
 def _percent_top_dense(
     matrix: np.ndarray,
     tops: np.ndarray,
-    total_per_obs: np.ndarray,
+    total_per_barcode: np.ndarray,
 ) -> np.ndarray:
 
     max_top = tops[-1]
@@ -552,7 +553,7 @@ def _percent_top_dense(
         previous = top
 
     with np.errstate(divide="ignore", invalid="ignore"):
-        return values / total_per_obs[:, None]
+        return values / total_per_barcode[:, None]
 
 
 def _percent_top_sparse_csr(

@@ -23,7 +23,6 @@ import pandas as pd
 from matplotlib.axes._axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.ticker import FormatStrFormatter
 
 from ..._compat import Literal
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
@@ -43,13 +42,15 @@ from ._colors import (
 from ._utils import (
     _resolve_legend_argument,
     _resolve_toggle_mapping_argument,
+    apply_legend,
     colormap_colors,
     colors_from_uns,
-    figure_from_axes,
     normalize_color,
     qualitative_color_values,
+    save_figure,
+    set_axis_formatters,
     set_axis_label,
-    set_window_title,
+    set_title,
 )
 
 Colors = Union[
@@ -61,429 +62,6 @@ Colors = Union[
 ]
 ContinuousColors = Union[str, Colormap]
 MarkerParameter = Union[float, Tuple[float, float]]
-
-
-def __split_marker_parameter(
-    value: MarkerParameter,
-    name: str,
-) -> Tuple[float, float]:
-
-    if isinstance(value, tuple):
-        if len(value) != 2:
-            raise ValueError(
-                f"invalid argument value for {name!r}: "
-                f"expected a float or a pair of floats but received {value!r}"
-            )
-        return value
-
-    return value, value
-
-
-def __scatter_alpha(color: object, kwargs: Mapping[str, Any]) -> float:
-
-    if "alpha" in kwargs:
-        return cast(float, kwargs["alpha"])
-    if color == lightgray:
-        return 0.3
-    return 1.0
-
-
-def __deprecated_graph_kwarg(
-    kwargs: Dict[str, Any],
-    old_name: str,
-    target: str,
-) -> bool:
-
-    if old_name not in kwargs:
-        return False
-
-    old_value = kwargs.pop(old_name)
-    _warn_deprecated(f"`{old_name}`", replacement=f"`{target}`", stacklevel=2)
-
-    return cast(bool, old_value)
-
-
-def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
-
-    if colors is None:
-        return plt.get_cmap("autumn_r")
-    if isinstance(colors, str):
-        return plt.get_cmap(colors)
-    if isinstance(colors, Colormap):
-        return colors
-
-    raise TypeError(
-        "unsupported colors for continuous observations: "
-        "expected a matplotlib colormap or colormap name"
-    )
-
-
-def __discrete_category_values(series: pd.Series) -> Sequence[object]:
-    categorical = series.astype("category")
-    values = list(categorical.cat.categories)
-    if isinstance(series.dtype, pd.CategoricalDtype) and series.cat.ordered:
-        return values
-
-    try:
-        return sorted(values)
-    except TypeError:
-        return sorted(values, key=lambda value: str(value))
-
-
-def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
-
-    def wrapper(
-        scdata: ScData,  # type: ignore
-        obs: str,
-        representation: str,
-        colors: Optional[Colors] = None,
-        n_components: Optional[int] = 2,
-        ax: Optional[Axes] = None,
-        **kwargs: Any,
-    ) -> Tuple[Figure, Axes]:
-
-        n_components = 2 if n_components is None else n_components
-        fig, ax = cast(
-            Tuple[Figure, Axes],
-            plot(scdata, obs, representation, colors, n_components, ax=ax, **kwargs),
-        )
-
-        if "xlabel" in kwargs:
-            set_axis_label(ax, "xlabel", kwargs["xlabel"])
-        if "ylabel" in kwargs:
-            set_axis_label(ax, "ylabel", kwargs["ylabel"])
-        if "zlabel" in kwargs and n_components > 2:
-            set_axis_label(ax, "zlabel", kwargs["zlabel"])
-
-        if "tick_params" in kwargs:
-            ax.tick_params(**kwargs["tick_params"])
-        else:
-            if "xtick_params" in kwargs:
-                ax.tick_params(axis="x", **kwargs["xtick_params"])
-            if "ytick_params" in kwargs:
-                ax.tick_params(axis="y", **kwargs["ytick_params"])
-            if n_components == 3 and "ztick_params" in kwargs:
-                cast(Any, ax).tick_params(axis="z", **kwargs["ztick_params"])
-
-        plt.sca(ax)
-        (
-            ax.xaxis.set_major_formatter(kwargs["formatter"])
-            if "formatter" in kwargs
-            else ax.xaxis.set_major_formatter(FormatStrFormatter("%g"))
-        )
-        (
-            ax.yaxis.set_major_formatter(kwargs["formatter"])
-            if "formatter" in kwargs
-            else ax.yaxis.set_major_formatter(FormatStrFormatter("%g"))
-        )
-        if n_components == 3:
-            ax3d = cast(Any, ax)
-            (
-                ax3d.zaxis.set_major_formatter(kwargs["formatter"])
-                if "formatter" in kwargs
-                else ax3d.zaxis.set_major_formatter(FormatStrFormatter("%g"))
-            )
-
-        if n_components == 3 and "background_visible" in kwargs:
-            if kwargs["background_visible"] is False:
-                ax3d = cast(Any, ax)
-                ax3d.xaxis.pane.fill = False
-                ax3d.yaxis.pane.fill = False
-                ax3d.zaxis.pane.fill = False
-                ax3d.xaxis.pane.set_edgecolor("w")
-                ax3d.yaxis.pane.set_edgecolor("w")
-                ax3d.zaxis.pane.set_edgecolor("w")
-
-        return fig, ax
-
-    return wrapper
-
-
-@__default_plot
-def __scatterplot_discrete(
-    scdata: ScData,  # type: ignore
-    obs: str,
-    representation: Optional[str] = None,
-    colors: Optional[Colors] = None,
-    n_components: int = 2,
-    legend: Union[bool, Mapping[str, Any]] = False,
-    ax: Optional[Axes] = None,
-    **kwargs: Any,
-) -> Tuple[Figure, Axes]:
-
-    category_values = __discrete_category_values(scdata.obs[obs])
-    categories = set(scdata.obs[obs].unique()) & set(category_values)
-
-    if colors is None:
-        colors = colors_from_uns(scdata, obs, category_values)
-
-    if colors is None:
-        colors = qualitative_color_values(
-            len(category_values),
-            QUALITATIVE_COLORS,
-            generate_colormap,
-        )
-    elif isinstance(colors, Mapping):
-        colors = [colors[cluster] for cluster in category_values]
-    if isinstance(colors, ListedColormap):
-        colors = colormap_colors(colors)
-
-    representation_mtx = cast(
-        np.ndarray,
-        get_representation(
-            scdata,
-            obsm=representation,
-            n_components=n_components,
-        ),
-    )
-
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(
-            111, projection="rectilinear" if n_components == 2 else "3d"
-        )
-        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-        fig.set_figwidth(
-            kwargs["figwidth"]
-            if "figwidth" in kwargs
-            else 6 if n_components == 2 else 8
-        )
-    else:
-        fig = figure_from_axes(ax)
-
-    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
-
-    if scdata.obs[obs].isna().any():
-        idx = scdata.obs[obs].isna()
-        if n_components == 2:
-            ax.scatter(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
-                facecolors=(
-                    kwargs["nan"]["facecolor"] if "facecolor" in kwargs["nan"] else gray
-                ),
-                edgecolors=(
-                    kwargs["nan"]["edgecolor"]
-                    if "edgecolor" in kwargs["nan"]
-                    else "none"
-                ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
-            )
-        elif n_components == 3:
-            ax3d = cast(Any, ax)
-            ax3d.scatter3D(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                representation_mtx[idx, 2],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
-                facecolors=(
-                    kwargs["nan"]["facecolors"]
-                    if "facecolors" in kwargs["nan"]
-                    else gray
-                ),
-                edgecolors=(
-                    kwargs["nan"]["facecolors"]
-                    if "edgecolors" in kwargs["nan"]
-                    else "none"
-                ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
-            )
-
-    color_values = cast(Sequence[object], colors)
-
-    for _cluster, _color in zip(category_values, color_values):
-        _color = normalize_color(_color)
-
-        if _cluster not in categories:
-            continue
-        idx = np.where(scdata.obs[obs] == _cluster)[0]
-        if n_components == 2:
-            ax.scatter(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                s=kwargs["s"] if "s" in kwargs else 2.0,
-                facecolors=_color,
-                edgecolors="none",
-                alpha=__scatter_alpha(_color, kwargs),
-                label=_cluster,
-            )
-        elif n_components == 3:
-            ax3d = cast(Any, ax)
-            ax3d.scatter3D(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                representation_mtx[idx, 2],
-                s=kwargs["s"] if "s" in kwargs else 2.0,
-                facecolors=_color,
-                edgecolors="none",
-                alpha=__scatter_alpha(_color, kwargs),
-                label=_cluster,
-            )
-
-    if legend is not False:
-        box = ax.get_position()
-        ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
-
-        handles, labels = ax.get_legend_handles_labels()
-        if legend is True:
-            ax.legend(handles, labels)
-        else:
-            ax.legend(handles, labels, **dict(legend))
-
-    return fig, ax
-
-
-@__default_plot
-def __scatterplot_continuous(
-    scdata: ScData,  # type: ignore
-    obs: str,
-    representation: Optional[str] = None,
-    colors: Optional[ContinuousColors] = None,
-    n_components: int = 2,
-    ax: Optional[Axes] = None,
-    **kwargs: Any,
-) -> Tuple[Figure, Axes]:
-
-    cmap = __continuous_colormap(colors)
-
-    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
-    if "facecolor" in kwargs["nan"] and "color" not in kwargs["nan"]:
-        kwargs["nan"]["color"] = kwargs["nan"]["facecolor"]
-    if not np.all(cmap.get_bad() != 0) and "facecolor" not in kwargs["nan"]:
-        kwargs["nan"]["color"] = cmap.get_bad()
-
-    representation_mtx = cast(
-        np.ndarray,
-        get_representation(
-            scdata,
-            obsm=representation,
-            n_components=n_components,
-        ),
-    )
-
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(
-            111, projection="rectilinear" if n_components == 2 else "3d"
-        )
-        fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
-        fig.set_figwidth(
-            kwargs["figwidth"]
-            if "figwidth" in kwargs
-            else 6 if n_components == 2 else 8
-        )
-    else:
-        fig = figure_from_axes(ax)
-
-    if scdata.obs[obs].isna().any():
-        idx = scdata.obs[obs].isna()
-        if n_components == 2:
-            ax.scatter(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
-                facecolors=(
-                    kwargs["nan"]["facecolor"]
-                    if "facecolor" in kwargs["nan"]
-                    else lightgray
-                ),
-                edgecolors=(
-                    kwargs["nan"]["edgecolor"]
-                    if "edgecolor" in kwargs["nan"]
-                    else "none"
-                ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
-            )
-        elif n_components == 3:
-            ax3d = cast(Any, ax)
-            ax3d.scatter3D(
-                representation_mtx[idx, 0],
-                representation_mtx[idx, 1],
-                representation_mtx[idx, 2],
-                s=kwargs["nan"]["s"] if "s" in kwargs["nan"] else 2.0,
-                facecolors=(
-                    kwargs["nan"]["facecolors"]
-                    if "facecolors" in kwargs["nan"]
-                    else gray
-                ),
-                edgecolors=(
-                    kwargs["nan"]["facecolors"]
-                    if "edgecolors" in kwargs["nan"]
-                    else "none"
-                ),
-                alpha=kwargs["nan"]["alpha"] if "alpha" in kwargs["nan"] else 1.0,
-            )
-
-    if n_components == 2:
-        sc = ax.scatter(
-            representation_mtx[:, 0],
-            representation_mtx[:, 1],
-            s=kwargs["s"] if "s" in kwargs else 2.0,
-            c=scdata.obs[obs],
-            cmap=cmap,
-            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
-            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
-            edgecolors="none",
-            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
-        )
-        cb = fig.colorbar(
-            sc, shrink=kwargs["colorbar_scale"] if "colorbar_scale" in kwargs else 1
-        )
-        cb.update_ticks()
-    elif n_components == 3:
-        ax3d = cast(Any, ax)
-        ax3d.scatter3D(
-            representation_mtx[:, 0],
-            representation_mtx[:, 1],
-            representation_mtx[:, 2],
-            s=kwargs["s"] if "s" in kwargs else 2.0,
-            c=scdata.obs[obs],
-            cmap=cmap,
-            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
-            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
-            edgecolors="none",
-            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
-        )
-
-    return fig, ax
-
-
-def __draw_labels(
-    scdata: ScData,  # type: ignore
-    obs: str,
-    representation: Optional[str] = None,
-    ax: Optional[Axes] = None,
-    dim: int = 2,
-    **kwargs: Any,
-) -> None:
-
-    barycenter_values = cast(
-        Dict[object, np.ndarray],
-        barycenters(scdata=scdata, obs=obs, representation=representation),
-    )
-    keys_to_remove = []
-    for k, v in barycenter_values.items():
-        if np.isnan(v).any():
-            keys_to_remove.append(k)
-    for k in keys_to_remove:
-        barycenter_values.pop(k, None)
-
-    if ax is None:
-        ax = plt.gca()
-
-    if "verticalalignment" not in kwargs:
-        kwargs["verticalalignment"] = "center"
-    else:
-        pass
-
-    if dim == 2:
-        for label, value in barycenter_values.items():
-            ax.text(x=value[0], y=value[1], s=str(label), **kwargs)
-    elif dim == 3:
-        ax3d = cast(Any, ax)
-        for label, value in barycenter_values.items():
-            ax3d.text(x=value[0], y=value[1], z=value[2], s=label, **kwargs)
 
 
 @overload
@@ -789,25 +367,12 @@ def embedding(
     if automatic_resize:
         fig.tight_layout(pad=1.2, rect=(0, 0, 0.84, 1))
 
-    if title:
-        if isinstance(title, str):
-            set_window_title(fig, title)
-            ax.set_title(title)
-        elif isinstance(title, dict):
-            set_window_title(fig, title["label"])
-            ax.set_title(**title)
-        else:
-            raise TypeError(
-                f"unsupported argument type for 'title': "
-                f"expected {str} or {dict} but received {type(title)}"
-            )
+    set_title(fig, ax, title)
 
-    if outfile:
-        plt.savefig(outfile, bbox_inches="tight")
-        plt.close()
+    if save_figure(fig, outfile):
         return None
-    else:
-        return fig, ax
+
+    return fig, ax
 
 
 def embedding_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
@@ -822,3 +387,412 @@ def embedding_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:
     )
 
     return embedding(*args, **kwargs)
+
+
+def __split_marker_parameter(
+    value: MarkerParameter,
+    name: str,
+) -> Tuple[float, float]:
+
+    if isinstance(value, tuple):
+        if len(value) != 2:
+            raise ValueError(
+                f"invalid argument value for {name!r}: "
+                f"expected a float or a pair of floats but received {value!r}"
+            )
+        return value
+
+    return value, value
+
+
+def __scatter_alpha(color: object, kwargs: Mapping[str, Any]) -> float:
+
+    if "alpha" in kwargs:
+        return cast(float, kwargs["alpha"])
+    if color == lightgray:
+        return 0.3
+    return 1.0
+
+
+def __deprecated_graph_kwarg(
+    kwargs: Dict[str, Any],
+    old_name: str,
+    target: str,
+) -> bool:
+
+    if old_name not in kwargs:
+        return False
+
+    old_value = kwargs.pop(old_name)
+    _warn_deprecated(f"`{old_name}`", replacement=f"`{target}`", stacklevel=2)
+
+    return cast(bool, old_value)
+
+
+def __continuous_colormap(colors: Optional[Colors]) -> Colormap:
+
+    if colors is None:
+        return plt.get_cmap("autumn_r")
+    if isinstance(colors, str):
+        return plt.get_cmap(colors)
+    if isinstance(colors, Colormap):
+        return colors
+
+    raise TypeError(
+        "unsupported colors for continuous observations: "
+        "expected a matplotlib colormap or colormap name"
+    )
+
+
+def __discrete_category_values(series: pd.Series) -> Sequence[object]:
+    categorical = series.astype("category")
+    values = list(categorical.cat.categories)
+    if isinstance(series.dtype, pd.CategoricalDtype) and series.cat.ordered:
+        return values
+
+    try:
+        return sorted(values)
+    except TypeError:
+        return sorted(values, key=lambda value: str(value))
+
+
+def __embedding_axes(
+    ax: Optional[Axes],
+    n_components: int,
+    kwargs: Mapping[str, Any],
+) -> Tuple[Figure, Axes]:
+
+    if ax is not None:
+        return cast(Figure, ax.figure), ax
+
+    fig = plt.figure()
+    ax = fig.add_subplot(
+        111,
+        projection="rectilinear" if n_components == 2 else "3d",
+    )
+    fig.set_figheight(kwargs["figheight"] if "figheight" in kwargs else 5)
+    fig.set_figwidth(
+        kwargs["figwidth"] if "figwidth" in kwargs else 6 if n_components == 2 else 8
+    )
+    return fig, ax
+
+
+def __embedding_matrix(
+    scdata: ScData,
+    representation: Optional[str],
+    n_components: int,
+) -> np.ndarray:
+
+    return cast(
+        np.ndarray,
+        get_representation(
+            scdata,
+            obsm=representation,
+            n_components=n_components,
+        ),
+    )
+
+
+def __scatter_values(
+    ax: Axes,
+    representation_mtx: np.ndarray,
+    rows: Any,
+    n_components: int,
+    **kwargs: Any,
+) -> Any:
+
+    if n_components == 2:
+        return ax.scatter(
+            representation_mtx[rows, 0],
+            representation_mtx[rows, 1],
+            **kwargs,
+        )
+
+    ax3d = cast(Any, ax)
+    return ax3d.scatter3D(
+        representation_mtx[rows, 0],
+        representation_mtx[rows, 1],
+        representation_mtx[rows, 2],
+        **kwargs,
+    )
+
+
+def __scatter_missing_values(
+    scdata: ScData,
+    obs: str,
+    representation_mtx: np.ndarray,
+    ax: Axes,
+    n_components: int,
+    kwargs: Mapping[str, Any],
+    default_color: object,
+) -> None:
+
+    if not scdata.obs[obs].isna().any():
+        return None
+
+    nan_kwargs = cast(Mapping[str, Any], kwargs["nan"])
+    idx = scdata.obs[obs].isna()
+    if n_components == 2:
+        __scatter_values(
+            ax,
+            representation_mtx,
+            idx,
+            n_components,
+            s=nan_kwargs["s"] if "s" in nan_kwargs else 2.0,
+            facecolors=(
+                nan_kwargs["facecolor"] if "facecolor" in nan_kwargs else default_color
+            ),
+            edgecolors=(
+                nan_kwargs["edgecolor"] if "edgecolor" in nan_kwargs else "none"
+            ),
+            alpha=nan_kwargs["alpha"] if "alpha" in nan_kwargs else 1.0,
+        )
+        return None
+
+    __scatter_values(
+        ax,
+        representation_mtx,
+        idx,
+        n_components,
+        s=nan_kwargs["s"] if "s" in nan_kwargs else 2.0,
+        facecolors=(
+            nan_kwargs["facecolors"] if "facecolors" in nan_kwargs else default_color
+        ),
+        edgecolors=nan_kwargs["facecolors"] if "edgecolors" in nan_kwargs else "none",
+        alpha=nan_kwargs["alpha"] if "alpha" in nan_kwargs else 1.0,
+    )
+    return None
+
+
+def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
+
+    def wrapper(
+        scdata: ScData,  # type: ignore
+        obs: str,
+        representation: str,
+        colors: Optional[Colors] = None,
+        n_components: Optional[int] = 2,
+        ax: Optional[Axes] = None,
+        **kwargs: Any,
+    ) -> Tuple[Figure, Axes]:
+
+        n_components = 2 if n_components is None else n_components
+        fig, ax = cast(
+            Tuple[Figure, Axes],
+            plot(scdata, obs, representation, colors, n_components, ax=ax, **kwargs),
+        )
+
+        if "xlabel" in kwargs:
+            set_axis_label(ax, "xlabel", kwargs["xlabel"])
+        if "ylabel" in kwargs:
+            set_axis_label(ax, "ylabel", kwargs["ylabel"])
+        if "zlabel" in kwargs and n_components > 2:
+            set_axis_label(ax, "zlabel", kwargs["zlabel"])
+
+        if "tick_params" in kwargs:
+            ax.tick_params(**kwargs["tick_params"])
+        else:
+            if "xtick_params" in kwargs:
+                ax.tick_params(axis="x", **kwargs["xtick_params"])
+            if "ytick_params" in kwargs:
+                ax.tick_params(axis="y", **kwargs["ytick_params"])
+            if n_components == 3 and "ztick_params" in kwargs:
+                cast(Any, ax).tick_params(axis="z", **kwargs["ztick_params"])
+
+        plt.sca(ax)
+        set_axis_formatters(
+            ax,
+            kwargs.get("formatter"),
+            n_components=n_components,
+        )
+
+        if n_components == 3 and "background_visible" in kwargs:
+            if kwargs["background_visible"] is False:
+                ax3d = cast(Any, ax)
+                ax3d.xaxis.pane.fill = False
+                ax3d.yaxis.pane.fill = False
+                ax3d.zaxis.pane.fill = False
+                ax3d.xaxis.pane.set_edgecolor("w")
+                ax3d.yaxis.pane.set_edgecolor("w")
+                ax3d.zaxis.pane.set_edgecolor("w")
+
+        return fig, ax
+
+    return wrapper
+
+
+@__default_plot
+def __scatterplot_discrete(
+    scdata: ScData,  # type: ignore
+    obs: str,
+    representation: Optional[str] = None,
+    colors: Optional[Colors] = None,
+    n_components: int = 2,
+    legend: Union[bool, Mapping[str, Any]] = False,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]:
+
+    category_values = __discrete_category_values(scdata.obs[obs])
+    categories = set(scdata.obs[obs].unique()) & set(category_values)
+
+    if colors is None:
+        colors = colors_from_uns(scdata, obs, category_values)
+
+    if colors is None:
+        colors = qualitative_color_values(
+            len(category_values),
+            QUALITATIVE_COLORS,
+            generate_colormap,
+        )
+    elif isinstance(colors, Mapping):
+        colors = [colors[cluster] for cluster in category_values]
+    if isinstance(colors, ListedColormap):
+        colors = colormap_colors(colors)
+
+    representation_mtx = __embedding_matrix(scdata, representation, n_components)
+    fig, ax = __embedding_axes(ax, n_components, kwargs)
+
+    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
+    __scatter_missing_values(
+        scdata,
+        obs,
+        representation_mtx,
+        ax,
+        n_components,
+        kwargs,
+        gray,
+    )
+
+    color_values = cast(Sequence[object], colors)
+
+    for _cluster, _color in zip(category_values, color_values):
+        _color = normalize_color(_color)
+
+        if _cluster not in categories:
+            continue
+        idx = np.where(scdata.obs[obs] == _cluster)[0]
+        __scatter_values(
+            ax,
+            representation_mtx,
+            idx,
+            n_components,
+            s=kwargs["s"] if "s" in kwargs else 2.0,
+            facecolors=_color,
+            edgecolors="none",
+            alpha=__scatter_alpha(_color, kwargs),
+            label=_cluster,
+        )
+
+    if legend is not False:
+        box = ax.get_position()
+        ax.set_position((box.x0, box.y0, box.width * 0.8, box.height))
+
+        handles, labels = ax.get_legend_handles_labels()
+        apply_legend(ax, legend, handles=handles, labels=labels)
+
+    return fig, ax
+
+
+@__default_plot
+def __scatterplot_continuous(
+    scdata: ScData,  # type: ignore
+    obs: str,
+    representation: Optional[str] = None,
+    colors: Optional[ContinuousColors] = None,
+    n_components: int = 2,
+    ax: Optional[Axes] = None,
+    **kwargs: Any,
+) -> Tuple[Figure, Axes]:
+
+    cmap = __continuous_colormap(colors)
+
+    kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
+    if "facecolor" in kwargs["nan"] and "color" not in kwargs["nan"]:
+        kwargs["nan"]["color"] = kwargs["nan"]["facecolor"]
+    if not np.all(cmap.get_bad() != 0) and "facecolor" not in kwargs["nan"]:
+        kwargs["nan"]["color"] = cmap.get_bad()
+
+    representation_mtx = __embedding_matrix(scdata, representation, n_components)
+    fig, ax = __embedding_axes(ax, n_components, kwargs)
+    __scatter_missing_values(
+        scdata,
+        obs,
+        representation_mtx,
+        ax,
+        n_components,
+        kwargs,
+        lightgray if n_components == 2 else gray,
+    )
+
+    if n_components == 2:
+        sc = __scatter_values(
+            ax,
+            representation_mtx,
+            slice(None),
+            n_components,
+            s=kwargs["s"] if "s" in kwargs else 2.0,
+            c=scdata.obs[obs],
+            cmap=cmap,
+            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
+            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
+            edgecolors="none",
+            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
+        )
+        cb = fig.colorbar(
+            sc, shrink=kwargs["colorbar_scale"] if "colorbar_scale" in kwargs else 1
+        )
+        cb.update_ticks()
+    elif n_components == 3:
+        __scatter_values(
+            ax,
+            representation_mtx,
+            slice(None),
+            n_components,
+            s=kwargs["s"] if "s" in kwargs else 2.0,
+            c=scdata.obs[obs],
+            cmap=cmap,
+            vmin=kwargs["vmin"] if "vmin" in kwargs else None,
+            vmax=kwargs["vmax"] if "vmax" in kwargs else None,
+            edgecolors="none",
+            alpha=kwargs["alpha"] if "alpha" in kwargs else 1.0,
+        )
+
+    return fig, ax
+
+
+def __draw_labels(
+    scdata: ScData,  # type: ignore
+    obs: str,
+    representation: Optional[str] = None,
+    ax: Optional[Axes] = None,
+    dim: int = 2,
+    **kwargs: Any,
+) -> None:
+
+    barycenter_values = cast(
+        Dict[object, np.ndarray],
+        barycenters(scdata=scdata, obs=obs, representation=representation),
+    )
+    keys_to_remove = []
+    for k, v in barycenter_values.items():
+        if np.isnan(v).any():
+            keys_to_remove.append(k)
+    for k in keys_to_remove:
+        barycenter_values.pop(k, None)
+
+    if ax is None:
+        ax = plt.gca()
+
+    if "verticalalignment" not in kwargs:
+        kwargs["verticalalignment"] = "center"
+    else:
+        pass
+
+    if dim == 2:
+        for label, value in barycenter_values.items():
+            ax.text(x=value[0], y=value[1], s=str(label), **kwargs)
+    elif dim == 3:
+        ax3d = cast(Any, ax)
+        for label, value in barycenter_values.items():
+            ax3d.text(x=value[0], y=value[1], z=value[2], s=label, **kwargs)
