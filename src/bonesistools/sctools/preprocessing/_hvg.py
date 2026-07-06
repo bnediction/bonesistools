@@ -21,7 +21,7 @@ from ..._validation import (
     _as_positive_number,
     _as_string,
 )
-from .._typing import anndata_checker
+from .._typing import Matrix, anndata_checker
 from ..tools._utils import get_expression
 
 HVGMethod = Literal["loess", "binning"]
@@ -292,7 +292,7 @@ def hvg(
 
 
 def _score_hvg_features(
-    matrix: Any,
+    matrix: Matrix,
     *,
     method: HVGMethod,
     span: float,
@@ -344,7 +344,7 @@ def _hvg_params(
 
 
 def _loess_fit(
-    matrix: Any,
+    matrix: Matrix,
     *,
     span: float,
 ) -> _HVGScore:
@@ -367,7 +367,7 @@ def _loess_fit(
 
 
 def _binning_fit(
-    matrix: Any,
+    matrix: Matrix,
     *,
     n_bins: int,
 ) -> _HVGScore:
@@ -384,11 +384,16 @@ def _binning_fit(
     )
 
 
-def _compute_mean(matrix: Any) -> np.ndarray:
+def _compute_mean(matrix: Matrix) -> np.ndarray:
 
     n_obs = int(matrix.shape[0])
     if sparse.issparse(matrix):
-        sums = np.asarray(matrix.sum(axis=0)).ravel().astype(np.float64, copy=False)
+        sparse_matrix = cast(Any, matrix)
+        sums = (
+            np.asarray(sparse_matrix.sum(axis=0))
+            .ravel()
+            .astype(np.float64, copy=False)
+        )
 
         return sums / n_obs
 
@@ -398,7 +403,7 @@ def _compute_mean(matrix: Any) -> np.ndarray:
 
 
 def _selection_means(
-    matrix: Any,
+    matrix: Matrix,
     *,
     method: HVGMethod,
     scoring_means: np.ndarray,
@@ -410,7 +415,7 @@ def _selection_means(
 
 
 def _compute_log_normalized_mean(
-    matrix: Any,
+    matrix: Matrix,
     *,
     target_sum: float = 1e4,
 ) -> np.ndarray:
@@ -418,7 +423,12 @@ def _compute_log_normalized_mean(
     n_obs = int(matrix.shape[0])
     n_vars = int(matrix.shape[1])
     if sparse.issparse(matrix):
-        counts = sparse.csr_matrix(matrix)
+        sparse_matrix = cast(Any, matrix)
+        counts = (
+            sparse_matrix
+            if sparse.isspmatrix_csr(sparse_matrix)
+            else sparse.csr_matrix(sparse_matrix)
+        )
         totals = np.asarray(counts.sum(axis=1)).ravel()
         scale = np.divide(
             target_sum,
@@ -454,7 +464,7 @@ def _compute_log_normalized_mean(
 
 
 def _compute_variance(
-    matrix: Any,
+    matrix: Matrix,
     mean: Optional[np.ndarray] = None,
 ) -> np.ndarray:
 
@@ -464,26 +474,27 @@ def _compute_variance(
     n_obs = int(matrix.shape[0])
     n_vars = int(matrix.shape[1])
     if sparse.issparse(matrix):
-        sparse_format = getattr(matrix, "format", None)
+        sparse_matrix = cast(Any, matrix)
+        sparse_format = getattr(sparse_matrix, "format", None)
         if sparse_format == "csr":
             squared_sums = np.bincount(
-                matrix.indices,
-                weights=matrix.data * matrix.data,
+                sparse_matrix.indices,
+                weights=sparse_matrix.data * sparse_matrix.data,
                 minlength=n_vars,
             )
         elif sparse_format == "csc":
             squared_sums = np.zeros(n_vars, dtype=np.float64)
-            nonempty_columns = np.diff(matrix.indptr) > 0
+            nonempty_columns = np.diff(sparse_matrix.indptr) > 0
             if np.any(nonempty_columns):
-                starts = matrix.indptr[:-1][nonempty_columns]
-                data = np.asarray(matrix.data, dtype=np.float64)
+                starts = sparse_matrix.indptr[:-1][nonempty_columns]
+                data = np.asarray(sparse_matrix.data, dtype=np.float64)
                 squared_sums[nonempty_columns] = np.add.reduceat(
                     data * data,
                     starts,
                 )
         else:
             return _compute_variance(
-                matrix.tocsr(),
+                sparse_matrix.tocsr(),
                 mean=mean,
             )
         mean_squares = squared_sums / n_obs
@@ -604,7 +615,7 @@ def _compute_regularized_variance(trend: np.ndarray) -> np.ndarray:
 
 
 def _compute_clipped_moments(
-    matrix: Any,
+    matrix: Matrix,
     means: np.ndarray,
     regularized_variance: np.ndarray,
 ) -> _ClippedMoments:
@@ -613,7 +624,8 @@ def _compute_clipped_moments(
     clip_values = means + np.sqrt(regularized_variance * n_obs)
 
     if sparse.issparse(matrix):
-        counts = sparse.csr_matrix(matrix.astype(np.float64, copy=True))
+        sparse_matrix = cast(Any, matrix)
+        counts = sparse.csr_matrix(sparse_matrix.astype(np.float64, copy=True))
         mask = counts.data > clip_values[counts.indices]
         counts.data[mask] = clip_values[counts.indices[mask]]
 
