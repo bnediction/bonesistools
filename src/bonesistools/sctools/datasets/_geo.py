@@ -32,6 +32,8 @@ _GEO_FTP_BASE = "https://ftp.ncbi.nlm.nih.gov/geo"
 _GSM_PATTERN = re.compile(r"^GSM[0-9]+$")
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _DOWNLOAD_HEADERS = {"User-Agent": "bonesistools"}
+_DOWNLOAD_LABEL_WIDTH = len("barcodes.tsv.gz")
+_DOWNLOAD_SPEED_WIDTH = len("999.99K/s")
 _SUPPLEMENTARY_SUFFIXES = (
     "_matrix.mtx.gz",
     "_barcodes.tsv.gz",
@@ -316,10 +318,12 @@ def _print_download_progress(
 ) -> None:
 
     speed = downloaded / elapsed if elapsed > 0 else 0
+    label = _format_download_label(filename)
+    speed_label = f"{_format_bytes(speed)}/s"
     if total is None or total == 0:
         print(
-            f"\rdownloading {filename} {_format_bytes(downloaded):>8} "
-            f"{_format_bytes(speed)}/s",
+            f"\r{label} {_format_bytes(downloaded):>8} "
+            f"{speed_label:>{_DOWNLOAD_SPEED_WIDTH}}",
             end="",
             file=file,
             flush=True,
@@ -334,13 +338,18 @@ def _print_download_progress(
     else:
         bar = "=" * filled + ">" + "." * max(0, width - filled - 1)
     print(
-        f"\rdownloading {filename} {percent:3d}%[{bar}] "
-        f"{_format_bytes(downloaded):>8} {_format_bytes(speed)}/s "
+        f"\r{label} {percent:3d}%[{bar}] "
+        f"{_format_bytes(downloaded):>8} {speed_label:>{_DOWNLOAD_SPEED_WIDTH}} "
         f"in {_format_duration(elapsed)}",
         end="",
         file=file,
         flush=True,
     )
+
+
+def _format_download_label(filename: str) -> str:
+
+    return f"downloading {filename:<{_DOWNLOAD_LABEL_WIDTH}}"
 
 
 def _format_bytes(size: float) -> str:

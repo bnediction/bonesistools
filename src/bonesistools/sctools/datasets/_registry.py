@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import pandas as pd
 from anndata import AnnData
@@ -25,6 +25,8 @@ _DATASET_LOADERS: Dict[str, _DatasetLoader] = {
     "nestorowa": _load_nestorowa,
     "pbmc3k": _load_pbmc3k,
 }
+_OBSERVATION_COUNT_FIELDS = ("cells", "barcodes", "observations")
+_FEATURE_COUNT_FIELDS = ("genes", "peaks")
 
 
 def load(
@@ -58,11 +60,13 @@ def load(
     dataset_name = _as_dataset_name(name)
     quiet = _as_boolean(quiet, "quiet")
     loader = _DATASET_LOADERS[dataset_name]
-
-    return loader(
+    adata = loader(
         _dataset_cache_dir(dataset_name),
         quiet,
     )
+    _validate_dataset_shape(dataset_name, adata)
+
+    return adata
 
 
 def info(name: str) -> Dict[str, object]:
@@ -157,6 +161,84 @@ def _as_dataset_name(name: str) -> str:
         )
 
     return dataset_name
+
+
+def _validate_dataset_shape(
+    name: str,
+    adata: AnnData,
+) -> None:
+
+    metadata = _DATASETS[name]
+    expected_observations = _expected_count(
+        metadata,
+        _OBSERVATION_COUNT_FIELDS,
+    )
+    expected_features = _expected_feature_count(metadata)
+    errors = []
+    if expected_observations is not None and adata.n_obs != expected_observations:
+        errors.append(
+            f"expected {expected_observations} observations but found "
+            f"{adata.n_obs}"
+        )
+    if expected_features is not None and adata.n_vars != expected_features:
+        errors.append(
+            f"expected {expected_features} features but found {adata.n_vars}"
+        )
+    if len(errors) == 0:
+        return
+
+    details = "; ".join(errors)
+    raise ValueError(
+        f"invalid cached dataset {name!r}: {details}. "
+        f"Clear cached files with bt.sct.datasets.clear({name!r}) and retry."
+    )
+
+
+def _expected_count(
+    metadata: Dict[str, Any],
+    fields: Iterable[str],
+) -> Optional[int]:
+
+    for field in fields:
+        if field in metadata:
+            return _metadata_count(metadata[field], field)
+
+    return None
+
+
+def _expected_feature_count(metadata: Dict[str, Any]) -> Optional[int]:
+
+    if "features" in metadata:
+        return _metadata_count(metadata["features"], "features")
+
+    counts = [
+        _metadata_count(metadata[field], field)
+        for field in _FEATURE_COUNT_FIELDS
+        if field in metadata
+    ]
+    if len(counts) == 0:
+        return None
+
+    return sum(counts)
+
+
+def _metadata_count(
+    value: object,
+    field: str,
+) -> int:
+
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(
+            f"invalid dataset metadata for '{field}': expected {int} "
+            f"but received {type(value)}"
+        )
+    if value < 0:
+        raise ValueError(
+            f"invalid dataset metadata for '{field}': expected non-negative "
+            f"value but received {value!r}"
+        )
+
+    return value
 
 
 def _dataset_cache_root() -> Path:

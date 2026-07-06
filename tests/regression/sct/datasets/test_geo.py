@@ -290,6 +290,21 @@ def test_geo_formatting_helpers_produce_human_readable_progress():
     assert " 50%" in known_total.getvalue()
     assert "[============>...........]" in known_total.getvalue()
 
+    aligned = []
+    for filename in ("matrix.mtx.gz", "barcodes.tsv.gz", "features.tsv.gz"):
+        progress = io.StringIO()
+        geo._print_download_progress(
+            filename,
+            downloaded=100,
+            total=100,
+            elapsed=1.0,
+            file=progress,
+        )
+        aligned.append(progress.getvalue())
+
+    assert len({progress.index("%[") for progress in aligned}) == 1
+    assert len({progress.index(" in ") for progress in aligned}) == 1
+
 
 def test_geo_cache_dir_uses_xdg_cache_home(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))

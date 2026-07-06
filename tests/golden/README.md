@@ -30,6 +30,7 @@ tests/golden/
     expected/
         qc.npz
         hvg_loess.npz
+        hvg_binning.npz
         pca.npz
         neighbors.npz
         spectral.npz
@@ -79,6 +80,8 @@ PBMC3k preprocessing workflow:
 
 * `qc.npz`: observation-level and variable-level QC columns;
 * `hvg_loess.npz`: HVG mask, ranks, scores and selected feature names;
+* `hvg_binning.npz`: mean-binned dispersion HVG mask, ranks, scores and
+  selected feature names;
 * `pca.npz`: PCA embedding, selected loadings and explained variance;
 * `neighbors.npz`: sparse distance and fuzzy connectivity graph arrays;
 * `spectral.npz`: spectral embedding computed from binary neighbors;

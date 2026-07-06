@@ -119,6 +119,15 @@ def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
 def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
     _patch_gene_mapping(monkeypatch)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    monkeypatch.setitem(
+        registry_module._DATASETS,
+        "nestorowa",
+        {
+            **registry_module._DATASETS["nestorowa"],
+            "cells": 3,
+            "genes": 2,
+        },
+    )
     fixture_dir = tmp_path / "fixtures"
     _write_nestorowa_fixture(fixture_dir)
     downloaded: List[str] = []
@@ -155,6 +164,15 @@ def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
 def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
     _patch_gene_mapping(monkeypatch)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    monkeypatch.setitem(
+        registry_module._DATASETS,
+        "nestorowa",
+        {
+            **registry_module._DATASETS["nestorowa"],
+            "cells": 3,
+            "genes": 2,
+        },
+    )
     fixture_dir = tmp_path / "fixtures"
     _write_nestorowa_fixture(fixture_dir)
 

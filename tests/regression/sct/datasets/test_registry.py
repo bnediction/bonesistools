@@ -4,6 +4,7 @@ import tarfile
 from pathlib import Path
 from typing import Any, List, cast
 
+import anndata as ad
 import numpy as np
 import pytest
 from scipy import sparse
@@ -63,6 +64,15 @@ def _as_csr(matrix: Any) -> csr_matrix:
 
 def test_datasets_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    monkeypatch.setitem(
+        registry_module._DATASETS,
+        "pbmc3k",
+        {
+            **registry_module._DATASETS["pbmc3k"],
+            "cells": 2,
+            "genes": 3,
+        },
+    )
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()
     _write_pbmc3k_fixture(fixture_dir)
@@ -99,6 +109,31 @@ def test_datasets_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
         _as_csr(second.X).toarray(),
     )
     assert downloaded == [pbmc3k_module._PBMC3K_URL]
+
+
+def test_datasets_load_rejects_invalid_cached_shape(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+
+    def fake_loader(_cache_dir: Path, _quiet: bool) -> ad.AnnData:
+
+        return ad.AnnData(X=np.ones((1, 1)))
+
+    monkeypatch.setitem(
+        registry_module._DATASET_LOADERS,
+        "pbmc3k",
+        fake_loader,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "invalid cached dataset 'pbmc3k'.*"
+            "expected 2700 observations but found 1.*"
+            "expected 32738 features but found 1.*"
+            "bt\\.sct\\.datasets\\.clear\\('pbmc3k'\\)"
+        ),
+    ):
+        bt.sct.datasets.load("pbmc3k", quiet=True)
 
 
 def test_datasets_info_pbmc3k_contains_source_license_url_and_citation():

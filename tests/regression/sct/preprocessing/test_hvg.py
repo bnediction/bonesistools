@@ -57,6 +57,9 @@ def test_hvg_dense_matrix_adds_expected_outputs():
             "fit": "loess",
             "span": 0.3,
             "score": "normalized_variance_score",
+            "selection": "top_n",
+            "score_cutoff": None,
+            "mean_cutoff": None,
         },
     }
 
@@ -85,6 +88,103 @@ def test_hvg_sparse_matrix_matches_dense_scores_and_selection():
     )
 
 
+def test_hvg_binning_sparse_matrix_matches_dense_scores_and_selection():
+    dense = _hvg_adata(sparse_input=False)
+    sparse_adata = _hvg_adata(sparse_input=True)
+
+    bt.sct.pp.hvg(dense, method="binning", n_features=5)
+    bt.sct.pp.hvg(sparse_adata, method="binning", n_features=5)
+
+    dense_var = cast(pd.DataFrame, dense.var)
+    sparse_var = cast(pd.DataFrame, sparse_adata.var)
+    assert np.array_equal(
+        dense_var["highly_variable"].to_numpy(),
+        sparse_var["highly_variable"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        dense_var["highly_variable_rank"].to_numpy(),
+        sparse_var["highly_variable_rank"].to_numpy(),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        dense_var["highly_variable_score"].to_numpy(),
+        sparse_var["highly_variable_score"].to_numpy(),
+        equal_nan=True,
+    )
+
+
+def test_hvg_binning_scores_match_mean_binned_dispersion_formula():
+    matrix = np.array(
+        [
+            [0, 1, 1, 2, 3, 3, 4, 5],
+            [0, 1, 2, 2, 3, 5, 4, 8],
+            [0, 1, 1, 4, 3, 3, 8, 5],
+            [0, 1, 3, 2, 6, 3, 4, 5],
+            [0, 2, 1, 2, 3, 6, 4, 9],
+            [0, 1, 1, 5, 3, 3, 9, 5],
+        ],
+        dtype=float,
+    )
+    adata = ad.AnnData(
+        X=matrix,
+        var=pd.DataFrame(index=["g{}".format(index) for index in range(8)]),
+    )
+
+    bt.sct.pp.hvg(
+        adata,
+        method="binning",
+        n_features=3,
+        n_bins=2,
+    )
+    var = cast(pd.DataFrame, adata.var)
+
+    np.testing.assert_allclose(
+        var["highly_variable_score"].to_numpy(),
+        np.array(
+            [
+                np.nan,
+                -2.108749563831,
+                0.131796847739,
+                1.217182652653,
+                -0.131796847739,
+                -0.674489750196,
+                3.599762976185,
+                0.0,
+            ]
+        ),
+        equal_nan=True,
+    )
+    assert var["highly_variable"].to_numpy().tolist() == [
+        False,
+        False,
+        True,
+        True,
+        False,
+        False,
+        True,
+        False,
+    ]
+    np.testing.assert_allclose(
+        var["highly_variable_rank"].to_numpy(),
+        np.array([np.nan, np.nan, 3.0, 2.0, np.nan, np.nan, 1.0, np.nan]),
+        equal_nan=True,
+    )
+    assert adata.uns["highly_variable"] == {
+        "method": "binning",
+        "n_features": 3,
+        "n_selected": 3,
+        "expression": None,
+        "params": {
+            "fit": "mean_binned_dispersion",
+            "n_bins": 2,
+            "score": "normalized_dispersion_score",
+            "selection": "top_n",
+            "score_cutoff": None,
+            "mean_cutoff": None,
+        },
+    }
+
+
 def test_hvg_ranking_follows_descending_positive_scores():
     adata = _hvg_adata()
 
@@ -108,6 +208,170 @@ def test_hvg_non_selected_features_have_nan_rank_and_non_positive_scores_are_exc
     assert np.isnan(non_selected["highly_variable_rank"].to_numpy()).all()
     assert (var.loc[var["highly_variable"], "highly_variable_score"] > 0).all()
     assert not (var["highly_variable"] & (var["highly_variable_score"] <= 0)).any()
+
+
+def test_hvg_cutoffs_select_features_by_score_and_mean():
+    adata = _hvg_adata()
+
+    bt.sct.pp.hvg(
+        adata,
+        n_features=None,
+        score=(2.0, np.inf),
+        mean=(0.0, 3.5),
+    )
+    var = cast(pd.DataFrame, adata.var)
+    scores = var["highly_variable_score"].to_numpy()
+    means = _hvg._compute_log_normalized_mean(adata.X)
+    expected = np.isfinite(scores) & (scores > 2.0) & (means > 0.0) & (means < 3.5)
+
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected)
+    selected = cast(pd.DataFrame, var.loc[var["highly_variable"]])
+    ordered = selected.sort_values("highly_variable_rank")
+    assert ordered["highly_variable_score"].is_monotonic_decreasing
+    assert adata.uns["highly_variable"]["n_features"] is None
+    assert adata.uns["highly_variable"]["params"]["selection"] == "cutoff"
+    assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (2.0, np.inf)
+    assert adata.uns["highly_variable"]["params"]["mean_cutoff"] == (0.0, 3.5)
+
+
+def test_hvg_uses_method_default_cutoffs_when_n_features_is_none():
+    adata = _hvg_adata()
+
+    bt.sct.pp.hvg(
+        adata,
+        n_features=None,
+        score="auto",
+    )
+    var = cast(pd.DataFrame, adata.var)
+    scores = var["highly_variable_score"].to_numpy()
+    means = _hvg._compute_log_normalized_mean(adata.X)
+    expected = (
+        np.isfinite(scores)
+        & (scores > 2.0)
+        & (means > 0.0125)
+        & (means < 3.0)
+    )
+
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected)
+    assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (2.0, np.inf)
+    assert adata.uns["highly_variable"]["params"]["mean_cutoff"] == (0.0125, 3.0)
+
+
+def test_hvg_loess_mean_cutoff_uses_log_normalized_mean():
+    adata = _hvg_adata()
+    bt.sct.pp.normalize(adata, expression="counts", key_added="normalized")
+    bt.sct.pp.log1p(adata, expression="normalized", key_added="log1p")
+
+    bt.sct.pp.hvg(
+        adata,
+        expression="counts",
+        n_features=None,
+        score=(-np.inf, np.inf),
+        mean=(0.5, 3.5),
+    )
+    var = cast(pd.DataFrame, adata.var)
+    scores = var["highly_variable_score"].to_numpy()
+    log_means = np.asarray(adata.layers["log1p"]).mean(axis=0)
+    expected = np.isfinite(scores) & (log_means > 0.5)
+    expected &= log_means < 3.5
+
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected)
+
+
+def test_hvg_n_features_takes_priority_over_cutoffs():
+    adata = _hvg_adata()
+
+    with pytest.warns(UserWarning, match="cutoffs are ignored"):
+        bt.sct.pp.hvg(
+            adata,
+            n_features=3,
+            score=(1e9, np.inf),
+            mean=(1e9, np.inf),
+        )
+    var = cast(pd.DataFrame, adata.var)
+
+    assert int(var["highly_variable"].sum()) == 3
+    assert adata.uns["highly_variable"]["params"]["selection"] == "top_n"
+    assert adata.uns["highly_variable"]["params"]["score_cutoff"] is None
+    assert adata.uns["highly_variable"]["params"]["mean_cutoff"] is None
+
+
+def test_hvg_binning_cutoffs_select_features_by_score_and_mean():
+    adata = _hvg_adata()
+
+    bt.sct.pp.hvg(
+        adata,
+        method="binning",
+        n_features=None,
+        score=(1.0, np.inf),
+        mean=(0.0, 4.0),
+    )
+    var = cast(pd.DataFrame, adata.var)
+    scores = var["highly_variable_score"].to_numpy()
+    means = np.asarray(adata.X).mean(axis=0)
+    expected = np.isfinite(scores) & (scores > 1.0) & (means > 0.0) & (means < 4.0)
+
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected)
+    assert adata.uns["highly_variable"]["params"]["selection"] == "cutoff"
+    assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (1.0, np.inf)
+    assert adata.uns["highly_variable"]["params"]["mean_cutoff"] == (0.0, 4.0)
+
+
+def test_hvg_binning_uses_method_default_cutoffs_when_n_features_is_none():
+    adata = _hvg_adata()
+
+    bt.sct.pp.hvg(adata, method="binning", n_features=None)
+    var = cast(pd.DataFrame, adata.var)
+    scores = var["highly_variable_score"].to_numpy()
+    means = np.asarray(adata.X).mean(axis=0)
+    expected = (
+        np.isfinite(scores)
+        & (scores > 0.5)
+        & (means > 0.0125)
+        & (means < 3.0)
+    )
+
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected)
+    assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (0.5, np.inf)
+    assert adata.uns["highly_variable"]["params"]["mean_cutoff"] == (0.0125, 3.0)
+
+
+def test_hvg_binning_ignores_unexpressed_features_when_binning():
+    rng = np.random.default_rng(0)
+    matrix = rng.poisson(
+        np.linspace(0.2, 5.0, 120),
+        size=(80, 120),
+    ).astype(float)
+    with_zeros = np.column_stack(
+        [
+            np.zeros((matrix.shape[0], 3), dtype=float),
+            matrix,
+        ]
+    )
+    expressed = ad.AnnData(
+        X=matrix,
+        var=pd.DataFrame(index=["g{}".format(index) for index in range(120)]),
+    )
+    extended = ad.AnnData(
+        X=with_zeros,
+        var=pd.DataFrame(index=["z0", "z1", "z2"] + list(expressed.var_names)),
+    )
+
+    bt.sct.pp.hvg(expressed, method="binning", n_features=30)
+    bt.sct.pp.hvg(extended, method="binning", n_features=30)
+    expressed_var = cast(pd.DataFrame, expressed.var)
+    extended_var = cast(pd.DataFrame, extended.var)
+
+    assert not extended_var.iloc[:3]["highly_variable"].any()
+    assert np.isnan(extended_var.iloc[:3]["highly_variable_score"].to_numpy()).all()
+    assert np.array_equal(
+        expressed_var["highly_variable"].to_numpy(),
+        extended_var.iloc[3:]["highly_variable"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        expressed_var["highly_variable_score"].to_numpy(),
+        extended_var.iloc[3:]["highly_variable_score"].to_numpy(),
+    )
 
 
 def test_hvg_warns_when_fewer_features_have_finite_scores_than_requested():
@@ -170,8 +434,35 @@ def test_hvg_validates_arguments(mini_adata):
     with pytest.raises(ValueError):
         bt.sct.pp.hvg(mini_adata, span=1.5)
 
+    with pytest.raises(ValueError):
+        bt.sct.pp.hvg(mini_adata, n_bins=0)
+
     with pytest.raises(TypeError):
         bt.sct.pp.hvg(mini_adata, span=cast(Any, "0.3"))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, n_bins=cast(Any, "20"))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, score=cast(Any, 1.0))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, score=cast(Any, None))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, mean=cast(Any, "default"))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, mean=cast(Any, "auto"))
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, mean=cast(Any, (0.0, "max")))
+
+    with pytest.raises(ValueError):
+        bt.sct.pp.hvg(mini_adata, score=(1.0, 1.0))
+
+    with pytest.raises(ValueError):
+        bt.sct.pp.hvg(mini_adata, mean=(np.nan, 1.0))
 
     with pytest.raises(TypeError):
         bt.sct.pp.hvg(mini_adata, key_added=cast(Any, object()))

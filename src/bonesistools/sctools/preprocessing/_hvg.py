@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib
+import numbers
 import warnings
+from collections.abc import Sequence as SequenceInstance
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, cast, overload
+from typing import Any, Optional, Tuple, Union, cast, overload
 
 import numpy as np
 from anndata import AnnData
@@ -22,16 +24,38 @@ from ..._validation import (
 from .._typing import anndata_checker
 from ..tools._utils import get_expression
 
-HVGMethod = Literal["loess"]
-HVG_METHODS: Tuple[HVGMethod, ...] = ("loess",)
+HVGMethod = Literal["loess", "binning"]
+HVG_METHODS: Tuple[HVGMethod, ...] = ("loess", "binning")
+_DEFAULT_SCORE_CUTOFFS = {
+    "loess": (2.0, np.inf),
+    "binning": (0.5, np.inf),
+}
+_DEFAULT_MEAN_CUTOFF = (0.0125, 3.0)
+_NORMAL_CONSISTENCY_MAD_SCALE = 0.6744897501960817
 
 
 @dataclass(frozen=True)
-class _StandardizedExpression:
+class _HVGScore:
+
+    means: np.ndarray
+    scores: np.ndarray
+
+
+@dataclass(frozen=True)
+class _HVGSelection:
+
+    selected: np.ndarray
+    ranks: np.ndarray
+    score_cutoff: Optional[Tuple[float, float]]
+    mean_cutoff: Optional[Tuple[float, float]]
+
+
+@dataclass(frozen=True)
+class _ClippedMoments:
 
     n_obs: int
     means: np.ndarray
-    regularized_std: np.ndarray
+    regularized_variance: np.ndarray
     clipped_sum: np.ndarray
     squared_sum: np.ndarray
 
@@ -41,9 +65,12 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
-    n_features: int = 2000,
+    n_features: Optional[int] = 2000,
     method: HVGMethod = "loess",
     span: float = 0.3,
+    n_bins: int = 20,
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
+    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: Literal[False] = False,
 ) -> None: ...
@@ -54,9 +81,12 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
-    n_features: int = 2000,
+    n_features: Optional[int] = 2000,
     method: HVGMethod = "loess",
     span: float = 0.3,
+    n_bins: int = 20,
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
+    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: Literal[True],
 ) -> AnnData: ...
@@ -67,9 +97,12 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
-    n_features: int = 2000,
+    n_features: Optional[int] = 2000,
     method: HVGMethod = "loess",
     span: float = 0.3,
+    n_bins: int = 20,
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
+    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: bool = False,
 ) -> Optional[AnnData]: ...
@@ -80,9 +113,12 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
-    n_features: int = 2000,
+    n_features: Optional[int] = 2000,
     method: HVGMethod = "loess",
     span: float = 0.3,
+    n_bins: int = 20,
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
+    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: bool = False,
 ) -> Optional[AnnData]:
@@ -95,20 +131,45 @@ def hvg(
         Unimodal annotated data matrix.
     expression: str, optional
         Expression matrix used to estimate variability. If None, use
-        `adata.X`; otherwise, use `adata.layers[expression]`.
-    n_features: int (default: 2000)
-        Maximum number of highly variable features to select.
-    method: {'loess'} (default: 'loess')
+        `adata.X`; otherwise, use `adata.layers[expression]`. Use raw counts
+        for `method='loess'` and log-normalized expression values for
+        `method='binning'`.
+    n_features: int or None (default: 2000)
+        Number of highly variable features to select. If None, features are
+        selected using `score` and `mean` cutoffs instead.
+    method: {'loess', 'binning'} (default: 'loess')
         Method used to score highly variable features.
 
-        The `loess` method reproduces the Seurat v3 highly variable
-        feature selection strategy: LOESS-regularized mean-variance trend
-        estimation, followed by clipping, standardization of expression
-        values using the regularized standard deviation, and ranking by
-        normalized variance scores [1].
+        The `loess` method reproduces the Seurat v3
+        LOESS-regularized mean-variance strategy: trend estimation,
+        followed by clipping, standardization of expression values
+        using the regularized variance, and ranking by  normalized
+        variance scores [1].
+
+        The `binning` method reproduces the Cell Ranger
+        mean-binned normalized dispersion strategy: features are
+        grouped by mean expression, dispersions are normalized within
+        each bin using the median and median absolute deviation, and
+        features are ranked by normalized dispersion scores [2, 3].
     span: float (default: 0.3)
         LOESS smoothing span. Must be greater than 0 and smaller than or equal
-        to 1.
+        to 1. Used by `method='loess'`.
+    n_bins: int (default: 20)
+        Number of mean-expression bins used by `method='binning'`.
+    score: {'auto'} or tuple of float (default: 'auto')
+        Score interval used when `n_features=None`. Features are selected when
+        `score[0] < feature_score < score[1]`. If 'auto', use
+        method-specific defaults: `(2.0, np.inf)` for `method='loess'` and
+        `(0.5, np.inf)` for `method='binning'`. For `method='loess'`, scores
+        are normalized variance scores. For `method='binning'`, scores are
+        normalized dispersion scores.
+    mean: tuple of float (default: (0.0125, 3.0))
+        Mean-expression interval used when `n_features=None`. Features are
+        selected when `mean[0] < feature_mean < mean[1]`. For
+        `method='loess'`, the interval is applied to the mean of log1p
+        library-size-normalized counts with target sum 1e4. For
+        `method='binning'`, the interval is applied to the mean of the
+        provided expression matrix.
     key_added: str (default: 'highly_variable')
         Column in `adata.var` where the selected feature mask is stored.
     copy: bool (default: False)
@@ -124,17 +185,28 @@ def hvg(
 
         - `adata.var[key_added]`: selected highly variable features;
         - `adata.var[f"{key_added}_rank"]`: selected feature rank;
-        - `adata.var[f"{key_added}_score"]`: normalized variance score;
+        - `adata.var[f"{key_added}_score"]`: method-specific variability score;
         - `adata.uns[key_added]`: HVG metadata.
 
     References
     ----------
-    Stuart et al. (2019). Comprehensive integration of single-cell data. Cell,
+    [1] Stuart et al. (2019). Comprehensive integration of single-cell data. Cell,
     177(7), 1888-1902.
+
+    [2] Macosko et al. (2015). Highly parallel genome-wide expression
+    profiling of individual cells using nanoliter droplets. Cell, 161(5),
+    1202-1214.
+
+    [3] Zheng et al. (2017). Massively parallel digital transcriptional
+    profiling of single cells. Nature Communications, 8, 14049.
     """
 
     expression = None if expression is None else _as_string(expression, "expression")
-    n_features = _as_positive_integer(n_features, "n_features")
+    n_features = (
+        None
+        if n_features is None
+        else _as_positive_integer(n_features, "n_features")
+    )
     method = cast(HVGMethod, _as_literal(method, choices=HVG_METHODS, name="method"))
     span = _as_positive_number(span, "span")
     if span > 1:
@@ -142,8 +214,25 @@ def hvg(
             f"invalid argument value for 'span': "
             f"expected value smaller than or equal to 1 but received {span!r}"
         )
+    n_bins = _as_positive_integer(n_bins, "n_bins")
     key_added = _as_string(key_added, "key_added")
+    score_cutoff = _as_optional_cutoff_interval(score, "score")
+    mean_cutoff = _as_cutoff_interval(mean, "mean")
     copy = _as_boolean(copy, "copy")
+
+    if (
+        n_features is not None
+        and (
+            score_cutoff is not None
+            or mean_cutoff != _DEFAULT_MEAN_CUTOFF
+        )
+    ):
+        warnings.warn(
+            "`score` and `mean` cutoffs are ignored when `n_features` is "
+            "provided.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     adata = adata.copy() if copy else adata
     expression_mtx = get_expression(
@@ -155,61 +244,144 @@ def hvg(
     if len(expression_mtx.shape) != 2:
         raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
 
-    scores = _loess_fit(expression_mtx, span=span)
-    ordered_indices = _order_by_score(scores)
-
-    n_eligible = int(ordered_indices.size)
-    if n_eligible < n_features:
-        warnings.warn(
-            f"Requested {n_features} highly variable features, but only "
-            f"{n_eligible} features have finite variability scores.",
-            RuntimeWarning,
-            stacklevel=2,
+    scoring = _score_hvg_features(
+        expression_mtx,
+        method=method,
+        span=span,
+        n_bins=n_bins,
+    )
+    ordered_indices = _order_by_score(scoring.scores)
+    selection_means = (
+        _selection_means(
+            expression_mtx,
+            method=method,
+            scoring_means=scoring.means,
         )
-
-    selected = _select_features(
-        ordered_indices,
+        if n_features is None
+        else scoring.means
+    )
+    selection = _select_hvg_features(
+        ordered_indices=ordered_indices,
+        scores=scoring.scores,
+        means=selection_means,
         n_features=n_features,
+        score=score_cutoff,
+        mean=mean_cutoff,
+        method=method,
         n_vars=adata.n_vars,
     )
-    ranks = _assign_feature_ranks(
-        ordered_indices,
-        n_features=n_features,
-        n_vars=adata.n_vars,
-    )
 
-    adata.var[key_added] = selected
-    adata.var[f"{key_added}_rank"] = ranks
-    adata.var[f"{key_added}_score"] = scores
+    adata.var[key_added] = selection.selected
+    adata.var[f"{key_added}_rank"] = selection.ranks
+    adata.var[f"{key_added}_score"] = scoring.scores
     adata.uns[key_added] = {
         "method": method,
         "n_features": n_features,
-        "n_selected": int(selected.sum()),
+        "n_selected": int(selection.selected.sum()),
         "expression": expression,
-        "params": {
-            "fit": "loess",
-            "span": span,
-            "score": "normalized_variance_score",
-        },
+        "params": _hvg_params(
+            method=method,
+            span=span,
+            n_bins=n_bins,
+            n_features=n_features,
+            selection=selection,
+        ),
     }
 
     return adata if copy else None
+
+
+def _score_hvg_features(
+    matrix: Any,
+    *,
+    method: HVGMethod,
+    span: float,
+    n_bins: int,
+) -> _HVGScore:
+
+    if method == "loess":
+        return _loess_fit(
+            matrix,
+            span=span,
+        )
+    if method == "binning":
+        return _binning_fit(
+            matrix,
+            n_bins=n_bins,
+        )
+
+    raise ValueError(f"unsupported HVG method: {method!r}")
+
+
+def _hvg_params(
+    *,
+    method: HVGMethod,
+    span: float,
+    n_bins: int,
+    n_features: Optional[int],
+    selection: _HVGSelection,
+) -> dict:
+
+    params = {
+        "selection": "top_n" if n_features is not None else "cutoff",
+        "score_cutoff": selection.score_cutoff,
+        "mean_cutoff": selection.mean_cutoff,
+    }
+    if method == "loess":
+        return {
+            "fit": "loess",
+            "span": span,
+            "score": "normalized_variance_score",
+            **params,
+        }
+
+    return {
+        "fit": "mean_binned_dispersion",
+        "n_bins": n_bins,
+        "score": "normalized_dispersion_score",
+        **params,
+    }
 
 
 def _loess_fit(
     matrix: Any,
     *,
     span: float,
-) -> np.ndarray:
+) -> _HVGScore:
 
     mean = _compute_mean(matrix)
     variance = _compute_variance(matrix, mean)
     trend = _compute_loess_trend(mean, variance, span=span)
-    std = _compute_regularized_std(trend)
-    standardized = _standardize(matrix, mean, std)
-    score = _compute_normalized_variance(standardized)
+    regularized_variance = _compute_regularized_variance(trend)
+    clipped_moments = _compute_clipped_moments(
+        matrix,
+        mean,
+        regularized_variance,
+    )
+    score = _compute_normalized_variance(clipped_moments)
 
-    return score
+    return _HVGScore(
+        means=mean,
+        scores=score,
+    )
+
+
+def _binning_fit(
+    matrix: Any,
+    *,
+    n_bins: int,
+) -> _HVGScore:
+
+    mean = _compute_mean(matrix)
+    variance = _compute_variance(matrix, mean)
+    dispersion = _compute_dispersion(mean, variance)
+    bins = _bin_by_mean(mean, n_bins=n_bins)
+    score = _normalize_dispersion(dispersion, bins)
+
+    return _HVGScore(
+        means=mean,
+        scores=score,
+    )
 
 
 def _compute_mean(matrix: Any) -> np.ndarray:
@@ -223,6 +395,62 @@ def _compute_mean(matrix: Any) -> np.ndarray:
     dense_matrix = cast(np.ndarray, matrix)
 
     return np.asarray(dense_matrix.mean(axis=0, dtype=np.float64)).ravel()
+
+
+def _selection_means(
+    matrix: Any,
+    *,
+    method: HVGMethod,
+    scoring_means: np.ndarray,
+) -> np.ndarray:
+
+    if method == "loess":
+        return _compute_log_normalized_mean(matrix)
+    return scoring_means
+
+
+def _compute_log_normalized_mean(
+    matrix: Any,
+    *,
+    target_sum: float = 1e4,
+) -> np.ndarray:
+
+    n_obs = int(matrix.shape[0])
+    n_vars = int(matrix.shape[1])
+    if sparse.issparse(matrix):
+        counts = sparse.csr_matrix(matrix)
+        totals = np.asarray(counts.sum(axis=1)).ravel()
+        scale = np.divide(
+            target_sum,
+            totals,
+            out=np.zeros(totals.shape[0], dtype=np.float64),
+            where=totals != 0,
+        )
+        values = np.asarray(counts.data, dtype=np.float64) * np.repeat(
+            scale,
+            np.diff(counts.indptr),
+        )
+        np.log1p(values, out=values)
+        sums = np.bincount(
+            counts.indices,
+            weights=values,
+            minlength=n_vars,
+        )
+
+        return sums / n_obs
+
+    counts = np.asarray(matrix, dtype=np.float64)
+    totals = counts.sum(axis=1)
+    scale = np.divide(
+        target_sum,
+        totals,
+        out=np.zeros(totals.shape[0], dtype=np.float64),
+        where=totals != 0,
+    )
+    normalized = counts * scale.reshape(-1, 1)
+    np.log1p(normalized, out=normalized)
+
+    return np.asarray(normalized.mean(axis=0, dtype=np.float64)).ravel()
 
 
 def _compute_variance(
@@ -284,6 +512,61 @@ def _compute_dispersion(
     return dispersion
 
 
+def _bin_by_mean(
+    means: np.ndarray,
+    *,
+    n_bins: int,
+) -> np.ndarray:
+
+    bins = np.full(means.shape[0], -1, dtype=int)
+    finite_indices = np.flatnonzero(np.isfinite(means) & (means > 0))
+    if finite_indices.size == 0:
+        return bins
+
+    finite_means = means[finite_indices]
+    if n_bins == 20:
+        percentiles = np.arange(10, 105, 5)
+    else:
+        percentiles = np.linspace(
+            100 / n_bins,
+            100,
+            n_bins,
+        )
+    bin_edges = np.r_[-np.inf, np.percentile(finite_means, percentiles), np.inf]
+    bin_edges = np.unique(bin_edges)
+    bins[finite_indices] = np.searchsorted(
+        bin_edges,
+        finite_means,
+        side="left",
+    ) - 1
+
+    return bins
+
+
+def _normalize_dispersion(
+    dispersion: np.ndarray,
+    bins: np.ndarray,
+) -> np.ndarray:
+
+    scores = np.full(dispersion.shape[0], np.nan, dtype=np.float64)
+    valid_bins = np.unique(bins[bins >= 0])
+    for bin_index in valid_bins:
+        bin_mask = bins == bin_index
+        finite_mask = bin_mask & np.isfinite(dispersion)
+        bin_dispersion = dispersion[finite_mask]
+        if bin_dispersion.size == 0:
+            continue
+
+        median = np.median(bin_dispersion)
+        mad = np.median(np.abs(bin_dispersion - median))
+        mad = mad / _NORMAL_CONSISTENCY_MAD_SCALE
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            scores[finite_mask] = (bin_dispersion - median) / mad
+
+    return scores
+
+
 def _compute_loess_trend(
     means: np.ndarray,
     variances: np.ndarray,
@@ -312,24 +595,22 @@ def _compute_loess_trend(
     return cast(np.ndarray, 10**log_expected_variances)
 
 
-def _compute_regularized_std(trend: np.ndarray) -> np.ndarray:
+def _compute_regularized_variance(trend: np.ndarray) -> np.ndarray:
 
-    trend = np.maximum(
+    return np.maximum(
         np.asarray(trend, dtype=np.float64),
         np.finfo(np.float64).eps,
     )
 
-    return np.sqrt(trend)
 
-
-def _standardize(
+def _compute_clipped_moments(
     matrix: Any,
     means: np.ndarray,
-    regularized_std: np.ndarray,
-) -> _StandardizedExpression:
+    regularized_variance: np.ndarray,
+) -> _ClippedMoments:
 
     n_obs = int(matrix.shape[0])
-    clip_values = means + regularized_std * np.sqrt(n_obs)
+    clip_values = means + np.sqrt(regularized_variance * n_obs)
 
     if sparse.issparse(matrix):
         counts = sparse.csr_matrix(matrix.astype(np.float64, copy=True))
@@ -346,62 +627,208 @@ def _standardize(
         np.square(counts, out=counts)
         squared_sum = counts.sum(axis=0)
 
-    return _StandardizedExpression(
+    return _ClippedMoments(
         n_obs=n_obs,
         means=means,
-        regularized_std=regularized_std,
+        regularized_variance=regularized_variance,
         clipped_sum=clipped_sum,
         squared_sum=squared_sum,
     )
 
 
 def _compute_normalized_variance(
-    standardized: _StandardizedExpression,
+    clipped_moments: _ClippedMoments,
 ) -> np.ndarray:
 
-    n_obs = standardized.n_obs
-    means = standardized.means
-    regularized_std = standardized.regularized_std
-    clipped_sum = standardized.clipped_sum
-    squared_sum = standardized.squared_sum
+    n_obs = clipped_moments.n_obs
+    means = clipped_moments.means
+    regularized_variance = clipped_moments.regularized_variance
+    clipped_sum = clipped_moments.clipped_sum
+    squared_sum = clipped_moments.squared_sum
 
-    denominator = (n_obs - 1) * np.square(regularized_std)
-    numerator = n_obs * np.square(means) + squared_sum - 2 * clipped_sum * means
-    scores = numerator / denominator
-    scores[denominator == 0] = np.nan
+    empirical_clipped_variance = (
+        n_obs * np.square(means) + squared_sum - 2 * clipped_sum * means
+    ) / (n_obs - 1)
+    scores = empirical_clipped_variance / regularized_variance
+    scores[regularized_variance == 0] = np.nan
     return scores
 
 
 def _order_by_score(scores: np.ndarray) -> np.ndarray:
 
-    eligible = np.flatnonzero(np.isfinite(scores))
+    eligible = np.flatnonzero(~np.isnan(scores))
 
     return eligible[np.argsort(-scores[eligible], kind="mergesort")]
 
 
-def _select_features(
+def _as_cutoff_interval(
+    value: Tuple[float, float],
+    name: str,
+) -> Tuple[float, float]:
+
+    if isinstance(value, (str, bytes)) or not isinstance(value, SequenceInstance):
+        raise TypeError(
+            f"unsupported argument type for '{name}': "
+            f"expected tuple of two floats but received {type(value)}"
+        )
+    if len(value) != 2:
+        raise ValueError(
+            f"invalid argument value for '{name}': expected two bounds "
+            f"but received {value!r}"
+        )
+
+    interval = cast(Tuple[float, float], value)
+    lower = _as_cutoff_bound(interval[0], f"{name}[0]")
+    upper = _as_cutoff_bound(interval[1], f"{name}[1]")
+    if lower >= upper:
+        raise ValueError(
+            f"invalid argument value for '{name}': expected lower bound "
+            f"smaller than upper bound but received {value!r}"
+        )
+
+    return lower, upper
+
+
+def _as_optional_cutoff_interval(
+    value: Union[Literal["auto"], Tuple[float, float]],
+    name: str,
+) -> Optional[Tuple[float, float]]:
+
+    if isinstance(value, str):
+        if value == "auto":
+            return None
+        raise ValueError(
+            f"invalid argument value for '{name}': expected 'auto' "
+            f"but received {value!r}"
+        )
+
+    return _as_cutoff_interval(value, name)
+
+
+def _as_cutoff_bound(
+    value: Any,
+    name: str,
+) -> float:
+
+    if not isinstance(value, numbers.Real) or isinstance(value, bool):
+        raise TypeError(
+            f"unsupported argument type for '{name}': "
+            f"expected {float} but received {type(value)}"
+        )
+
+    value = float(value)
+    if np.isnan(value):
+        raise ValueError(
+            f"invalid argument value for '{name}': expected real value "
+            f"but received {value!r}"
+        )
+
+    return value
+
+
+def _select_hvg_features(
+    *,
+    ordered_indices: np.ndarray,
+    scores: np.ndarray,
+    means: np.ndarray,
+    n_features: Optional[int],
+    score: Optional[Tuple[float, float]],
+    mean: Tuple[float, float],
+    method: HVGMethod,
+    n_vars: int,
+) -> _HVGSelection:
+
+    if n_features is not None:
+        return _select_hvg_by_rank(
+            ordered_indices,
+            n_features=n_features,
+            n_vars=n_vars,
+        )
+
+    return _select_hvg_by_cutoff(
+        ordered_indices=ordered_indices,
+        scores=scores,
+        means=means,
+        score=score,
+        mean=mean,
+        method=method,
+        n_vars=n_vars,
+    )
+
+
+def _select_hvg_by_rank(
     ordered_indices: np.ndarray,
     *,
     n_features: int,
     n_vars: int,
-) -> np.ndarray:
+) -> _HVGSelection:
+
+    n_eligible = int(ordered_indices.size)
+    if n_eligible < n_features:
+        warnings.warn(
+            f"Requested {n_features} highly variable features, but only "
+            f"{n_eligible} features have finite variability scores.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    selected_indices = ordered_indices[:n_features]
+
+    return _hvg_selection_from_ordered_indices(
+        selected_indices,
+        n_vars=n_vars,
+        score_cutoff=None,
+        mean_cutoff=None,
+    )
+
+
+def _select_hvg_by_cutoff(
+    *,
+    ordered_indices: np.ndarray,
+    scores: np.ndarray,
+    means: np.ndarray,
+    score: Optional[Tuple[float, float]],
+    mean: Tuple[float, float],
+    method: HVGMethod,
+    n_vars: int,
+) -> _HVGSelection:
+
+    score_cutoff = score if score is not None else _DEFAULT_SCORE_CUTOFFS[method]
+    mean_cutoff = mean
+    selected = (
+        np.isfinite(scores)
+        & np.isfinite(means)
+        & (scores > score_cutoff[0])
+        & (scores < score_cutoff[1])
+        & (means > mean_cutoff[0])
+        & (means < mean_cutoff[1])
+    )
+    selected_indices = ordered_indices[selected[ordered_indices]]
+
+    return _hvg_selection_from_ordered_indices(
+        selected_indices,
+        n_vars=n_vars,
+        score_cutoff=score_cutoff,
+        mean_cutoff=mean_cutoff,
+    )
+
+
+def _hvg_selection_from_ordered_indices(
+    selected_indices: np.ndarray,
+    *,
+    n_vars: int,
+    score_cutoff: Optional[Tuple[float, float]],
+    mean_cutoff: Optional[Tuple[float, float]],
+) -> _HVGSelection:
 
     selected = np.zeros(n_vars, dtype=bool)
-    selected_indices = ordered_indices[:n_features]
     selected[selected_indices] = True
-
-    return selected
-
-
-def _assign_feature_ranks(
-    ordered_indices: np.ndarray,
-    *,
-    n_features: int,
-    n_vars: int,
-) -> np.ndarray:
-
     ranks = np.full(n_vars, np.nan, dtype=float)
-    selected_indices = ordered_indices[:n_features]
     ranks[selected_indices] = np.arange(1, selected_indices.size + 1, dtype=float)
 
-    return ranks
+    return _HVGSelection(
+        selected=selected,
+        ranks=ranks,
+        score_cutoff=score_cutoff,
+        mean_cutoff=mean_cutoff,
+    )
