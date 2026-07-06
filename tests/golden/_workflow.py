@@ -47,6 +47,8 @@ PCA_N_COMPONENTS = 50
 N_NEIGHBORS = 15
 EMBEDDING_N_COMPONENTS = 2
 TSNE_N_ITER = 300
+KNNSC_CELLS_PER_CLUSTER = 50
+KNNSC_N_NEIGHBORS = 15
 
 
 def load_pbmc3k() -> ad.AnnData:
@@ -119,6 +121,14 @@ def run_workflow() -> Dict[str, Dict[str, Any]]:
     )
     outputs["neighbors"] = _collect_neighbors(adata)
 
+    bt.sct.tl.louvain(
+        adata,
+        resolution=1.0,
+        neighbors_key="neighbors",
+        key_added="knnsc_clusters",
+        seed=0,
+    )
+
     bt.sct.tl.neighbors(
         adata,
         n_neighbors=N_NEIGHBORS,
@@ -155,6 +165,18 @@ def run_workflow() -> Dict[str, Dict[str, Any]]:
         n_jobs=1,
     )
     outputs["umap"] = _collect_embedding(adata, "X_umap")
+
+    knnsc_adata = _subset_knnsc_adata(adata)
+    knnsc = bt.sct.tl.KNNSC()
+    knnsc.fit(
+        knnsc_adata,
+        cluster_key="knnsc_clusters",
+        representation="X_umap",
+        n_components=EMBEDDING_N_COMPONENTS,
+        n_neighbors=KNNSC_N_NEIGHBORS,
+        n_jobs=1,
+    )
+    outputs["knnsc"] = _collect_knnsc(knnsc)
 
     bt.sct.tl.tsne(
         adata,
@@ -263,6 +285,38 @@ def _collect_embedding(
 
     return {
         "embedding": np.asarray(adata.obsm[key]),
+    }
+
+
+def _subset_knnsc_adata(adata: ad.AnnData) -> ad.AnnData:
+
+    obs = cast(pd.DataFrame, adata.obs)
+    labels = cast(pd.Series, obs["knnsc_clusters"])
+    indices = []
+    for cluster in labels.cat.categories:
+        cluster_indices = obs.index[labels == cluster]
+        indices.extend(cluster_indices[:KNNSC_CELLS_PER_CLUSTER])
+
+    subset = adata[indices, :].copy()
+    subset.obs["knnsc_clusters"] = cast(
+        pd.Series,
+        subset.obs["knnsc_clusters"],
+    ).cat.remove_unused_categories()
+
+    return subset
+
+
+def _collect_knnsc(knnsc: bt.sct.tl.KNNSC) -> Dict[str, Any]:
+
+    shortest_path_lengths = knnsc.shortest_path_lengths_df
+
+    return {
+        "obs_names": np.asarray(shortest_path_lengths.index.astype(str), dtype=str),
+        "cluster_names": np.asarray(
+            shortest_path_lengths.columns.astype(str),
+            dtype=str,
+        ),
+        "shortest_path_lengths": shortest_path_lengths.to_numpy(dtype=np.float64),
     }
 
 

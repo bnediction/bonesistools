@@ -1387,18 +1387,31 @@ class KNNSC:
     ) -> None:
 
         def shortest_path_lengths_from(
-            source: str,
+            source: Hashable,
         ):
-            distances = pd.Series(data=self.obs.index, index=self.obs.index)
-            distances = distances.apply(
-                lambda x: nx.shortest_path_length(
+            if method == "dijkstra":
+                lengths = nx.single_source_dijkstra_path_length(
                     self.knn_graph,
                     source=source,
-                    target=x,
                     weight="distance",
-                    method=method,
                 )
-            )
+            elif method == "bellman-ford":
+                lengths = nx.single_source_bellman_ford_path_length(
+                    self.knn_graph,
+                    source=source,
+                    weight="distance",
+                )
+            else:
+                raise ValueError(f"unsupported shortest path method: {method!r}")
+
+            distances = pd.Series(lengths, dtype=float).reindex(self.obs.index)
+            missing_mask = distances.isna().to_numpy(dtype=bool)
+            if np.any(missing_mask):
+                missing = np.asarray(distances.index, dtype=object)[missing_mask][0]
+                raise nx.NetworkXNoPath(
+                    f"node {missing!r} is not reachable from {source!r}"
+                )
+
             return (source, distances)
 
         _multiprocess_is_available = (

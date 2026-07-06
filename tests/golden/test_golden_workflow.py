@@ -81,5 +81,14 @@ def test_golden_workflow_matches_expected_outputs(golden_outputs, name):
             rtol=1e-6,
             atol=1e-6,
         )
+    elif name == "knnsc":
+        assert_equal_arrays(result, expected, ("obs_names", "cluster_names"))
+        assert_close_arrays(
+            result,
+            expected,
+            ("shortest_path_lengths",),
+            rtol=1e-10,
+            atol=1e-12,
+        )
     else:
         raise AssertionError(f"unexpected golden output: {name}")
