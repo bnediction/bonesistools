@@ -26,6 +26,10 @@ from ..tools._utils import get_expression
 
 HVGMethod = Literal["loess", "binning"]
 HVG_METHODS: Tuple[HVGMethod, ...] = ("loess", "binning")
+HVG_BATCH_WEIGHTINGS: Tuple[Literal["equal", "cell_count"], ...] = (
+    "equal",
+    "cell_count",
+)
 _DEFAULT_SCORE_CUTOFFS = {
     "loess": (2.0, np.inf),
     "binning": (0.5, np.inf),
@@ -51,6 +55,13 @@ class _HVGSelection:
 
 
 @dataclass(frozen=True)
+class _BatchGroups:
+
+    masks: Tuple[np.ndarray, ...]
+    sizes: np.ndarray
+
+
+@dataclass(frozen=True)
 class _ClippedMoments:
 
     n_obs: int
@@ -69,6 +80,8 @@ def hvg(
     method: HVGMethod = "loess",
     span: float = 0.3,
     n_bins: int = 20,
+    batch_key: Optional[str] = None,
+    batch_weighting: Literal["equal", "cell_count"] = "equal",
     score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
@@ -85,6 +98,8 @@ def hvg(
     method: HVGMethod = "loess",
     span: float = 0.3,
     n_bins: int = 20,
+    batch_key: Optional[str] = None,
+    batch_weighting: Literal["equal", "cell_count"] = "equal",
     score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
@@ -101,6 +116,8 @@ def hvg(
     method: HVGMethod = "loess",
     span: float = 0.3,
     n_bins: int = 20,
+    batch_key: Optional[str] = None,
+    batch_weighting: Literal["equal", "cell_count"] = "equal",
     score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
@@ -117,6 +134,8 @@ def hvg(
     method: HVGMethod = "loess",
     span: float = 0.3,
     n_bins: int = 20,
+    batch_key: Optional[str] = None,
+    batch_weighting: Literal["equal", "cell_count"] = "equal",
     score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
@@ -156,6 +175,14 @@ def hvg(
         to 1. Used by `method='loess'`.
     n_bins: int (default: 20)
         Number of mean-expression bins used by `method='binning'`.
+    batch_key: str, optional
+        Column in `adata.obs` defining batches. If provided, features are
+        scored independently in each batch and scores are averaged across
+        batches.
+    batch_weighting: {'equal', 'cell_count'} (default: 'equal')
+        Batch score aggregation strategy. If 'equal', each batch has the same
+        weight. If 'cell_count', batches are weighted by their number of
+        observations. Ignored when `batch_key` is None.
     score: {'auto'} or tuple of float (default: 'auto')
         Score interval used when `n_features=None`. Features are selected when
         `score[0] < feature_score < score[1]`. If 'auto', use
@@ -208,6 +235,15 @@ def hvg(
         else _as_positive_integer(n_features, "n_features")
     )
     method = cast(HVGMethod, _as_literal(method, choices=HVG_METHODS, name="method"))
+    batch_key = None if batch_key is None else _as_string(batch_key, "batch_key")
+    batch_weighting = cast(
+        Literal["equal", "cell_count"],
+        _as_literal(
+            batch_weighting,
+            choices=HVG_BATCH_WEIGHTINGS,
+            name="batch_weighting",
+        ),
+    )
     span = _as_positive_number(span, "span")
     if span > 1:
         raise ValueError(
@@ -244,11 +280,23 @@ def hvg(
     if len(expression_mtx.shape) != 2:
         raise ValueError("invalid expression matrix: expected a two-dimensional matrix")
 
-    scoring = _score_hvg_features(
-        expression_mtx,
-        method=method,
-        span=span,
-        n_bins=n_bins,
+    batch_groups = _resolve_batch_groups(adata, batch_key)
+    scoring = (
+        _score_hvg_features(
+            expression_mtx,
+            method=method,
+            span=span,
+            n_bins=n_bins,
+        )
+        if batch_groups is None
+        else _score_hvg_features_by_batch(
+            expression_mtx,
+            batch_groups=batch_groups,
+            batch_weighting=batch_weighting,
+            method=method,
+            span=span,
+            n_bins=n_bins,
+        )
     )
     ordered_indices = _order_by_score(scoring.scores)
     selection_means = (
@@ -256,6 +304,8 @@ def hvg(
             expression_mtx,
             method=method,
             scoring_means=scoring.means,
+            batch_groups=batch_groups,
+            batch_weighting=batch_weighting,
         )
         if n_features is None
         else scoring.means
@@ -285,6 +335,8 @@ def hvg(
             n_bins=n_bins,
             n_features=n_features,
             selection=selection,
+            batch_key=batch_key,
+            batch_weighting=batch_weighting,
         ),
     }
 
@@ -313,6 +365,42 @@ def _score_hvg_features(
     raise ValueError(f"unsupported HVG method: {method!r}")
 
 
+def _score_hvg_features_by_batch(
+    matrix: Matrix,
+    *,
+    batch_groups: _BatchGroups,
+    batch_weighting: Literal["equal", "cell_count"],
+    method: HVGMethod,
+    span: float,
+    n_bins: int,
+) -> _HVGScore:
+
+    batch_means = []
+    batch_scores = []
+    for mask in batch_groups.masks:
+        batch_matrix = _subset_obs_matrix(matrix, mask)
+        if int(mask.sum()) < 2:
+            batch_means.append(_compute_mean(batch_matrix))
+            batch_scores.append(np.full(matrix.shape[1], np.nan, dtype=np.float64))
+            continue
+
+        scoring = _score_hvg_features(
+            batch_matrix,
+            method=method,
+            span=span,
+            n_bins=n_bins,
+        )
+        batch_means.append(scoring.means)
+        batch_scores.append(scoring.scores)
+
+    weights = _batch_weights(batch_groups, batch_weighting=batch_weighting)
+
+    return _HVGScore(
+        means=_weighted_nanmean(np.vstack(batch_means), weights),
+        scores=_weighted_nanmean(np.vstack(batch_scores), weights),
+    )
+
+
 def _hvg_params(
     *,
     method: HVGMethod,
@@ -320,12 +408,16 @@ def _hvg_params(
     n_bins: int,
     n_features: Optional[int],
     selection: _HVGSelection,
+    batch_key: Optional[str],
+    batch_weighting: Literal["equal", "cell_count"],
 ) -> dict:
 
     params = {
         "selection": "top_n" if n_features is not None else "cutoff",
         "score_cutoff": selection.score_cutoff,
         "mean_cutoff": selection.mean_cutoff,
+        "batch_key": batch_key,
+        "batch_weighting": batch_weighting,
     }
     if method == "loess":
         return {
@@ -407,9 +499,17 @@ def _selection_means(
     *,
     method: HVGMethod,
     scoring_means: np.ndarray,
+    batch_groups: Optional[_BatchGroups],
+    batch_weighting: Literal["equal", "cell_count"],
 ) -> np.ndarray:
 
     if method == "loess":
+        if batch_groups is not None:
+            return _compute_log_normalized_mean_by_batch(
+                matrix,
+                batch_groups=batch_groups,
+                batch_weighting=batch_weighting,
+            )
         return _compute_log_normalized_mean(matrix)
     return scoring_means
 
@@ -461,6 +561,22 @@ def _compute_log_normalized_mean(
     np.log1p(normalized, out=normalized)
 
     return np.asarray(normalized.mean(axis=0, dtype=np.float64)).ravel()
+
+
+def _compute_log_normalized_mean_by_batch(
+    matrix: Matrix,
+    *,
+    batch_groups: _BatchGroups,
+    batch_weighting: Literal["equal", "cell_count"],
+) -> np.ndarray:
+
+    batch_means = [
+        _compute_log_normalized_mean(_subset_obs_matrix(matrix, mask))
+        for mask in batch_groups.masks
+    ]
+    weights = _batch_weights(batch_groups, batch_weighting=batch_weighting)
+
+    return _weighted_nanmean(np.vstack(batch_means), weights)
 
 
 def _compute_variance(
@@ -671,6 +787,69 @@ def _order_by_score(scores: np.ndarray) -> np.ndarray:
     eligible = np.flatnonzero(~np.isnan(scores))
 
     return eligible[np.argsort(-scores[eligible], kind="mergesort")]
+
+
+def _resolve_batch_groups(
+    adata: AnnData,
+    batch_key: Optional[str],
+) -> Optional[_BatchGroups]:
+
+    if batch_key is None:
+        return None
+    if batch_key not in adata.obs:
+        raise KeyError(f"column {batch_key!r} not found in adata.obs")
+
+    labels = cast(Any, adata.obs[batch_key])
+    valid_mask = ~np.asarray(labels.isna(), dtype=bool)
+    values = list(labels[valid_mask].unique())
+    masks = tuple(
+        np.asarray((labels == value) & valid_mask, dtype=bool)
+        for value in values
+    )
+    masks = tuple(mask for mask in masks if np.any(mask))
+    if not masks:
+        raise ValueError(
+            f"invalid observation batches in adata.obs[{batch_key!r}]: "
+            "expected at least one non-missing batch"
+        )
+
+    return _BatchGroups(
+        masks=masks,
+        sizes=np.asarray([mask.sum() for mask in masks], dtype=np.float64),
+    )
+
+
+def _subset_obs_matrix(matrix: Matrix, obs_mask: np.ndarray) -> Matrix:
+
+    return cast(Matrix, cast(Any, matrix)[obs_mask, :])
+
+
+def _batch_weights(
+    batch_groups: _BatchGroups,
+    *,
+    batch_weighting: Literal["equal", "cell_count"],
+) -> np.ndarray:
+
+    if batch_weighting == "equal":
+        return np.ones(batch_groups.sizes.shape[0], dtype=np.float64)
+    if batch_weighting == "cell_count":
+        return batch_groups.sizes.astype(np.float64, copy=False)
+
+    raise ValueError(f"unsupported batch weighting: {batch_weighting!r}")
+
+
+def _weighted_nanmean(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+
+    valid = ~np.isnan(values)
+    weighted_values = np.where(valid, values, 0.0) * weights.reshape(-1, 1)
+    denominators = np.sum(valid * weights.reshape(-1, 1), axis=0)
+
+    return np.divide(
+        weighted_values.sum(axis=0),
+        denominators,
+        out=np.full(values.shape[1], np.nan, dtype=np.float64),
+        where=denominators != 0,
+    )
 
 
 def _as_cutoff_interval(

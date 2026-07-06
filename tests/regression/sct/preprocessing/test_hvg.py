@@ -36,6 +36,22 @@ def _hvg_adata(sparse_input=False):
     return adata
 
 
+def _weighted_nanmean(values, weights):
+
+    values = np.asarray(values, dtype=np.float64)
+    weights = np.asarray(weights, dtype=np.float64)
+    valid = ~np.isnan(values)
+    weighted_values = np.where(valid, values, 0.0) * weights.reshape(-1, 1)
+    denominators = np.sum(valid * weights.reshape(-1, 1), axis=0)
+
+    return np.divide(
+        weighted_values.sum(axis=0),
+        denominators,
+        out=np.full(values.shape[1], np.nan, dtype=np.float64),
+        where=denominators != 0,
+    )
+
+
 def test_hvg_dense_matrix_adds_expected_outputs():
     adata = _hvg_adata()
 
@@ -60,6 +76,8 @@ def test_hvg_dense_matrix_adds_expected_outputs():
             "selection": "top_n",
             "score_cutoff": None,
             "mean_cutoff": None,
+            "batch_key": None,
+            "batch_weighting": "equal",
         },
     }
 
@@ -110,6 +128,92 @@ def test_hvg_binning_sparse_matrix_matches_dense_scores_and_selection():
         dense_var["highly_variable_score"].to_numpy(),
         sparse_var["highly_variable_score"].to_numpy(),
         equal_nan=True,
+    )
+
+
+def test_hvg_batch_key_uses_equal_batch_weighting_by_default():
+    adata = _hvg_adata()
+    matrix = np.asarray(adata.X)
+    batch = np.array(["small"] * 20 + ["large"] * 60)
+    adata.obs["batch"] = batch
+
+    bt.sct.pp.hvg(
+        adata,
+        method="binning",
+        n_features=5,
+        n_bins=10,
+        batch_key="batch",
+    )
+
+    small_scores = _hvg._score_hvg_features(
+        matrix[batch == "small", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    large_scores = _hvg._score_hvg_features(
+        matrix[batch == "large", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    expected_scores = _weighted_nanmean(
+        np.vstack([small_scores, large_scores]),
+        np.ones(2),
+    )
+    var = cast(pd.DataFrame, adata.var)
+
+    np.testing.assert_allclose(
+        var["highly_variable_score"].to_numpy(),
+        expected_scores,
+        equal_nan=True,
+    )
+    assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
+    assert adata.uns["highly_variable"]["params"]["batch_weighting"] == "equal"
+
+
+def test_hvg_batch_key_can_weight_batches_by_cell_count():
+    adata = _hvg_adata()
+    matrix = np.asarray(adata.X)
+    batch = np.array(["small"] * 20 + ["large"] * 60)
+    adata.obs["batch"] = batch
+
+    bt.sct.pp.hvg(
+        adata,
+        method="binning",
+        n_features=5,
+        n_bins=10,
+        batch_key="batch",
+        batch_weighting="cell_count",
+    )
+
+    small_scores = _hvg._score_hvg_features(
+        matrix[batch == "small", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    large_scores = _hvg._score_hvg_features(
+        matrix[batch == "large", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    batch_scores = np.vstack([small_scores, large_scores])
+    expected_scores = _weighted_nanmean(batch_scores, np.array([20, 60]))
+    equal_scores = _weighted_nanmean(batch_scores, np.ones(2))
+    var = cast(pd.DataFrame, adata.var)
+    finite = np.isfinite(expected_scores) & np.isfinite(equal_scores)
+
+    np.testing.assert_allclose(
+        var["highly_variable_score"].to_numpy(),
+        expected_scores,
+        equal_nan=True,
+    )
+    assert np.max(np.abs(expected_scores[finite] - equal_scores[finite])) > 1e-12
+    assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
+    assert (
+        adata.uns["highly_variable"]["params"]["batch_weighting"] == "cell_count"
     )
 
 
@@ -181,6 +285,8 @@ def test_hvg_binning_scores_match_mean_binned_dispersion_formula():
             "selection": "top_n",
             "score_cutoff": None,
             "mean_cutoff": None,
+            "batch_key": None,
+            "batch_weighting": "equal",
         },
     }
 
@@ -436,6 +542,15 @@ def test_hvg_validates_arguments(mini_adata):
 
     with pytest.raises(ValueError):
         bt.sct.pp.hvg(mini_adata, n_bins=0)
+
+    with pytest.raises(TypeError):
+        bt.sct.pp.hvg(mini_adata, batch_key=cast(Any, 1))
+
+    with pytest.raises(KeyError):
+        bt.sct.pp.hvg(mini_adata, batch_key="unknown")
+
+    with pytest.raises(ValueError):
+        bt.sct.pp.hvg(mini_adata, batch_weighting=cast(Any, "weighted"))
 
     with pytest.raises(TypeError):
         bt.sct.pp.hvg(mini_adata, span=cast(Any, "0.3"))
