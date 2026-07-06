@@ -56,28 +56,6 @@ def _resolve_representation_argument(
     return cast(Optional[str], representation)
 
 
-def _resolve_obsm_argument(
-    obsm: Any,
-    use_rep: Any,
-    *,
-    default: Optional[str],
-    stacklevel: int,
-) -> Optional[str]:
-
-    if use_rep is not _UNSET:
-        _warn_deprecated_argument("use_rep", "obsm", stacklevel=stacklevel)
-        if obsm is not _UNSET:
-            raise TypeError(
-                "received both 'obsm' and deprecated 'use_rep'; "
-                "please use only 'obsm'"
-            )
-        obsm = use_rep
-    elif obsm is _UNSET:
-        obsm = default
-
-    return cast(Optional[str], obsm)
-
-
 @anndata_checker
 def get_expression(
     adata: AnnData,
@@ -406,6 +384,28 @@ def get_representation(
         return cast(Matrix, scdata.obsm[obsm])
     else:
         return cast(Matrix, scdata.obsm[obsm][:, :n_components])
+
+
+def _resolve_obsm_argument(
+    obsm: Any,
+    use_rep: Any,
+    *,
+    default: Optional[str],
+    stacklevel: int,
+) -> Optional[str]:
+
+    if use_rep is not _UNSET:
+        _warn_deprecated_argument("use_rep", "obsm", stacklevel=stacklevel)
+        if obsm is not _UNSET:
+            raise TypeError(
+                "received both 'obsm' and deprecated 'use_rep'; "
+                "please use only 'obsm'"
+            )
+        obsm = use_rep
+    elif obsm is _UNSET:
+        obsm = default
+
+    return cast(Optional[str], obsm)
 
 
 @anndata_checker

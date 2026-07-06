@@ -56,83 +56,6 @@ class InteractionScore:
         return self.score / self.total_weight
 
 
-def _default_weights(max_depth: int) -> List[float]:
-
-    return [1 / (length**2) for length in range(1, max_depth + 1)]
-
-
-def _path_weight(
-    path_length: int,
-    weights: Sequence[float],
-) -> float:
-
-    try:
-        return weights[path_length - 1]
-
-    except IndexError:
-        raise ValueError(
-            "invalid argument value for 'weights': "
-            f"expected at least {path_length} values but received {len(weights)}"
-        )
-
-
-def _edge_signs(
-    graph: nx.Graph[Any],
-    source: str,
-    target: str,
-) -> List[int]:
-
-    edge_data = graph.get_edge_data(source, target)
-
-    if edge_data is None:
-        return []
-
-    if graph.is_multigraph():
-        data_iterable = edge_data.values()
-    else:
-        data_iterable = [edge_data]
-
-    signs = []
-
-    for data in data_iterable:
-        sign = data.get("sign")
-
-        if sign not in {-1, 1}:
-            raise ValueError(
-                "invalid interaction sign: expected -1 or 1 for edge "
-                f"{source!r} -> {target!r} but received {sign!r}"
-            )
-
-        signs.append(sign)
-
-    return signs
-
-
-def _walk_signs(
-    graph: nx.Graph[Any],
-    walk: Sequence[str],
-) -> List[int]:
-
-    edge_signs = [
-        _edge_signs(graph, source, target) for source, target in zip(walk, walk[1:])
-    ]
-
-    if any(len(signs) == 0 for signs in edge_signs):
-        return []
-
-    signs = []
-
-    for sign_combination in product(*edge_signs):
-        path_sign = 1
-
-        for sign in sign_combination:
-            path_sign *= sign
-
-        signs.append(path_sign)
-
-    return signs
-
-
 def interaction_scores_from_walks(
     graph: nx.Graph[Any],
     genes: Optional[Iterable[str]] = None,
@@ -247,24 +170,6 @@ def interaction_scores_from_walks(
             )
 
     return scores
-
-
-def _empty_score() -> InteractionScore:
-
-    return InteractionScore(score=0.0, total_weight=0.0, path_number=0)
-
-
-def _passes_threshold(
-    score: InteractionScore,
-    minimum_path_number: int,
-    threshold: float,
-) -> bool:
-
-    return (
-        score.path_number >= minimum_path_number
-        and score.normalized_score != 0
-        and abs(score.normalized_score) >= threshold
-    )
 
 
 def infer_signed_interactions(
@@ -399,3 +304,98 @@ def infer_signed_interactions_from_walks(
         threshold=threshold,
         allow_bidirectional=allow_bidirectional,
     )
+
+
+def _default_weights(max_depth: int) -> List[float]:
+
+    return [1 / (length**2) for length in range(1, max_depth + 1)]
+
+
+def _edge_signs(
+    graph: nx.Graph[Any],
+    source: str,
+    target: str,
+) -> List[int]:
+
+    edge_data = graph.get_edge_data(source, target)
+
+    if edge_data is None:
+        return []
+
+    if graph.is_multigraph():
+        data_iterable = edge_data.values()
+    else:
+        data_iterable = [edge_data]
+
+    signs = []
+
+    for data in data_iterable:
+        sign = data.get("sign")
+
+        if sign not in {-1, 1}:
+            raise ValueError(
+                "invalid interaction sign: expected -1 or 1 for edge "
+                f"{source!r} -> {target!r} but received {sign!r}"
+            )
+
+        signs.append(sign)
+
+    return signs
+
+
+def _path_weight(
+    path_length: int,
+    weights: Sequence[float],
+) -> float:
+
+    try:
+        return weights[path_length - 1]
+
+    except IndexError:
+        raise ValueError(
+            "invalid argument value for 'weights': "
+            f"expected at least {path_length} values but received {len(weights)}"
+        )
+
+
+def _empty_score() -> InteractionScore:
+
+    return InteractionScore(score=0.0, total_weight=0.0, path_number=0)
+
+
+def _passes_threshold(
+    score: InteractionScore,
+    minimum_path_number: int,
+    threshold: float,
+) -> bool:
+
+    return (
+        score.path_number >= minimum_path_number
+        and score.normalized_score != 0
+        and abs(score.normalized_score) >= threshold
+    )
+
+
+def _walk_signs(
+    graph: nx.Graph[Any],
+    walk: Sequence[str],
+) -> List[int]:
+
+    edge_signs = [
+        _edge_signs(graph, source, target) for source, target in zip(walk, walk[1:])
+    ]
+
+    if any(len(signs) == 0 for signs in edge_signs):
+        return []
+
+    signs = []
+
+    for sign_combination in product(*edge_signs):
+        path_sign = 1
+
+        for sign in sign_combination:
+            path_sign *= sign
+
+        signs.append(path_sign)
+
+    return signs

@@ -39,13 +39,6 @@ CENTERED_PCA_SOLVERS: Tuple[PCASolver, ...] = (
 UNCENTERED_PCA_SOLVERS: Tuple[TruncatedSVDSolver, ...] = ("arpack", "randomized")
 
 
-def _format_var_subset(var_subset: VarSubset) -> Union[str, Tuple[str, ...], None]:
-
-    if var_subset is None or isinstance(var_subset, str):
-        return var_subset
-    return tuple(sorted(var_subset))
-
-
 @anndata_checker
 def pca(
     adata: AnnData,
@@ -233,41 +226,11 @@ def pca(
     return adata if copy else None
 
 
-def _neighbors_graph(
-    adata: AnnData,
-    neighbors_key: str,
-) -> Tuple[str, Dict[str, Any], Any]:
+def _format_var_subset(var_subset: VarSubset) -> Union[str, Tuple[str, ...], None]:
 
-    if neighbors_key not in adata.uns:
-        raise KeyError(
-            f"key {neighbors_key!r} not found in adata.uns: "
-            f"please run `bt.sct.tl.neighbors(..., key_added={neighbors_key!r})`"
-        )
-
-    neighbors = cast(Dict[str, Any], adata.uns[neighbors_key])
-    if "connectivities_key" not in neighbors:
-        raise KeyError(
-            f"key 'connectivities_key' not found in " f"adata.uns[{neighbors_key!r}]"
-        )
-
-    connectivities_key = _as_string(
-        neighbors["connectivities_key"],
-        "connectivities_key",
-    )
-    if connectivities_key not in adata.obsp:
-        raise KeyError(
-            f"key {connectivities_key!r} not found in adata.obsp: "
-            f"expected connectivities from adata.uns[{neighbors_key!r}]"
-        )
-
-    connectivities = cast(Any, adata.obsp[connectivities_key])
-    if sparse.issparse(connectivities):
-        graph = connectivities.tocoo(copy=True)
-    else:
-        graph = sparse.coo_matrix(connectivities)
-
-    neighbor_params = cast(Dict[str, Any], neighbors.get("params", {}))
-    return connectivities_key, neighbor_params, graph
+    if var_subset is None or isinstance(var_subset, str):
+        return var_subset
+    return tuple(sorted(var_subset))
 
 
 @anndata_checker
@@ -584,6 +547,43 @@ def umap(
     }
 
     return adata if copy else None
+
+
+def _neighbors_graph(
+    adata: AnnData,
+    neighbors_key: str,
+) -> Tuple[str, Dict[str, Any], Any]:
+
+    if neighbors_key not in adata.uns:
+        raise KeyError(
+            f"key {neighbors_key!r} not found in adata.uns: "
+            f"please run `bt.sct.tl.neighbors(..., key_added={neighbors_key!r})`"
+        )
+
+    neighbors = cast(Dict[str, Any], adata.uns[neighbors_key])
+    if "connectivities_key" not in neighbors:
+        raise KeyError(
+            f"key 'connectivities_key' not found in " f"adata.uns[{neighbors_key!r}]"
+        )
+
+    connectivities_key = _as_string(
+        neighbors["connectivities_key"],
+        "connectivities_key",
+    )
+    if connectivities_key not in adata.obsp:
+        raise KeyError(
+            f"key {connectivities_key!r} not found in adata.obsp: "
+            f"expected connectivities from adata.uns[{neighbors_key!r}]"
+        )
+
+    connectivities = cast(Any, adata.obsp[connectivities_key])
+    if sparse.issparse(connectivities):
+        graph = connectivities.tocoo(copy=True)
+    else:
+        graph = sparse.coo_matrix(connectivities)
+
+    neighbor_params = cast(Dict[str, Any], neighbors.get("params", {}))
+    return connectivities_key, neighbor_params, graph
 
 
 @anndata_checker

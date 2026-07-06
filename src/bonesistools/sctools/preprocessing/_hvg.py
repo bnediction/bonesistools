@@ -254,9 +254,7 @@ def hvg(
 
     expression = None if expression is None else _as_string(expression, "expression")
     n_features = (
-        None
-        if n_features is None
-        else _as_positive_integer(n_features, "n_features")
+        None if n_features is None else _as_positive_integer(n_features, "n_features")
     )
     method = cast(HVGMethod, _as_literal(method, choices=HVG_METHODS, name="method"))
     batch_key = None if batch_key is None else _as_string(batch_key, "batch_key")
@@ -288,16 +286,11 @@ def hvg(
     mean_cutoff = _as_cutoff_interval(mean, "mean")
     copy = _as_boolean(copy, "copy")
 
-    if (
-        n_features is not None
-        and (
-            score_cutoff is not None
-            or mean_cutoff != (0.0125, 3.0)
-        )
+    if n_features is not None and (
+        score_cutoff is not None or mean_cutoff != (0.0125, 3.0)
     ):
         warnings.warn(
-            "`score` and `mean` cutoffs are ignored when `n_features` is "
-            "provided.",
+            "`score` and `mean` cutoffs are ignored when `n_features` is " "provided.",
             UserWarning,
             stacklevel=2,
         )
@@ -546,9 +539,7 @@ def _compute_mean(matrix: Matrix) -> np.ndarray:
     if sparse.issparse(matrix):
         sparse_matrix = cast(Any, matrix)
         sums = (
-            np.asarray(sparse_matrix.sum(axis=0))
-            .ravel()
-            .astype(np.float64, copy=False)
+            np.asarray(sparse_matrix.sum(axis=0)).ravel().astype(np.float64, copy=False)
         )
 
         return sums / n_obs
@@ -681,9 +672,7 @@ def _compute_variance(
     else:
         dense_matrix = cast(np.ndarray, matrix)
         squared_matrix = np.multiply(dense_matrix, dense_matrix)
-        mean_squares = np.asarray(
-            squared_matrix.mean(axis=0, dtype=np.float64)
-        ).ravel()
+        mean_squares = np.asarray(squared_matrix.mean(axis=0, dtype=np.float64)).ravel()
 
     variances = np.maximum(mean_squares - mean**2, 0)
     if n_obs > 1:
@@ -725,11 +714,14 @@ def _bin_by_mean(
         )
     bin_edges = np.r_[-np.inf, np.percentile(finite_means, percentiles), np.inf]
     bin_edges = np.unique(bin_edges)
-    bins[finite_indices] = np.searchsorted(
-        bin_edges,
-        finite_means,
-        side="left",
-    ) - 1
+    bins[finite_indices] = (
+        np.searchsorted(
+            bin_edges,
+            finite_means,
+            side="left",
+        )
+        - 1
+    )
 
     return bins
 
@@ -918,8 +910,7 @@ def _resolve_batch_groups(
     valid_mask = ~np.asarray(labels.isna(), dtype=bool)
     values = list(labels[valid_mask].unique())
     masks = tuple(
-        np.asarray((labels == value) & valid_mask, dtype=bool)
-        for value in values
+        np.asarray((labels == value) & valid_mask, dtype=bool) for value in values
     )
     masks = tuple(mask for mask in masks if np.any(mask))
     if not masks:

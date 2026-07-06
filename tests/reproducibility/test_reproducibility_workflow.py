@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import warnings
 from typing import Any, cast
 
 import anndata as ad
@@ -75,15 +76,25 @@ def _run_clustering_workflow():
         n_jobs=1,
         copy=False,
     )
-    bt.sct.tl.spectral(
-        adata,
-        neighbors_key="neighbors",
-        n_components=2,
-        eigen_solver="arpack",
-        seed=10,
-        n_jobs=1,
-        copy=False,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=(
+                "Graph is not fully connected, spectral embedding may not "
+                "work as expected."
+            ),
+            category=UserWarning,
+            module="sklearn.manifold._spectral_embedding",
+        )
+        bt.sct.tl.spectral(
+            adata,
+            neighbors_key="neighbors",
+            n_components=2,
+            eigen_solver="arpack",
+            seed=10,
+            n_jobs=1,
+            copy=False,
+        )
 
     return adata
 

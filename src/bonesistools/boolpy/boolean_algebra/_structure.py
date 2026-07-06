@@ -24,27 +24,6 @@ DNFValue = Union[bool, DNFStructure]
 BA = BooleanAlgebra()
 
 
-def _eval_as_bool(
-    ba: BooleanAlgebra,
-    expr: Expression,
-    assignment: Mapping[Any, bool],
-) -> bool:
-
-    substitutions = {
-        symbol: ba.TRUE if value else ba.FALSE for symbol, value in assignment.items()
-    }
-
-    value = expr.subs(substitutions).simplify()
-
-    if isinstance(value, _TRUE):
-        return True
-
-    if isinstance(value, _FALSE):
-        return False
-
-    raise ValueError(f"expression did not evaluate to a Boolean constant: {value!r}")
-
-
 def expressions_equivalent(
     expr1: Expression,
     expr2: Expression,
@@ -148,44 +127,6 @@ def expressions_equivalent(
         return True
 
 
-def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:
-
-    literal_any: Any = literal
-
-    if isinstance(literal_any, ba.NOT):
-        operand = literal_any.args[0]
-
-        if not operand.isliteral:
-            raise ValueError(f"invalid DNF literal: {literal_any!r}")
-
-        return str(operand.obj), False
-
-    if literal_any.isliteral:
-        return str(literal_any.obj), True
-
-    raise ValueError(f"invalid DNF literal: {literal_any!r}")
-
-
-def _clause_to_structure(
-    ba: BooleanAlgebra,
-    clause: Expression,
-    container: Callable[[Iterable[Any]], Any],
-    sort: bool,
-):
-
-    if isinstance(clause, ba.AND):
-        literals = clause.args
-    else:
-        literals = (clause,)
-
-    literals = [_literal_to_pair(ba, literal) for literal in literals]
-
-    if sort:
-        literals = sorted(literals)
-
-    return container(literals)
-
-
 def dnf_to_structure(
     ba: BooleanAlgebra,
     expr: Expression,
@@ -247,3 +188,62 @@ def dnf_to_structure(
         clauses = sorted(clauses, key=repr)
 
     return container(clauses)
+
+
+def _eval_as_bool(
+    ba: BooleanAlgebra,
+    expr: Expression,
+    assignment: Mapping[Any, bool],
+) -> bool:
+
+    substitutions = {
+        symbol: ba.TRUE if value else ba.FALSE for symbol, value in assignment.items()
+    }
+
+    value = expr.subs(substitutions).simplify()
+
+    if isinstance(value, _TRUE):
+        return True
+
+    if isinstance(value, _FALSE):
+        return False
+
+    raise ValueError(f"expression did not evaluate to a Boolean constant: {value!r}")
+
+
+def _clause_to_structure(
+    ba: BooleanAlgebra,
+    clause: Expression,
+    container: Callable[[Iterable[Any]], Any],
+    sort: bool,
+):
+
+    if isinstance(clause, ba.AND):
+        literals = clause.args
+    else:
+        literals = (clause,)
+
+    literals = [_literal_to_pair(ba, literal) for literal in literals]
+
+    if sort:
+        literals = sorted(literals)
+
+    return container(literals)
+
+
+def _literal_to_pair(ba: BooleanAlgebra, literal: Expression) -> RegulatoryLiteral:
+
+    literal_any: Any = literal
+
+    if isinstance(literal_any, ba.NOT):
+        operand = literal_any.args[0]
+
+        if not operand.isliteral:
+            raise ValueError(f"invalid DNF literal: {literal_any!r}")
+
+        return str(operand.obj), False
+
+    if literal_any.isliteral:
+        return str(literal_any.obj), True
+
+    raise ValueError(f"invalid DNF literal: {literal_any!r}")

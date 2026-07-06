@@ -528,7 +528,7 @@ def distribution(
                         QUALITATIVE_COLORS,
                         generate_colormap,
                     ),
-            )
+                )
             __apply_violin_colors(distribution_artists, violin_colors, alpha=alpha)
             __apply_summary_artist_kwargs(
                 distribution_artists,
@@ -663,9 +663,7 @@ def distribution(
                     legend_edgecolor = bodies[0].get_edgecolor()[0]
                     legend_facecolor = bodies[0].get_facecolor()[0]
                 else:
-                    legend_edgecolor = cast(Mapping[object, object], artist_colors)[
-                        h
-                    ]
+                    legend_edgecolor = cast(Mapping[object, object], artist_colors)[h]
                     legend_facecolor = cast(Mapping[object, object], point_colors)[h]
                 handles.append(
                     mpatches.Patch(
@@ -1336,9 +1334,11 @@ def __nonempty_violin_inputs(
         position_values[keep_indices],
         width_values[keep_indices],
         [quantile_sets[index] for index in keep_indices],
-        None
-        if label_values is None
-        else [label_values[index] for index in keep_indices],
+        (
+            None
+            if label_values is None
+            else [label_values[index] for index in keep_indices]
+        ),
     )
 
 

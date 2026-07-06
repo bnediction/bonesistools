@@ -188,9 +188,10 @@ def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
     loaded = bt.sct.datasets.load("nestorowa", quiet=True)
 
     assert adata.shape == (3, 2)
-    assert adata.obs["label"].astype(str).tolist() == loaded.obs["label"].astype(
-        str
-    ).tolist()
+    assert (
+        adata.obs["label"].astype(str).tolist()
+        == loaded.obs["label"].astype(str).tolist()
+    )
     np.testing.assert_array_equal(
         _as_csr(adata.X).toarray(),
         _as_csr(loaded.X).toarray(),

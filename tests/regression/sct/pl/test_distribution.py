@@ -433,9 +433,7 @@ def test_distribution_violin_mean_matches_boxplot_style(mini_adata):
         artists["cmeans"].get_colors(),
         [bt.sct.pl.rgba("C2")],
     )
-    assert all(
-        pattern is not None for _, pattern in artists["cmeans"].get_linestyle()
-    )
+    assert all(pattern is not None for _, pattern in artists["cmeans"].get_linestyle())
     np.testing.assert_allclose(artists["cmeans"].get_linewidths(), [1.0])
     np.testing.assert_allclose(
         artists["cmeans"].get_segments(),
@@ -481,9 +479,7 @@ def test_distribution_box_summary_statistics_accept_artist_kwargs(mini_adata):
     assert all(median.get_linewidth() == 3.0 for median in artists["medians"])
     assert artists["means"]
     assert all(mean.get_marker() == "D" for mean in artists["means"])
-    assert all(
-        mean.get_markerfacecolor() == "tab:green" for mean in artists["means"]
-    )
+    assert all(mean.get_markerfacecolor() == "tab:green" for mean in artists["means"])
     plt.close(fig)
 
 

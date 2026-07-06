@@ -107,7 +107,7 @@ def set_default_params(tex: bool = True):
     return None
 
 
-cmap = ListedColormap(colors=CLASSIC_COLORS, name="default", N=None)
+cmap = ListedColormap(colors=CLASSIC_COLORS, name="default")
 
 mpl.colormaps.register(cmap)
 

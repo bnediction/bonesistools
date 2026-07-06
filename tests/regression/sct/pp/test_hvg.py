@@ -10,6 +10,7 @@ import pytest
 from scipy import sparse
 
 import bonesistools as bt
+from bonesistools.sctools._typing import Matrix
 from bonesistools.sctools.preprocessing import _hvg
 
 
@@ -192,9 +193,7 @@ def test_hvg_batch_key_uses_equal_batch_weighting_by_default():
     )
     assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
     assert adata.uns["highly_variable"]["params"]["batch_weighting"] == "equal"
-    assert (
-        adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
-    )
+    assert adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
 
 
 def test_hvg_batch_key_can_weight_batches_by_cell_count():
@@ -247,12 +246,8 @@ def test_hvg_batch_key_can_weight_batches_by_cell_count():
     assert np.array_equal(var["highly_variable"].to_numpy(), expected_selected)
     assert np.max(np.abs(expected_scores[finite] - equal_scores[finite])) > 1e-12
     assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
-    assert (
-        adata.uns["highly_variable"]["params"]["batch_weighting"] == "cell_count"
-    )
-    assert (
-        adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
-    )
+    assert adata.uns["highly_variable"]["params"]["batch_weighting"] == "cell_count"
+    assert adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
 
 
 def test_hvg_batch_selection_rank_prioritizes_summarized_within_batch_rank():
@@ -539,7 +534,7 @@ def test_hvg_cutoffs_select_features_by_score_and_mean():
     )
     var = cast(pd.DataFrame, adata.var)
     scores = var["highly_variable_score"].to_numpy()
-    means = _hvg._compute_log_normalized_mean(adata.X)
+    means = _hvg._compute_log_normalized_mean(cast(Matrix, adata.X))
     expected = np.isfinite(scores) & (scores > 2.0) & (means > 0.0) & (means < 3.5)
 
     assert np.array_equal(var["highly_variable"].to_numpy(), expected)
@@ -562,13 +557,8 @@ def test_hvg_uses_method_default_cutoffs_when_n_features_is_none():
     )
     var = cast(pd.DataFrame, adata.var)
     scores = var["highly_variable_score"].to_numpy()
-    means = _hvg._compute_log_normalized_mean(adata.X)
-    expected = (
-        np.isfinite(scores)
-        & (scores > 2.0)
-        & (means > 0.0125)
-        & (means < 3.0)
-    )
+    means = _hvg._compute_log_normalized_mean(cast(Matrix, adata.X))
+    expected = np.isfinite(scores) & (scores > 2.0) & (means > 0.0125) & (means < 3.0)
 
     assert np.array_equal(var["highly_variable"].to_numpy(), expected)
     assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (2.0, np.inf)
@@ -642,12 +632,7 @@ def test_hvg_binning_uses_method_default_cutoffs_when_n_features_is_none():
     var = cast(pd.DataFrame, adata.var)
     scores = var["highly_variable_score"].to_numpy()
     means = np.asarray(adata.X).mean(axis=0)
-    expected = (
-        np.isfinite(scores)
-        & (scores > 0.5)
-        & (means > 0.0125)
-        & (means < 3.0)
-    )
+    expected = np.isfinite(scores) & (scores > 0.5) & (means > 0.0125) & (means < 3.0)
 
     assert np.array_equal(var["highly_variable"].to_numpy(), expected)
     assert adata.uns["highly_variable"]["params"]["score_cutoff"] == (0.5, np.inf)

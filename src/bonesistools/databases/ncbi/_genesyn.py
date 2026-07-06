@@ -226,32 +226,6 @@ _GENE_SYNONYMS_DEPRECATED_ARGS = {
 }
 
 
-def _is_interaction(item: Any) -> bool:
-
-    return (
-        isinstance(item, SequenceInstance)
-        and not isinstance(item, str)
-        and len(item) == 3
-        and isinstance(item[0], str)
-        and isinstance(item[1], str)
-        and isinstance(item[2], MappingInstance)
-    )
-
-
-def _is_interaction_list(data: Any) -> bool:
-
-    if not (
-        (isinstance(data, SequenceInstance) and not isinstance(data, str))
-        or isinstance(data, set)
-    ):
-        return False
-
-    if len(data) == 0:
-        return False
-
-    return all(_is_interaction(item) for item in data)
-
-
 def support_legacy_gene_synonyms_args(func):
     """
     Decorate GeneSynonyms methods to accept deprecated argument names.
@@ -1881,6 +1855,32 @@ class GeneSynonyms:
             path.unlink()
         except FileNotFoundError:
             pass
+
+
+def _is_interaction_list(data: Any) -> bool:
+
+    if not (
+        (isinstance(data, SequenceInstance) and not isinstance(data, str))
+        or isinstance(data, set)
+    ):
+        return False
+
+    if len(data) == 0:
+        return False
+
+    return all(_is_interaction(item) for item in data)
+
+
+def _is_interaction(item: Any) -> bool:
+
+    return (
+        isinstance(item, SequenceInstance)
+        and not isinstance(item, str)
+        and len(item) == 3
+        and isinstance(item[0], str)
+        and isinstance(item[1], str)
+        and isinstance(item[2], MappingInstance)
+    )
 
 
 def genesyn(

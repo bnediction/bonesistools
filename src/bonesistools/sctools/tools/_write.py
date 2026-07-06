@@ -10,21 +10,6 @@ from scipy import io, sparse
 PathInput = Union[str, Path]
 
 
-def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
-
-    return adata.X if layer is None else adata.layers[layer]
-
-
-def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
-
-    X = _get_matrix(adata, layer)
-
-    if sparse.issparse(X):
-        return cast(Any, X).toarray()
-
-    return cast(Any, X)
-
-
 def to_csv(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData matrix to a CSV file.
@@ -89,3 +74,18 @@ def to_npz(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> 
 
     X = _get_matrix(adata, layer)
     sparse.save_npz(filename, X)
+
+
+def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
+
+    X = _get_matrix(adata, layer)
+
+    if sparse.issparse(X):
+        return cast(Any, X).toarray()
+
+    return cast(Any, X)
+
+
+def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
+
+    return adata.X if layer is None else adata.layers[layer]

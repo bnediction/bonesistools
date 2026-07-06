@@ -25,21 +25,6 @@ from .._validation import _as_anndata_axis
 from ..tools import anndata_to_dataframe
 
 
-@type_checker(dfs=UnionType(DataFrame, List))
-def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
-
-    dfs = [dfs] if isinstance(dfs, DataFrame) else dfs
-    column_names = set()
-    for df in dfs:
-        column_names.update(set(df.columns))
-    index_name = "index"
-    _i = 0
-    while index_name in column_names:
-        index_name = f"index_{_i}"
-        _i += 1
-    return index_name
-
-
 @overload
 def transfer_layer(
     left_ad: AnnData,
@@ -371,6 +356,21 @@ def transfer_obs_to_integrated(
     adata.obs = merge_df
 
     return adata if copy else None
+
+
+@type_checker(dfs=UnionType(DataFrame, List))
+def __generate_unique_index_name(dfs: Union[DataFrame, DataFrameList]) -> str:
+
+    dfs = [dfs] if isinstance(dfs, DataFrame) else dfs
+    column_names = set()
+    for df in dfs:
+        column_names.update(set(df.columns))
+    index_name = "index"
+    _i = 0
+    while index_name in column_names:
+        index_name = f"index_{_i}"
+        _i += 1
+    return index_name
 
 
 @overload

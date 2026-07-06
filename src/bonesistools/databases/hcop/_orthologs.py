@@ -779,7 +779,7 @@ class Orthologs:
         resolved_min_evidence = self._validate_min_evidence(resolved_min_evidence)
 
         if table is None:
-            table = self.orthologs(
+            table = self._load_orthologs_table(
                 input_organism=resolved_input_organism,
                 output_organism=resolved_output_organism,
                 min_evidence=resolved_min_evidence,
@@ -840,6 +840,30 @@ class Orthologs:
             if found
         ]
 
+    @staticmethod
+    def versions(output_organism: Optional[str] = None) -> List[str]:
+        """
+        List available HCOP version labels without loading an HCOP table.
+
+        Parameters
+        ----------
+        output_organism: str, optional
+            If provided, only report local snapshots available for this target
+            organism.
+
+        Returns
+        -------
+        list of str
+            Accepted version labels. `"bundled"` denotes the HCOP snapshot
+            distributed with bonesistools. `"latest"` denotes the current
+            public HCOP files.
+        """
+
+        if output_organism is not None:
+            Orthologs._validate_output_organism(output_organism)
+
+        return ["bundled", "latest"]
+
     def _translate_best(self, gene: str, keep_if_missing: bool) -> Optional[str]:
 
         translated = self.translate(gene, keep_if_missing=keep_if_missing)
@@ -864,7 +888,7 @@ class Orthologs:
         return cast(pd.DataFrame, translated.dropna(subset=[column]))
 
     @staticmethod
-    def orthologs(
+    def _load_orthologs_table(
         input_organism: str = "human",
         output_organism: str = "mouse",
         min_evidence: int = 3,
@@ -949,30 +973,6 @@ class Orthologs:
             ),
         )
         return copylib.deepcopy(table)
-
-    @staticmethod
-    def versions(output_organism: Optional[str] = None) -> List[str]:
-        """
-        List available HCOP version labels without loading an HCOP table.
-
-        Parameters
-        ----------
-        output_organism: str, optional
-            If provided, only report local snapshots available for this target
-            organism.
-
-        Returns
-        -------
-        list of str
-            Accepted version labels. `"bundled"` denotes the HCOP snapshot
-            distributed with bonesistools. `"latest"` denotes the current
-            public HCOP files.
-        """
-
-        if output_organism is not None:
-            Orthologs._validate_output_organism(output_organism)
-
-        return ["bundled", "latest"]
 
     @staticmethod
     def _is_interaction(item: Any) -> bool:

@@ -9,59 +9,6 @@ from ._influence_graph import InfluenceGraph
 SignedEdge = Tuple[Any, Any, int]
 
 
-def _signed_edge_identity(source: Any, target: Any, sign: Any) -> SignedEdge:
-
-    return (source, target, InfluenceGraph._normalize_sign(sign))
-
-
-def _signed_edge_set(ig: InfluenceGraph) -> Set[SignedEdge]:
-
-    return {
-        _signed_edge_identity(source, target, sign)
-        for source, target, sign in ig.edges(data="sign")
-    }
-
-
-def _implicit_hamming_domain_size(
-    ig1: InfluenceGraph,
-    ig2: InfluenceGraph,
-) -> int:
-
-    nodes = set(ig1.nodes()) | set(ig2.nodes())
-
-    return 2 * len(nodes) ** 2
-
-
-def _validate_hamming_domain(
-    edges1: Set[SignedEdge],
-    edges2: Set[SignedEdge],
-    domain: InfluenceGraph,
-) -> Set[SignedEdge]:
-
-    domain_edges = _signed_edge_set(domain)
-
-    if not edges1 < domain_edges or not edges2 < domain_edges:
-        raise ValueError(
-            "`domain` must be a strict signed-edge superset of both input graphs"
-        )
-
-    return domain_edges
-
-
-def _hamming_domain_size(
-    ig1: InfluenceGraph,
-    ig2: InfluenceGraph,
-    edges1: Set[SignedEdge],
-    edges2: Set[SignedEdge],
-    domain: Optional[InfluenceGraph],
-) -> int:
-
-    if domain is None:
-        return _implicit_hamming_domain_size(ig1, ig2)
-
-    return len(_validate_hamming_domain(edges1, edges2, domain))
-
-
 def similarity(
     ig1: InfluenceGraph,
     ig2: InfluenceGraph,
@@ -185,3 +132,56 @@ def distance(
 
     else:
         raise ValueError(f"unsupported distance metric: {metric!r}")
+
+
+def _signed_edge_set(ig: InfluenceGraph) -> Set[SignedEdge]:
+
+    return {
+        _signed_edge_identity(source, target, sign)
+        for source, target, sign in ig.edges(data="sign")
+    }
+
+
+def _hamming_domain_size(
+    ig1: InfluenceGraph,
+    ig2: InfluenceGraph,
+    edges1: Set[SignedEdge],
+    edges2: Set[SignedEdge],
+    domain: Optional[InfluenceGraph],
+) -> int:
+
+    if domain is None:
+        return _implicit_hamming_domain_size(ig1, ig2)
+
+    return len(_validate_hamming_domain(edges1, edges2, domain))
+
+
+def _signed_edge_identity(source: Any, target: Any, sign: Any) -> SignedEdge:
+
+    return (source, target, InfluenceGraph._normalize_sign(sign))
+
+
+def _implicit_hamming_domain_size(
+    ig1: InfluenceGraph,
+    ig2: InfluenceGraph,
+) -> int:
+
+    nodes = set(ig1.nodes()) | set(ig2.nodes())
+
+    return 2 * len(nodes) ** 2
+
+
+def _validate_hamming_domain(
+    edges1: Set[SignedEdge],
+    edges2: Set[SignedEdge],
+    domain: InfluenceGraph,
+) -> Set[SignedEdge]:
+
+    domain_edges = _signed_edge_set(domain)
+
+    if not edges1 < domain_edges or not edges2 < domain_edges:
+        raise ValueError(
+            "`domain` must be a strict signed-edge superset of both input graphs"
+        )
+
+    return domain_edges

@@ -253,9 +253,7 @@ def qc(
 
     if log1p:
         for column in ("mean", "variance", "median", "mad", "total"):
-            var_metrics[f"log1p_{column}"] = np.log1p(
-                var_metrics[column].to_numpy()
-            )
+            var_metrics[f"log1p_{column}"] = np.log1p(var_metrics[column].to_numpy())
 
     obs_metrics.index = adata.obs_names
     var_metrics.index = adata.var_names
@@ -491,9 +489,7 @@ def _percent_top(
     backend: Literal["auto", "python", "numba"] = "auto",
 ) -> np.ndarray:
 
-    return _percent_top_by_rank(matrix, (top,), total_per_barcode, backend=backend)[
-        top
-    ]
+    return _percent_top_by_rank(matrix, (top,), total_per_barcode, backend=backend)[top]
 
 
 def _percent_top_by_rank(

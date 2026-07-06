@@ -150,14 +150,13 @@ def _as_dataset_name(name: str) -> str:
         raise TypeError(
             f"unsupported argument type for 'name': "
             f"expected {str} but received {type(name)}"
-    )
+        )
 
     dataset_name = name.strip().lower()
     if dataset_name not in _DATASETS:
         available = ", ".join(repr(name) for name in sorted(_DATASETS))
         raise ValueError(
-            f"unknown dataset {name!r}; available datasets are "
-            f"{available}"
+            f"unknown dataset {name!r}; available datasets are " f"{available}"
         )
 
     return dataset_name
@@ -177,13 +176,10 @@ def _validate_dataset_shape(
     errors = []
     if expected_observations is not None and adata.n_obs != expected_observations:
         errors.append(
-            f"expected {expected_observations} observations but found "
-            f"{adata.n_obs}"
+            f"expected {expected_observations} observations but found " f"{adata.n_obs}"
         )
     if expected_features is not None and adata.n_vars != expected_features:
-        errors.append(
-            f"expected {expected_features} features but found {adata.n_vars}"
-        )
+        errors.append(f"expected {expected_features} features but found {adata.n_vars}")
     if len(errors) == 0:
         return
 

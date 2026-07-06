@@ -50,86 +50,6 @@ from ._utils import (
 Colors = Union[Sequence[object], Iterator[object], Colormap, Mapping[object, object]]
 
 
-def _resolve_feature_argument(feature: Any, gene: Any, *, stacklevel: int) -> str:
-
-    if gene is not _UNSET:
-        _warn_deprecated_argument("gene", "feature", stacklevel=stacklevel)
-        if feature is not _UNSET:
-            raise TypeError(
-                "received both 'feature' and deprecated 'gene'; "
-                "please use only 'feature'"
-            )
-        feature = gene
-
-    if feature is _UNSET:
-        raise TypeError("missing required argument: 'feature'")
-
-    return cast(str, feature)
-
-
-def _resolve_expression_argument(
-    expression: Optional[str],
-    layer: Any,
-    *,
-    stacklevel: int,
-) -> Optional[str]:
-
-    if layer is not _UNSET:
-        _warn_deprecated_argument("layer", "expression", stacklevel=stacklevel)
-        if expression is not None:
-            raise TypeError(
-                "received both 'expression' and deprecated 'layer'; "
-                "please use only 'expression'"
-            )
-        expression = cast(Optional[str], layer)
-
-    return expression
-
-
-def _resolve_clip_outliers_argument(clip_outliers: bool, clip: Any) -> bool:
-
-    if clip is _UNSET:
-        return clip_outliers
-
-    _warn_deprecated_argument("clip", "clip_outliers", stacklevel=3)
-    if clip_outliers is not False:
-        raise TypeError(
-            "received both 'clip_outliers' and deprecated 'clip'; "
-            "please use only 'clip_outliers'"
-        )
-
-    return cast(bool, clip)
-
-
-def _resolve_show_global_argument(show_global: bool, not_all: Any) -> bool:
-
-    if not_all is _UNSET:
-        return show_global
-
-    _warn_deprecated_argument("not_all", "show_global", stacklevel=3)
-    if show_global is not True:
-        raise TypeError(
-            "received both 'show_global' and deprecated 'not_all'; "
-            "please use only 'show_global'"
-        )
-
-    return not cast(bool, not_all)
-
-
-def _counts_vector(
-    adata: AnnData,
-    feature: str,
-    expression: Optional[str],
-) -> np.ndarray:
-
-    counts = adata[:, feature].layers[expression] if expression else adata[:, feature].X
-
-    if scipy.sparse.issparse(counts):
-        counts = cast(Any, counts).toarray()
-
-    return np.asarray(counts).squeeze()
-
-
 @overload
 def density(
     adata: AnnData,
@@ -559,6 +479,86 @@ def cdf(
         return None
 
     return fig, ax
+
+
+def _resolve_feature_argument(feature: Any, gene: Any, *, stacklevel: int) -> str:
+
+    if gene is not _UNSET:
+        _warn_deprecated_argument("gene", "feature", stacklevel=stacklevel)
+        if feature is not _UNSET:
+            raise TypeError(
+                "received both 'feature' and deprecated 'gene'; "
+                "please use only 'feature'"
+            )
+        feature = gene
+
+    if feature is _UNSET:
+        raise TypeError("missing required argument: 'feature'")
+
+    return cast(str, feature)
+
+
+def _resolve_expression_argument(
+    expression: Optional[str],
+    layer: Any,
+    *,
+    stacklevel: int,
+) -> Optional[str]:
+
+    if layer is not _UNSET:
+        _warn_deprecated_argument("layer", "expression", stacklevel=stacklevel)
+        if expression is not None:
+            raise TypeError(
+                "received both 'expression' and deprecated 'layer'; "
+                "please use only 'expression'"
+            )
+        expression = cast(Optional[str], layer)
+
+    return expression
+
+
+def _resolve_clip_outliers_argument(clip_outliers: bool, clip: Any) -> bool:
+
+    if clip is _UNSET:
+        return clip_outliers
+
+    _warn_deprecated_argument("clip", "clip_outliers", stacklevel=3)
+    if clip_outliers is not False:
+        raise TypeError(
+            "received both 'clip_outliers' and deprecated 'clip'; "
+            "please use only 'clip_outliers'"
+        )
+
+    return cast(bool, clip)
+
+
+def _resolve_show_global_argument(show_global: bool, not_all: Any) -> bool:
+
+    if not_all is _UNSET:
+        return show_global
+
+    _warn_deprecated_argument("not_all", "show_global", stacklevel=3)
+    if show_global is not True:
+        raise TypeError(
+            "received both 'show_global' and deprecated 'not_all'; "
+            "please use only 'show_global'"
+        )
+
+    return not cast(bool, not_all)
+
+
+def _counts_vector(
+    adata: AnnData,
+    feature: str,
+    expression: Optional[str],
+) -> np.ndarray:
+
+    counts = adata[:, feature].layers[expression] if expression else adata[:, feature].X
+
+    if scipy.sparse.issparse(counts):
+        counts = cast(Any, counts).toarray()
+
+    return np.asarray(counts).squeeze()
 
 
 def kde_plot(*args: Any, **kwargs: Any) -> Optional[Tuple[Figure, Axes]]:

@@ -147,13 +147,11 @@ def test_geo_gsm_path_generation():
 def test_geo_link_parser_keeps_decoded_anchor_hrefs_only():
     parser = geo._LinkParser()
 
-    parser.feed(
-        """
+    parser.feed("""
         <span href="ignored">ignored</span>
         <a>missing</a>
         <a href="GSM1%20matrix.mtx.gz">matrix</a>
-        """
-    )
+        """)
 
     assert parser.links == ["GSM1 matrix.mtx.gz"]
 

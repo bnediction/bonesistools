@@ -281,8 +281,9 @@ def test_pca_stores_scores_loadings_and_metadata(mini_adata):
         np.abs(mini_adata.obsm["X_pca"]),
         np.abs(expected.transform(mini_adata.X)),
     )
+    loadings = cast(np.ndarray, mini_adata.varm["PCs"])
     assert np.allclose(
-        np.abs(mini_adata.varm["PCs"]),
+        np.abs(loadings),
         np.abs(expected.components_.T),
     )
     assert np.allclose(mini_adata.uns["pca"]["variance"], expected.explained_variance_)
@@ -319,8 +320,9 @@ def test_pca_copy_layer_and_highly_variable_genes(mini_adata):
     assert "X_custom" not in mini_adata.obsm
     assert copied is not None
     assert copied.obsm["X_custom"].shape == (mini_adata.n_obs, 2)
-    assert copied.varm["PCs"].shape == (mini_adata.n_vars, 2)
-    assert np.allclose(copied.varm["PCs"][1, :], 0.0)
+    loadings = cast(np.ndarray, copied.varm["PCs"])
+    assert loadings.shape == (mini_adata.n_vars, 2)
+    assert np.allclose(loadings[1, :], 0.0)
     assert copied.uns["pca"]["params"]["layer"] == "counts"
     assert copied.uns["pca"]["params"]["var_subset"] == "highly_variable"
 
@@ -335,7 +337,8 @@ def test_pca_accepts_variable_name_subset(mini_adata):
     )
 
     assert mini_adata.obsm["X_pca"].shape == (mini_adata.n_obs, 2)
-    assert np.allclose(mini_adata.varm["PCs"][1, :], 0.0)
+    loadings = cast(np.ndarray, mini_adata.varm["PCs"])
+    assert np.allclose(loadings[1, :], 0.0)
     assert mini_adata.uns["pca"]["params"]["var_subset"] == ("g1", "g3")
 
 
@@ -357,7 +360,8 @@ def test_pca_without_zero_center_preserves_sparse_input(mini_adata):
     )
 
     assert np.allclose(mini_adata.obsm["X_pca"], expected_scores)
-    assert np.allclose(mini_adata.varm["PCs"], expected.components_.T)
+    loadings = cast(np.ndarray, mini_adata.varm["PCs"])
+    assert np.allclose(loadings, expected.components_.T)
     assert np.allclose(mini_adata.uns["pca"]["variance"], expected.explained_variance_)
     assert np.allclose(
         mini_adata.uns["pca"]["variance_ratio"],
@@ -385,8 +389,9 @@ def test_pca_with_sparse_input_densifies_for_dense_solver(mini_adata):
     )
 
     assert np.allclose(np.abs(mini_adata.obsm["X_pca"]), np.abs(expected_scores))
+    loadings = cast(np.ndarray, mini_adata.varm["PCs"])
     assert np.allclose(
-        np.abs(mini_adata.varm["PCs"]),
+        np.abs(loadings),
         np.abs(expected.components_.T),
     )
     assert np.allclose(mini_adata.uns["pca"]["variance"], expected.explained_variance_)
@@ -428,9 +433,11 @@ def test_pca_matches_scanpy_with_sparse_input_and_seed(mini_adata, zero_center):
         np.abs(bonesis_adata.obsm["X_pca"]),
         np.abs(scanpy_adata.obsm["X_pca"]),
     )
+    bonesis_loadings = cast(np.ndarray, bonesis_adata.varm["PCs"])
+    scanpy_loadings = cast(np.ndarray, scanpy_adata.varm["PCs"])
     assert np.allclose(
-        np.abs(bonesis_adata.varm["PCs"]),
-        np.abs(scanpy_adata.varm["PCs"]),
+        np.abs(bonesis_loadings),
+        np.abs(scanpy_loadings),
     )
     assert np.allclose(
         bonesis_adata.uns["pca"]["variance"],
@@ -473,8 +480,9 @@ def test_pca_preserves_dense_var_subset_layout():
         np.abs(bonesis_adata.obsm["X_pca"]),
         np.abs(expected_scores),
     )
+    loadings = cast(np.ndarray, bonesis_adata.varm["PCs"])
     assert np.array_equal(
-        np.abs(bonesis_adata.varm["PCs"]),
+        np.abs(loadings),
         np.abs(expected_loadings),
     )
     assert np.array_equal(

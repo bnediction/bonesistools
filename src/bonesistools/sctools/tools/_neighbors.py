@@ -68,434 +68,6 @@ _MIN_K_DIST_SCALE = 0.001
 _NPY_FLOATMAX = np.float32(3.4028235e38)
 
 
-def _kneighbors_distance_matrix(
-    scdata: ScData,
-    representation: Optional[str],
-    n_components: Optional[int],
-    n_neighbors: int,
-    metric: Metric,
-    n_jobs: int,
-) -> csr_matrix:
-
-    from sklearn import neighbors as sklearn_neighbors
-
-    representation_mtx = cast(
-        Matrix,
-        get_representation(
-            scdata,
-            obsm=representation,
-            n_components=n_components,
-        ),
-    )
-    matrix = sklearn_neighbors.kneighbors_graph(
-        X=representation_mtx,
-        n_neighbors=n_neighbors,
-        mode="distance",
-        metric=metric,
-        n_jobs=n_jobs,
-    )
-    return cast(csr_matrix, matrix)
-
-
-def _kneighbors_graph_matrices(
-    scdata: ScData,
-    representation: Optional[str],
-    n_components: Optional[int],
-    n_neighbors: int,
-    backend: NeighborBackend,
-    connectivity_method: NeighborConnectivityMethod,
-    metric: Metric,
-    seed: RandomStateSeed,
-    n_jobs: int,
-) -> Tuple[csr_matrix, csr_matrix]:
-
-    representation_mtx = cast(
-        Matrix,
-        get_representation(
-            scdata,
-            obsm=representation,
-            n_components=n_components,
-        ),
-    )
-    if backend == "exact":
-        knn_indices, knn_distances = _exact_knn_arrays(
-            representation_mtx=representation_mtx,
-            n_neighbors=n_neighbors,
-            metric=metric,
-            n_jobs=n_jobs,
-        )
-    else:
-        knn_indices, knn_distances = _pynndescent_knn_arrays(
-            representation_mtx=representation_mtx,
-            n_neighbors=n_neighbors,
-            metric=metric,
-            seed=seed,
-            n_jobs=n_jobs,
-        )
-
-    distances = _sparse_distances_from_knn(
-        knn_indices=knn_indices,
-        knn_distances=knn_distances,
-        n_obs=scdata.n_obs,
-    )
-    if connectivity_method == "binary":
-        from sklearn import neighbors as sklearn_neighbors
-
-        connectivities = cast(
-            csr_matrix,
-            sklearn_neighbors.kneighbors_graph(
-                X=representation_mtx,
-                n_neighbors=n_neighbors,
-                mode="connectivity",
-                metric=metric,
-                include_self=True,
-                n_jobs=n_jobs,
-            ),
-        )
-        connectivities = cast(csr_matrix, 0.5 * (connectivities + connectivities.T))
-        return distances, connectivities
-
-    connectivities = _umap_connectivities_from_knn(
-        knn_indices,
-        knn_distances,
-        n_obs=scdata.n_obs,
-    )
-    return distances, connectivities
-
-
-def _get_pynndescent_transformer() -> Any:
-
-    try:
-        from pynndescent import PyNNDescentTransformer
-    except ImportError as exc:
-        raise ImportError(
-            "backend='pynndescent' requires the optional dependency "
-            "'pynndescent'. Install it with:\n\n"
-            "pip install pynndescent\n\n"
-            "or use backend='exact'."
-        ) from exc
-
-    return PyNNDescentTransformer
-
-
-def _exact_knn_arrays(
-    representation_mtx: Matrix,
-    n_neighbors: int,
-    metric: Metric,
-    n_jobs: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    from sklearn import neighbors as sklearn_neighbors
-
-    neighbors_model = sklearn_neighbors.NearestNeighbors(
-        n_neighbors=n_neighbors,
-        algorithm="brute",
-        metric=metric,
-        n_jobs=n_jobs,
-    )
-    sklearn_representation_mtx = cast(Any, representation_mtx)
-    neighbors_model.fit(sklearn_representation_mtx)
-    knn_distances, knn_indices = neighbors_model.kneighbors(sklearn_representation_mtx)
-    return _sort_knn_arrays(
-        knn_indices=knn_indices.astype(np.int32, copy=False),
-        knn_distances=knn_distances.astype(np.float32, copy=False),
-    )
-
-
-def _pynndescent_knn_arrays(
-    representation_mtx: Matrix,
-    n_neighbors: int,
-    metric: Metric,
-    seed: RandomStateSeed,
-    n_jobs: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    PyNNDescentTransformer = _get_pynndescent_transformer()
-    transformer = PyNNDescentTransformer(
-        n_neighbors=n_neighbors,
-        metric=metric,
-        random_state=_as_seed(seed),
-        n_jobs=n_jobs,
-    )
-    sparse_distances = cast(csr_matrix, transformer.fit_transform(representation_mtx))
-    return _knn_arrays_from_sparse_distances(
-        sparse_distances=sparse_distances.tocsr(),
-        n_neighbors=n_neighbors,
-    )
-
-
-def _knn_arrays_from_sparse_distances(
-    sparse_distances: csr_matrix,
-    n_neighbors: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    row_sizes = np.diff(sparse_distances.indptr)
-    if np.any(row_sizes < n_neighbors):
-        raise ValueError(
-            "invalid neighbor graph: backend returned fewer neighbors than expected"
-        )
-
-    if np.all(row_sizes == row_sizes[0]):
-        row_size = int(row_sizes[0])
-        n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
-        indices = sparse_distances.indices.reshape(n_obs, row_size)
-        distances = sparse_distances.data.reshape(n_obs, row_size)
-        order = np.argsort(distances, axis=1)
-        indices = np.take_along_axis(indices, order, axis=1)
-        distances = np.take_along_axis(distances, order, axis=1)
-
-        rows = np.arange(indices.shape[0])
-        if np.all((indices[:, 0] == rows) & (distances[:, 0] == 0.0)):
-            return _sort_knn_arrays(
-                knn_indices=indices[:, :n_neighbors].astype(np.int32, copy=False),
-                knn_distances=distances[:, :n_neighbors].astype(
-                    np.float32,
-                    copy=False,
-                ),
-            )
-
-    return _knn_arrays_from_sparse_distances_slow(
-        sparse_distances=sparse_distances,
-        n_neighbors=n_neighbors,
-    )
-
-
-def _knn_arrays_from_sparse_distances_slow(
-    sparse_distances: csr_matrix,
-    n_neighbors: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
-    knn_indices = np.empty((n_obs, n_neighbors), dtype=np.int32)
-    knn_distances = np.empty((n_obs, n_neighbors), dtype=np.float32)
-    for row in range(n_obs):
-        start = sparse_distances.indptr[row]
-        end = sparse_distances.indptr[row + 1]
-        indices = sparse_distances.indices[start:end]
-        distances = sparse_distances.data[start:end]
-
-        order = np.argsort(distances)
-        indices = indices[order]
-        distances = distances[order]
-
-        self_positions = np.flatnonzero((indices == row) & (distances == 0.0))
-        if self_positions.size == 0:
-            indices = np.concatenate(([row], indices))
-            distances = np.concatenate(([0.0], distances))
-        elif self_positions[0] != 0:
-            self_position = int(self_positions[0])
-            indices = np.concatenate(
-                (
-                    indices[self_position : self_position + 1],
-                    indices[:self_position],
-                    indices[self_position + 1 :],
-                )
-            )
-            distances = np.concatenate(
-                (
-                    distances[self_position : self_position + 1],
-                    distances[:self_position],
-                    distances[self_position + 1 :],
-                )
-            )
-
-        if indices.shape[0] < n_neighbors:
-            raise ValueError(
-                "invalid neighbor graph: backend returned fewer neighbors than expected"
-            )
-
-        knn_indices[row, :] = indices[:n_neighbors]
-        knn_distances[row, :] = distances[:n_neighbors]
-
-    return _sort_knn_arrays(knn_indices=knn_indices, knn_distances=knn_distances)
-
-
-def _sort_knn_arrays(
-    knn_indices: np.ndarray,
-    knn_distances: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
-    self_order = np.where(knn_indices == rows, 0, 1)
-    order = np.lexsort(
-        (
-            knn_indices,
-            knn_distances,
-            self_order,
-        ),
-        axis=1,
-    )
-    return (
-        np.take_along_axis(knn_indices, order, axis=1),
-        np.take_along_axis(knn_distances, order, axis=1),
-    )
-
-
-def _sparse_distances_from_knn(
-    knn_indices: np.ndarray,
-    knn_distances: np.ndarray,
-    n_obs: int,
-) -> csr_matrix:
-
-    n_neighbors = knn_indices.shape[1]
-    rows = np.repeat(np.arange(n_obs), n_neighbors)
-    columns = knn_indices.ravel()
-    data = knn_distances.ravel()
-    non_self = rows != columns
-    distances = csr_matrix(
-        (data[non_self], (rows[non_self], columns[non_self])),
-        shape=(n_obs, n_obs),
-    )
-    distances.eliminate_zeros()
-    return distances
-
-
-def _umap_smooth_knn_distances(
-    distances: np.ndarray,
-    n_neighbors: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-
-    distances = distances.astype(np.float32, copy=False)
-    target = np.float32(np.log2(float(n_neighbors)))
-    n_obs = distances.shape[0]
-
-    rhos = np.zeros(n_obs, dtype=np.float32)
-    for i in range(n_obs):
-        non_zero_distances = distances[i][distances[i] > 0.0]
-        if non_zero_distances.shape[0] > 0:
-            rhos[i] = non_zero_distances[0]
-
-    lo = np.zeros(n_obs, dtype=np.float32)
-    hi = np.full(n_obs, _NPY_FLOATMAX, dtype=np.float32)
-    sigmas = np.ones(n_obs, dtype=np.float32)
-    active = np.ones(n_obs, dtype=bool)
-    shifted_distances = distances[:, 1:] - rhos[:, None]
-
-    for _ in range(64):
-        with np.errstate(over="ignore"):
-            probabilities = np.where(
-                shifted_distances > 0.0,
-                np.exp(-(shifted_distances / sigmas[:, None])),
-                1.0,
-            )
-        probability_sums = probabilities.sum(axis=1)
-        close = np.abs(probability_sums - target) < _SMOOTH_K_TOLERANCE
-        update = active & ~close
-        if not np.any(update):
-            break
-
-        greater = update & (probability_sums > target)
-        hi[greater] = sigmas[greater]
-        sigmas[greater] = (lo[greater] + hi[greater]) / 2.0
-
-        lower = update & ~greater
-        lo[lower] = sigmas[lower]
-        unset_hi = lower & (hi >= _NPY_FLOATMAX)
-        sigmas[unset_hi] *= 2.0
-        set_hi = lower & ~unset_hi
-        sigmas[set_hi] = (lo[set_hi] + hi[set_hi]) / 2.0
-
-        active &= ~close
-
-    mean_distances = np.mean(distances)
-    mean_row_distances = np.mean(distances, axis=1)
-    min_sigmas = np.where(
-        rhos > 0.0,
-        _MIN_K_DIST_SCALE * mean_row_distances,
-        _MIN_K_DIST_SCALE * mean_distances,
-    )
-    sigmas = np.maximum(sigmas, min_sigmas)
-
-    return sigmas.astype(np.float32, copy=False), rhos
-
-
-def _umap_connectivities_from_knn(
-    knn_indices: np.ndarray,
-    knn_distances: np.ndarray,
-    n_obs: int,
-) -> csr_matrix:
-
-    knn_distances = knn_distances.astype(np.float32, copy=False)
-    n_neighbors = knn_indices.shape[1]
-    sigmas, rhos = _umap_smooth_knn_distances(knn_distances, n_neighbors)
-
-    rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
-    columns = knn_indices.astype(np.int32, copy=False).ravel()
-    shifted_distances = knn_distances - rhos[:, None]
-    with np.errstate(over="ignore"):
-        values = np.exp(-(shifted_distances / sigmas[:, None]))
-    values = np.where(
-        (shifted_distances <= 0.0) | (sigmas[:, None] == 0.0),
-        1.0,
-        values,
-    ).astype(np.float32, copy=False)
-    values[knn_indices == np.arange(n_obs)[:, None]] = 0.0
-
-    valid = columns != -1
-    graph = coo_matrix(
-        (
-            values.ravel()[valid],
-            (rows[valid], columns[valid]),
-        ),
-        shape=(n_obs, n_obs),
-    ).tocsr()
-
-    transpose = graph.transpose()
-    intersections = graph.multiply(transpose)
-    graph = graph + transpose - intersections
-    graph.eliminate_zeros()
-
-    return cast(csr_matrix, graph.tocsr())
-
-
-def _normalize_knnsc_configuration(
-    representation: Optional[str],
-    n_components: Optional[int],
-    n_neighbors: Optional[int],
-    metric: Optional[Metric],
-    metric_kwargs: Optional[Dict[str, Any]],
-) -> Tuple[str, Optional[int], int, Metric, Dict[str, Any]]:
-
-    if n_components is not None:
-        n_components = _as_positive_integer(n_components, "n_components")
-
-    resolved_representation = "X_pca" if representation is None else representation
-    resolved_representation = _as_string(
-        resolved_representation,
-        "representation",
-    )
-
-    if n_neighbors is None:
-        raise TypeError("missing required argument: 'n_neighbors'")
-
-    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
-
-    resolved_metric: Metric = "euclidean" if metric is None else metric
-    resolved_metric = _as_literal(
-        resolved_metric,
-        choices=get_args(Metric),
-        name="metric",
-    )
-
-    if metric_kwargs is None:
-        resolved_metric_kwargs: Dict[str, Any] = {}
-    elif isinstance(metric_kwargs, dict):
-        resolved_metric_kwargs = dict(metric_kwargs)
-    else:
-        raise TypeError(
-            f"unsupported argument type for 'metric_kwargs': "
-            f"expected {dict} but received {type(metric_kwargs)}"
-        )
-
-    return (
-        resolved_representation,
-        n_components,
-        n_neighbors,
-        resolved_metric,
-        resolved_metric_kwargs,
-    )
-
-
 @overload
 def neighbors(
     scdata: ScData,
@@ -870,6 +442,386 @@ def kneighbors_graph(*args: Any, **kwargs: Any) -> Graph[Any]:
         stacklevel=2,
     )
     return knn_graph(*args, **kwargs)
+
+
+def _kneighbors_graph_matrices(
+    scdata: ScData,
+    representation: Optional[str],
+    n_components: Optional[int],
+    n_neighbors: int,
+    backend: NeighborBackend,
+    connectivity_method: NeighborConnectivityMethod,
+    metric: Metric,
+    seed: RandomStateSeed,
+    n_jobs: int,
+) -> Tuple[csr_matrix, csr_matrix]:
+
+    representation_mtx = cast(
+        Matrix,
+        get_representation(
+            scdata,
+            obsm=representation,
+            n_components=n_components,
+        ),
+    )
+    if backend == "exact":
+        knn_indices, knn_distances = _exact_knn_arrays(
+            representation_mtx=representation_mtx,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            n_jobs=n_jobs,
+        )
+    else:
+        knn_indices, knn_distances = _pynndescent_knn_arrays(
+            representation_mtx=representation_mtx,
+            n_neighbors=n_neighbors,
+            metric=metric,
+            seed=seed,
+            n_jobs=n_jobs,
+        )
+
+    distances = _sparse_distances_from_knn(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+        n_obs=scdata.n_obs,
+    )
+    if connectivity_method == "binary":
+        from sklearn import neighbors as sklearn_neighbors
+
+        connectivities = cast(
+            csr_matrix,
+            sklearn_neighbors.kneighbors_graph(
+                X=representation_mtx,
+                n_neighbors=n_neighbors,
+                mode="connectivity",
+                metric=metric,
+                include_self=True,
+                n_jobs=n_jobs,
+            ),
+        )
+        connectivities = cast(csr_matrix, 0.5 * (connectivities + connectivities.T))
+        return distances, connectivities
+
+    connectivities = _umap_connectivities_from_knn(
+        knn_indices,
+        knn_distances,
+        n_obs=scdata.n_obs,
+    )
+    return distances, connectivities
+
+
+def _kneighbors_distance_matrix(
+    scdata: ScData,
+    representation: Optional[str],
+    n_components: Optional[int],
+    n_neighbors: int,
+    metric: Metric,
+    n_jobs: int,
+) -> csr_matrix:
+
+    from sklearn import neighbors as sklearn_neighbors
+
+    representation_mtx = cast(
+        Matrix,
+        get_representation(
+            scdata,
+            obsm=representation,
+            n_components=n_components,
+        ),
+    )
+    matrix = sklearn_neighbors.kneighbors_graph(
+        X=representation_mtx,
+        n_neighbors=n_neighbors,
+        mode="distance",
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    return cast(csr_matrix, matrix)
+
+
+def _exact_knn_arrays(
+    representation_mtx: Matrix,
+    n_neighbors: int,
+    metric: Metric,
+    n_jobs: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    from sklearn import neighbors as sklearn_neighbors
+
+    neighbors_model = sklearn_neighbors.NearestNeighbors(
+        n_neighbors=n_neighbors,
+        algorithm="brute",
+        metric=metric,
+        n_jobs=n_jobs,
+    )
+    sklearn_representation_mtx = cast(Any, representation_mtx)
+    neighbors_model.fit(sklearn_representation_mtx)
+    knn_distances, knn_indices = neighbors_model.kneighbors(sklearn_representation_mtx)
+    return _sort_knn_arrays(
+        knn_indices=knn_indices.astype(np.int32, copy=False),
+        knn_distances=knn_distances.astype(np.float32, copy=False),
+    )
+
+
+def _pynndescent_knn_arrays(
+    representation_mtx: Matrix,
+    n_neighbors: int,
+    metric: Metric,
+    seed: RandomStateSeed,
+    n_jobs: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    PyNNDescentTransformer = _get_pynndescent_transformer()
+    transformer = PyNNDescentTransformer(
+        n_neighbors=n_neighbors,
+        metric=metric,
+        random_state=_as_seed(seed),
+        n_jobs=n_jobs,
+    )
+    sparse_distances = cast(csr_matrix, transformer.fit_transform(representation_mtx))
+    return _knn_arrays_from_sparse_distances(
+        sparse_distances=sparse_distances.tocsr(),
+        n_neighbors=n_neighbors,
+    )
+
+
+def _sparse_distances_from_knn(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+    n_obs: int,
+) -> csr_matrix:
+
+    n_neighbors = knn_indices.shape[1]
+    rows = np.repeat(np.arange(n_obs), n_neighbors)
+    columns = knn_indices.ravel()
+    data = knn_distances.ravel()
+    non_self = rows != columns
+    distances = csr_matrix(
+        (data[non_self], (rows[non_self], columns[non_self])),
+        shape=(n_obs, n_obs),
+    )
+    distances.eliminate_zeros()
+    return distances
+
+
+def _umap_connectivities_from_knn(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+    n_obs: int,
+) -> csr_matrix:
+
+    knn_distances = knn_distances.astype(np.float32, copy=False)
+    n_neighbors = knn_indices.shape[1]
+    sigmas, rhos = _umap_smooth_knn_distances(knn_distances, n_neighbors)
+
+    rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
+    columns = knn_indices.astype(np.int32, copy=False).ravel()
+    shifted_distances = knn_distances - rhos[:, None]
+    with np.errstate(over="ignore"):
+        values = np.exp(-(shifted_distances / sigmas[:, None]))
+    values = np.where(
+        (shifted_distances <= 0.0) | (sigmas[:, None] == 0.0),
+        1.0,
+        values,
+    ).astype(np.float32, copy=False)
+    values[knn_indices == np.arange(n_obs)[:, None]] = 0.0
+
+    valid = columns != -1
+    graph = coo_matrix(
+        (
+            values.ravel()[valid],
+            (rows[valid], columns[valid]),
+        ),
+        shape=(n_obs, n_obs),
+    ).tocsr()
+
+    transpose = graph.transpose()
+    intersections = graph.multiply(transpose)
+    graph = graph + transpose - intersections
+    graph.eliminate_zeros()
+
+    return cast(csr_matrix, graph.tocsr())
+
+
+def _get_pynndescent_transformer() -> Any:
+
+    try:
+        from pynndescent import PyNNDescentTransformer
+    except ImportError as exc:
+        raise ImportError(
+            "backend='pynndescent' requires the optional dependency "
+            "'pynndescent'. Install it with:\n\n"
+            "pip install pynndescent\n\n"
+            "or use backend='exact'."
+        ) from exc
+
+    return PyNNDescentTransformer
+
+
+def _knn_arrays_from_sparse_distances(
+    sparse_distances: csr_matrix,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    row_sizes = np.diff(sparse_distances.indptr)
+    if np.any(row_sizes < n_neighbors):
+        raise ValueError(
+            "invalid neighbor graph: backend returned fewer neighbors than expected"
+        )
+
+    if np.all(row_sizes == row_sizes[0]):
+        row_size = int(row_sizes[0])
+        n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
+        indices = sparse_distances.indices.reshape(n_obs, row_size)
+        distances = sparse_distances.data.reshape(n_obs, row_size)
+        order = np.argsort(distances, axis=1)
+        indices = np.take_along_axis(indices, order, axis=1)
+        distances = np.take_along_axis(distances, order, axis=1)
+
+        rows = np.arange(indices.shape[0])
+        if np.all((indices[:, 0] == rows) & (distances[:, 0] == 0.0)):
+            return _sort_knn_arrays(
+                knn_indices=indices[:, :n_neighbors].astype(np.int32, copy=False),
+                knn_distances=distances[:, :n_neighbors].astype(
+                    np.float32,
+                    copy=False,
+                ),
+            )
+
+    return _knn_arrays_from_sparse_distances_slow(
+        sparse_distances=sparse_distances,
+        n_neighbors=n_neighbors,
+    )
+
+
+def _sort_knn_arrays(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
+    self_order = np.where(knn_indices == rows, 0, 1)
+    order = np.lexsort(
+        (
+            knn_indices,
+            knn_distances,
+            self_order,
+        ),
+        axis=1,
+    )
+    return (
+        np.take_along_axis(knn_indices, order, axis=1),
+        np.take_along_axis(knn_distances, order, axis=1),
+    )
+
+
+def _umap_smooth_knn_distances(
+    distances: np.ndarray,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    distances = distances.astype(np.float32, copy=False)
+    target = np.float32(np.log2(float(n_neighbors)))
+    n_obs = distances.shape[0]
+
+    rhos = np.zeros(n_obs, dtype=np.float32)
+    for i in range(n_obs):
+        non_zero_distances = distances[i][distances[i] > 0.0]
+        if non_zero_distances.shape[0] > 0:
+            rhos[i] = non_zero_distances[0]
+
+    lo = np.zeros(n_obs, dtype=np.float32)
+    hi = np.full(n_obs, _NPY_FLOATMAX, dtype=np.float32)
+    sigmas = np.ones(n_obs, dtype=np.float32)
+    active = np.ones(n_obs, dtype=bool)
+    shifted_distances = distances[:, 1:] - rhos[:, None]
+
+    for _ in range(64):
+        with np.errstate(over="ignore"):
+            probabilities = np.where(
+                shifted_distances > 0.0,
+                np.exp(-(shifted_distances / sigmas[:, None])),
+                1.0,
+            )
+        probability_sums = probabilities.sum(axis=1)
+        close = np.abs(probability_sums - target) < _SMOOTH_K_TOLERANCE
+        update = active & ~close
+        if not np.any(update):
+            break
+
+        greater = update & (probability_sums > target)
+        hi[greater] = sigmas[greater]
+        sigmas[greater] = (lo[greater] + hi[greater]) / 2.0
+
+        lower = update & ~greater
+        lo[lower] = sigmas[lower]
+        unset_hi = lower & (hi >= _NPY_FLOATMAX)
+        sigmas[unset_hi] *= 2.0
+        set_hi = lower & ~unset_hi
+        sigmas[set_hi] = (lo[set_hi] + hi[set_hi]) / 2.0
+
+        active &= ~close
+
+    mean_distances = np.mean(distances)
+    mean_row_distances = np.mean(distances, axis=1)
+    min_sigmas = np.where(
+        rhos > 0.0,
+        _MIN_K_DIST_SCALE * mean_row_distances,
+        _MIN_K_DIST_SCALE * mean_distances,
+    )
+    sigmas = np.maximum(sigmas, min_sigmas)
+
+    return sigmas.astype(np.float32, copy=False), rhos
+
+
+def _knn_arrays_from_sparse_distances_slow(
+    sparse_distances: csr_matrix,
+    n_neighbors: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    n_obs = cast(Tuple[int, int], sparse_distances.shape)[0]
+    knn_indices = np.empty((n_obs, n_neighbors), dtype=np.int32)
+    knn_distances = np.empty((n_obs, n_neighbors), dtype=np.float32)
+    for row in range(n_obs):
+        start = sparse_distances.indptr[row]
+        end = sparse_distances.indptr[row + 1]
+        indices = sparse_distances.indices[start:end]
+        distances = sparse_distances.data[start:end]
+
+        order = np.argsort(distances)
+        indices = indices[order]
+        distances = distances[order]
+
+        self_positions = np.flatnonzero((indices == row) & (distances == 0.0))
+        if self_positions.size == 0:
+            indices = np.concatenate(([row], indices))
+            distances = np.concatenate(([0.0], distances))
+        elif self_positions[0] != 0:
+            self_position = int(self_positions[0])
+            indices = np.concatenate(
+                (
+                    indices[self_position : self_position + 1],
+                    indices[:self_position],
+                    indices[self_position + 1 :],
+                )
+            )
+            distances = np.concatenate(
+                (
+                    distances[self_position : self_position + 1],
+                    distances[:self_position],
+                    distances[self_position + 1 :],
+                )
+            )
+
+        if indices.shape[0] < n_neighbors:
+            raise ValueError(
+                "invalid neighbor graph: backend returned fewer neighbors than expected"
+            )
+
+        knn_indices[row, :] = indices[:n_neighbors]
+        knn_distances[row, :] = distances[:n_neighbors]
+
+    return _sort_knn_arrays(knn_indices=knn_indices, knn_distances=knn_distances)
 
 
 class KNNSC:
@@ -1382,76 +1334,6 @@ class KNNSC:
         self._compute_shortest_path_lengths(method=method, n_jobs=n_jobs)
         return None
 
-    def _compute_shortest_path_lengths(
-        self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
-    ) -> None:
-
-        def shortest_path_lengths_from(
-            source: Hashable,
-        ):
-            if method == "dijkstra":
-                lengths = nx.single_source_dijkstra_path_length(
-                    self.knn_graph,
-                    source=source,
-                    weight="distance",
-                )
-            elif method == "bellman-ford":
-                lengths = nx.single_source_bellman_ford_path_length(
-                    self.knn_graph,
-                    source=source,
-                    weight="distance",
-                )
-            else:
-                raise ValueError(f"unsupported shortest path method: {method!r}")
-
-            distances = pd.Series(lengths, dtype=float).reindex(self.obs.index)
-            missing_mask = distances.isna().to_numpy(dtype=bool)
-            if np.any(missing_mask):
-                missing = np.asarray(distances.index, dtype=object)[missing_mask][0]
-                raise nx.NetworkXNoPath(
-                    f"node {missing!r} is not reachable from {source!r}"
-                )
-
-            return (source, distances)
-
-        _multiprocess_is_available = (
-            importlib_util.find_spec("multiprocess") is not None
-        )
-
-        if n_jobs == 1:
-            shortest_path_lengths_ls = [
-                shortest_path_lengths_from(category)
-                for category in self.obs.cat.categories
-            ]
-
-        elif _multiprocess_is_available:
-            Pool = import_module("multiprocess").Pool
-
-            with Pool(processes=n_jobs) as pool:
-                shortest_path_lengths_ls = pool.map(
-                    shortest_path_lengths_from,
-                    self.obs.cat.categories,
-                )
-
-        else:
-            warnings.warn(
-                "module multiprocess not available: not using CPU parallelization"
-            )
-
-            shortest_path_lengths_ls = [
-                shortest_path_lengths_from(category)
-                for category in self.obs.cat.categories
-            ]
-
-        shortest_path_lengths_dict = {}
-        for k, v in shortest_path_lengths_ls:
-            shortest_path_lengths_dict[k] = v
-
-        self._shortest_path_lengths_df = pd.DataFrame.from_dict(
-            data=shortest_path_lengths_dict, orient="columns"
-        )
-        return None
-
     def compute_shortest_path_lengths(
         self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
     ) -> None:
@@ -1783,6 +1665,76 @@ class KNNSC:
             raise AttributeError("KNNSC has not been fitted yet")
         return getattr(self, name)
 
+    def _compute_shortest_path_lengths(
+        self, method: Shortest_Path_Method = "dijkstra", n_jobs: int = 1
+    ) -> None:
+
+        def shortest_path_lengths_from(
+            source: Hashable,
+        ):
+            if method == "dijkstra":
+                lengths = nx.single_source_dijkstra_path_length(
+                    self.knn_graph,
+                    source=source,
+                    weight="distance",
+                )
+            elif method == "bellman-ford":
+                lengths = nx.single_source_bellman_ford_path_length(
+                    self.knn_graph,
+                    source=source,
+                    weight="distance",
+                )
+            else:
+                raise ValueError(f"unsupported shortest path method: {method!r}")
+
+            distances = pd.Series(lengths, dtype=float).reindex(self.obs.index)
+            missing_mask = distances.isna().to_numpy(dtype=bool)
+            if np.any(missing_mask):
+                missing = np.asarray(distances.index, dtype=object)[missing_mask][0]
+                raise nx.NetworkXNoPath(
+                    f"node {missing!r} is not reachable from {source!r}"
+                )
+
+            return (source, distances)
+
+        _multiprocess_is_available = (
+            importlib_util.find_spec("multiprocess") is not None
+        )
+
+        if n_jobs == 1:
+            shortest_path_lengths_ls = [
+                shortest_path_lengths_from(category)
+                for category in self.obs.cat.categories
+            ]
+
+        elif _multiprocess_is_available:
+            Pool = import_module("multiprocess").Pool
+
+            with Pool(processes=n_jobs) as pool:
+                shortest_path_lengths_ls = pool.map(
+                    shortest_path_lengths_from,
+                    self.obs.cat.categories,
+                )
+
+        else:
+            warnings.warn(
+                "module multiprocess not available: not using CPU parallelization"
+            )
+
+            shortest_path_lengths_ls = [
+                shortest_path_lengths_from(category)
+                for category in self.obs.cat.categories
+            ]
+
+        shortest_path_lengths_dict = {}
+        for k, v in shortest_path_lengths_ls:
+            shortest_path_lengths_dict[k] = v
+
+        self._shortest_path_lengths_df = pd.DataFrame.from_dict(
+            data=shortest_path_lengths_dict, orient="columns"
+        )
+        return None
+
     def _validate_candidate_clusters(
         self,
         clusters: Iterable[str],
@@ -1862,43 +1814,52 @@ class Knnbs(KNNSC):
         )
 
 
-@anndata_or_mudata_checker
-def _shared_nearest_neighbors_graph(
-    scdata: ScData, cluster_key: str, prune_snn: float  # type: ignore
-) -> csr_matrix:
+def _normalize_knnsc_configuration(
+    representation: Optional[str],
+    n_components: Optional[int],
+    n_neighbors: Optional[int],
+    metric: Optional[Metric],
+    metric_kwargs: Optional[Dict[str, Any]],
+) -> Tuple[str, Optional[int], int, Metric, Dict[str, Any]]:
 
-    n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
-    prune_snn = _as_non_negative_number(prune_snn, "prune_snn")
-    if prune_snn < 1:
-        prune_snn = math.ceil(n_neighbors * prune_snn)
-    elif prune_snn >= n_neighbors:
-        raise ValueError(
-            f"invalid argument values for 'prune_snn' and 'n_neighbors': "
-            f"expected prune_snn < n_neighbors but received "
-            f"prune_snn={prune_snn!r} and n_neighbors={n_neighbors!r}"
+    if n_components is not None:
+        n_components = _as_positive_integer(n_components, "n_components")
+
+    resolved_representation = "X_pca" if representation is None else representation
+    resolved_representation = _as_string(
+        resolved_representation,
+        "representation",
+    )
+
+    if n_neighbors is None:
+        raise TypeError("missing required argument: 'n_neighbors'")
+
+    n_neighbors = _as_positive_integer(n_neighbors, "n_neighbors")
+
+    resolved_metric: Metric = "euclidean" if metric is None else metric
+    resolved_metric = _as_literal(
+        resolved_metric,
+        choices=get_args(Metric),
+        name="metric",
+    )
+
+    if metric_kwargs is None:
+        resolved_metric_kwargs: Dict[str, Any] = {}
+    elif isinstance(metric_kwargs, dict):
+        resolved_metric_kwargs = dict(metric_kwargs)
+    else:
+        raise TypeError(
+            f"unsupported argument type for 'metric_kwargs': "
+            f"expected {dict} but received {type(metric_kwargs)}"
         )
 
-    n_cells = scdata.n_obs
-    distances_key = scdata.uns[cluster_key]["distances_key"]
-
-    neighborhood_graph = scdata.obsp[distances_key].copy()
-    if not issparse(neighborhood_graph):
-        neighborhood_graph = csr_matrix(neighborhood_graph)
-    neighborhood_graph.data[neighborhood_graph.data > 0] = 1
-
-    neighborhood_graph = neighborhood_graph * neighborhood_graph.transpose()
-    neighborhood_graph -= n_neighbors * diags(
-        np.ones(n_cells), offsets=0, shape=(n_cells, n_cells)
+    return (
+        resolved_representation,
+        n_components,
+        n_neighbors,
+        resolved_metric,
+        resolved_metric_kwargs,
     )
-    neighborhood_graph.sort_indices()
-    neighborhood_graph = neighborhood_graph.astype(dtype=np.int8)
-
-    if prune_snn:
-        mask = neighborhood_graph.data <= prune_snn
-        neighborhood_graph.data[mask] = 0
-        neighborhood_graph.eliminate_zeros()
-
-    return neighborhood_graph
 
 
 @overload
@@ -2067,3 +2028,42 @@ def shared_neighbors(
     }
 
     return scdata if copy else None
+
+
+@anndata_or_mudata_checker
+def _shared_nearest_neighbors_graph(
+    scdata: ScData, cluster_key: str, prune_snn: float  # type: ignore
+) -> csr_matrix:
+
+    n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
+    prune_snn = _as_non_negative_number(prune_snn, "prune_snn")
+    if prune_snn < 1:
+        prune_snn = math.ceil(n_neighbors * prune_snn)
+    elif prune_snn >= n_neighbors:
+        raise ValueError(
+            f"invalid argument values for 'prune_snn' and 'n_neighbors': "
+            f"expected prune_snn < n_neighbors but received "
+            f"prune_snn={prune_snn!r} and n_neighbors={n_neighbors!r}"
+        )
+
+    n_cells = scdata.n_obs
+    distances_key = scdata.uns[cluster_key]["distances_key"]
+
+    neighborhood_graph = scdata.obsp[distances_key].copy()
+    if not issparse(neighborhood_graph):
+        neighborhood_graph = csr_matrix(neighborhood_graph)
+    neighborhood_graph.data[neighborhood_graph.data > 0] = 1
+
+    neighborhood_graph = neighborhood_graph * neighborhood_graph.transpose()
+    neighborhood_graph -= n_neighbors * diags(
+        np.ones(n_cells), offsets=0, shape=(n_cells, n_cells)
+    )
+    neighborhood_graph.sort_indices()
+    neighborhood_graph = neighborhood_graph.astype(dtype=np.int8)
+
+    if prune_snn:
+        mask = neighborhood_graph.data <= prune_snn
+        neighborhood_graph.data[mask] = 0
+        neighborhood_graph.eliminate_zeros()
+
+    return neighborhood_graph

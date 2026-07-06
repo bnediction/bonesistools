@@ -3301,6 +3301,162 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
             self._validate_count(source, target, count)
 
+    @classmethod
+    def from_influence_graphs(
+        cls,
+        *graphs: InfluenceGraph,
+    ) -> "AggregatedInfluenceGraph":
+        """
+        Build an aggregated influence graph from influence graphs.
+
+        Each input graph contributes at most one occurrence to each signed edge.
+        The resulting `total` is the number of input graphs, and every aggregated
+        edge stores the number of graphs in which the same signed influence was
+        observed.
+
+        Positive and negative influences between the same source and target are
+        aggregated as distinct signed edges, matching `InfluenceGraph`
+        multiedge semantics.
+
+        Examples
+        --------
+        >>> ig1 = InfluenceGraph()
+        >>> ig1.add_edge("A", "B", sign=1)
+        >>> ig1.add_edge("A", "B", sign=-1)
+
+        >>> ig2 = InfluenceGraph()
+        >>> ig2.add_edge("A", "B", sign=1)
+        >>> ig2.add_edge("B", "C", sign=-1)
+
+        >>> graph = AggregatedInfluenceGraph.from_influence_graphs(ig1, ig2)
+        >>> graph.total
+        2
+
+        >>> graph.edge_count("A", "B", sign=1)
+        2
+
+        >>> graph.edge_count("A", "B", sign=-1)
+        1
+
+        Parameters
+        ----------
+        *graphs: InfluenceGraph
+            Influence graphs to aggregate. At least one graph is required.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Aggregated graph whose edge counts indicate in how many input graphs
+            each signed influence was observed.
+
+        Raises
+        ------
+        ValueError
+            If no graph is provided, or if one input graph contains an invalid
+            edge sign.
+        """
+
+        total = len(graphs)
+
+        if total == 0:
+            raise ValueError("expected at least one influence graph")
+
+        aggregated = cls(total=total)
+
+        for graph in graphs:
+            aggregated.add_nodes_from(
+                (node, data.copy()) for node, data in graph.nodes(data=True)
+            )
+
+            for source, target, data in graph.edges(data=True):
+                sign = cast(CircuitSign, cls._normalize_sign(data["sign"]))
+
+                try:
+                    edge_data = aggregated._aggregated_edge_data(
+                        source,
+                        target,
+                        sign=sign,
+                    )
+                except KeyError:
+                    aggregated.add_edge(source, target, sign=sign, count=1)
+                else:
+                    edge_data["count"] += 1
+
+        aggregated.validate_counts()
+
+        return aggregated
+
+    @classmethod
+    def from_boolean_networks(
+        cls,
+        *networks: Union["BooleanNetwork", "BooleanNetworkEnsemble"],
+    ) -> "AggregatedInfluenceGraph":
+        """
+        Build an aggregated influence graph from Boolean networks.
+
+        Each Boolean network is converted with `to_influence_graph()` before
+        aggregation. A single `BooleanNetworkEnsemble` argument is accepted and
+        expanded automatically.
+
+        Examples
+        --------
+        >>> from bonesistools.boolpy.boolean_network import BooleanNetwork
+
+        >>> bn1 = BooleanNetwork({"A": "B", "B": 0, "C": 1})
+        >>> bn2 = BooleanNetwork({"A": "B", "B": "C", "C": 0})
+        >>> bn3 = BooleanNetwork({"A": "!B", "B": "C", "C": 1})
+
+        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(
+        ...     bn1,
+        ...     bn2,
+        ...     bn3,
+        ... )
+        >>> graph.edge_count("B", "A", sign=1)
+        2
+
+        >>> graph.edge_count("B", "A", sign=-1)
+        1
+
+        A Boolean network ensemble can also be passed directly:
+
+        >>> from bonesistools.boolpy.boolean_network import BooleanNetworkEnsemble
+        >>> ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
+        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
+        >>> graph.total
+        3
+
+        Parameters
+        ----------
+        *networks: BooleanNetwork
+            Boolean networks to convert and aggregate, or a single
+            `BooleanNetworkEnsemble`. At least one network is required.
+
+        Returns
+        -------
+        AggregatedInfluenceGraph
+            Aggregated influence graph built from the influence graphs inferred
+            from the input Boolean networks.
+
+        Raises
+        ------
+        AttributeError
+            If one input object does not provide `to_influence_graph()`.
+        ValueError
+            If no network is provided, or if conversion produces an influence
+            graph with invalid edge signs.
+        """
+
+        from ..boolean_network import BooleanNetworkEnsemble
+
+        if len(networks) == 1 and isinstance(networks[0], BooleanNetworkEnsemble):
+            boolean_networks = cast(Tuple["BooleanNetwork", ...], tuple(networks[0]))
+        else:
+            boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
+
+        graphs = tuple(network.to_influence_graph() for network in boolean_networks)
+
+        return cls.from_influence_graphs(*graphs)
+
     def _visualization_graph(
         self,
         collapse: Optional[CollapseMode],
@@ -3527,159 +3683,3 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         return _as_positive_integer(total, "total")
-
-    @classmethod
-    def from_influence_graphs(
-        cls,
-        *graphs: InfluenceGraph,
-    ) -> "AggregatedInfluenceGraph":
-        """
-        Build an aggregated influence graph from influence graphs.
-
-        Each input graph contributes at most one occurrence to each signed edge.
-        The resulting `total` is the number of input graphs, and every aggregated
-        edge stores the number of graphs in which the same signed influence was
-        observed.
-
-        Positive and negative influences between the same source and target are
-        aggregated as distinct signed edges, matching `InfluenceGraph`
-        multiedge semantics.
-
-        Examples
-        --------
-        >>> ig1 = InfluenceGraph()
-        >>> ig1.add_edge("A", "B", sign=1)
-        >>> ig1.add_edge("A", "B", sign=-1)
-
-        >>> ig2 = InfluenceGraph()
-        >>> ig2.add_edge("A", "B", sign=1)
-        >>> ig2.add_edge("B", "C", sign=-1)
-
-        >>> graph = AggregatedInfluenceGraph.from_influence_graphs(ig1, ig2)
-        >>> graph.total
-        2
-
-        >>> graph.edge_count("A", "B", sign=1)
-        2
-
-        >>> graph.edge_count("A", "B", sign=-1)
-        1
-
-        Parameters
-        ----------
-        *graphs: InfluenceGraph
-            Influence graphs to aggregate. At least one graph is required.
-
-        Returns
-        -------
-        AggregatedInfluenceGraph
-            Aggregated graph whose edge counts indicate in how many input graphs
-            each signed influence was observed.
-
-        Raises
-        ------
-        ValueError
-            If no graph is provided, or if one input graph contains an invalid
-            edge sign.
-        """
-
-        total = len(graphs)
-
-        if total == 0:
-            raise ValueError("expected at least one influence graph")
-
-        aggregated = cls(total=total)
-
-        for graph in graphs:
-            aggregated.add_nodes_from(
-                (node, data.copy()) for node, data in graph.nodes(data=True)
-            )
-
-            for source, target, data in graph.edges(data=True):
-                sign = cast(CircuitSign, cls._normalize_sign(data["sign"]))
-
-                try:
-                    edge_data = aggregated._aggregated_edge_data(
-                        source,
-                        target,
-                        sign=sign,
-                    )
-                except KeyError:
-                    aggregated.add_edge(source, target, sign=sign, count=1)
-                else:
-                    edge_data["count"] += 1
-
-        aggregated.validate_counts()
-
-        return aggregated
-
-    @classmethod
-    def from_boolean_networks(
-        cls,
-        *networks: Union["BooleanNetwork", "BooleanNetworkEnsemble"],
-    ) -> "AggregatedInfluenceGraph":
-        """
-        Build an aggregated influence graph from Boolean networks.
-
-        Each Boolean network is converted with `to_influence_graph()` before
-        aggregation. A single `BooleanNetworkEnsemble` argument is accepted and
-        expanded automatically.
-
-        Examples
-        --------
-        >>> from bonesistools.boolpy.boolean_network import BooleanNetwork
-
-        >>> bn1 = BooleanNetwork({"A": "B", "B": 0, "C": 1})
-        >>> bn2 = BooleanNetwork({"A": "B", "B": "C", "C": 0})
-        >>> bn3 = BooleanNetwork({"A": "!B", "B": "C", "C": 1})
-
-        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(
-        ...     bn1,
-        ...     bn2,
-        ...     bn3,
-        ... )
-        >>> graph.edge_count("B", "A", sign=1)
-        2
-
-        >>> graph.edge_count("B", "A", sign=-1)
-        1
-
-        A Boolean network ensemble can also be passed directly:
-
-        >>> from bonesistools.boolpy.boolean_network import BooleanNetworkEnsemble
-        >>> ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
-        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
-        >>> graph.total
-        3
-
-        Parameters
-        ----------
-        *networks: BooleanNetwork
-            Boolean networks to convert and aggregate, or a single
-            `BooleanNetworkEnsemble`. At least one network is required.
-
-        Returns
-        -------
-        AggregatedInfluenceGraph
-            Aggregated influence graph built from the influence graphs inferred
-            from the input Boolean networks.
-
-        Raises
-        ------
-        AttributeError
-            If one input object does not provide `to_influence_graph()`.
-        ValueError
-            If no network is provided, or if conversion produces an influence
-            graph with invalid edge signs.
-        """
-
-        from ..boolean_network import BooleanNetworkEnsemble
-
-        if len(networks) == 1 and isinstance(networks[0], BooleanNetworkEnsemble):
-            boolean_networks = cast(Tuple["BooleanNetwork", ...], tuple(networks[0]))
-        else:
-            boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
-
-        graphs = tuple(network.to_influence_graph() for network in boolean_networks)
-
-        return cls.from_influence_graphs(*graphs)
