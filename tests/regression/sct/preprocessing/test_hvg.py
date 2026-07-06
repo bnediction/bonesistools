@@ -52,6 +52,13 @@ def _weighted_nanmean(values, weights):
     )
 
 
+def _top_score_indices(scores, n_features):
+
+    ordered = np.flatnonzero(~np.isnan(scores))
+
+    return ordered[np.argsort(-scores[ordered], kind="mergesort")][:n_features]
+
+
 def test_hvg_dense_matrix_adds_expected_outputs():
     adata = _hvg_adata()
 
@@ -78,6 +85,7 @@ def test_hvg_dense_matrix_adds_expected_outputs():
             "mean_cutoff": None,
             "batch_key": None,
             "batch_weighting": "equal",
+            "batch_selection": "consensus",
         },
     }
 
@@ -161,6 +169,15 @@ def test_hvg_batch_key_uses_equal_batch_weighting_by_default():
         np.vstack([small_scores, large_scores]),
         np.ones(2),
     )
+    nbatches = np.zeros(matrix.shape[1], dtype=int)
+    nbatches[_top_score_indices(small_scores, 5)] += 1
+    nbatches[_top_score_indices(large_scores, 5)] += 1
+    eligible = np.flatnonzero(np.isfinite(expected_scores))
+    expected_order = eligible[
+        np.lexsort((-expected_scores[eligible], -nbatches[eligible]))
+    ]
+    expected_selected = np.zeros(matrix.shape[1], dtype=bool)
+    expected_selected[expected_order[:5]] = True
     var = cast(pd.DataFrame, adata.var)
 
     np.testing.assert_allclose(
@@ -168,8 +185,16 @@ def test_hvg_batch_key_uses_equal_batch_weighting_by_default():
         expected_scores,
         equal_nan=True,
     )
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected_selected)
+    np.testing.assert_allclose(
+        var["highly_variable_rank"].to_numpy()[expected_order[:5]],
+        np.arange(1, 6, dtype=float),
+    )
     assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
     assert adata.uns["highly_variable"]["params"]["batch_weighting"] == "equal"
+    assert (
+        adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
+    )
 
 
 def test_hvg_batch_key_can_weight_batches_by_cell_count():
@@ -202,6 +227,15 @@ def test_hvg_batch_key_can_weight_batches_by_cell_count():
     batch_scores = np.vstack([small_scores, large_scores])
     expected_scores = _weighted_nanmean(batch_scores, np.array([20, 60]))
     equal_scores = _weighted_nanmean(batch_scores, np.ones(2))
+    nbatches = np.zeros(matrix.shape[1], dtype=int)
+    nbatches[_top_score_indices(small_scores, 5)] += 1
+    nbatches[_top_score_indices(large_scores, 5)] += 1
+    eligible = np.flatnonzero(np.isfinite(expected_scores))
+    expected_order = eligible[
+        np.lexsort((-expected_scores[eligible], -nbatches[eligible]))
+    ]
+    expected_selected = np.zeros(matrix.shape[1], dtype=bool)
+    expected_selected[expected_order[:5]] = True
     var = cast(pd.DataFrame, adata.var)
     finite = np.isfinite(expected_scores) & np.isfinite(equal_scores)
 
@@ -210,11 +244,188 @@ def test_hvg_batch_key_can_weight_batches_by_cell_count():
         expected_scores,
         equal_nan=True,
     )
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected_selected)
     assert np.max(np.abs(expected_scores[finite] - equal_scores[finite])) > 1e-12
     assert adata.uns["highly_variable"]["params"]["batch_key"] == "batch"
     assert (
         adata.uns["highly_variable"]["params"]["batch_weighting"] == "cell_count"
     )
+    assert (
+        adata.uns["highly_variable"]["params"]["batch_selection"] == "consensus"
+    )
+
+
+def test_hvg_batch_selection_rank_prioritizes_summarized_within_batch_rank():
+    adata = _hvg_adata()
+    matrix = np.asarray(adata.X)
+    batch = np.array(["small"] * 20 + ["large"] * 60)
+    adata.obs["batch"] = batch
+
+    bt.sct.pp.hvg(
+        adata,
+        method="binning",
+        n_features=5,
+        n_bins=10,
+        batch_key="batch",
+        batch_selection="rank",
+    )
+
+    small_scores = _hvg._score_hvg_features(
+        matrix[batch == "small", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    large_scores = _hvg._score_hvg_features(
+        matrix[batch == "large", :],
+        method="binning",
+        span=0.3,
+        n_bins=10,
+    ).scores
+    expected_scores = _weighted_nanmean(
+        np.vstack([small_scores, large_scores]),
+        np.ones(2),
+    )
+    ranks = np.full((2, matrix.shape[1]), np.nan, dtype=float)
+    nbatches = np.zeros(matrix.shape[1], dtype=int)
+    for batch_index, scores in enumerate([small_scores, large_scores]):
+        selected_indices = _top_score_indices(scores, 5)
+        nbatches[selected_indices] += 1
+        ranks[batch_index, selected_indices] = np.arange(
+            1,
+            selected_indices.size + 1,
+            dtype=float,
+        )
+    rank_summary = np.ma.median(
+        np.ma.masked_invalid(ranks),
+        axis=0,
+    ).filled(np.nan)
+    rank_sort_values = np.where(np.isnan(rank_summary), np.inf, rank_summary)
+    eligible = np.flatnonzero(np.isfinite(expected_scores))
+    expected_order = eligible[
+        np.lexsort(
+            (
+                -expected_scores[eligible],
+                -nbatches[eligible],
+                rank_sort_values[eligible],
+            )
+        )
+    ]
+    consensus_order = eligible[
+        np.lexsort(
+            (
+                -expected_scores[eligible],
+                -nbatches[eligible],
+            )
+        )
+    ]
+    expected_selected = np.zeros(matrix.shape[1], dtype=bool)
+    expected_selected[expected_order[:5]] = True
+    consensus_selected = np.zeros(matrix.shape[1], dtype=bool)
+    consensus_selected[consensus_order[:5]] = True
+    var = cast(pd.DataFrame, adata.var)
+
+    np.testing.assert_allclose(
+        var["highly_variable_score"].to_numpy(),
+        expected_scores,
+    )
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected_selected)
+    assert not np.array_equal(expected_selected, consensus_selected)
+    np.testing.assert_allclose(
+        var["highly_variable_rank"].to_numpy()[expected_order[:5]],
+        np.arange(1, 6, dtype=float),
+    )
+    assert adata.uns["highly_variable"]["params"]["batch_selection"] == "rank"
+
+
+def test_hvg_loess_batch_key_prioritizes_batches_then_median_rank():
+    pytest.importorskip("skmisc")
+
+    adata = _hvg_adata()
+    matrix = np.asarray(adata.X)
+    batch = np.array(["a"] * 40 + ["b"] * 40)
+    adata.obs["batch"] = batch
+
+    bt.sct.pp.hvg(
+        adata,
+        method="loess",
+        n_features=8,
+        batch_key="batch",
+    )
+
+    a_scores = _hvg._score_hvg_features(
+        matrix[batch == "a", :],
+        method="loess",
+        span=0.3,
+        n_bins=20,
+    ).scores
+    b_scores = _hvg._score_hvg_features(
+        matrix[batch == "b", :],
+        method="loess",
+        span=0.3,
+        n_bins=20,
+    ).scores
+    expected_scores = _weighted_nanmean(
+        np.vstack([a_scores, b_scores]),
+        np.ones(2),
+    )
+    ranks = np.full((2, matrix.shape[1]), np.nan, dtype=float)
+    nbatches = np.zeros(matrix.shape[1], dtype=int)
+    for batch_index, scores in enumerate([a_scores, b_scores]):
+        selected_indices = _top_score_indices(scores, 8)
+        nbatches[selected_indices] += 1
+        ranks[batch_index, selected_indices] = np.arange(
+            1,
+            selected_indices.size + 1,
+            dtype=float,
+        )
+    rank_summary = np.ma.median(
+        np.ma.masked_invalid(ranks),
+        axis=0,
+    ).filled(np.nan)
+    rank_sort_values = np.where(np.isnan(rank_summary), np.inf, rank_summary)
+    eligible = np.flatnonzero(np.isfinite(expected_scores))
+    expected_order = eligible[
+        np.lexsort(
+            (
+                -expected_scores[eligible],
+                rank_sort_values[eligible],
+                -nbatches[eligible],
+            )
+        )
+    ]
+    expected_selected = np.zeros(matrix.shape[1], dtype=bool)
+    expected_selected[expected_order[:8]] = True
+    var = cast(pd.DataFrame, adata.var)
+
+    np.testing.assert_allclose(
+        var["highly_variable_score"].to_numpy(),
+        expected_scores,
+    )
+    assert np.array_equal(var["highly_variable"].to_numpy(), expected_selected)
+    np.testing.assert_allclose(
+        var["highly_variable_rank"].to_numpy()[expected_order[:8]],
+        np.arange(1, 9, dtype=float),
+    )
+
+
+def test_hvg_batch_rank_summary_supports_cell_count_weighting():
+    ranks = np.array(
+        [
+            [1.0, 4.0, np.nan],
+            [10.0, 2.0, 3.0],
+            [20.0, np.nan, 1.0],
+        ]
+    )
+    weights = np.array([1.0, 3.0, 6.0])
+
+    summary = _hvg._batch_rank_summary(
+        ranks,
+        weights,
+        batch_weighting="cell_count",
+    )
+
+    np.testing.assert_allclose(summary, np.array([20.0, 2.0, 1.0]))
 
 
 def test_hvg_binning_scores_match_mean_binned_dispersion_formula():
@@ -287,6 +498,7 @@ def test_hvg_binning_scores_match_mean_binned_dispersion_formula():
             "mean_cutoff": None,
             "batch_key": None,
             "batch_weighting": "equal",
+            "batch_selection": "consensus",
         },
     }
 
@@ -551,6 +763,9 @@ def test_hvg_validates_arguments(mini_adata):
 
     with pytest.raises(ValueError):
         bt.sct.pp.hvg(mini_adata, batch_weighting=cast(Any, "weighted"))
+
+    with pytest.raises(ValueError):
+        bt.sct.pp.hvg(mini_adata, batch_selection=cast(Any, "score"))
 
     with pytest.raises(TypeError):
         bt.sct.pp.hvg(mini_adata, span=cast(Any, "0.3"))

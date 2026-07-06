@@ -30,11 +30,14 @@ HVG_BATCH_WEIGHTINGS: Tuple[Literal["equal", "cell_count"], ...] = (
     "equal",
     "cell_count",
 )
+HVG_BATCH_SELECTIONS: Tuple[Literal["consensus", "rank"], ...] = (
+    "consensus",
+    "rank",
+)
 _DEFAULT_SCORE_CUTOFFS = {
     "loess": (2.0, np.inf),
     "binning": (0.5, np.inf),
 }
-_DEFAULT_MEAN_CUTOFF = (0.0125, 3.0)
 _NORMAL_CONSISTENCY_MAD_SCALE = 0.6744897501960817
 
 
@@ -43,6 +46,15 @@ class _HVGScore:
 
     means: np.ndarray
     scores: np.ndarray
+
+
+@dataclass(frozen=True)
+class _BatchHVGScore:
+
+    means: np.ndarray
+    scores: np.ndarray
+    nbatches: np.ndarray
+    rank_summary: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -76,14 +88,15 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
+    method: Literal["loess", "binning"] = "loess",
     n_features: Optional[int] = 2000,
-    method: HVGMethod = "loess",
+    mean: Tuple[float, float] = (0.0125, 3.0),
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     span: float = 0.3,
     n_bins: int = 20,
     batch_key: Optional[str] = None,
+    batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
-    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
-    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: Literal[False] = False,
 ) -> None: ...
@@ -94,14 +107,15 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
+    method: Literal["loess", "binning"] = "loess",
     n_features: Optional[int] = 2000,
-    method: HVGMethod = "loess",
+    mean: Tuple[float, float] = (0.0125, 3.0),
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     span: float = 0.3,
     n_bins: int = 20,
     batch_key: Optional[str] = None,
+    batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
-    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
-    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: Literal[True],
 ) -> AnnData: ...
@@ -112,14 +126,15 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
+    method: Literal["loess", "binning"] = "loess",
     n_features: Optional[int] = 2000,
-    method: HVGMethod = "loess",
+    mean: Tuple[float, float] = (0.0125, 3.0),
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     span: float = 0.3,
     n_bins: int = 20,
     batch_key: Optional[str] = None,
+    batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
-    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
-    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: bool = False,
 ) -> Optional[AnnData]: ...
@@ -130,14 +145,15 @@ def hvg(
     adata: AnnData,
     *,
     expression: Optional[str] = None,
+    method: Literal["loess", "binning"] = "loess",
     n_features: Optional[int] = 2000,
-    method: HVGMethod = "loess",
+    mean: Tuple[float, float] = (0.0125, 3.0),
+    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
     span: float = 0.3,
     n_bins: int = 20,
     batch_key: Optional[str] = None,
+    batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
-    score: Union[Literal["auto"], Tuple[float, float]] = "auto",
-    mean: Tuple[float, float] = _DEFAULT_MEAN_CUTOFF,
     key_added: str = "highly_variable",
     copy: bool = False,
 ) -> Optional[AnnData]:
@@ -153,9 +169,6 @@ def hvg(
         `adata.X`; otherwise, use `adata.layers[expression]`. Use raw counts
         for `method='loess'` and log-normalized expression values for
         `method='binning'`.
-    n_features: int or None (default: 2000)
-        Number of highly variable features to select. If None, features are
-        selected using `score` and `mean` cutoffs instead.
     method: {'loess', 'binning'} (default: 'loess')
         Method used to score highly variable features.
 
@@ -170,6 +183,23 @@ def hvg(
         grouped by mean expression, dispersions are normalized within
         each bin using the median and median absolute deviation, and
         features are ranked by normalized dispersion scores [2, 3].
+    n_features: int or None (default: 2000)
+        Number of highly variable features to select. If None, features are
+        selected using `score` and `mean` cutoffs instead.
+    mean: tuple of float (default: (0.0125, 3.0))
+        Mean-expression interval used when `n_features=None`. Features are
+        selected when `mean[0] < feature_mean < mean[1]`. For
+        `method='loess'`, the interval is applied to the mean of log1p
+        library-size-normalized counts with target sum 1e4. For
+        `method='binning'`, the interval is applied to the mean of the
+        provided expression matrix.
+    score: {'auto'} or tuple of float (default: 'auto')
+        Score interval used when `n_features=None`. Features are selected when
+        `score[0] < feature_score < score[1]`. If 'auto', use
+        method-specific defaults: `(2.0, np.inf)` for `method='loess'` and
+        `(0.5, np.inf)` for `method='binning'`. For `method='loess'`, scores
+        are normalized variance scores. For `method='binning'`, scores are
+        normalized dispersion scores.
     span: float (default: 0.3)
         LOESS smoothing span. Must be greater than 0 and smaller than or equal
         to 1. Used by `method='loess'`.
@@ -179,24 +209,18 @@ def hvg(
         Column in `adata.obs` defining batches. If provided, features are
         scored independently in each batch and scores are averaged across
         batches.
+    batch_selection: {'consensus', 'rank'} (default: 'consensus')
+        Batch-aware top-feature selection strategy used when both `batch_key`
+        and `n_features` are provided. If 'consensus', prioritize features
+        selected in the largest number of batches. If 'rank', prioritize
+        features with the best summarized within-batch rank.
     batch_weighting: {'equal', 'cell_count'} (default: 'equal')
         Batch score aggregation strategy. If 'equal', each batch has the same
         weight. If 'cell_count', batches are weighted by their number of
-        observations. Ignored when `batch_key` is None.
-    score: {'auto'} or tuple of float (default: 'auto')
-        Score interval used when `n_features=None`. Features are selected when
-        `score[0] < feature_score < score[1]`. If 'auto', use
-        method-specific defaults: `(2.0, np.inf)` for `method='loess'` and
-        `(0.5, np.inf)` for `method='binning'`. For `method='loess'`, scores
-        are normalized variance scores. For `method='binning'`, scores are
-        normalized dispersion scores.
-    mean: tuple of float (default: (0.0125, 3.0))
-        Mean-expression interval used when `n_features=None`. Features are
-        selected when `mean[0] < feature_mean < mean[1]`. For
-        `method='loess'`, the interval is applied to the mean of log1p
-        library-size-normalized counts with target sum 1e4. For
-        `method='binning'`, the interval is applied to the mean of the
-        provided expression matrix.
+        observations. When `n_features` is provided, features selected in more
+        batches are prioritized before applying method-specific tie-breaks. If
+        `n_features` is None, cutoffs are applied to the aggregated scores and
+        means. Ignored when `batch_key` is None.
     key_added: str (default: 'highly_variable')
         Column in `adata.var` where the selected feature mask is stored.
     copy: bool (default: False)
@@ -244,6 +268,14 @@ def hvg(
             name="batch_weighting",
         ),
     )
+    batch_selection = cast(
+        Literal["consensus", "rank"],
+        _as_literal(
+            batch_selection,
+            choices=HVG_BATCH_SELECTIONS,
+            name="batch_selection",
+        ),
+    )
     span = _as_positive_number(span, "span")
     if span > 1:
         raise ValueError(
@@ -260,7 +292,7 @@ def hvg(
         n_features is not None
         and (
             score_cutoff is not None
-            or mean_cutoff != _DEFAULT_MEAN_CUTOFF
+            or mean_cutoff != (0.0125, 3.0)
         )
     ):
         warnings.warn(
@@ -293,12 +325,21 @@ def hvg(
             expression_mtx,
             batch_groups=batch_groups,
             batch_weighting=batch_weighting,
+            n_features=n_features,
             method=method,
             span=span,
             n_bins=n_bins,
         )
     )
-    ordered_indices = _order_by_score(scoring.scores)
+    ordered_indices = (
+        _order_by_score(scoring.scores)
+        if batch_groups is None or n_features is None
+        else _order_batch_hvg_features(
+            cast(_BatchHVGScore, scoring),
+            method=method,
+            batch_selection=batch_selection,
+        )
+    )
     selection_means = (
         _selection_means(
             expression_mtx,
@@ -337,6 +378,7 @@ def hvg(
             selection=selection,
             batch_key=batch_key,
             batch_weighting=batch_weighting,
+            batch_selection=batch_selection,
         ),
     }
 
@@ -370,18 +412,22 @@ def _score_hvg_features_by_batch(
     *,
     batch_groups: _BatchGroups,
     batch_weighting: Literal["equal", "cell_count"],
+    n_features: Optional[int],
     method: HVGMethod,
     span: float,
     n_bins: int,
-) -> _HVGScore:
+) -> _BatchHVGScore:
 
     batch_means = []
     batch_scores = []
+    batch_ranks = []
+    nbatches = np.zeros(matrix.shape[1], dtype=int)
     for mask in batch_groups.masks:
         batch_matrix = _subset_obs_matrix(matrix, mask)
         if int(mask.sum()) < 2:
             batch_means.append(_compute_mean(batch_matrix))
             batch_scores.append(np.full(matrix.shape[1], np.nan, dtype=np.float64))
+            batch_ranks.append(np.full(matrix.shape[1], np.nan, dtype=np.float64))
             continue
 
         scoring = _score_hvg_features(
@@ -392,12 +438,28 @@ def _score_hvg_features_by_batch(
         )
         batch_means.append(scoring.means)
         batch_scores.append(scoring.scores)
+        batch_rank = np.full(matrix.shape[1], np.nan, dtype=np.float64)
+        if n_features is not None:
+            selected_indices = _order_by_score(scoring.scores)[:n_features]
+            nbatches[selected_indices] += 1
+            batch_rank[selected_indices] = np.arange(
+                1,
+                selected_indices.size + 1,
+                dtype=np.float64,
+            )
+        batch_ranks.append(batch_rank)
 
     weights = _batch_weights(batch_groups, batch_weighting=batch_weighting)
 
-    return _HVGScore(
+    return _BatchHVGScore(
         means=_weighted_nanmean(np.vstack(batch_means), weights),
         scores=_weighted_nanmean(np.vstack(batch_scores), weights),
+        nbatches=nbatches,
+        rank_summary=_batch_rank_summary(
+            np.vstack(batch_ranks),
+            weights,
+            batch_weighting=batch_weighting,
+        ),
     )
 
 
@@ -410,6 +472,7 @@ def _hvg_params(
     selection: _HVGSelection,
     batch_key: Optional[str],
     batch_weighting: Literal["equal", "cell_count"],
+    batch_selection: Literal["consensus", "rank"],
 ) -> dict:
 
     params = {
@@ -418,6 +481,7 @@ def _hvg_params(
         "mean_cutoff": selection.mean_cutoff,
         "batch_key": batch_key,
         "batch_weighting": batch_weighting,
+        "batch_selection": batch_selection,
     }
     if method == "loess":
         return {
@@ -789,6 +853,57 @@ def _order_by_score(scores: np.ndarray) -> np.ndarray:
     return eligible[np.argsort(-scores[eligible], kind="mergesort")]
 
 
+def _order_batch_hvg_features(
+    scoring: _BatchHVGScore,
+    *,
+    method: HVGMethod,
+    batch_selection: Literal["consensus", "rank"],
+) -> np.ndarray:
+
+    eligible = np.flatnonzero(np.isfinite(scoring.scores))
+    ranks = np.where(
+        np.isnan(scoring.rank_summary),
+        np.inf,
+        scoring.rank_summary,
+    )
+    if batch_selection == "rank":
+        return eligible[
+            np.lexsort(
+                (
+                    -scoring.scores[eligible],
+                    -scoring.nbatches[eligible],
+                    ranks[eligible],
+                )
+            )
+        ]
+
+    if batch_selection != "consensus":
+        raise ValueError(f"unsupported batch selection: {batch_selection!r}")
+
+    if method == "loess":
+        return eligible[
+            np.lexsort(
+                (
+                    -scoring.scores[eligible],
+                    ranks[eligible],
+                    -scoring.nbatches[eligible],
+                )
+            )
+        ]
+
+    if method == "binning":
+        return eligible[
+            np.lexsort(
+                (
+                    -scoring.scores[eligible],
+                    -scoring.nbatches[eligible],
+                )
+            )
+        ]
+
+    raise ValueError(f"unsupported HVG method: {method!r}")
+
+
 def _resolve_batch_groups(
     adata: AnnData,
     batch_key: Optional[str],
@@ -850,6 +965,42 @@ def _weighted_nanmean(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
         out=np.full(values.shape[1], np.nan, dtype=np.float64),
         where=denominators != 0,
     )
+
+
+def _batch_rank_summary(
+    ranks: np.ndarray,
+    weights: np.ndarray,
+    *,
+    batch_weighting: Literal["equal", "cell_count"],
+) -> np.ndarray:
+
+    if batch_weighting == "equal":
+        return cast(
+            np.ndarray,
+            np.ma.median(np.ma.masked_invalid(ranks), axis=0).filled(np.nan),
+        )
+
+    return _weighted_nanmedian(ranks, weights)
+
+
+def _weighted_nanmedian(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+
+    medians = np.full(values.shape[1], np.nan, dtype=np.float64)
+    for index in range(values.shape[1]):
+        valid = ~np.isnan(values[:, index])
+        if not np.any(valid):
+            continue
+
+        valid_values = values[valid, index]
+        valid_weights = weights[valid]
+        order = np.argsort(valid_values, kind="mergesort")
+        sorted_values = valid_values[order]
+        cumulative_weights = np.cumsum(valid_weights[order])
+        cutoff = 0.5 * cumulative_weights[-1]
+        median_index = np.searchsorted(cumulative_weights, cutoff, side="left")
+        medians[index] = sorted_values[median_index]
+
+    return medians
 
 
 def _as_cutoff_interval(
