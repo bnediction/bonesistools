@@ -301,8 +301,8 @@ def __composition_table(
     if not normalize:
         return counts, groups, segments
 
-    totals = counts.sum(axis=1)
-    empty_groups = list(totals[totals == 0].index)
+    totals = cast(pd.Series, counts.sum(axis=1))
+    empty_groups = [group for group, total in totals.items() if total == 0]
     if empty_groups:
         raise ValueError(
             f"cannot normalize composition for empty groups: {empty_groups!r}"

@@ -123,11 +123,14 @@ def logfoldchanges(
     )
 
     if cluster_rebalancing:
-        mean_counts_df = counts_df.groupby(
-            by=groupby,
-            sort=True,
-            observed=False,
-        ).mean()
+        mean_counts_df = cast(
+            pd.DataFrame,
+            counts_df.groupby(
+                by=groupby,
+                sort=True,
+                observed=False,
+            ).mean(),
+        )
 
         for cluster in sorted(adata.obs[groupby].dropna().unique()):
             _mean_in = mean_counts_df.loc[cluster]

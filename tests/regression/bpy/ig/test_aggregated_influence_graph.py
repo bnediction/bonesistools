@@ -220,9 +220,7 @@ def test_structural_families_can_ignore_edge_frequencies():
         bins=None,
     )
 
-    assert set(map(frozenset, frequency_aware.values())) == {
-        frozenset({"g1", "g2"})
-    }
+    assert set(map(frozenset, frequency_aware.values())) == {frozenset({"g1", "g2"})}
     assert set(map(frozenset, signed_structure_only.values())) == {
         frozenset({"g1", "g2", "g3"})
     }

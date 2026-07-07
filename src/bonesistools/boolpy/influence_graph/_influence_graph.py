@@ -3390,7 +3390,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Display height assigned to the rendered SVG root. Integers and
             floats are passed as raw SVG length values; strings can include CSS
             units.
-        
+
         Returns
         -------
         None

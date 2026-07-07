@@ -184,7 +184,20 @@ def merge_duplicate_vars(
     if copy:
         return merged
 
-    adata._init_as_actual(merged)
+    cast(Any, adata)._init_as_actual(
+        X=merged.X,
+        obs=merged.obs,
+        var=merged.var,
+        uns=merged.uns,
+        obsm=merged.obsm,
+        varm=merged.varm,
+        obsp=merged.obsp,
+        layers={
+            key: value
+            for key, value in merged.layers.items()
+            if key is not None
+        },
+    )
     return None
 
 
