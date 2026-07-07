@@ -1751,9 +1751,10 @@ class KNNSC:
         below_minimum = []
         empty = []
         missing = []
+        cluster_counts = cast(pd.Series, self.cluster_counts)
         for cluster in invalid_clusters:
-            if cluster in self.cluster_counts.index:
-                size = int(self.cluster_counts[cluster])
+            if cluster in cluster_counts.index:
+                size = int(cluster_counts.loc[cluster])
                 if size == 0:
                     empty.append(str(cluster))
                 else:

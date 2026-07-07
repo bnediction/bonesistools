@@ -285,11 +285,12 @@ def __composition_table(
     normalize: bool,
 ) -> Tuple[pd.DataFrame, Sequence[object], Sequence[object]]:
 
-    data = scdata.obs[[groupby, obs]]
+    obs_table = cast(pd.DataFrame, scdata.obs)
+    data = obs_table[[groupby, obs]]
     data = data.dropna() if dropna else data
 
-    groups = __ordered_values(scdata.obs[groupby], group_order)
-    segments = __ordered_values(scdata.obs[obs], obs_order)
+    groups = __ordered_values(cast(pd.Series, obs_table[groupby]), group_order)
+    segments = __ordered_values(cast(pd.Series, obs_table[obs]), obs_order)
     counts = pd.crosstab(data[groupby], data[obs])
     counts = counts.reindex(
         index=__index_from_values(groups, groupby),

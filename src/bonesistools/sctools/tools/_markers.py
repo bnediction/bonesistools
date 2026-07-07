@@ -117,7 +117,10 @@ def logfoldchanges(
         return __df
 
     logfoldchanges = []
-    counts_df = anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log)
+    counts_df = cast(
+        pd.DataFrame,
+        anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log),
+    )
 
     if cluster_rebalancing:
         mean_counts_df = counts_df.groupby(

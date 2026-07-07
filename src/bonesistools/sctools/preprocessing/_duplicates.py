@@ -155,6 +155,11 @@ def merge_duplicate_vars(
 
     selected_positions = [positions[0] for positions in groups.values()]
     group_matrix = _var_group_matrix(source.n_vars, groups)
+    layers: Dict[str, Any] = {}
+    for key, value in source.layers.items():
+        if key is None:
+            continue
+        layers[cast(str, key)] = _sum_var_groups(cast(Any, value), group_matrix)
 
     merged = AnnData(
         X=_sum_var_groups(cast(Any, source.X), group_matrix),
@@ -163,10 +168,7 @@ def merge_duplicate_vars(
         uns=deepcopy(source.uns),
         obsm=_copy_axis_mapping(source.obsm),
         obsp=_copy_axis_mapping(source.obsp),
-        layers={
-            key: _sum_var_groups(cast(Any, value), group_matrix)
-            for key, value in source.layers.items()
-        },
+        layers=layers,
         varm={
             key: _merge_varm_value(
                 key,
