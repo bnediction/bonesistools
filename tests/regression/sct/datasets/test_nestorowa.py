@@ -81,6 +81,11 @@ def _as_csr(matrix: Any) -> csr_matrix:
     return cast(csr_matrix, matrix)
 
 
+def _user_layer_keys(adata: ad.AnnData) -> List[str]:
+
+    return [cast(str, key) for key in adata.layers.keys() if key is not None]
+
+
 def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
     source_dir = tmp_path / "source"
     _write_nestorowa_fixture(source_dir)
@@ -113,7 +118,7 @@ def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
             ],
         ),
     )
-    assert len(adata.layers) == 0
+    assert _user_layer_keys(adata) == []
 
 
 def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
@@ -250,7 +255,7 @@ def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
             ],
         ),
     )
-    assert len(adata.layers) == 0
+    assert _user_layer_keys(adata) == []
 
 
 def test_nestorowa_file_paths_use_given_directory(tmp_path):
