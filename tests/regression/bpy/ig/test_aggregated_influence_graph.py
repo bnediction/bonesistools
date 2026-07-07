@@ -471,6 +471,8 @@ def test_from_boolean_networks_accepts_varargs_and_ensemble():
     assert aggregated.edge_count("B", "A", sign=1) == 2
     assert aggregated.edge_count("B", "A", sign=-1) == 1
     assert aggregated.edge_count("C", "B") == 2
+    assert aggregated.nodes["A"]["function_count"] == 2
+    assert aggregated.nodes["A"]["function_stability"] == pytest.approx(2 / 3)
 
     ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
     from_ensemble = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
@@ -479,6 +481,8 @@ def test_from_boolean_networks_accepts_varargs_and_ensemble():
     assert from_ensemble.edge_count("B", "A", sign=1) == 2
     assert from_ensemble.edge_count("B", "A", sign=-1) == 1
     assert from_ensemble.edge_count("C", "B") == 2
+    assert from_ensemble.nodes["A"]["function_count"] == 2
+    assert from_ensemble.nodes["A"]["function_stability"] == pytest.approx(2 / 3)
 
 
 def test_to_graphviz_supports_collapse_modes(fake_graphviz):
@@ -496,8 +500,8 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
         ("g2", "out", "2", "tee"),
     ]
     assert _rendered_edges(family) == [
-        ("TF", "g1|g2", "0.75", "normal"),
-        ("g1|g2", "out", "0.5", "tee"),
+        ("TF", "g1|g2", "3", "normal"),
+        ("g1|g2", "out", "2", "tee"),
     ]
 
     feedback_graph = AggregatedInfluenceGraph(total=4)
@@ -517,16 +521,16 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
         ("B", "A"),
     ]
     assert _rendered_edges(feedback) == [
-        ("A", "B", "0.75", "normal"),
-        ("B", "A", "0.75", "normal"),
+        ("A", "B", "3", "normal"),
+        ("B", "A", "3", "normal"),
     ]
     assert sorted((source, target) for source, target, _ in both.edges) == [
         ("A", "B"),
         ("B", "A"),
     ]
     assert _rendered_edges(both) == [
-        ("A", "B", "0.75", "normal"),
-        ("B", "A", "0.75", "normal"),
+        ("A", "B", "3", "normal"),
+        ("B", "A", "3", "normal"),
     ]
 
     with pytest.raises(ValueError, match="unsupported collapse"):
@@ -542,7 +546,7 @@ def test_to_graphviz_can_filter_and_disable_frequency_style(fake_graphviz):
     rendered = graph.to_graphviz(
         collapse="family",
         min_frequency=0.6,
-        show_edge_labels=False,
+        edge_label=None,
         edge_style=False,
     )
 
@@ -552,6 +556,172 @@ def test_to_graphviz_can_filter_and_disable_frequency_style(fake_graphviz):
     ]
     assert all("label" not in attrs for _, _, attrs in rendered.edges)
     assert all("style" not in attrs for _, _, attrs in rendered.edges)
+
+
+def test_to_graphviz_can_force_frequency_edge_labels_on_exact_graph(fake_graphviz):
+    graph = _collapse_graph()
+
+    rendered = graph.to_graphviz(edge_label="frequency")
+
+    assert isinstance(rendered, fake_graphviz)
+    assert _rendered_edges(rendered) == [
+        ("TF", "g1", "0.75", "normal"),
+        ("TF", "g2", "0.75", "normal"),
+        ("g1", "out", "0.5", "tee"),
+        ("g2", "out", "0.5", "tee"),
+    ]
+
+
+def test_to_graphviz_can_disable_edge_labels_with_edge_label_none(fake_graphviz):
+    graph = _collapse_graph()
+
+    rendered = graph.to_graphviz(edge_label=None)
+
+    assert isinstance(rendered, fake_graphviz)
+    assert all("label" not in attrs for _, _, attrs in rendered.edges)
+
+
+def test_to_graphviz_deprecates_show_edge_labels_without_disabling_labels(
+    fake_graphviz,
+):
+    graph = _single_edge_graph()
+
+    with pytest.warns(FutureWarning, match="show_edge_labels"):
+        rendered = graph.to_graphviz(show_edge_labels=False)
+
+    assert isinstance(rendered, fake_graphviz)
+    assert _rendered_edges(rendered) == [("A", "B", "3", "normal")]
+
+
+def test_to_graphviz_can_force_count_edge_labels_on_collapsed_graph(fake_graphviz):
+    graph = _collapse_graph()
+
+    rendered = graph.to_graphviz(collapse="family", edge_label="count")
+
+    assert isinstance(rendered, fake_graphviz)
+    assert _rendered_edges(rendered) == [
+        ("TF", "g1|g2", "3", "normal"),
+        ("g1|g2", "out", "2", "tee"),
+    ]
+
+
+def test_to_graphviz_rejects_unknown_edge_label():
+    graph = _single_edge_graph()
+
+    with pytest.raises(ValueError, match="unsupported edge_label"):
+        graph.to_graphviz(edge_label=cast(Any, "bad"))
+
+
+def test_to_graphviz_can_remove_isolated_nodes(fake_graphviz):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_edge("A", "B", sign=1, count=4)
+    graph.add_edge("C", "D", sign=-1, count=1)
+
+    rendered = graph.to_graphviz(
+        min_frequency=0.5,
+        remove_isolated_nodes=True,
+    )
+
+    assert isinstance(rendered, fake_graphviz)
+    assert sorted(node for node, _ in rendered.nodes) == ["A", "B"]
+    assert sorted((source, target) for source, target, _ in rendered.edges) == [
+        ("A", "B"),
+    ]
+
+
+def test_to_graphviz_can_style_nodes_from_function_count(fake_graphviz):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_node("A", function_count=1)
+    graph.add_node("B", function_count=2)
+    graph.add_edge("A", "B", sign=1, count=4)
+
+    rendered = graph.to_graphviz(node_style="count")
+
+    assert isinstance(rendered, fake_graphviz)
+
+    node_attrs = {node: attrs for node, attrs in rendered.nodes}
+
+    assert node_attrs["A"]["fillcolor"] == "darkgoldenrod2"
+    assert node_attrs["A"]["style"] == "rounded,filled,bold"
+    assert node_attrs["B"]["fillcolor"] == "lightgoldenrod1"
+    assert node_attrs["B"]["style"] == "rounded,filled"
+
+
+def test_to_graphviz_node_style_warns_for_partially_missing_attributes(
+    fake_graphviz,
+):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_node("A", function_stability=1.0)
+    graph.add_node("B")
+    graph.add_edge("A", "B", sign=1, count=4)
+
+    with pytest.warns(UserWarning, match="B"):
+        rendered = graph.to_graphviz(node_style="stability")
+
+    node_attrs = {node: attrs for node, attrs in rendered.nodes}
+
+    assert node_attrs["A"]["fillcolor"] == "darkgoldenrod2"
+    assert "fillcolor" not in node_attrs["B"]
+
+
+def test_to_graphviz_node_style_warning_truncates_missing_nodes(fake_graphviz):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_node("styled", function_stability=1.0)
+
+    for index in range(10):
+        graph.add_node(f"missing_{index}")
+
+    graph.add_edge("styled", "missing_0", sign=1, count=4)
+
+    with pytest.warns(UserWarning) as warnings:
+        graph.to_graphviz(node_style="stability")
+
+    message = str(warnings[0].message)
+
+    assert "missing_0" in message
+    assert "missing_7" in message
+    assert "missing_8" not in message
+    assert "and 2 more" in message
+
+
+def test_to_graphviz_node_style_warns_without_listing_when_all_missing(
+    fake_graphviz,
+):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_edge("A", "B", sign=1, count=4)
+
+    with pytest.warns(UserWarning) as warnings:
+        rendered = graph.to_graphviz(node_style="stability")
+
+    message = str(warnings[0].message)
+
+    assert isinstance(rendered, fake_graphviz)
+    assert "no node was styled" in message
+    assert "A" not in message
+    assert "B" not in message
+
+
+def test_to_graphviz_node_style_can_be_inferred_from_complete_attributes(
+    fake_graphviz,
+):
+    graph = AggregatedInfluenceGraph(total=4)
+    graph.add_node("A", function_stability=1.0)
+    graph.add_node("B", function_stability=0.5)
+    graph.add_edge("A", "B", sign=1, count=4)
+
+    rendered = graph.to_graphviz(node_style=True)
+
+    node_attrs = {node: attrs for node, attrs in rendered.nodes}
+
+    assert node_attrs["A"]["fillcolor"] == "darkgoldenrod2"
+    assert node_attrs["B"]["fillcolor"] == "cornsilk"
+
+
+def test_to_graphviz_rejects_unknown_node_style():
+    graph = _single_edge_graph()
+
+    with pytest.raises(ValueError, match="unsupported node_style"):
+        graph.to_graphviz(node_style=cast(Any, "bad"))
 
 
 def test_to_pydot_supports_collapse_modes():
@@ -586,8 +756,8 @@ def test_to_pydot_supports_collapse_modes():
         )
         for edge in family.get_edges()
     ) == [
-        ("TF", "g1|g2", "0.75", "normal"),
-        ("g1|g2", "out", "0.5", "tee"),
+        ("TF", "g1|g2", "3", "normal"),
+        ("g1|g2", "out", "2", "tee"),
     ]
 
 
@@ -605,7 +775,10 @@ def test_show_supports_collapse_modes(monkeypatch):
         protect_feedback_nodes=True,
         include_singleton_selfloops=True,
         min_frequency=0.0,
-        show_edge_labels=True,
+        remove_isolated_nodes=False,
+        node_style=None,
+        show_edge_labels="not passed",
+        edge_label="count",
         edge_style=None,
         program="dot",
         **kwargs,
@@ -616,7 +789,9 @@ def test_show_supports_collapse_modes(monkeypatch):
             "protect_feedback_nodes": protect_feedback_nodes,
             "include_singleton_selfloops": include_singleton_selfloops,
             "min_frequency": min_frequency,
-            "show_edge_labels": show_edge_labels,
+            "remove_isolated_nodes": remove_isolated_nodes,
+            "node_style": node_style,
+            "edge_label": edge_label,
             "edge_style": edge_style,
             "program": program,
             "kwargs": kwargs,
@@ -643,7 +818,9 @@ def test_show_supports_collapse_modes(monkeypatch):
         protect_feedback_nodes=False,
         include_singleton_selfloops=False,
         min_frequency=0.5,
-        show_edge_labels=False,
+        remove_isolated_nodes=True,
+        node_style="stability",
+        edge_label="frequency",
         edge_style=False,
         program="neato",
         width="640px",
@@ -656,7 +833,9 @@ def test_show_supports_collapse_modes(monkeypatch):
         "protect_feedback_nodes": False,
         "include_singleton_selfloops": False,
         "min_frequency": 0.5,
-        "show_edge_labels": False,
+        "remove_isolated_nodes": True,
+        "node_style": "stability",
+        "edge_label": "frequency",
         "edge_style": False,
         "program": "neato",
         "kwargs": {"rankdir": "LR"},

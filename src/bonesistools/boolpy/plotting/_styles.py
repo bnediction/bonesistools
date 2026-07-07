@@ -45,6 +45,13 @@ def count_node_style(data: Mapping[str, Any]) -> Dict[str, str]:
     """
     Return pydot node attributes from the number of distinct rule structures.
 
+    `function_count` counts how many distinct Boolean rule structures were
+    observed for a node across an ensemble. A value of 1 means all Boolean
+    networks assign the same rule structure to the node. Larger values indicate
+    more alternative inferred functions. The visual style therefore highlights
+    low counts with stronger fill colors and high counts with lighter or dotted
+    styles.
+
     Parameters
     ----------
     data: Mapping[str, Any]
@@ -88,6 +95,13 @@ def count_node_style(data: Mapping[str, Any]) -> Dict[str, str]:
 def stability_node_style(data: Mapping[str, Any]) -> Dict[str, str]:
     """
     Return pydot node attributes from rule-structure stability.
+
+    `function_stability` is the frequency of the most common Boolean rule
+    structure for a node across an ensemble. A value of 1 means all Boolean
+    networks assign the same rule structure to the node. Lower values indicate
+    that the node has several competing inferred functions. The visual style
+    therefore highlights stable nodes with stronger fill colors and unstable
+    nodes with lighter or dotted styles.
 
     Parameters
     ----------

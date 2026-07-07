@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping as MappingInstance
 from itertools import product
 from typing import (
@@ -33,7 +34,7 @@ from ..._validation import (
 )
 from ..._warnings import _warn_deprecated
 from ..plotting._graphviz import _networkx_to_graphviz
-from ..plotting._styles import ratio_edge_style
+from ..plotting._styles import count_node_style, ratio_edge_style, stability_node_style
 from ..plotting._svg import SvgLength, scale_svg
 
 if TYPE_CHECKING:
@@ -45,6 +46,9 @@ CircuitSign = Literal[-1, 1]
 InfluenceSign = Literal[-1, 1, "+", "-", "positive", "negative"]
 Direction = Literal["upstream", "downstream", "both"]
 CollapseMode = Literal["family", "feedback", "both"]
+AggregatedNodeStyle = Literal["count", "stability"]
+AggregatedEdgeLabel = Literal["count", "frequency"]
+_UNSET = object()
 
 StructuralSignature = Tuple[
     FrozenSet[Tuple[str, int]],
@@ -2973,7 +2977,15 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         protect_feedback_nodes: bool = True,
         include_singleton_selfloops: bool = True,
         min_frequency: float = 0.0,
-        show_edge_labels: bool = True,
+        remove_isolated_nodes: bool = False,
+        node_style: Union[
+            AggregatedNodeStyle,
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        show_edge_labels: Any = _UNSET,
+        edge_label: Optional[AggregatedEdgeLabel] = "count",
         edge_style: Union[
             Callable[[float], Mapping[str, Any]],
             bool,
@@ -2986,9 +2998,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Convert the aggregated influence graph to a native graphviz Digraph.
 
         Rendering is always performed from an `InfluenceGraph`. Without
-        collapse, the graph preserves exact edge counts and labels display
-        counts. With `collapse="family"`, `collapse="feedback"` or
-        `collapse="both"`, the rendered graph uses frequency labels.
+        collapse, the graph preserves exact edge counts. With
+        `collapse="family"`, `collapse="feedback"` or `collapse="both"`, the
+        rendered graph uses frequencies internally for edge filtering and
+        styling.
 
         Parameters
         ----------
@@ -3005,8 +3018,27 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             `collapse="feedback"`.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        show_edge_labels: bool (default: True)
-            Whether to display counts or frequencies as edge labels.
+        remove_isolated_nodes: bool (default: False)
+            If True, remove nodes with no incoming or outgoing influence after
+            applying the minimum frequency filter.
+        node_style: Literal["count", "stability"] or Callable or bool or None
+            Node styling strategy. If assigned to `"count"`, nodes are styled
+            according to their `function_count` attribute, i.e. the number of
+            distinct Boolean rule structures observed for the node across the
+            ensemble. Lower values indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to their
+            `function_stability` attribute, i.e. the frequency of the most
+            common Boolean rule structure for the node. Higher values indicate
+            more stable inferred functions. If assigned to a callable, the
+            callable receives node attributes and must return graphviz node
+            attributes. If assigned to True, `function_stability` is preferred
+            when available, otherwise `function_count` is used. If assigned to
+            False or None, no additional node styling is applied.
+        show_edge_labels: bool, deprecated
+            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
+        edge_label: {"count", "frequency"} or None (default: "count")
+            Quantity displayed as edge label. If None, no edge label is
+            displayed.
         edge_style: Callable[[float], Mapping[str, Any]] or bool or None
             Function used to style edges according to frequency. If True, use
             `ratio_edge_style`. If False or None, no frequency style is applied.
@@ -3028,13 +3060,17 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             If `collapse` is invalid or `min_frequency` is outside [0, 1].
         """
 
+        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
+
         graph = self._visualization_graph(
             collapse=collapse,
             bins=bins,
             protect_feedback_nodes=protect_feedback_nodes,
             include_singleton_selfloops=include_singleton_selfloops,
             min_frequency=min_frequency,
-            show_edge_labels=show_edge_labels,
+            remove_isolated_nodes=remove_isolated_nodes,
+            node_style=node_style,
+            edge_label=edge_label,
             edge_style=edge_style,
         )
 
@@ -3048,7 +3084,15 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         protect_feedback_nodes: bool = True,
         include_singleton_selfloops: bool = True,
         min_frequency: float = 0.0,
-        show_edge_labels: bool = True,
+        remove_isolated_nodes: bool = False,
+        node_style: Union[
+            AggregatedNodeStyle,
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        show_edge_labels: Any = _UNSET,
+        edge_label: Optional[AggregatedEdgeLabel] = "count",
         edge_style: Union[
             Callable[[float], Mapping[str, Any]],
             bool,
@@ -3061,9 +3105,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Convert the aggregated influence graph to a pydot graph.
 
         Rendering is always performed from an `InfluenceGraph`. Without
-        collapse, the graph preserves exact edge counts and labels display
-        counts. With `collapse="family"`, `collapse="feedback"` or
-        `collapse="both"`, the rendered graph uses frequency labels.
+        collapse, the graph preserves exact edge counts. With
+        `collapse="family"`, `collapse="feedback"` or `collapse="both"`, the
+        rendered graph uses frequencies internally for edge filtering and
+        styling.
 
         Examples
         --------
@@ -3089,8 +3134,27 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             `collapse="feedback"`.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        show_edge_labels: bool (default: True)
-            Whether to display counts or frequencies as edge labels.
+        remove_isolated_nodes: bool (default: False)
+            If True, remove nodes with no incoming or outgoing influence after
+            applying the minimum frequency filter.
+        node_style: Literal["count", "stability"] or Callable or bool or None
+            Node styling strategy. If assigned to `"count"`, nodes are styled
+            according to their `function_count` attribute, i.e. the number of
+            distinct Boolean rule structures observed for the node across the
+            ensemble. Lower values indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to their
+            `function_stability` attribute, i.e. the frequency of the most
+            common Boolean rule structure for the node. Higher values indicate
+            more stable inferred functions. If assigned to a callable, the
+            callable receives node attributes and must return pydot node
+            attributes. If assigned to True, `function_stability` is preferred
+            when available, otherwise `function_count` is used. If assigned to
+            False or None, no additional node styling is applied.
+        show_edge_labels: bool, deprecated
+            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
+        edge_label: {"count", "frequency"} or None (default: "count")
+            Quantity displayed as edge label. If None, no edge label is
+            displayed.
         edge_style: Callable[[float], Mapping[str, Any]] or bool or None
             Function used to style edges according to frequency. If True, use
             `ratio_edge_style`. If False or None, no frequency style is applied.
@@ -3111,13 +3175,17 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             If `collapse` is invalid or `min_frequency` is outside [0, 1].
         """
 
+        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
+
         graph = self._visualization_graph(
             collapse=collapse,
             bins=bins,
             protect_feedback_nodes=protect_feedback_nodes,
             include_singleton_selfloops=include_singleton_selfloops,
             min_frequency=min_frequency,
-            show_edge_labels=show_edge_labels,
+            remove_isolated_nodes=remove_isolated_nodes,
+            node_style=node_style,
+            edge_label=edge_label,
             edge_style=edge_style,
         )
 
@@ -3138,7 +3206,15 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         protect_feedback_nodes: bool = True,
         include_singleton_selfloops: bool = True,
         min_frequency: float = 0.0,
-        show_edge_labels: bool = True,
+        remove_isolated_nodes: bool = False,
+        node_style: Union[
+            AggregatedNodeStyle,
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ] = None,
+        show_edge_labels: Any = _UNSET,
+        edge_label: Optional[AggregatedEdgeLabel] = "count",
         edge_style: Union[
             Callable[[float], Mapping[str, Any]],
             bool,
@@ -3178,13 +3254,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         ----------
         collapse: {None, "family", "feedback", "both"} (default: None)
             Optional graph transformation applied before rendering.
-            If None, render the exact aggregated graph and display edge counts.
-            If `"family"`, render `family_collapsed_graph()` and display edge
-            frequencies.
-            If `"feedback"`, render the feedback-induced graph and display edge
-            frequencies.
-            If `"both"`, render `collapsed_graph()` and display edge
-            frequencies.
+            If None, render the exact aggregated graph.
+            If `"family"`, render `family_collapsed_graph()`.
+            If `"feedback"`, render the feedback-induced graph.
+            If `"both"`, render `collapsed_graph()`.
         bins: Iterable of float
             Ordered bin boundaries used by collapsed structural families.
         protect_feedback_nodes: bool (default: True)
@@ -3195,8 +3268,27 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             `collapse="feedback"` or `collapse="both"`.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        show_edge_labels: bool (default: True)
-            Whether to display counts or frequencies as edge labels.
+        remove_isolated_nodes: bool (default: False)
+            If True, remove nodes with no incoming or outgoing influence after
+            applying the minimum frequency filter.
+        node_style: Literal["count", "stability"] or Callable or bool or None
+            Node styling strategy. If assigned to `"count"`, nodes are styled
+            according to their `function_count` attribute, i.e. the number of
+            distinct Boolean rule structures observed for the node across the
+            ensemble. Lower values indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to their
+            `function_stability` attribute, i.e. the frequency of the most
+            common Boolean rule structure for the node. Higher values indicate
+            more stable inferred functions. If assigned to a callable, the
+            callable receives node attributes and must return pydot node
+            attributes. If assigned to True, `function_stability` is preferred
+            when available, otherwise `function_count` is used. If assigned to
+            False or None, no additional node styling is applied.
+        show_edge_labels: bool, deprecated
+            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
+        edge_label: {"count", "frequency"} or None (default: "count")
+            Quantity displayed as edge label. If None, no edge label is
+            displayed.
         edge_style: Callable[[float], Mapping[str, Any]] or bool or None
             Function used to style edges according to frequency. If True, use
             `ratio_edge_style`. If False or None, no frequency style is applied.
@@ -3233,6 +3325,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         layout computed by Graphviz.
         """
 
+        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
+
         try:
             from IPython.display import SVG, display
 
@@ -3247,7 +3341,9 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 protect_feedback_nodes=protect_feedback_nodes,
                 include_singleton_selfloops=include_singleton_selfloops,
                 min_frequency=min_frequency,
-                show_edge_labels=show_edge_labels,
+                remove_isolated_nodes=remove_isolated_nodes,
+                node_style=node_style,
+                edge_label=edge_label,
                 edge_style=edge_style,
                 program=program,
                 **kwargs,
@@ -3394,9 +3490,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
         Build an aggregated influence graph from Boolean networks.
 
-        Each Boolean network is converted with `to_influence_graph()` before
+        Each Boolean network is converted into a signed influence graph before
         aggregation. A single `BooleanNetworkEnsemble` argument is accepted and
-        expanded automatically.
+        expanded automatically. Node attributes include `function_count` and
+        `function_stability`, matching `BooleanNetworkEnsemble.to_networkx()`.
 
         Examples
         --------
@@ -3448,14 +3545,24 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         from ..boolean_network import BooleanNetworkEnsemble
 
+        if len(networks) == 0:
+            raise ValueError("expected at least one Boolean network")
+
         if len(networks) == 1 and isinstance(networks[0], BooleanNetworkEnsemble):
-            boolean_networks = cast(Tuple["BooleanNetwork", ...], tuple(networks[0]))
+            ensemble = networks[0]
         else:
             boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
+            ensemble = BooleanNetworkEnsemble(bns=boolean_networks)
 
-        graphs = tuple(network.to_influence_graph() for network in boolean_networks)
+        graph = ensemble.to_networkx(remove_isolated_nodes=False)
 
-        return cls.from_influence_graphs(*graphs)
+        for _, _, data in graph.edges(data=True):
+            if data["sign"] is True:
+                data["sign"] = 1
+            elif data["sign"] is False:
+                data["sign"] = -1
+
+        return cls(graph, total=len(ensemble))
 
     def _visualization_graph(
         self,
@@ -3464,7 +3571,14 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         protect_feedback_nodes: bool,
         include_singleton_selfloops: bool,
         min_frequency: float,
-        show_edge_labels: bool,
+        remove_isolated_nodes: bool,
+        node_style: Union[
+            AggregatedNodeStyle,
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ],
+        edge_label: Optional[AggregatedEdgeLabel],
         edge_style: Union[
             Callable[[float], Mapping[str, Any]],
             bool,
@@ -3476,6 +3590,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         min_frequency = _as_probability(min_frequency, "min_frequency")
+        edge_label = self._resolve_edge_label(edge_label)
 
         if collapse is None:
             graph = InfluenceGraph(self._plain_graph(self))
@@ -3537,18 +3652,205 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 penwidth="2",
             )
 
-            if show_edge_labels:
-                if collapse is None:
-                    data["label"] = str(data["count"])
-                else:
-                    data["label"] = f"{frequency:.2g}"
+            if edge_label is not None:
+                data["label"] = self._format_edge_label(
+                    data=data,
+                    edge_label=edge_label,
+                    frequency=frequency,
+                )
 
             if edge_style_callable is not None:
                 data.update(edge_style_callable(frequency))
 
         graph.remove_edges_from(edges_to_remove)
 
+        if remove_isolated_nodes:
+            graph.remove_nodes_from(list(nx.isolates(graph)))
+
+        self._apply_node_style(
+            graph=graph,
+            node_style=node_style,
+        )
+
         return graph
+
+    def _warn_deprecated_show_edge_labels(
+        self,
+        show_edge_labels: Any,
+        *,
+        stacklevel: int,
+    ) -> None:
+        """
+        Warn when the deprecated `show_edge_labels` argument is explicitly used.
+        """
+
+        if show_edge_labels is not _UNSET:
+            _warn_deprecated(
+                "`show_edge_labels`",
+                replacement="`edge_label`",
+                stacklevel=stacklevel,
+            )
+
+    def _resolve_edge_label(
+        self,
+        edge_label: Optional[AggregatedEdgeLabel],
+    ) -> Optional[Literal["count", "frequency"]]:
+        """
+        Resolve the effective edge label quantity.
+        """
+
+        if edge_label is None:
+            return None
+
+        if edge_label in ("count", "frequency"):
+            return edge_label
+
+        raise ValueError(
+            "unsupported edge_label: expected None, 'count' or 'frequency', "
+            f"but received {edge_label!r}"
+        )
+
+    def _format_edge_label(
+        self,
+        data: Mapping[str, Any],
+        edge_label: Literal["count", "frequency"],
+        frequency: float,
+    ) -> str:
+        """
+        Return a rendered edge label.
+        """
+
+        if edge_label == "count":
+            count = data.get("count")
+
+            if count is None:
+                count = frequency * self.total
+
+            return self._format_count_label(count)
+
+        return f"{frequency:.2g}"
+
+    def _format_count_label(self, count: Any) -> str:
+        """
+        Return a compact rendered count label.
+        """
+
+        if isinstance(count, float) and count.is_integer():
+            return str(int(count))
+
+        return str(count)
+
+    def _apply_node_style(
+        self,
+        graph: InfluenceGraph,
+        node_style: Union[
+            AggregatedNodeStyle,
+            Callable[[Mapping[str, Any]], Mapping[str, Any]],
+            bool,
+            None,
+        ],
+    ) -> None:
+        """
+        Apply graphviz node styling in-place.
+        """
+
+        if node_style is None or node_style is False:
+            return
+
+        if node_style is True:
+            node_style = self._infer_node_style(graph)
+
+            if node_style is None:
+                warnings.warn(
+                    "node_style=True requires every node to define either "
+                    "'function_stability' or 'function_count'; no node was styled.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+                return
+
+        if callable(node_style):
+            for _, data in graph.nodes(data=True):
+                data.update(node_style(data))
+
+            return
+
+        if node_style == "stability":
+            required_attribute = "function_stability"
+            style_callable = stability_node_style
+
+        elif node_style == "count":
+            required_attribute = "function_count"
+            style_callable = count_node_style
+
+        else:
+            raise ValueError(
+                "unsupported node_style: expected None, False, True, 'count', "
+                f"'stability' or a callable, but received {node_style!r}"
+            )
+
+        missing_nodes = []
+        styled_count = 0
+
+        for node, data in graph.nodes(data=True):
+            if required_attribute not in data:
+                missing_nodes.append(str(node))
+                continue
+
+            data.update(style_callable(data))
+            styled_count += 1
+
+        if not missing_nodes:
+            return
+
+        if styled_count == 0:
+            warnings.warn(
+                f"node_style={node_style!r} requires node attribute "
+                f"{required_attribute!r}; no node was styled.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return
+
+        warnings.warn(
+            f"node_style={node_style!r} skipped nodes missing "
+            f"{required_attribute!r}: "
+            f"{self._format_missing_nodes(missing_nodes)}",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    def _infer_node_style(
+        self,
+        graph: InfluenceGraph,
+    ) -> Optional[AggregatedNodeStyle]:
+        """
+        Infer a complete node styling strategy from available node attributes.
+        """
+
+        nodes = list(graph.nodes(data=True))
+
+        if any("function_stability" in data for _, data in nodes):
+            return "stability"
+
+        if any("function_count" in data for _, data in nodes):
+            return "count"
+
+        return None
+
+    def _format_missing_nodes(self, missing_nodes: List[str]) -> str:
+        """
+        Return a compact missing-node list for warning messages.
+        """
+
+        visible_nodes = sorted(missing_nodes)[:8]
+        message = ", ".join(repr(node) for node in visible_nodes)
+        remaining_count = len(missing_nodes) - len(visible_nodes)
+
+        if remaining_count > 0:
+            message = f"{message}, and {remaining_count} more"
+
+        return message
 
     def _empty_like(self) -> "AggregatedInfluenceGraph":
         """

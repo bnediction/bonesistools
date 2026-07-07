@@ -1886,6 +1886,17 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             If True, remove components with no incoming or outgoing influence.
         node_style: Literal["count", "stability"] or Callable or bool or None
             Node styling strategy.
+            If assigned to `"count"`, nodes are styled according to
+            `function_count`, the number of distinct Boolean rule structures
+            observed for the component across the ensemble. Lower values
+            indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to
+            `function_stability`, the frequency of the most common Boolean rule
+            structure for the component. Higher values indicate more stable
+            inferred functions.
+            If assigned to a callable, the callable receives node attributes and
+            must return graphviz node attributes.
+            If assigned to False or None, no additional node styling is applied.
         min_ratio: float (default: 0.0)
             Minimum edge occurrence ratio required for an influence to be
             displayed.
@@ -2004,10 +2015,14 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             If True, remove components with no incoming or outgoing influence.
         node_style: Literal["count", "stability"] or Callable or bool or None
             Node styling strategy.
-            If assigned to `"count"`, nodes are styled according to the number of
-            distinct rule structures observed for the component.
-            If assigned to `"stability"`, nodes are styled according to the
-            frequency of the most common rule structure.
+            If assigned to `"count"`, nodes are styled according to
+            `function_count`, the number of distinct Boolean rule structures
+            observed for the component across the ensemble. Lower values
+            indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to
+            `function_stability`, the frequency of the most common Boolean rule
+            structure for the component. Higher values indicate more stable
+            inferred functions.
             If assigned to a callable, the callable receives the node attributes
             and must return a mapping of pydot node attributes.
             If assigned to False or None, no additional node styling is applied.
@@ -2134,6 +2149,17 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             If True, remove components with no incoming or outgoing influence.
         node_style: Literal["count", "stability"] or Callable or bool or None
             Node styling strategy.
+            If assigned to `"count"`, nodes are styled according to
+            `function_count`, the number of distinct Boolean rule structures
+            observed for the component across the ensemble. Lower values
+            indicate more consistent inferred functions.
+            If assigned to `"stability"`, nodes are styled according to
+            `function_stability`, the frequency of the most common Boolean rule
+            structure for the component. Higher values indicate more stable
+            inferred functions.
+            If assigned to a callable, the callable receives node attributes and
+            must return pydot node attributes.
+            If assigned to False or None, no additional node styling is applied.
         min_ratio: float (default: 0.0)
             Minimum edge occurrence ratio required for an influence to be
             displayed.
