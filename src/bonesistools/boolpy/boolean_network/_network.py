@@ -32,7 +32,7 @@ from boolean.boolean import (
 )
 
 from ..._compat import Literal
-from ..._validation import _as_non_negative_integer, _as_probability
+from ..._validation import _as_non_negative_integer
 from ..boolean_algebra import (
     BooleanRule,
     ConfigurationLike,
@@ -44,13 +44,14 @@ from ..boolean_algebra import (
     is_hypercube_like,
     rule_to_string,
 )
-from ..influence_graph._influence_graph import InfluenceGraph
-from ..plotting import (
-    count_node_style,
-    ratio_edge_style,
-    stability_node_style,
+from ..influence_graph._influence_graph import (
+    AggregatedEdgeStyle,
+    AggregatedInfluenceGraph,
+    AggregatedNodeStyle,
+    CollapseMode,
+    InfluenceGraph,
 )
-from ..plotting._graphviz import _networkx_to_graphviz
+from ..plotting import frequency_edge_style
 from ..plotting._svg import SvgLength, scale_svg
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
@@ -96,10 +97,10 @@ class BooleanNetwork(Dict[str, Expression]):
     rules: Mapping[str, BooleanRule] (optional, default: None)
         Mapping associating component names to Boolean rules.
     ba: BooleanAlgebra (optional, default: None)
-        Boolean algebra used to parse and store Boolean expressions. If None,
+        Boolean algebra used to parse and store Boolean expressions. If `None`,
         a new BooleanAlgebra instance is created.
     check: bool (default: True)
-        If True, validate that all symbols referenced by rules are defined as
+        If `True`, validate that all symbols referenced by rules are defined as
         network components.
 
     Raises
@@ -140,7 +141,7 @@ class BooleanNetwork(Dict[str, Expression]):
             Boolean algebra used to parse and store Boolean expressions. If
             None, a new BooleanAlgebra instance is created.
         check: bool (default: True)
-            If True, validate that all symbols referenced by rules are defined
+            If `True`, validate that all symbols referenced by rules are defined
             as network components.
 
         Raises
@@ -325,7 +326,7 @@ class BooleanNetwork(Dict[str, Expression]):
             Boolean algebra used to parse and store Boolean expressions. If
             None, a new BooleanAlgebra instance is created.
         check: bool (default: True)
-            If True, validate that all symbols referenced by rules are defined
+            If `True`, validate that all symbols referenced by rules are defined
             as network components.
 
         Returns
@@ -1048,7 +1049,7 @@ class BooleanNetwork(Dict[str, Expression]):
     def to_pydot(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ) -> "Dot":
         """
@@ -1070,9 +1071,11 @@ class BooleanNetwork(Dict[str, Expression]):
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes. The callable receives
-            edge attribute dictionaries and must return a mapping of pydot edge
-            attributes.
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
+            pydot edge attributes.
         **kwargs: Any
             Keyword arguments passed to the resulting pydot graph using
             `dot.set(key, value)`.
@@ -1090,7 +1093,7 @@ class BooleanNetwork(Dict[str, Expression]):
     def show(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
         **kwargs: Any,
@@ -1104,14 +1107,18 @@ class BooleanNetwork(Dict[str, Expression]):
         Examples
         --------
         >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
-        >>> bn.show(width="700px")  # doctest: +SKIP
+        >>> bn.show(width="700px")
 
         Parameters
         ----------
         program: str (default: "dot")
             Graphviz layout program used for rendering.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes before rendering.
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
+            pydot edge attributes.
         width: str or int or float, optional
             Display width assigned to the rendered SVG root. Strings can include
             CSS units, for example `"700px"` or `"80%"`.
@@ -1160,7 +1167,7 @@ class BooleanNetwork(Dict[str, Expression]):
     def to_graphviz(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ):
         """
@@ -1176,7 +1183,11 @@ class BooleanNetwork(Dict[str, Expression]):
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting graph.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes before conversion.
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
+            graphviz edge attributes.
         **kwargs: Any
             Graph attributes assigned to the resulting graphviz object.
 
@@ -1214,7 +1225,7 @@ class BooleanNetwork(Dict[str, Expression]):
         Parameters
         ----------
         file: str or Path (optional, default: None)
-            Output file path. If None, return the `.bnet` content as a string.
+            Output file path. If `None`, return the `.bnet` content as a string.
 
         Returns
         -------
@@ -1574,7 +1585,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         del self._networks[index]
 
-    def to_networkx(self, remove_isolated_nodes: bool = False) -> nx.MultiDiGraph[Any]:
+    def to_networkx(self, drop_isolates: bool = False) -> nx.MultiDiGraph[Any]:
         """
         Convert the Boolean network ensemble into an aggregated signed influence graph.
 
@@ -1592,13 +1603,13 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         >>> graph = ensemble.to_networkx()
         >>> graph["B"]["A"][0]["count"]
         2
-        >>> graph["B"]["A"][0]["ratio"]
+        >>> graph["B"]["A"][0]["frequency"]
         1.0
 
         Parameters
         ----------
-        remove_isolated_nodes: bool (default: False)
-            If True, remove components with no incoming or outgoing influence.
+        drop_isolates: bool (default: False)
+            If `True`, remove components with no incoming or outgoing influence.
 
         Returns
         -------
@@ -1644,10 +1655,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
                         target,
                         sign=sign,
                         count=count,
-                        ratio=count / len(self),
+                        frequency=count / len(self),
                     )
 
-        if remove_isolated_nodes:
+        if drop_isolates:
             isolated = list(nx.isolates(graph))
             graph.remove_nodes_from(isolated)
 
@@ -1854,331 +1865,142 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         return influences
 
-    def to_graphviz(
-        self,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            Literal["count", "stability"],
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        min_ratio: float = 0.0,
-        show_edge_labels: bool = True,
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
-        program: str = "dot",
-        **kwargs: Any,
-    ):
+    def to_graphviz(self, *args: Any, **kwargs: Any):
         """
-        Convert the Boolean network ensemble to a native graphviz Digraph.
+        Direct ensemble Graphviz rendering is no longer supported.
 
-        The resulting graph represents signed influences aggregated across the
-        ensemble. This method mirrors the styling options of `to_pydot()` while
-        using the `graphviz` Python package directly.
-
-        Parameters
-        ----------
-        remove_isolated_nodes: bool (default: False)
-            If True, remove components with no incoming or outgoing influence.
-        node_style: Literal["count", "stability"] or Callable or bool or None
-            Node styling strategy.
-            If assigned to `"count"`, nodes are styled according to
-            `function_count`, the number of distinct Boolean rule structures
-            observed for the component across the ensemble. Lower values
-            indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to
-            `function_stability`, the frequency of the most common Boolean rule
-            structure for the component. Higher values indicate more stable
-            inferred functions.
-            If assigned to a callable, the callable receives node attributes and
-            must return graphviz node attributes.
-            If assigned to False or None, no additional node styling is applied.
-        min_ratio: float (default: 0.0)
-            Minimum edge occurrence ratio required for an influence to be
-            displayed.
-        show_edge_labels: bool (default: True)
-            If True, display edge occurrence counts as edge labels.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to their occurrence ratio.
-            If True, use `ratio_edge_style`.
-        program: str (default: "dot")
-            Graphviz layout program assigned to the resulting graph.
-        **kwargs: Any
-            Graph attributes assigned to the resulting graphviz object.
-
-        Returns
-        -------
-        graphviz.Digraph
-            Aggregated signed influence graph as a native graphviz object.
-
-        Raises
-        ------
-        ImportError
-            If the `graphviz` Python package is not installed.
-        ValueError
-            If `min_ratio` is outside [0, 1].
+        Use `AggregatedInfluenceGraph.from_boolean_networks(ensemble)` and call
+        `to_graphviz(...)` on the resulting aggregated influence graph.
         """
 
-        graph = self.to_networkx(remove_isolated_nodes=False)
+        raise NotImplementedError(
+            "BooleanNetworkEnsemble.to_graphviz() no longer supports direct "
+            "ensemble rendering. Use "
+            "AggregatedInfluenceGraph.from_boolean_networks(ensemble)."
+            "to_graphviz(...) instead."
+        )
 
-        min_ratio = _as_probability(min_ratio, "min_ratio")
-
-        edges_to_remove = [
-            (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio
-        ]
-
-        graph.remove_edges_from(edges_to_remove)
-
-        if remove_isolated_nodes:
-            isolated = list(nx.isolates(graph))
-            graph.remove_nodes_from(isolated)
-
-        if edge_style is True:
-            edge_style = ratio_edge_style
-
-        node_style_callable = node_style if callable(node_style) else None
-        edge_style_callable = edge_style if callable(edge_style) else None
-
-        if node_style == "count":
-            node_style_callable = count_node_style
-
-        elif node_style == "stability":
-            node_style_callable = stability_node_style
-
-        for _, data in graph.nodes(data=True):
-            if node_style_callable is not None:
-                data.update(node_style_callable(data))
-
-        for _, _, data in graph.edges(data=True):
-            sign = data["sign"]
-            count = data["count"]
-            ratio = data["ratio"]
-
-            data.update(
-                color="green4" if sign is True else "red2",
-                arrowhead="normal" if sign is True else "tee",
-                penwidth="2",
-            )
-
-            if show_edge_labels:
-                data["label"] = str(count)
-
-            if edge_style_callable is not None:
-                data.update(edge_style_callable(ratio))
-
-        return _networkx_to_graphviz(graph, program=program, **kwargs)
-
-    def to_pydot(
-        self,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            Literal["count", "stability"],
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        min_ratio: float = 0.0,
-        show_edge_labels: bool = True,
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
-        program: str = "dot",
-        **kwargs: Any,
-    ) -> "Dot":
+    def to_pydot(self, *args: Any, **kwargs: Any) -> "Dot":
         """
-        Convert the Boolean network ensemble into an aggregated pydot graph.
+        Direct ensemble pydot rendering is no longer supported.
 
-        The resulting graph represents signed influences aggregated across the
-        ensemble. Edge occurrence counts correspond to the number of Boolean
-        networks in which a signed influence is observed. Node attributes include
-        both the number of distinct rule structures and the stability of the most
-        frequent rule structure.
-
-        Examples
-        --------
-        >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
-        ... )
-        >>> dot = ensemble.to_pydot(rankdir="LR")
-        >>> dot.get_rankdir()
-        'LR'
-
-        Parameters
-        ----------
-        remove_isolated_nodes: bool (default: False)
-            If True, remove components with no incoming or outgoing influence.
-        node_style: Literal["count", "stability"] or Callable or bool or None
-            Node styling strategy.
-            If assigned to `"count"`, nodes are styled according to
-            `function_count`, the number of distinct Boolean rule structures
-            observed for the component across the ensemble. Lower values
-            indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to
-            `function_stability`, the frequency of the most common Boolean rule
-            structure for the component. Higher values indicate more stable
-            inferred functions.
-            If assigned to a callable, the callable receives the node attributes
-            and must return a mapping of pydot node attributes.
-            If assigned to False or None, no additional node styling is applied.
-        show_edge_labels: bool (default: True)
-            If True, display edge occurrence counts as edge labels.
-        min_ratio: float (default: 0.0)
-            Minimum edge occurrence ratio required for an influence to be displayed.
-            Edges with occurrence ratios strictly smaller than `min_ratio` are removed
-            from the aggregated graph before rendering.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to their occurrence ratio in
-            the ensemble. The callable receives a ratio between 0 and 1 and must
-            return a mapping of pydot edge attributes.
-            If assigned to True, use `ratio_edge_style`.
-            If assigned to False or None, no additional edge styling is applied.
-        program: str (default: "dot")
-            Graphviz layout program assigned to the resulting pydot graph.
-        **kwargs: Any
-            Keyword arguments passed to the resulting pydot graph using
-            `dot.set(key, value)`.
-
-        Returns
-        -------
-        Dot
-            Aggregated signed influence graph as a pydot object.
+        Use `AggregatedInfluenceGraph.from_boolean_networks(ensemble)` and call
+        `to_pydot(...)` on the resulting aggregated influence graph.
         """
 
-        graph = self.to_networkx(remove_isolated_nodes=False)
-
-        min_ratio = _as_probability(min_ratio, "min_ratio")
-
-        edges_to_remove = [
-            (u, v) for u, v, data in graph.edges(data=True) if data["ratio"] < min_ratio
-        ]
-
-        graph.remove_edges_from(edges_to_remove)
-
-        if remove_isolated_nodes:
-
-            isolated = list(nx.isolates(graph))
-            graph.remove_nodes_from(isolated)
-
-        if edge_style is True:
-            edge_style = ratio_edge_style
-
-        node_style_callable = node_style if callable(node_style) else None
-        edge_style_callable = edge_style if callable(edge_style) else None
-
-        if node_style == "count":
-            node_style_callable = count_node_style
-
-        elif node_style == "stability":
-            node_style_callable = stability_node_style
-
-        for _, data in graph.nodes(data=True):
-
-            if node_style_callable is not None:
-                data.update(node_style_callable(data))
-
-        for _, _, data in graph.edges(data=True):
-            sign = data["sign"]
-            count = data["count"]
-            ratio = data["ratio"]
-
-            data.update(
-                color="green4" if sign is True else "red2",
-                arrowhead="normal" if sign is True else "tee",
-                penwidth="2",
-            )
-
-            if show_edge_labels:
-                data["label"] = str(count)
-
-            if edge_style_callable is not None:
-                data.update(edge_style_callable(ratio))
-
-        dot = nx.drawing.nx_pydot.to_pydot(graph)
-
-        dot.set_prog(program)
-
-        for key, value in kwargs.items():
-            dot.set(key, value)
-
-        return dot
+        raise NotImplementedError(
+            "BooleanNetworkEnsemble.to_pydot() no longer supports direct "
+            "ensemble rendering. Use "
+            "AggregatedInfluenceGraph.from_boolean_networks(ensemble)."
+            "to_pydot(...) instead."
+        )
 
     def show(
         self,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            Literal["count", "stability"],
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        min_ratio: float = 0.0,
-        show_edge_labels: bool = True,
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
+        collapse: Optional[CollapseMode] = None,
+        *,
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        preserve_feedback: bool = True,
+        include_selfloops: bool = True,
+        min_frequency: float = 0.0,
+        drop_isolates: bool = False,
+        graph_attr: Optional[Mapping[str, Any]] = None,
+        node_attr: Optional[Mapping[str, Any]] = None,
+        node_style: AggregatedNodeStyle = "stability",
+        edge_label: Optional[str] = "count",
+        edge_attr: Optional[Mapping[str, Any]] = None,
+        edge_style: AggregatedEdgeStyle = frequency_edge_style,
         program: str = "dot",
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
-        **kwargs: Any,
     ) -> None:
         """
-        Display the Boolean network ensemble in a Jupyter/IPython environment.
+        Display the Boolean network ensemble as an aggregated influence graph.
 
-        The aggregated signed influence graph induced by the ensemble is
-        rendered through Graphviz using the `to_pydot()` method and displayed as
-        an SVG image.
+        This is a convenience wrapper around
+        `AggregatedInfluenceGraph.from_boolean_networks(self).show(...)`, with
+        `node_style="stability"` by default.
 
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
         ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
         ... )
-        >>> ensemble.show(node_style="stability", width="900px")  # doctest: +SKIP
+        >>> ensemble.show(width="900px")
 
         Parameters
         ----------
-        remove_isolated_nodes: bool (default: False)
-            If True, remove components with no incoming or outgoing influence.
-        node_style: Literal["count", "stability"] or Callable or bool or None
+        collapse: {None, "family", "feedback", "both"} (default: None)
+            Graph reduction applied before rendering. If `None`, render the
+            exact aggregated graph. If `"family"`, collapse structurally
+            equivalent nodes into families. If `"feedback"`, render the
+            feedback-induced subgraph. If `"both"`, render the feedback-induced
+            subgraph with structural families collapsed.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies in
+            family-based collapse modes, where frequency is `count / total`
+            and ranges from 0 to 1. If `None`, family collapse uses signed
+            structure only, independently of frequencies.
+        preserve_feedback: bool (default: True)
+            Preserve feedback nodes during family collapse.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
+        min_frequency: float (default: 0.0)
+            Minimum edge occurrence frequency required for display.
+        drop_isolates: bool (default: False)
+            Drop isolated nodes after filtering.
+        graph_attr: Mapping[str, Any], optional
+            Global graph attributes.
+        node_attr: Mapping[str, Any], optional
+            Global node attributes applied unless overridden on individual
+            nodes.
+        node_style: {"count", "stability"} or callable or None
             Node styling strategy.
-            If assigned to `"count"`, nodes are styled according to
-            `function_count`, the number of distinct Boolean rule structures
-            observed for the component across the ensemble. Lower values
-            indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to
-            `function_stability`, the frequency of the most common Boolean rule
-            structure for the component. Higher values indicate more stable
-            inferred functions.
-            If assigned to a callable, the callable receives node attributes and
-            must return pydot node attributes.
-            If assigned to False or None, no additional node styling is applied.
-        min_ratio: float (default: 0.0)
-            Minimum edge occurrence ratio required for an influence to be
-            displayed.
-        show_edge_labels: bool (default: True)
-            If True, display edge occurrence counts as edge labels.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to their occurrence ratio.
-            If True, use `ratio_edge_style`.
+
+            The `"count"` strategy styles nodes according to their
+            `function_count` attribute, i.e. the number of distinct Boolean
+            rule structures observed for the component across the ensemble.
+            Lower values indicate more consistent inferred functions.
+
+            The `"stability"` strategy styles nodes according to their
+            `function_stability` attribute, i.e. the frequency of the most
+            common Boolean rule structure for the component. Higher values
+            indicate more stable inferred functions.
+
+            A callable defines a custom node style. Argument names are resolved
+            from node attributes and the callable must return pydot node
+            attributes.
+
+            If `None`, no additional node styling is applied.
+        edge_label: str or None (default: "count")
+            Edge attribute displayed as label. If `None`, no edge label is
+            displayed. `"count"` displays the occurrence count on exact
+            aggregated graphs; on family-collapsed graphs, it displays
+            `frequency * total` because collapsed edges no longer store exact
+            counts. `"frequency"` displays the occurrence frequency
+            `count / total`, or the average edge frequency after family
+            collapse. Any other string is interpreted as an edge attribute
+            name.
+        edge_attr: Mapping[str, Any], optional
+            Global edge attributes applied unless overridden on individual
+            edges.
+        edge_style: callable or None (default: frequency_edge_style)
+            Edge styling strategy.
+
+            By default, `frequency_edge_style` styles edges according to their
+            `frequency` attribute, i.e. `count / total`.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `frequency`, `count` and `sign`, and
+            the callable must return pydot edge attributes.
+
+            If `None`, no frequency-based edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program used for rendering.
         width: str or int or float, optional
-            Display width assigned to the rendered SVG root. Strings can include
-            CSS units, for example `"900px"` or `"80%"`.
+            Display width assigned to the rendered SVG root.
         height: str or int or float, optional
-            Display height assigned to the rendered SVG root. Strings can
-            include CSS units.
-        **kwargs: Any
-            Keyword arguments passed to the underlying pydot graph through
-            `dot.set(key, value)`.
+            Display height assigned to the rendered SVG root.
 
         Returns
         -------
@@ -2187,39 +2009,28 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Raises
         ------
-        RuntimeError
-            If IPython is not available.
         ValueError
-            If `min_ratio` is outside [0, 1].
-
-        Notes
-        -----
-        `width` and `height` only affect notebook display by rewriting the root
-        SVG attributes after Graphviz rendering. They do not change the graph
-        layout computed by Graphviz.
+            If `collapse` is invalid or `min_frequency` is outside [0, 1].
         """
 
-        try:
-            from IPython.display import SVG, display
-
-        except ImportError:
-            raise RuntimeError("show() requires an IPython/Jupyter environment.")
-
-        dot = cast(
-            Any,
-            self.to_pydot(
-                remove_isolated_nodes=remove_isolated_nodes,
-                node_style=node_style,
-                min_ratio=min_ratio,
-                show_edge_labels=show_edge_labels,
-                edge_style=edge_style,
-                program=program,
-                **kwargs,
-            ),
+        graph = AggregatedInfluenceGraph.from_boolean_networks(self)
+        graph.show(
+            collapse=collapse,
+            bins=bins,
+            preserve_feedback=preserve_feedback,
+            include_selfloops=include_selfloops,
+            min_frequency=min_frequency,
+            drop_isolates=drop_isolates,
+            node_style=node_style,
+            edge_label=edge_label,
+            edge_style=edge_style,
+            program=program,
+            graph_attr=graph_attr,
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+            width=width,
+            height=height,
         )
-        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
-
-        display(SVG(svg))
 
     def _check_network(self, bn: BooleanNetworkLike) -> None:
         """

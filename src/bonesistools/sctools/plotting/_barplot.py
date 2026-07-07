@@ -159,9 +159,9 @@ def composition(
     groupby: str
         Observation column defining bars.
     obs_order: sequence, optional
-        Segment order. If None, categorical order or observed order is used.
+        Segment order. If `None`, categorical order or observed order is used.
     group_order: sequence, optional
-        Bar order. If None, categorical order or observed order is used.
+        Bar order. If `None`, categorical order or observed order is used.
     normalize: bool (default: True)
         Plot proportions within each group instead of raw counts.
     percent: bool (default: True)
@@ -171,7 +171,7 @@ def composition(
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or mapping (default: True)
-        Legend configuration. False disables the legend. True draws the legend
+        Legend configuration. `False` disables the legend. `True` draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
     orientation: {"vertical", "horizontal"} (default: "vertical")
@@ -179,10 +179,10 @@ def composition(
     width: float (default: 0.8)
         Bar width.
     colors: colormap name, sequence, colormap or mapping, optional
-        Segment colors. If None, `scdata.uns["<obs>_color"]`,
+        Segment colors. If `None`, `scdata.uns["<obs>_color"]`,
         `scdata.uns["<obs>_colors"]` or a qualitative palette is used.
     group_colors: mapping, optional
-        Colors applied to group tick labels. If None,
+        Colors applied to group tick labels. If `None`,
         `scdata.uns["<groupby>_color"]` or `scdata.uns["<groupby>_colors"]` is
         used when available.
     xlabel: str or mapping, optional

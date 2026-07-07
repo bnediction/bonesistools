@@ -34,7 +34,7 @@ def set_default_params(tex: bool = True):
     Parameters
     ----------
     tex: bool (default: True)
-        If True, enable LaTeX rendering for text. Set to False in
+        If `True`, enable LaTeX rendering for text. Set to `False` in
         environments where LaTeX is not installed.
     """
 

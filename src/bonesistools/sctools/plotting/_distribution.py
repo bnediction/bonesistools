@@ -310,7 +310,7 @@ def distribution(
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or mapping (default: True)
-        Legend configuration. False disables the legend. True draws the legend
+        Legend configuration. `False` disables the legend. `True` draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
     widths: float (default: 0.5)
@@ -326,17 +326,17 @@ def distribution(
         Violin body opacity. When points are shown, also used as the default
         point opacity. Explicit `points={"alpha": ...}` values take precedence.
     points: bool or mapping, optional
-        If None, draw points only when boxplot fliers are hidden. If True, draw
-        points with default scatter parameters. If False, do not draw points. If
+        If `None`, draw points only when boxplot fliers are hidden. If `True`, draw
+        points with default scatter parameters. If `False`, do not draw points. If
         a mapping is provided, it is forwarded as keyword arguments to
         `Axes.scatter`. Use `points={"colors": ...}` to specify point colors.
     median: bool or mapping (default: True)
-        Median line configuration. False disables the median line. True draws
+        Median line configuration. `False` disables the median line. `True` draws
         it with default parameters. For `kind="box"`, a mapping is forwarded to
         `medianprops`. For `kind="violin"`, it is applied to the `cmedians`
         artist.
     mean: bool or mapping (default: False)
-        Mean line configuration. False disables the mean line. True draws it
+        Mean line configuration. `False` disables the mean line. `True` draws it
         with default parameters. For `kind="box"`, a mapping is forwarded to
         `meanprops`. For `kind="violin"`, it is applied to the `cmeans` artist.
     figwidth: float, optional

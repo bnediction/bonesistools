@@ -160,13 +160,13 @@ def density(
     colors: Colors (optional, default: None)
         Colors used for density curves.
     show_global: bool (default: True)
-        If True, draw the density function using all observations.
+        If `True`, draw the density function using all observations.
     clip_outliers: bool (default: False)
-        If True, clip density between the minimum value and the quantile at 99%.
+        If `True`, clip density between the minimum value and the quantile at 99%.
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or mapping (default: True)
-        Legend configuration. False disables the legend. True draws the legend
+        Legend configuration. `False` disables the legend. `True` draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
     xlabel: str or mapping, optional
@@ -380,7 +380,7 @@ def cdf(
     colors: Colors (optional, default: None)
         Colors used for cumulative density curves.
     legend: bool or mapping (default: True)
-        Legend configuration. False disables the legend. True draws the legend
+        Legend configuration. `False` disables the legend. `True` draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
     xlabel: str or mapping, optional

@@ -47,7 +47,7 @@ def require_dependency(
     Parameters
     ----------
     function: Callable, optional
-        Function to decorate. If None, return a decorator.
+        Function to decorate. If `None`, return a decorator.
     module: str
         Python module imported to check dependency availability.
     package: str

@@ -74,11 +74,11 @@ def interaction_scores_from_walks(
     graph: nx.Graph
         Directed signed graph.
     genes: Iterable[str], optional
-        Genes used as sources and targets. If None, use all graph nodes.
+        Genes used as sources and targets. If `None`, use all graph nodes.
     max_depth: int (default: 3)
         Maximum number of traversed edges.
     weights: Sequence[float], optional
-        Walk weights indexed by path length minus one. If None, use
+        Walk weights indexed by path length minus one. If `None`, use
         `1 / path_length**2`.
 
     Returns
@@ -187,13 +187,13 @@ def infer_signed_interactions(
     scores: Mapping[str, Mapping[str, InteractionScore]]
         Nested interaction scores.
     genes: Iterable[str], optional
-        Genes to compare. If None, use keys from `scores`.
+        Genes to compare. If `None`, use keys from `scores`.
     minimum_path_number: int (default: 1)
         Minimum number of contributing walks required for an interaction.
     threshold: float (default: 0.75)
         Minimum absolute normalized score.
     allow_bidirectional: bool (default: False)
-        If True, allow both directions of a gene pair to be retained.
+        If `True`, allow both directions of a gene pair to be retained.
 
     Returns
     -------
@@ -265,18 +265,18 @@ def infer_signed_interactions_from_walks(
     graph: nx.Graph
         Directed signed graph.
     genes: Iterable[str], optional
-        Genes used as sources and targets. If None, use all graph nodes.
+        Genes used as sources and targets. If `None`, use all graph nodes.
     max_depth: int (default: 3)
         Maximum number of traversed edges.
     weights: Sequence[float], optional
-        Walk weights indexed by path length minus one. If None, use
+        Walk weights indexed by path length minus one. If `None`, use
         `1 / path_length**2`.
     minimum_path_number: int (default: 1)
         Minimum number of contributing walks required for an interaction.
     threshold: float (default: 0.75)
         Minimum absolute normalized score.
     allow_bidirectional: bool (default: False)
-        If True, allow both directions of a gene pair to be retained.
+        If `True`, allow both directions of a gene pair to be retained.
 
     Returns
     -------

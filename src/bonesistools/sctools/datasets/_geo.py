@@ -73,7 +73,7 @@ def from_geo(
     accession: str
         GEO accession, such as `"GSM4138110"`.
     cache_dir: path-like, optional
-        Directory used to cache downloaded files. If None, use
+        Directory used to cache downloaded files. If `None`, use
         `~/.cache/bonesistools/geo`.
     quiet: bool (default: False)
         Whether to suppress download progress messages.

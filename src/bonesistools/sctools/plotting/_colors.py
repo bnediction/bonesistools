@@ -60,7 +60,7 @@ def rgba(color: Union[str, RGBLike], alpha: Optional[float] = None) -> List[floa
         RGB sequences outside that range are interpreted as 0-255 channels and
         converted with `rgb`. Strings are interpreted by Matplotlib.
     alpha: float, optional
-        Alpha channel in the 0-1 range. If None, use the input color alpha or
+        Alpha channel in the 0-1 range. If `None`, use the input color alpha or
         1.0 for RGB sequences.
 
     Returns

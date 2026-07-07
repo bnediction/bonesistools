@@ -38,7 +38,7 @@ def anndata_to_dataframe(
     layer: str, optional
         Layer to use instead of `adata.X`.
     is_log: bool (default: False)
-        If True, back-transform log1p values with `expm1`.
+        If `True`, back-transform log1p values with `expm1`.
 
     Returns
     -------

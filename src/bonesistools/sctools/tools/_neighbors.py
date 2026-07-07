@@ -151,7 +151,7 @@ def neighbors(
     representation: str, optional (default: 'X_pca')
         Representation key in `scdata.obsm`.
     n_pcs: int, optional
-        Number of representation dimensions to use. If None, use all
+        Number of representation dimensions to use. If `None`, use all
         dimensions in `representation`.
     backend: {'exact', 'pynndescent'} (default: 'exact')
         Neighbor-search backend. If `"exact"`, use scikit-learn brute-force
@@ -338,7 +338,7 @@ def knn_graph(
     representation: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
-        Number of dimensions to use. If None, use all dimensions.
+        Number of dimensions to use. If `None`, use all dimensions.
     n_neighbors: int
         Number of nearest neighbors.
     metric: Metric (default: 'euclidean')
@@ -1143,7 +1143,7 @@ class KNNSC:
         representation: str, optional (default: "X_pca")
             Representation key in `adata.obsm`.
         n_components: int, optional
-            Number of dimensions to use. If None, use all dimensions.
+            Number of dimensions to use. If `None`, use all dimensions.
         n_neighbors: int
             Number of nearest neighbors.
         metric: Metric (default: 'euclidean')
@@ -1383,7 +1383,7 @@ class KNNSC:
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
         key: str, optional (default: 'knnsc')
-            Pandas Series name. If None, leave the returned Series unnamed.
+            Pandas Series name. If `None`, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -1478,7 +1478,7 @@ class KNNSC:
             If `subcluster_size` is greater than the cluster size, the corresponding
             subcluster contains the full cluster.
         key: str, optional (default: 'knnsc')
-            Pandas Series name. If None, leave the returned Series unnamed.
+            Pandas Series name. If `None`, leave the returned Series unnamed.
         clusters: Sequence[str] (optional, default: None)
             List of clusters for which cell subpopulations are computed.
 
@@ -1937,7 +1937,7 @@ def shared_neighbors(
         Value can be relative (float between 0 and 1) or absolute
         (integer between 1 and k).
     normalize_connectivities: bool (default: True)
-        If False, connectivities store the absolute number of shared neighbors.
+        If `False`, connectivities store the absolute number of shared neighbors.
         Otherwise, connectivities are normalized.
     metric: Metric (default: 'euclidean')
         Metric used when calculating pairwise distances between observations.

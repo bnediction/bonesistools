@@ -57,7 +57,7 @@ def dorothea(
         non-human networks are translated from human interactions with the
         bonesistools HCOP translator using decoupler-compatible expansion.
     levels: list of str, optional
-        DoRothEA confidence levels to keep. If None, use `["A", "B", "C"]`.
+        DoRothEA confidence levels to keep. If `None`, use `["A", "B", "C"]`.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
     gene_identifier_type: OutputIdentifierType (default: "official_name")
@@ -73,11 +73,11 @@ def dorothea(
         file. `"bundled"` uses the HCOP snapshots distributed with
         bonesistools. Paths resolve to custom HCOP-like files.
     compatibility: bool (default: False)
-        If True, reproduce decoupler's source-target deduplication after
-        orthology translation. If False, sign-conflicting interactions are
+        If `True`, reproduce decoupler's source-target deduplication after
+        orthology translation. If `False`, sign-conflicting interactions are
         preserved as distinct signed influences.
     flavor: {"modern", "legacy"}, optional
-        DoRothEA construction flavor. If None, use `"modern"`.
+        DoRothEA construction flavor. If `None`, use `"modern"`.
         If `"modern"`, reproduce the current `decoupler.op.dorothea`
         construction.
         If `"legacy"`, reproduce the historical `decoupler.get_dorothea`

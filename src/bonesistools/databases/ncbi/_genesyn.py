@@ -313,7 +313,7 @@ class GeneSynonyms:
         If a path-like object or path string is provided, load that gene_info
         file directly.
     show_warnings: bool (default: False)
-        If True, warn when a requested gene identifier has no correspondence.
+        If `True`, warn when a requested gene identifier has no correspondence.
 
     Attributes
     ----------
@@ -513,7 +513,7 @@ class GeneSynonyms:
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         keep_if_missing: bool (default: True)
-            If True, keep the original gene identifier when no correspondence
+            If `True`, keep the original gene identifier when no correspondence
             is found.
 
         Returns
@@ -576,7 +576,7 @@ class GeneSynonyms:
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         keep_if_missing: bool (default: True)
-            If True, keep the original gene identifier when no correspondence
+            If `True`, keep the original gene identifier when no correspondence
             is found.
 
         Returns
@@ -855,7 +855,7 @@ class GeneSynonyms:
         genes: Sequence[str]
             Gene names to standardize.
         keep_if_missing: bool (default: True)
-            If True, keep the original gene identifier when no correspondence
+            If `True`, keep the original gene identifier when no correspondence
             is found.
 
         Returns
@@ -883,7 +883,7 @@ class GeneSynonyms:
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
             Sequence of `(source, target, attributes)` interactions.
         keep_if_missing: bool (default: True)
-            If True, keep the original gene identifier when no correspondence
+            If `True`, keep the original gene identifier when no correspondence
             is found.
 
         Returns
@@ -999,12 +999,12 @@ class GeneSynonyms:
         Parameters
         ----------
         organism: str, optional
-            Common name of the organism to load. If None, reload the current
+            Common name of the organism to load. If `None`, reload the current
             organism.
         version: "bundled", "latest", date string, str path or PathLike, optional
-            NCBI gene_info version to load. If None, keep the current version.
+            NCBI gene_info version to load. If `None`, keep the current version.
         show_warnings: bool (default: False)
-            If True, warn when a requested gene identifier has no correspondence.
+            If `True`, warn when a requested gene identifier has no correspondence.
 
         Raises
         ------
@@ -1898,7 +1898,7 @@ def genesyn(
     version: "bundled", "latest", date string, str path or PathLike (default: "bundled")
         NCBI gene_info version to load.
     show_warnings: bool (default: False)
-        If True, warn when a requested gene identifier has no correspondence.
+        If `True`, warn when a requested gene identifier has no correspondence.
 
     Returns
     -------

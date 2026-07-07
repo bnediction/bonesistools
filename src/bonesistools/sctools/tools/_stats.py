@@ -118,12 +118,12 @@ def wilcoxon_tests(
         belonging to those background labels. To compare against an actual group
         named `"rest"`, pass `background=["rest"]`.
     expression: str, optional
-        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        Expression source. If `None` or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
     var_subset: str or collection of str, optional
         Variables to test. If a string is provided, it is interpreted as a
         boolean column in `adata.var`. If a collection is provided, it is
-        interpreted as variable names. If None, test all variables in the
+        interpreted as variable names. If `None`, test all variables in the
         selected expression matrix.
     correction: {'benjamini-hochberg', 'bonferroni'} or None
         Multiple-testing correction applied independently for each group. If
@@ -131,7 +131,7 @@ def wilcoxon_tests(
     tie_correction: bool (default: True)
         Whether to apply the rank-sum variance correction for tied values.
     max_memory: int or str, optional
-        Approximate maximum memory allocated to dense rank matrices. If None,
+        Approximate maximum memory allocated to dense rank matrices. If `None`,
         rank all variables in a single chunk. Integers are interpreted as bytes.
         Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"` are
         accepted.
@@ -234,21 +234,21 @@ def welch_tests(
         belonging to those background labels. To compare against an actual group
         named `"rest"`, pass `background=["rest"]`.
     expression: str, optional
-        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        Expression source. If `None` or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
     var_subset: str or collection of str, optional
         Variables to test. If a string is provided, it is interpreted as a
         boolean column in `adata.var`. If a collection is provided, it is
-        interpreted as variable names. If None, test all variables in the
+        interpreted as variable names. If `None`, test all variables in the
         selected expression matrix.
     correction: {'benjamini-hochberg', 'bonferroni'} or None
         Multiple-testing correction applied independently for each group. If
         None, p-values are not adjusted.
     overestimate_variance: bool (default: False)
-        If True, reproduce Scanpy's `method="t-test_overestim_var"` behavior by
+        If `True`, reproduce Scanpy's `method="t-test_overestim_var"` behavior by
         using the target group size for the background variance term.
     max_memory: int or str, optional
-        Approximate maximum memory allocated to dense working arrays. If None,
+        Approximate maximum memory allocated to dense working arrays. If `None`,
         process all variables in a single chunk. Integers are interpreted as
         bytes. Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"`
         are accepted.

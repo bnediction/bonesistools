@@ -63,7 +63,7 @@ def graph_overlay(
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
     labels: bool or mapping (default: False)
-        Label configuration. False disables graph node labels. True draws
+        Label configuration. `False` disables graph node labels. `True` draws
         labels with default Matplotlib text parameters. If a mapping is
         provided, it is forwarded as keyword arguments to `Axes.text`.
     z_offset: float (default: 0.0)
@@ -73,7 +73,7 @@ def graph_overlay(
     label_kwargs: dict, optional
         Deprecated alias for `labels`.
     ax: Axes, optional
-        Matplotlib axes containing the embedding. If None, use current axes.
+        Matplotlib axes containing the embedding. If `None`, use current axes.
     **kwargs: Any
         Keyword arguments passed to graph line drawing.
 
@@ -304,12 +304,12 @@ def trajectory(
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or mapping (default: True)
-        Legend configuration forwarded to `embedding`. False disables the
-        legend. True draws the legend using default Matplotlib parameters. If a
+        Legend configuration forwarded to `embedding`. `False` disables the
+        legend. `True` draws the legend using default Matplotlib parameters. If a
         mapping is provided, it is forwarded as keyword arguments to
         `Axes.legend`.
     labels: bool or mapping (default: False)
-        Label configuration for graph node labels. False disables labels. True
+        Label configuration for graph node labels. `False` disables labels. True
         draws labels with default Matplotlib text parameters. If a mapping is
         provided, it is forwarded as keyword arguments to `Axes.text`.
     n_components: 2 or 3 (default: 2)

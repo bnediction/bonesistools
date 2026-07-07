@@ -69,7 +69,7 @@ def regress_out(
     layer: str, optional
         Layer to use instead of `adata.X`.
     intercept: bool (default: False)
-        If True, preserve the fitted intercept after regressing out covariates.
+        If `True`, preserve the fitted intercept after regressing out covariates.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
     n_jobs: int (default: 1)

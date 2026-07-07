@@ -90,7 +90,7 @@ def convert_gene_identifiers(
         Output gene identifier type. Valid database-specific values are listed
         in `databases`.
     genesyn: GeneSynonyms, optional
-        GeneSynonyms object used to convert gene identifiers. If None, create
+        GeneSynonyms object used to convert gene identifiers. If `None`, create
         a default GeneSynonyms instance.
     copy: bool (default: False)
         Return a copy instead of modifying `scdata`.
@@ -183,7 +183,7 @@ def standardize_gene_identifiers(
         `scdata.var.index`. Deprecated values 0 and 1 are still accepted as
         aliases for `"obs"` and `"var"`.
     genesyn: GeneSynonyms, optional
-        GeneSynonyms object used to convert gene identifiers. If None, create
+        GeneSynonyms object used to convert gene identifiers. If `None`, create
         a default GeneSynonyms instance.
     copy: bool (default: False)
         Return a copy instead of modifying `scdata`.

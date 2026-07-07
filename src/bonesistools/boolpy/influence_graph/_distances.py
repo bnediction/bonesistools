@@ -29,7 +29,7 @@ def similarity(
     metric: {"jaccard", "hamming"} (default: 'jaccard')
         Similarity metric.
     domain: InfluenceGraph, optional
-        Signed-edge universe used when `metric="hamming"`. If None, use all
+        Signed-edge universe used when `metric="hamming"`. If `None`, use all
         signed directed edges between nodes in `union(V1, V2)`, including
         signed self-edges. If provided, the domain, corresponding to a reference
         graph, must be a strict signed-edge superset of both input graphs.
@@ -96,7 +96,7 @@ def distance(
     metric: {"jaccard", "hamming"} (default: 'jaccard')
         Distance metric.
     domain: InfluenceGraph, optional
-        Signed-edge universe used when `metric="hamming"`. If None, use all
+        Signed-edge universe used when `metric="hamming"`. If `None`, use all
         signed directed edges between nodes in `union(V1, V2)`, including
         signed self-edges. If provided, the domain, corresponding to a reference
         graph, must be a strict signed-edge superset of both input graphs.

@@ -10,10 +10,18 @@ class FakeGraphvizDigraph:
     def __init__(self, engine="dot"):
         self.engine = engine
         self.graph_attr = {}
+        self.node_attr = {}
+        self.edge_attr = {}
         self.nodes = []
         self.edges = []
 
-    def attr(self, **attrs):
+    def attr(self, kind=None, **attrs):
+        if kind == "node":
+            self.node_attr.update(attrs)
+            return
+        if kind == "edge":
+            self.edge_attr.update(attrs)
+            return
         self.graph_attr.update(attrs)
 
     def node(self, name, **attrs):

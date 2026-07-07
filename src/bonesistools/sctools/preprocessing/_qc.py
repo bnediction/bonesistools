@@ -83,14 +83,14 @@ def qc(
     adata: AnnData
         Unimodal annotated data matrix.
     expression: str, optional
-        Expression matrix used for quality-control metrics. If None, use
+        Expression matrix used for quality-control metrics. If `None`, use
         `adata.X`; otherwise, use `adata.layers[expression]`.
     qc_vars: str or sequence of str (default: ())
         Boolean columns in `adata.var` identifying variable groups to summarize,
         such as mitochondrial genes.
     percent_top: sequence of int, optional (default: (50, 100, 200, 500))
         Ranks at which cumulative expression among the most expressed variables
-        is reported. If None, top-rank percentages are not computed.
+        is reported. If `None`, top-rank percentages are not computed.
     log1p: bool (default: True)
         Whether to add log1p-transformed metric columns.
     backend: {"auto", "python", "numba"} (default: "auto")

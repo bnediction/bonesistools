@@ -219,7 +219,7 @@ def dea(
     method: {'welch', 'welch_overestimate', 'wilcoxon'} (default: 'welch')
         Statistical test used before log2 fold-change estimation.
     expression: str, optional
-        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        Expression source. If `None` or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
     is_log: bool (default: False)
         Whether selected expression values are already log1p-transformed. This
@@ -227,7 +227,7 @@ def dea(
     var_subset: str or collection of str, optional
         Variables to test. If a string is provided, it is interpreted as a
         boolean column in `adata.var`. If a collection is provided, it is
-        interpreted as variable names. If None, test all variables in the
+        interpreted as variable names. If `None`, test all variables in the
         selected expression matrix.
     correction: {'benjamini-hochberg', 'bonferroni'} or None
         Multiple-testing correction applied independently for each group. If
@@ -240,7 +240,7 @@ def dea(
         filtering. The callable receives the log2 fold-change vector and must
         return a boolean mask.
     max_memory: int or str, optional
-        Approximate maximum memory allocated to dense working arrays. If None,
+        Approximate maximum memory allocated to dense working arrays. If `None`,
         process all variables in a single chunk. Integers are interpreted as
         bytes. Human-readable strings such as `"512MB"`, `"2GB"` or `"1GiB"`
         are accepted.

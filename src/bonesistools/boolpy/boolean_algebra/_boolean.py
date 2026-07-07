@@ -35,8 +35,8 @@ class PartialBoolean:
     Parameters
     ----------
     value: bool, number, str or PartialBoolean
-        Partial Boolean value. Supported values are False, True, 0, 1, NaN and
-        "*".
+        Partial Boolean value. Supported values are `False`, `True`, `0`, `1`,
+        `NaN` and `"*"`.
 
     Raises
     ------

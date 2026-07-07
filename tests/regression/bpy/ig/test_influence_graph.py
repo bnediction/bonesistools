@@ -306,7 +306,7 @@ def test_scc_feedback_regulators_and_targets():
     }
     assert {
         frozenset(scc)
-        for scc in ig.strongly_connected_components(include_singleton_selfloops=False)
+        for scc in ig.strongly_connected_components(include_selfloops=False)
     } == {frozenset({"A", "B", "C"}), frozenset({"D", "E"})}
     assert ig.feedback_nodes() == {"A", "B", "C", "D", "E", "H"}
 
@@ -379,7 +379,7 @@ def test_structural_families_can_ignore_successors_and_feedback_nodes():
 
     families = ig.structural_families(
         include_successors=False,
-        exclude_feedback_nodes=True,
+        preserve_feedback=True,
     )
 
     assert set(map(frozenset, families.values())) == {frozenset({"g1", "g2"})}
@@ -617,7 +617,7 @@ def test_to_graphviz_applies_signed_edge_styles_and_custom_options(fake_graphviz
 
     graph = ig.to_graphviz(
         program="neato",
-        edge_style=lambda data: {"label": data["sign"]},
+        edge_style=lambda sign: {"label": sign},
         rankdir="LR",
     )
 
@@ -649,7 +649,7 @@ def test_to_pydot_applies_signed_edge_styles_and_custom_options():
 
     dot = ig.to_pydot(
         program="dot",
-        edge_style=lambda data: {"label": str(data["sign"])},
+        edge_style=lambda sign: {"label": str(sign)},
         rankdir="LR",
     )
 

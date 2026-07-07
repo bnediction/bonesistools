@@ -167,7 +167,7 @@ def type_checker(
     Parameters
     ----------
     function: Callable, optional
-        Function to decorate. If None, return a decorator.
+        Function to decorate. If `None`, return a decorator.
     **options: type
         Mapping from argument names to expected runtime types.
 
@@ -247,7 +247,7 @@ def anndata_checker(
     Parameters
     ----------
     function: Callable, optional
-        Function to decorate. If None, return a decorator.
+        Function to decorate. If `None`, return a decorator.
     n: int (default: 1)
         Number of arguments to test.
 
@@ -303,7 +303,7 @@ def mudata_checker(
     Parameters
     ----------
     function: Callable, optional
-        Function to decorate. If None, return a decorator.
+        Function to decorate. If `None`, return a decorator.
     n: int (default: 1)
         Number of arguments to test.
 
@@ -368,7 +368,7 @@ def anndata_or_mudata_checker(
     Parameters
     ----------
     function: Callable, optional
-        Function to decorate. If None, return a decorator.
+        Function to decorate. If `None`, return a decorator.
     n: int (default: 1)
         Number of arguments to test.
 

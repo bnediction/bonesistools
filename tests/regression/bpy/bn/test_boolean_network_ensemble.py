@@ -1,22 +1,10 @@
 #!/usr/bin/env python
 
-#!/usr/bin/env python
-
-import sys
-from types import ModuleType
 from typing import Any, cast
 
 import pytest
 
 import bonesistools as bt
-
-
-def _pydot_get(obj, method):
-    return getattr(cast(Any, obj), method)()
-
-
-def _pydot_get_string(obj, method):
-    return cast(str, _pydot_get(obj, method)).strip('"')
 
 
 @pytest.fixture
@@ -144,178 +132,96 @@ def test_boolean_network_ensemble_to_networkx(bnet_ensemble):
     assert graph.has_edge("C", "A")
 
     edge_data = list(graph.get_edge_data("B", "A").values())
-    assert any(data["sign"] is True and data["count"] == 3 for data in edge_data)
+    assert any(
+        data["sign"] is True
+        and data["count"] == 3
+        and data["frequency"] == 1
+        and "ratio" not in data
+        for data in edge_data
+    )
 
     edge_data = list(graph.get_edge_data("C", "A").values())
-    assert any(data["sign"] is True and data["count"] == 1 for data in edge_data)
-    assert any(data["sign"] is False and data["count"] == 1 for data in edge_data)
+    assert any(
+        data["sign"] is True
+        and data["count"] == 1
+        and data["frequency"] == pytest.approx(1 / 3)
+        for data in edge_data
+    )
+    assert any(
+        data["sign"] is False
+        and data["count"] == 1
+        and data["frequency"] == pytest.approx(1 / 3)
+        for data in edge_data
+    )
 
 
-def test_boolean_network_ensemble_to_networkx_remove_isolated_nodes(bnet_ensemble):
-    graph = bnet_ensemble.to_networkx(remove_isolated_nodes=True)
+def test_boolean_network_ensemble_to_networkx_drop_isolates(bnet_ensemble):
+    graph = bnet_ensemble.to_networkx(drop_isolates=True)
 
     assert set(graph.nodes) == {"A", "B", "C"}
 
 
-def test_boolean_network_ensemble_to_graphviz(bnet_ensemble, fake_graphviz):
-    graph = bnet_ensemble.to_graphviz(
-        remove_isolated_nodes=True,
-        show_edge_labels=False,
-        node_style="stability",
-        rankdir="LR",
-    )
-
-    edges = {(source, target): attrs for source, target, attrs in graph.edges}
-    nodes = {node: attrs for node, attrs in graph.nodes}
-
-    assert isinstance(graph, fake_graphviz)
-    assert graph.graph_attr["rankdir"] == "LR"
-    assert ("B", "A") in edges
-    assert ("C", "A") in edges
-    assert all("label" not in attrs for attrs in edges.values())
-    assert all("fillcolor" in attrs for attrs in nodes.values())
-
-
-def test_ensemble_to_graphviz_styles_thresholds(
+def test_boolean_network_ensemble_to_graphviz_redirects_to_aggregated_graph(
     bnet_ensemble,
-    fake_graphviz,
 ):
-    with pytest.raises(ValueError, match="invalid argument value for 'min_ratio'"):
-        bnet_ensemble.to_graphviz(min_ratio=2)
-
-    graph = bnet_ensemble.to_graphviz(
-        node_style="count",
-        edge_style=True,
-        min_ratio=0.4,
-        rankdir="LR",
-    )
-
-    assert isinstance(graph, fake_graphviz)
-    assert graph.graph_attr["rankdir"] == "LR"
-    assert all("style" in attrs for _, _, attrs in graph.edges)
-    assert all(attrs["shape"] == "oval" for _, attrs in graph.nodes)
+    with pytest.raises(NotImplementedError, match="from_boolean_networks"):
+        bnet_ensemble.to_graphviz(rankdir="LR")
 
 
-def test_boolean_network_ensemble_to_pydot(bnet_ensemble):
-    pytest.importorskip("pydot")
-
-    dot = bnet_ensemble.to_pydot(
-        remove_isolated_nodes=True,
-        show_edge_labels=False,
-        node_style="stability",
-    )
-
-    edges = {
-        (
-            _pydot_get_string(edge, "get_source"),
-            _pydot_get_string(edge, "get_destination"),
-        )
-        for edge in dot.get_edges()
-    }
-
-    assert ("B", "A") in edges
-    assert ("C", "A") in edges
-
-    for edge in dot.get_edges():
-        assert _pydot_get(edge, "get_label") is None
-
-
-def test_boolean_network_ensemble_to_pydot_styles_thresholds_and_options(bnet_ensemble):
-    pytest.importorskip("pydot")
-
-    with pytest.raises(ValueError, match="invalid argument value for 'min_ratio'"):
-        bnet_ensemble.to_pydot(min_ratio=2)
-
-    dot = bnet_ensemble.to_pydot(
-        node_style="count",
-        edge_style=True,
-        min_ratio=0.4,
-        rankdir="LR",
-    )
-
-    assert cast(Any, dot).get_rankdir() == "LR"
-    assert all(_pydot_get(edge, "get_style") is not None for edge in dot.get_edges())
-    assert all(_pydot_get(node, "get_shape") == "oval" for node in dot.get_nodes())
-
-
-def test_boolean_network_ensemble_to_pydot_with_edge_labels(bnet_ensemble):
-    pytest.importorskip("pydot")
-
-    dot = bnet_ensemble.to_pydot(show_edge_labels=True)
-
-    labels = {_pydot_get_string(edge, "get_label") for edge in dot.get_edges()}
-
-    assert "3" in labels
-    assert "1" in labels
+def test_boolean_network_ensemble_to_pydot_redirects_to_aggregated_graph(
+    bnet_ensemble,
+):
+    with pytest.raises(NotImplementedError, match="from_boolean_networks"):
+        bnet_ensemble.to_pydot(rankdir="LR")
 
 
 def test_boolean_network_ensemble_show(monkeypatch, bnet_ensemble):
     calls = {}
 
-    class FakeDot:
-        def create_svg(self):
-            return b'<svg width="100pt" height="200pt"></svg>'
+    def fake_show(self, **kwargs):
+        calls["graph"] = self
+        calls["show"] = kwargs
 
-    def fake_to_pydot(
-        self,
-        remove_isolated_nodes=False,
-        node_style=None,
-        min_ratio=0.0,
-        show_edge_labels=True,
-        edge_style=None,
-        program="dot",
-        **kwargs,
-    ):
-        calls["to_pydot"] = {
-            "remove_isolated_nodes": remove_isolated_nodes,
-            "node_style": node_style,
-            "min_ratio": min_ratio,
-            "show_edge_labels": show_edge_labels,
-            "edge_style": edge_style,
-            "program": program,
-            "kwargs": kwargs,
-        }
-        return FakeDot()
-
-    class FakeSVG:
-        def __init__(self, svg):
-            self.svg = svg
-
-    def fake_display(svg):
-        calls["display"] = svg
-
-    display_module = ModuleType("IPython.display")
-    setattr(display_module, "SVG", FakeSVG)
-    setattr(display_module, "display", fake_display)
-    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
-    monkeypatch.setattr(
-        bt.bpy.bn.BooleanNetworkEnsemble,
-        "to_pydot",
-        fake_to_pydot,
-    )
+    monkeypatch.setattr(bt.bpy.ig.AggregatedInfluenceGraph, "show", fake_show)
 
     bnet_ensemble.show(
-        remove_isolated_nodes=True,
-        node_style="count",
-        min_ratio=0.5,
-        show_edge_labels=False,
-        edge_style=False,
+        collapse="family",
+        bins=None,
+        preserve_feedback=False,
+        include_selfloops=False,
+        drop_isolates=True,
+        min_frequency=0.5,
+        edge_label="frequency",
+        edge_style=None,
         program="neato",
+        graph_attr={"rankdir": "LR"},
+        node_attr={"shape": "box"},
+        edge_attr={"fontsize": "10"},
+        width="640px",
         height="480px",
-        rankdir="LR",
     )
 
-    assert calls["to_pydot"] == {
-        "remove_isolated_nodes": True,
-        "node_style": "count",
-        "min_ratio": 0.5,
-        "show_edge_labels": False,
-        "edge_style": False,
+    graph = calls["graph"]
+    assert isinstance(graph, bt.bpy.ig.AggregatedInfluenceGraph)
+    assert graph.total == len(bnet_ensemble)
+
+    assert calls["show"] == {
+        "collapse": "family",
+        "bins": None,
+        "preserve_feedback": False,
+        "include_selfloops": False,
+        "min_frequency": 0.5,
+        "drop_isolates": True,
+        "node_style": "stability",
+        "edge_label": "frequency",
+        "edge_style": None,
         "program": "neato",
-        "kwargs": {"rankdir": "LR"},
+        "graph_attr": {"rankdir": "LR"},
+        "node_attr": {"shape": "box"},
+        "edge_attr": {"fontsize": "10"},
+        "width": "640px",
+        "height": "480px",
     }
-    assert isinstance(calls["display"], FakeSVG)
-    assert calls["display"].svg == '<svg height="480px"></svg>'
 
 
 def test_ensemble_allows_external_regulators_unchecked():

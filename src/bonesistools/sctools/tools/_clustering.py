@@ -101,7 +101,7 @@ def kmeans(
     representation: str, optional (default: 'X_pca')
         Representation key in `adata.obsm`.
     n_pcs: int, optional
-        Number of representation dimensions to use. If None, use all
+        Number of representation dimensions to use. If `None`, use all
         dimensions from `representation`.
     n_init: int (default: 10)
         Number of independent clustering initializations. The solution with

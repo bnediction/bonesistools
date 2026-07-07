@@ -111,7 +111,7 @@ class DEABinarizer:
         background: 'rest' or sequence (default: "rest")
             Background population passed to `dea`.
         expression: str, optional
-            Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`,
+            Expression source. If `None` or `"X"`, use `adata.X`. If `"raw.X"`,
             use `adata.raw.X`. Otherwise, interpret as a layer key in
             `adata.layers`.
         is_log: bool (default: False)

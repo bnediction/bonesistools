@@ -15,14 +15,14 @@ from . import _typing as typing
 from ._network import (
     BooleanNetwork,
     BooleanNetworkEnsemble,
-    ratio_edge_style,
+    frequency_edge_style,
 )
 from ._parser import read_bnet, read_bnet_directory
 
 __all__ = [
     "BooleanNetwork",
     "BooleanNetworkEnsemble",
-    "ratio_edge_style",
+    "frequency_edge_style",
     "read_bnet",
     "read_bnet_directory",
     "bn_to_pydot",

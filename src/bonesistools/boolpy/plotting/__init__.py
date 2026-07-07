@@ -12,12 +12,12 @@ from typing import List as _List
 
 from ._styles import (
     count_node_style,
-    ratio_edge_style,
+    frequency_edge_style,
     stability_node_style,
 )
 
 __all__ = [
-    "ratio_edge_style",
+    "frequency_edge_style",
     "count_node_style",
     "stability_node_style",
 ]

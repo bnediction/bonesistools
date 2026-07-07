@@ -67,7 +67,7 @@ class Orthologs:
         File paths resolve directly to user-provided HCOP tables.
     table: pandas.DataFrame, optional
         Preloaded HCOP-like table with columns `human_symbol`,
-        `target_symbol`, `support` and `evidence`. If None, the table is
+        `target_symbol`, `support` and `evidence`. If `None`, the table is
         downloaded from HCOP.
     target_organism: str, optional
         Alias for `output_organism`.
@@ -312,7 +312,7 @@ class Orthologs:
             Human gene symbol to translate. Complex names separated by `_` are
             translated subunit by subunit.
         keep_if_missing: bool (default: False)
-            If True, keep the original gene symbol when no ortholog is found.
+            If `True`, keep the original gene symbol when no ortholog is found.
 
         Returns
         -------
@@ -382,7 +382,7 @@ class Orthologs:
         genes: sequence or set of str
             Human gene symbols to translate.
         keep_if_missing: bool (default: True)
-            If True, keep original gene symbols with no ortholog.
+            If `True`, keep original gene symbols with no ortholog.
 
         Returns
         -------
@@ -419,8 +419,8 @@ class Orthologs:
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
             Sequence of `(source, target, attributes)` interactions.
         keep_if_missing: bool (default: True)
-            If True, keep original source or target symbols with no ortholog.
-            If False, interactions with unmapped endpoints are removed.
+            If `True`, keep original source or target symbols with no ortholog.
+            If `False`, interactions with unmapped endpoints are removed.
 
         Returns
         -------
@@ -499,10 +499,10 @@ class Orthologs:
         df: pandas.DataFrame
             DataFrame containing human gene symbols.
         columns: str or sequence of str, optional
-            Columns to translate. If None, translate any existing column among
+            Columns to translate. If `None`, translate any existing column among
             `source`, `target` and `genesymbol`.
         keep_if_missing: bool (default: True)
-            If True, keep original symbols with no ortholog. If False, rows
+            If `True`, keep original symbols with no ortholog. If `False`, rows
             with missing translations in selected columns are removed.
         copy: bool (default: True)
             Return a translated copy instead of modifying `df`.
@@ -578,7 +578,7 @@ class Orthologs:
         graph: networkx.Graph
             Graph whose node identifiers are human gene symbols.
         keep_if_missing: bool (default: True)
-            If True, keep original node labels with no ortholog. If False,
+            If `True`, keep original node labels with no ortholog. If `False`,
             unmapped nodes and incident edges are removed.
         copy: bool (default: True)
             Return a translated copy instead of modifying `graph`.
@@ -633,7 +633,7 @@ class Orthologs:
             Boolean network-like object whose component identifiers are human
             gene symbols.
         keep_if_missing: bool (default: True)
-            If True, keep original component names with no ortholog. If False,
+            If `True`, keep original component names with no ortholog. If `False`,
             raise an error for unmapped components.
         copy: bool (default: False)
             Return a translated copy instead of modifying `bn`.
@@ -722,16 +722,16 @@ class Orthologs:
         Parameters
         ----------
         input_organism: str, optional
-            Source organism. If None, keep the current source organism.
+            Source organism. If `None`, keep the current source organism.
             Currently only `"human"` is supported.
         output_organism: str, optional
-            Target organism. If None, keep the current target organism.
+            Target organism. If `None`, keep the current target organism.
         min_evidence: int, optional
-            Minimum HCOP support threshold. If None, keep the current threshold.
+            Minimum HCOP support threshold. If `None`, keep the current threshold.
         version: "bundled", "latest", str path or Path, optional
-            HCOP version to load. If None, keep the current version.
+            HCOP version to load. If `None`, keep the current version.
         table: pandas.DataFrame, optional
-            Preloaded HCOP-like table. If None, reload mappings from HCOP.
+            Preloaded HCOP-like table. If `None`, reload mappings from HCOP.
         target_organism: str, optional
             Alias for `output_organism`.
 

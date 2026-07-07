@@ -89,7 +89,7 @@ def mitochondrial_genes(
         Organism used to resolve gene identifiers and mitochondrial aliases.
     genesyn: GeneSynonyms, optional
         Existing gene synonym converter. If provided, `organism` is ignored.
-        If None, a converter is created for `organism`.
+        If `None`, a converter is created for `organism`.
 
     Returns
     -------
@@ -210,7 +210,7 @@ def ribosomal_genes(
         symbols.
     genesyn: GeneSynonyms, optional
         Existing gene synonym converter. If provided, `organism` is ignored.
-        If None, a converter is created for `organism`.
+        If `None`, a converter is created for `organism`.
 
     Returns
     -------

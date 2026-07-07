@@ -636,7 +636,7 @@ def test_boolean_network_show(monkeypatch):
 
     bn.show(
         program="neato",
-        edge_style=lambda data: data,
+        edge_style=lambda sign: {"label": sign},
         width=600,
         rankdir="LR",
     )

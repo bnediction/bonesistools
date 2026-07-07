@@ -33,8 +33,14 @@ from ..._validation import (
     _as_probability,
 )
 from ..._warnings import _warn_deprecated
-from ..plotting._graphviz import _networkx_to_graphviz
-from ..plotting._styles import count_node_style, ratio_edge_style, stability_node_style
+from ..plotting._graphviz import _networkx_to_graphviz, _set_pydot_defaults
+from ..plotting._styles import (
+    _evaluate_style_from_attributes,
+    _style_callable_parameters,
+    count_node_style,
+    frequency_edge_style,
+    stability_node_style,
+)
 from ..plotting._svg import SvgLength, scale_svg
 
 if TYPE_CHECKING:
@@ -46,8 +52,12 @@ CircuitSign = Literal[-1, 1]
 InfluenceSign = Literal[-1, 1, "+", "-", "positive", "negative"]
 Direction = Literal["upstream", "downstream", "both"]
 CollapseMode = Literal["family", "feedback", "both"]
-AggregatedNodeStyle = Literal["count", "stability"]
-AggregatedEdgeLabel = Literal["count", "frequency"]
+AggregatedNodeStyle = Union[
+    Literal["count", "stability"],
+    Callable[..., Mapping[str, Any]],
+    None,
+]
+AggregatedEdgeStyle = Union[Callable[..., Mapping[str, Any]], None]
 _UNSET = object()
 
 StructuralSignature = Tuple[
@@ -188,7 +198,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         key: Any = None,
         sign: Optional[InfluenceSign] = None,
         **attr: Any,
-    ) -> int:
+    ) -> None:
         """
         Add a signed influence edge between two nodes.
 
@@ -246,7 +256,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         attr["sign"] = sign
 
-        return super().add_edge(
+        super().add_edge(
             source,
             target,
             key=key,
@@ -578,7 +588,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def strongly_connected_components(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
     ) -> List[Set[str]]:
         """
         Return strongly connected components involved in feedback structures.
@@ -612,9 +622,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should be
-            included.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
 
         Returns
         -------
@@ -627,7 +636,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             if len(scc) > 1:
                 sccs.append(set(scc))
 
-            elif include_singleton_selfloops:
+            elif include_selfloops:
                 node = next(iter(scc))
                 if self.has_edge(node, node):
                     sccs.append(set(scc))
@@ -636,7 +645,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def feedback_nodes(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
     ) -> Set[str]:
         """
         Return nodes belonging to feedback-relevant strongly connected components.
@@ -647,9 +656,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should be
-            included.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
 
         Returns
         -------
@@ -660,7 +668,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         nodes = set()
 
         for scc in self.strongly_connected_components(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
         ):
             nodes.update(scc)
 
@@ -743,7 +751,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def structural_families(
         self,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = True,
+        preserve_feedback: bool = True,
         min_size: int = 2,
     ) -> Dict[StructuralSignature, Set[str]]:
         """
@@ -798,8 +806,8 @@ class InfluenceGraph(_MultiDiGraphBase):
         include_successors: bool (default: True)
             Whether signed successor signatures should also be included in the
             structural equivalence criterion.
-        exclude_feedback_nodes: bool (default: True)
-            Whether nodes participating in feedback structures should be excluded.
+        preserve_feedback: bool (default: True)
+            Do not group feedback nodes into structural families.
         min_size: int (default: 2)
             Minimum family size required to keep a structural family.
 
@@ -811,7 +819,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         signatures = {}
 
-        feedback_nodes = self.feedback_nodes() if exclude_feedback_nodes else set()
+        feedback_nodes = self.feedback_nodes() if preserve_feedback else set()
 
         for node in self.nodes():
 
@@ -861,7 +869,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def family_collapsed_graph(
         self,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = True,
+        preserve_feedback: bool = True,
         min_size: int = 2,
         sep: str = "|",
     ) -> "InfluenceGraph":
@@ -903,9 +911,8 @@ class InfluenceGraph(_MultiDiGraphBase):
         include_successors: bool (default: True)
             Whether signed successor signatures should also be included in the
             structural equivalence criterion.
-        exclude_feedback_nodes: bool (default: True)
-            Whether nodes participating in feedback structures should be excluded
-            from collapsing.
+        preserve_feedback: bool (default: True)
+            Do not collapse feedback nodes.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
@@ -919,7 +926,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         families = self.structural_families(
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
         )
 
@@ -975,7 +982,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def family_compressed_graph(
         self,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = True,
+        preserve_feedback: bool = True,
         min_size: int = 2,
         sep: str = "|",
     ) -> "InfluenceGraph":
@@ -992,7 +999,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         return self.family_collapsed_graph(
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
             sep=sep,
         )
@@ -1322,7 +1329,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         direction: {"upstream", "downstream", "both"} (default: "both")
             Direction of marker/SCC relationships.
         sccs: Iterable[Iterable[str]], optional
-            SCCs to use. If None, feedback SCCs are computed.
+            SCCs to use. If `None`, feedback SCCs are computed.
         sign: {-1, 0, 1}, optional
             If provided, return only paths with the requested aggregated sign.
 
@@ -1552,7 +1559,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def feedback_induced_graph(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
     ) -> "InfluenceGraph":
         """
         Return the graph induced by feedback nodes.
@@ -1602,9 +1609,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should be
-            included.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
 
         Returns
         -------
@@ -1613,7 +1619,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         feedback_nodes = self.feedback_nodes(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
         )
 
         return type(self)(
@@ -1622,9 +1628,9 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def collapsed_graph(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = False,
+        preserve_feedback: bool = False,
         min_size: int = 2,
         sep: str = "|",
     ) -> "InfluenceGraph":
@@ -1637,15 +1643,13 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should be
-            included in the feedback-induced graph.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
         include_successors: bool (default: True)
             Whether signed successor signatures should be included in structural
             family detection.
-        exclude_feedback_nodes: bool (default: False)
-            Whether nodes participating in feedback structures should be excluded
-            from structural family collapse.
+        preserve_feedback: bool (default: False)
+            Do not collapse feedback nodes.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
@@ -1663,21 +1667,21 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         graph = self.feedback_induced_graph(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
         )
 
         return graph.family_collapsed_graph(
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
             sep=sep,
         )
 
     def compressed_graph(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = False,
+        preserve_feedback: bool = False,
         min_size: int = 2,
         sep: str = "|",
     ) -> "InfluenceGraph":
@@ -1693,9 +1697,9 @@ class InfluenceGraph(_MultiDiGraphBase):
             )
 
         return self.collapsed_graph(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
             sep=sep,
         )
@@ -1703,7 +1707,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def to_graphviz(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ):
         """
@@ -1719,8 +1723,10 @@ class InfluenceGraph(_MultiDiGraphBase):
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting graph.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes. The callable
-            receives edge attribute dictionaries and must return a mapping of
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
             graphviz edge attributes.
         **kwargs: Any
             Graph attributes assigned to the resulting graphviz object.
@@ -1737,8 +1743,13 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         graph = self.copy()
+        edge_style_parameters = (
+            None
+            if edge_style is None
+            else _style_callable_parameters(edge_style, "edge_style")
+        )
 
-        for _, _, edge_data in graph.edges(data=True):
+        for source, target, edge_data in graph.edges(data=True):
             sign = self._normalize_sign(edge_data.get("sign", 1))
 
             edge_data.update(
@@ -1747,15 +1758,24 @@ class InfluenceGraph(_MultiDiGraphBase):
                 penwidth=2,
             )
 
-            if edge_style is not None:
-                edge_data.update(edge_style(edge_data))
+            if edge_style is not None and edge_style_parameters is not None:
+                edge_data.update(
+                    _evaluate_style_from_attributes(
+                        edge_style,
+                        edge_data,
+                        edge_style_parameters,
+                        style_name="edge_style",
+                        element_name="edge",
+                        element=(source, target),
+                    )
+                )
 
         return _networkx_to_graphviz(graph, program=program, **kwargs)
 
     def to_pydot(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ) -> "Dot":
         """
@@ -1769,9 +1789,11 @@ class InfluenceGraph(_MultiDiGraphBase):
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes. The callable receives
-            edge attribute dictionaries and must return a mapping of pydot edge
-            attributes.
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
+            pydot edge attributes.
         **kwargs: Any
             Keyword arguments passed to the resulting pydot graph using
             `dot.set(key, value)`.
@@ -1783,8 +1805,13 @@ class InfluenceGraph(_MultiDiGraphBase):
         """
 
         graph = self.copy()
+        edge_style_parameters = (
+            None
+            if edge_style is None
+            else _style_callable_parameters(edge_style, "edge_style")
+        )
 
-        for _, _, edge_data in graph.edges(data=True):
+        for source, target, edge_data in graph.edges(data=True):
 
             sign = self._normalize_sign(
                 edge_data.get("sign", 1),
@@ -1796,8 +1823,17 @@ class InfluenceGraph(_MultiDiGraphBase):
                 penwidth=2,
             )
 
-            if edge_style is not None:
-                edge_data.update(edge_style(edge_data))
+            if edge_style is not None and edge_style_parameters is not None:
+                edge_data.update(
+                    _evaluate_style_from_attributes(
+                        edge_style,
+                        edge_data,
+                        edge_style_parameters,
+                        style_name="edge_style",
+                        element_name="edge",
+                        element=(source, target),
+                    )
+                )
 
         dot = nx.drawing.nx_pydot.to_pydot(graph)
 
@@ -1811,7 +1847,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     def show(
         self,
         program: str = "dot",
-        edge_style: Optional[Callable[[Mapping[str, Any]], Mapping[str, Any]]] = None,
+        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
         **kwargs: Any,
@@ -1827,7 +1863,11 @@ class InfluenceGraph(_MultiDiGraphBase):
         program: str (default: "dot")
             Graphviz layout program used for rendering.
         edge_style: Callable, optional
-            Optional callable used to update edge attributes before rendering.
+            Edge styling strategy.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `sign`, and the callable must return
+            pydot edge attributes.
         width: str or int or float, optional
             Display width assigned to the rendered SVG.
         height: str or int or float, optional
@@ -2195,7 +2235,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         sign: Optional[InfluenceSign] = None,
         count: Optional[int] = None,
         **attr: Any,
-    ) -> int:
+    ) -> None:
         """
         Add an aggregated signed influence.
 
@@ -2213,10 +2253,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         --------
         >>> graph = AggregatedInfluenceGraph(total=4)
         >>> graph.add_edge("A", "B", sign=1, count=3)
-        0
 
         >>> graph.add_edge("A", "B", -1, count=1)
-        1
 
         >>> sorted(
         ...     (source, target, data["sign"], data["count"])
@@ -2237,11 +2275,6 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         **attr: Any
             Additional edge attributes.
 
-        Returns
-        -------
-        int
-            NetworkX multiedge key assigned to the added edge.
-
         Raises
         ------
         TypeError
@@ -2260,7 +2293,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         count = self._validate_count(source, target, count)
 
-        return super().add_edge(
+        super().add_edge(
             source,
             target,
             key=key,
@@ -2554,7 +2587,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         target: str
             Target node.
         bins: Iterable of float
-            Ordered bin boundaries used to classify frequencies.
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1.
         sign: {-1, 1}, optional
             Signed influence to select when several signed edges exist between
             `source` and `target`.
@@ -2573,7 +2607,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             covered by `bins`.
         """
 
-        bins = tuple(bins)
+        bins = self._validate_frequency_bins(bins)
         frequency = self.edge_frequency(source, target, sign=sign)
 
         for lower, upper in zip(bins[:-1], bins[1:]):
@@ -2587,20 +2621,16 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def structural_families(
         self,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = True,
+        preserve_feedback: bool = True,
         min_size: int = 2,
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
-        protect_feedback_nodes: Optional[bool] = None,
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
     ) -> Dict[Tuple[Any, ...], Set[str]]:
         """
         Group structurally equivalent nodes using signed frequency-aware edges.
 
         Two nodes are grouped only if they have the same signed predecessor and,
-        optionally, successor structure with the same frequency bins.
-
-        Frequency bins are part of the structural signature. Therefore two nodes
-        with the same signed regulators are separated if the corresponding edge
-        counts fall in different frequency intervals.
+        optionally, successor structure. If `bins` is not None, edge-frequency
+        bins are also included in the structural signature.
 
         Examples
         --------
@@ -2624,15 +2654,14 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         include_successors: bool (default: True)
             Whether signed successor signatures should also be included in the
             structural equivalence criterion.
-        exclude_feedback_nodes: bool (default: True)
-            Whether nodes participating in feedback structures should be excluded.
+        preserve_feedback: bool (default: True)
+            Do not group feedback nodes into structural families.
         min_size: int (default: 2)
             Minimum family size required to keep a structural family.
-        bins: Iterable of float
-            Ordered bin boundaries used to classify edge frequencies.
-        protect_feedback_nodes: bool, optional
-            Backward-compatible alias for `exclude_feedback_nodes`. If provided,
-            it takes precedence over `exclude_feedback_nodes`.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1. If `None`,
+            group nodes by signed structure independently of edge frequencies.
 
         Returns
         -------
@@ -2640,39 +2669,48 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Mapping from frequency-aware structural signatures to node families.
         """
 
-        if protect_feedback_nodes is not None:
-            exclude_feedback_nodes = protect_feedback_nodes
-
-        bins = tuple(bins)
-        feedback_nodes = self.feedback_nodes() if exclude_feedback_nodes else set()
+        bins = None if bins is None else self._validate_frequency_bins(bins)
+        feedback_nodes = self.feedback_nodes() if preserve_feedback else set()
         families = {}
 
         for node in self.nodes():
             if node in feedback_nodes:
                 continue
 
-            predecessors = tuple(
-                sorted(
-                    (
+            predecessors = []
+
+            for predecessor, _, data in self.in_edges(node, data=True):
+                sign = self._normalize_sign(data["sign"])
+                signature = (predecessor, sign)
+
+                if bins is not None:
+                    signature = (
                         predecessor,
-                        self._normalize_sign(data["sign"]),
+                        sign,
                         self._frequency_bin_for_count(data["count"], bins),
                     )
-                    for predecessor, _, data in self.in_edges(node, data=True)
-                )
-            )
+
+                predecessors.append(signature)
+
+            predecessors = tuple(sorted(predecessors))
 
             if include_successors:
-                successors = tuple(
-                    sorted(
-                        (
+                successors = []
+
+                for _, successor, data in self.out_edges(node, data=True):
+                    sign = self._normalize_sign(data["sign"])
+                    signature = (successor, sign)
+
+                    if bins is not None:
+                        signature = (
                             successor,
-                            self._normalize_sign(data["sign"]),
+                            sign,
                             self._frequency_bin_for_count(data["count"], bins),
                         )
-                        for _, successor, data in self.out_edges(node, data=True)
-                    )
-                )
+
+                    successors.append(signature)
+
+                successors = tuple(sorted(successors))
 
             else:
                 successors = tuple()
@@ -2689,10 +2727,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def family_collapsed_graph(
         self,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = True,
+        preserve_feedback: bool = True,
         min_size: int = 2,
         sep: str = "|",
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
     ) -> InfluenceGraph:
         """
         Return a frequency-aware graph where structural families are collapsed.
@@ -2720,7 +2758,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         ...     ]
         ... )
         >>> collapsed = graph.family_collapsed_graph(
-        ...     exclude_feedback_nodes=False,
+        ...     preserve_feedback=False,
         ... )
         >>> sorted(collapsed.nodes())
         ['TF', 'g1|g2', 'out']
@@ -2736,15 +2774,17 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         include_successors: bool (default: True)
             Whether signed successor signatures should also be included in
             structural family detection.
-        exclude_feedback_nodes: bool (default: True)
-            Whether nodes participating in feedback structures should be excluded
-            from collapsing.
+        preserve_feedback: bool (default: True)
+            Do not collapse feedback nodes.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
             Separator used to build composite node names.
-        bins: Iterable of float
-            Ordered bin boundaries used to classify edge frequencies.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1. If `None`,
+            collapse nodes by signed structure independently of edge
+            frequencies.
 
         Returns
         -------
@@ -2760,7 +2800,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         families = self.structural_families(
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
             bins=bins,
         )
@@ -2840,7 +2880,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
     def feedback_induced_graph(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
     ) -> "AggregatedInfluenceGraph":
         """
         Return the aggregated graph induced by feedback nodes.
@@ -2867,9 +2907,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should
-            be included.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
 
         Returns
         -------
@@ -2878,7 +2917,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         feedback_nodes = self.feedback_nodes(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
         )
 
         return type(self)(
@@ -2888,12 +2927,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
     def collapsed_graph(
         self,
-        include_singleton_selfloops: bool = True,
+        include_selfloops: bool = True,
         include_successors: bool = True,
-        exclude_feedback_nodes: bool = False,
+        preserve_feedback: bool = False,
         min_size: int = 2,
         sep: str = "|",
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
     ) -> InfluenceGraph:
         """
         Return a collapsed influence graph for visualization or summaries.
@@ -2907,21 +2946,22 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         Parameters
         ----------
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton SCCs corresponding to self-regulated nodes should
-            be included in the feedback-induced graph.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
         include_successors: bool (default: True)
             Whether signed successor signatures should be included in structural
             family detection.
-        exclude_feedback_nodes: bool (default: False)
-            Whether nodes participating in feedback structures should be excluded
-            from structural family collapse.
+        preserve_feedback: bool (default: False)
+            Do not collapse feedback nodes.
         min_size: int (default: 2)
             Minimum family size required to collapse nodes.
         sep: str (default: "|")
             Separator used to build composite node names.
-        bins: Iterable of float
-            Ordered bin boundaries used to classify edge frequencies.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1. If `None`,
+            collapse nodes by signed structure independently of edge
+            frequencies.
 
         Returns
         -------
@@ -2936,12 +2976,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         graph = self.feedback_induced_graph(
-            include_singleton_selfloops=include_singleton_selfloops,
+            include_selfloops=include_selfloops,
         )
 
         return graph.family_collapsed_graph(
             include_successors=include_successors,
-            exclude_feedback_nodes=exclude_feedback_nodes,
+            preserve_feedback=preserve_feedback,
             min_size=min_size,
             sep=sep,
             bins=bins,
@@ -2973,26 +3013,19 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def to_graphviz(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         collapse: Optional[CollapseMode] = None,
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
-        protect_feedback_nodes: bool = True,
-        include_singleton_selfloops: bool = True,
+        *,
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        preserve_feedback: bool = True,
+        include_selfloops: bool = True,
         min_frequency: float = 0.0,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            AggregatedNodeStyle,
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        show_edge_labels: Any = _UNSET,
-        edge_label: Optional[AggregatedEdgeLabel] = "count",
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
+        drop_isolates: bool = False,
+        graph_attr: Optional[Mapping[str, Any]] = None,
+        node_attr: Optional[Mapping[str, Any]] = None,
+        node_style: AggregatedNodeStyle = None,
+        edge_label: Optional[str] = "count",
+        edge_attr: Optional[Mapping[str, Any]] = None,
+        edge_style: AggregatedEdgeStyle = frequency_edge_style,
         program: str = "dot",
-        **kwargs: Any,
     ):
         """
         Convert the aggregated influence graph to a native graphviz Digraph.
@@ -3006,47 +3039,71 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Parameters
         ----------
         collapse: {None, "family", "feedback", "both"} (default: None)
-            Optional collapse applied before rendering. `"family"` uses
-            `family_collapsed_graph()`. `"feedback"` keeps only the
-            feedback-induced graph. `"both"` uses `collapsed_graph()`.
-        bins: Iterable of float
-            Ordered bin boundaries used by collapsed structural families.
-        protect_feedback_nodes: bool (default: True)
-            Whether feedback nodes are protected from family collapse.
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton self-loop SCCs are retained when using
-            `collapse="feedback"`.
+            Graph reduction applied before rendering. If `None`, render the
+            exact aggregated graph. If `"family"`, collapse structurally
+            equivalent nodes into families. If `"feedback"`, render the
+            feedback-induced subgraph. If `"both"`, render the feedback-induced
+            subgraph with structural families collapsed.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1. If `None`,
+            family collapse uses signed structure only.
+        preserve_feedback: bool (default: True)
+            Preserve feedback nodes during family collapse.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        remove_isolated_nodes: bool (default: False)
-            If True, remove nodes with no incoming or outgoing influence after
-            applying the minimum frequency filter.
-        node_style: Literal["count", "stability"] or Callable or bool or None
-            Node styling strategy. If assigned to `"count"`, nodes are styled
-            according to their `function_count` attribute, i.e. the number of
-            distinct Boolean rule structures observed for the node across the
-            ensemble. Lower values indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to their
+        drop_isolates: bool (default: False)
+            Drop isolated nodes after filtering.
+        graph_attr: Mapping[str, Any], optional
+            Global graph attributes.
+        node_attr: Mapping[str, Any], optional
+            Global node attributes applied unless overridden on individual
+            nodes.
+        node_style: {"count", "stability"} or Callable or None
+            Node styling strategy.
+
+            The `"count"` strategy styles nodes according to their
+            `function_count` attribute, i.e. the number of distinct Boolean
+            rule structures observed for the node across the ensemble. Lower
+            values indicate more consistent inferred functions.
+
+            The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
             common Boolean rule structure for the node. Higher values indicate
-            more stable inferred functions. If assigned to a callable, the
-            callable receives node attributes and must return graphviz node
-            attributes. If assigned to True, `function_stability` is preferred
-            when available, otherwise `function_count` is used. If assigned to
-            False or None, no additional node styling is applied.
-        show_edge_labels: bool, deprecated
-            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
-        edge_label: {"count", "frequency"} or None (default: "count")
-            Quantity displayed as edge label. If None, no edge label is
-            displayed.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to frequency. If True, use
-            `ratio_edge_style`. If False or None, no frequency style is applied.
+            more stable inferred functions.
+
+            A callable defines a custom node style. Argument names are resolved
+            from node attributes and the callable must return graphviz node
+            attributes.
+
+            If `None`, no additional node styling is applied.
+        edge_label: str or None (default: "count")
+            Edge attribute displayed as label. If `None`, no edge label is
+            displayed. `"count"` displays the occurrence count on exact
+            aggregated graphs; on family-collapsed graphs, it displays
+            `frequency * total` because collapsed edges no longer store exact
+            counts. `"frequency"` displays the occurrence frequency
+            `count / total`, or the average edge frequency after family
+            collapse. Any other string is interpreted as an edge attribute
+            name.
+        edge_attr: Mapping[str, Any], optional
+            Global edge attributes applied unless overridden on individual
+            edges.
+        edge_style: Callable or None
+            Edge styling strategy.
+
+            By default, `frequency_edge_style` styles edges according to their
+            `frequency` attribute, i.e. `count / total`.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `frequency`, `count` and `sign`, and
+            the callable must return graphviz edge attributes.
+
+            If `None`, no frequency-based edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting graph.
-        **kwargs: Any
-            Graph attributes assigned to the resulting graphviz object.
-
         Returns
         -------
         graphviz.Digraph
@@ -3060,46 +3117,43 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             If `collapse` is invalid or `min_frequency` is outside [0, 1].
         """
 
-        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
-
         graph = self._visualization_graph(
             collapse=collapse,
             bins=bins,
-            protect_feedback_nodes=protect_feedback_nodes,
-            include_singleton_selfloops=include_singleton_selfloops,
+            preserve_feedback=preserve_feedback,
+            include_selfloops=include_selfloops,
             min_frequency=min_frequency,
-            remove_isolated_nodes=remove_isolated_nodes,
+            drop_isolates=drop_isolates,
             node_style=node_style,
             edge_label=edge_label,
             edge_style=edge_style,
         )
 
-        return _networkx_to_graphviz(graph, program=program, **kwargs)
+        return _networkx_to_graphviz(
+            graph,
+            program=program,
+            graph_attr=graph_attr,
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+        )
 
     # Aggregated rendering exposes collapse/frequency controls.
     def to_pydot(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         collapse: Optional[CollapseMode] = None,
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
-        protect_feedback_nodes: bool = True,
-        include_singleton_selfloops: bool = True,
+        *,
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        preserve_feedback: bool = True,
+        include_selfloops: bool = True,
         min_frequency: float = 0.0,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            AggregatedNodeStyle,
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        show_edge_labels: Any = _UNSET,
-        edge_label: Optional[AggregatedEdgeLabel] = "count",
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
+        drop_isolates: bool = False,
+        graph_attr: Optional[Mapping[str, Any]] = None,
+        node_attr: Optional[Mapping[str, Any]] = None,
+        node_style: AggregatedNodeStyle = None,
+        edge_label: Optional[str] = "count",
+        edge_attr: Optional[Mapping[str, Any]] = None,
+        edge_style: AggregatedEdgeStyle = frequency_edge_style,
         program: str = "dot",
-        **kwargs: Any,
     ) -> "Dot":
         """
         Convert the aggregated influence graph to a pydot graph.
@@ -3114,56 +3168,78 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         --------
         >>> graph = AggregatedInfluenceGraph(total=4)
         >>> graph.add_edge("A", "B", sign=1, count=3)
-        0
-        >>> dot = graph.to_pydot(rankdir="LR")
+        >>> dot = graph.to_pydot(graph_attr={"rankdir": "LR"})
         >>> dot.get_rankdir()
         'LR'
 
         Parameters
         ----------
         collapse: {None, "family", "feedback", "both"} (default: None)
-            Optional collapse applied before rendering. `"family"` uses
-            `family_collapsed_graph()`. `"feedback"` keeps only the
-            feedback-induced graph. `"both"` uses `collapsed_graph()`.
-        bins: Iterable of float
-            Ordered bin boundaries used by collapsed structural families.
-        protect_feedback_nodes: bool (default: True)
-            Whether feedback nodes are protected from family collapse.
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton self-loop SCCs are retained when using
-            `collapse="feedback"`.
+            Graph reduction applied before rendering. If `None`, render the
+            exact aggregated graph. If `"family"`, collapse structurally
+            equivalent nodes into families. If `"feedback"`, render the
+            feedback-induced subgraph. If `"both"`, render the feedback-induced
+            subgraph with structural families collapsed.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies, where
+            frequency is `count / total` and ranges from 0 to 1. If `None`,
+            family collapse uses signed structure only.
+        preserve_feedback: bool (default: True)
+            Preserve feedback nodes during family collapse.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        remove_isolated_nodes: bool (default: False)
-            If True, remove nodes with no incoming or outgoing influence after
-            applying the minimum frequency filter.
-        node_style: Literal["count", "stability"] or Callable or bool or None
-            Node styling strategy. If assigned to `"count"`, nodes are styled
-            according to their `function_count` attribute, i.e. the number of
-            distinct Boolean rule structures observed for the node across the
-            ensemble. Lower values indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to their
+        drop_isolates: bool (default: False)
+            Drop isolated nodes after filtering.
+        graph_attr: Mapping[str, Any], optional
+            Global graph attributes.
+        node_attr: Mapping[str, Any], optional
+            Global node attributes applied unless overridden on individual
+            nodes.
+        node_style: {"count", "stability"} or Callable or None
+            Node styling strategy.
+
+            The `"count"` strategy styles nodes according to their
+            `function_count` attribute, i.e. the number of distinct Boolean
+            rule structures observed for the node across the ensemble. Lower
+            values indicate more consistent inferred functions.
+
+            The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
             common Boolean rule structure for the node. Higher values indicate
-            more stable inferred functions. If assigned to a callable, the
-            callable receives node attributes and must return pydot node
-            attributes. If assigned to True, `function_stability` is preferred
-            when available, otherwise `function_count` is used. If assigned to
-            False or None, no additional node styling is applied.
-        show_edge_labels: bool, deprecated
-            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
-        edge_label: {"count", "frequency"} or None (default: "count")
-            Quantity displayed as edge label. If None, no edge label is
-            displayed.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to frequency. If True, use
-            `ratio_edge_style`. If False or None, no frequency style is applied.
+            more stable inferred functions.
+
+            A callable defines a custom node style. Argument names are resolved
+            from node attributes and the callable must return pydot node
+            attributes.
+
+            If `None`, no additional node styling is applied.
+        edge_label: str or None (default: "count")
+            Edge attribute displayed as label. If `None`, no edge label is
+            displayed. `"count"` displays the occurrence count on exact
+            aggregated graphs; on family-collapsed graphs, it displays
+            `frequency * total` because collapsed edges no longer store exact
+            counts. `"frequency"` displays the occurrence frequency
+            `count / total`, or the average edge frequency after family
+            collapse. Any other string is interpreted as an edge attribute
+            name.
+        edge_attr: Mapping[str, Any], optional
+            Global edge attributes applied unless overridden on individual
+            edges.
+        edge_style: Callable or None
+            Edge styling strategy.
+
+            By default, `frequency_edge_style` styles edges according to their
+            `frequency` attribute, i.e. `count / total`.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `frequency`, `count` and `sign`, and
+            the callable must return pydot edge attributes.
+
+            If `None`, no frequency-based edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
-        **kwargs: Any
-            Keyword arguments passed to the resulting pydot graph using
-            `dot.set(key, value)`.
-
         Returns
         -------
         Dot
@@ -3175,15 +3251,13 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             If `collapse` is invalid or `min_frequency` is outside [0, 1].
         """
 
-        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
-
         graph = self._visualization_graph(
             collapse=collapse,
             bins=bins,
-            protect_feedback_nodes=protect_feedback_nodes,
-            include_singleton_selfloops=include_singleton_selfloops,
+            preserve_feedback=preserve_feedback,
+            include_selfloops=include_selfloops,
             min_frequency=min_frequency,
-            remove_isolated_nodes=remove_isolated_nodes,
+            drop_isolates=drop_isolates,
             node_style=node_style,
             edge_label=edge_label,
             edge_style=edge_style,
@@ -3193,105 +3267,119 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         dot.set_prog(program)
 
-        for key, value in kwargs.items():
-            dot.set(key, value)
+        _set_pydot_defaults(
+            dot,
+            graph_attr=graph_attr,
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+        )
 
         return dot
 
-    # Aggregated rendering exposes collapse/frequency controls.
     def show(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         collapse: Optional[CollapseMode] = None,
-        bins: Iterable[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
-        protect_feedback_nodes: bool = True,
-        include_singleton_selfloops: bool = True,
+        *,
+        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
+        preserve_feedback: bool = True,
+        include_selfloops: bool = True,
         min_frequency: float = 0.0,
-        remove_isolated_nodes: bool = False,
-        node_style: Union[
-            AggregatedNodeStyle,
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ] = None,
-        show_edge_labels: Any = _UNSET,
-        edge_label: Optional[AggregatedEdgeLabel] = "count",
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ] = ratio_edge_style,
+        drop_isolates: bool = False,
+        graph_attr: Optional[Mapping[str, Any]] = None,
+        node_attr: Optional[Mapping[str, Any]] = None,
+        node_style: AggregatedNodeStyle = None,
+        edge_label: Optional[str] = "count",
+        edge_attr: Optional[Mapping[str, Any]] = None,
+        edge_style: AggregatedEdgeStyle = frequency_edge_style,
         program: str = "dot",
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
-        **kwargs: Any,
     ) -> None:
         """
-        Display the aggregated influence graph in a Jupyter/IPython environment.
-
-        The graph is rendered through Graphviz using the `to_pydot()` method and
-        displayed as an SVG image. Optional collapse modes allow rendering the
-        exact graph, the family-collapsed graph, the feedback-induced graph, or
-        the full collapsed graph.
+        Display the aggregated influence graph as an SVG in Jupyter/IPython.
 
         Examples
         --------
-        Display the exact aggregated graph:
-
         >>> graph = AggregatedInfluenceGraph(total=4)
         >>> graph.add_edge("A", "B", sign=1, count=3)
-        0
-        >>> graph.show(width="700px")  # doctest: +SKIP
+        >>> graph.show(width="700px")
 
-        Display a family-collapsed graph:
-
-        >>> graph.show(collapse="family", width=900)  # doctest: +SKIP
-
-        Display only feedback influences:
-
-        >>> graph.show(collapse="feedback")  # doctest: +SKIP
+        >>> graph.show(
+        ...     node_style=lambda function_stability: {
+        ...         "style": "filled",
+        ...         "fillcolor": "white"
+        ...         if function_stability >= 0.5
+        ...         else "lightgray",
+        ...     },
+        ... )
 
         Parameters
         ----------
         collapse: {None, "family", "feedback", "both"} (default: None)
-            Optional graph transformation applied before rendering.
-            If None, render the exact aggregated graph.
-            If `"family"`, render `family_collapsed_graph()`.
-            If `"feedback"`, render the feedback-induced graph.
-            If `"both"`, render `collapsed_graph()`.
-        bins: Iterable of float
-            Ordered bin boundaries used by collapsed structural families.
-        protect_feedback_nodes: bool (default: True)
-            Whether feedback nodes are protected from family collapse when
-            `collapse="family"`.
-        include_singleton_selfloops: bool (default: True)
-            Whether singleton self-loop SCCs are retained when using
-            `collapse="feedback"` or `collapse="both"`.
+            Graph reduction applied before rendering. If `None`, render the
+            exact aggregated graph. If `"family"`, collapse structurally
+            equivalent nodes into families. If `"feedback"`, render the
+            feedback-induced subgraph. If `"both"`, render the feedback-induced
+            subgraph with structural families collapsed.
+        bins: Iterable of float or None
+            Ordered boundaries used to classify edge frequencies in
+            family-based collapse modes, where frequency is `count / total`
+            and ranges from 0 to 1. If `None`, family collapse uses signed
+            structure only, independently of frequencies.
+        preserve_feedback: bool (default: True)
+            Preserve feedback nodes during family collapse.
+        include_selfloops: bool (default: True)
+            Include self-loops as feedback.
         min_frequency: float (default: 0.0)
             Minimum edge frequency required for display.
-        remove_isolated_nodes: bool (default: False)
-            If True, remove nodes with no incoming or outgoing influence after
-            applying the minimum frequency filter.
-        node_style: Literal["count", "stability"] or Callable or bool or None
-            Node styling strategy. If assigned to `"count"`, nodes are styled
-            according to their `function_count` attribute, i.e. the number of
-            distinct Boolean rule structures observed for the node across the
-            ensemble. Lower values indicate more consistent inferred functions.
-            If assigned to `"stability"`, nodes are styled according to their
+        drop_isolates: bool (default: False)
+            Drop isolated nodes after filtering.
+        graph_attr: Mapping[str, Any], optional
+            Global graph attributes.
+        node_attr: Mapping[str, Any], optional
+            Global node attributes applied unless overridden on individual
+            nodes.
+        node_style: {"count", "stability"} or callable or None
+            Node styling strategy.
+
+            The `"count"` strategy styles nodes according to their
+            `function_count` attribute, i.e. the number of distinct Boolean
+            rule structures observed for the node across the ensemble. Lower
+            values indicate more consistent inferred functions.
+
+            The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
             common Boolean rule structure for the node. Higher values indicate
-            more stable inferred functions. If assigned to a callable, the
-            callable receives node attributes and must return pydot node
-            attributes. If assigned to True, `function_stability` is preferred
-            when available, otherwise `function_count` is used. If assigned to
-            False or None, no additional node styling is applied.
-        show_edge_labels: bool, deprecated
-            Deprecated and ignored. Use `edge_label=None` to hide edge labels.
-        edge_label: {"count", "frequency"} or None (default: "count")
-            Quantity displayed as edge label. If None, no edge label is
-            displayed.
-        edge_style: Callable[[float], Mapping[str, Any]] or bool or None
-            Function used to style edges according to frequency. If True, use
-            `ratio_edge_style`. If False or None, no frequency style is applied.
+            more stable inferred functions.
+
+            A callable defines a custom node style. Argument names are resolved
+            from node attributes and the callable must return pydot node
+            attributes.
+
+            If `None`, no additional node styling is applied.
+        edge_label: str or None (default: "count")
+            Edge attribute displayed as label. If `None`, no edge label is
+            displayed. `"count"` displays the occurrence count on exact
+            aggregated graphs; on family-collapsed graphs, it displays
+            `frequency * total` because collapsed edges no longer store exact
+            counts. `"frequency"` displays the occurrence frequency
+            `count / total`, or the average edge frequency after family
+            collapse. Any other string is interpreted as an edge attribute
+            name.
+        edge_attr: Mapping[str, Any], optional
+            Global edge attributes applied unless overridden on individual
+            edges.
+        edge_style: callable or None (default: frequency_edge_style)
+            Edge styling strategy.
+
+            By default, `frequency_edge_style` styles edges according to their
+            `frequency` attribute, i.e. `count / total`.
+
+            A callable defines a custom edge style. Argument names are resolved
+            from edge attributes such as `frequency`, `count`, and `sign`, and
+            the callable must return pydot edge attributes.
+
+            If `None`, no frequency-based edge styling is applied.
         program: str (default: "dot")
             Graphviz layout program used for rendering.
         width: str or int or float, optional
@@ -3302,14 +3390,11 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Display height assigned to the rendered SVG root. Integers and
             floats are passed as raw SVG length values; strings can include CSS
             units.
-        **kwargs: Any
-            Keyword arguments passed to the underlying pydot graph through
-            `dot.set(key, value)`.
-
+        
         Returns
         -------
         None
-            The SVG is displayed in the current IPython/Jupyter output cell.
+            Displays the SVG in the current notebook output cell.
 
         Raises
         ------
@@ -3317,15 +3402,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             If IPython is not available.
         ValueError
             If `collapse` is invalid or `min_frequency` is outside [0, 1].
-
-        Notes
-        -----
-        `width` and `height` only affect notebook display by rewriting the root
-        SVG attributes after Graphviz rendering. They do not change the graph
-        layout computed by Graphviz.
         """
-
-        self._warn_deprecated_show_edge_labels(show_edge_labels, stacklevel=2)
 
         try:
             from IPython.display import SVG, display
@@ -3338,15 +3415,17 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             self.to_pydot(
                 collapse=collapse,
                 bins=bins,
-                protect_feedback_nodes=protect_feedback_nodes,
-                include_singleton_selfloops=include_singleton_selfloops,
+                preserve_feedback=preserve_feedback,
+                include_selfloops=include_selfloops,
                 min_frequency=min_frequency,
-                remove_isolated_nodes=remove_isolated_nodes,
+                drop_isolates=drop_isolates,
                 node_style=node_style,
                 edge_label=edge_label,
                 edge_style=edge_style,
                 program=program,
-                **kwargs,
+                graph_attr=graph_attr,
+                node_attr=node_attr,
+                edge_attr=edge_attr,
             ),
         )
         svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
@@ -3554,7 +3633,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
             ensemble = BooleanNetworkEnsemble(bns=boolean_networks)
 
-        graph = ensemble.to_networkx(remove_isolated_nodes=False)
+        graph = ensemble.to_networkx(drop_isolates=False)
 
         for _, _, data in graph.edges(data=True):
             if data["sign"] is True:
@@ -3567,23 +3646,14 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def _visualization_graph(
         self,
         collapse: Optional[CollapseMode],
-        bins: Iterable[float],
-        protect_feedback_nodes: bool,
-        include_singleton_selfloops: bool,
+        bins: Optional[Iterable[float]],
+        preserve_feedback: bool,
+        include_selfloops: bool,
         min_frequency: float,
-        remove_isolated_nodes: bool,
-        node_style: Union[
-            AggregatedNodeStyle,
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ],
-        edge_label: Optional[AggregatedEdgeLabel],
-        edge_style: Union[
-            Callable[[float], Mapping[str, Any]],
-            bool,
-            None,
-        ],
+        drop_isolates: bool,
+        node_style: AggregatedNodeStyle,
+        edge_label: Optional[str],
+        edge_style: AggregatedEdgeStyle,
     ) -> InfluenceGraph:
         """
         Return a styled InfluenceGraph for pydot or graphviz rendering.
@@ -3597,7 +3667,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         elif collapse == "family":
             graph = self.family_collapsed_graph(
-                exclude_feedback_nodes=protect_feedback_nodes,
+                preserve_feedback=preserve_feedback,
                 bins=bins,
             )
 
@@ -3605,15 +3675,15 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             graph = InfluenceGraph(
                 self._plain_graph(
                     self.feedback_induced_graph(
-                        include_singleton_selfloops=include_singleton_selfloops,
+                        include_selfloops=include_selfloops,
                     )
                 )
             )
 
         elif collapse == "both":
             graph = self.collapsed_graph(
-                include_singleton_selfloops=include_singleton_selfloops,
-                exclude_feedback_nodes=protect_feedback_nodes,
+                include_selfloops=include_selfloops,
+                preserve_feedback=preserve_feedback,
                 bins=bins,
             )
 
@@ -3623,14 +3693,17 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 f"or 'both', but received {collapse!r}"
             )
 
-        edge_style_callable = None
+        if edge_style is not None and not callable(edge_style):
+            raise TypeError(
+                f"unsupported argument type for 'edge_style': expected "
+                f"callable or None but received {type(edge_style)}"
+            )
 
-        if edge_style is True:
-            edge_style_callable = ratio_edge_style
-
-        elif callable(edge_style):
-            edge_style_callable = edge_style
-
+        edge_style_parameters = (
+            None
+            if edge_style is None
+            else _style_callable_parameters(edge_style, "edge_style")
+        )
         edges_to_remove = []
 
         for source, target, key, data in graph.edges(keys=True, data=True):
@@ -3659,12 +3732,21 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                     frequency=frequency,
                 )
 
-            if edge_style_callable is not None:
-                data.update(edge_style_callable(frequency))
+            if edge_style is not None:
+                data.update(
+                    _evaluate_style_from_attributes(
+                        edge_style,
+                        data,
+                        cast(Tuple[Any, ...], edge_style_parameters),
+                        style_name="edge_style",
+                        element_name="edge",
+                        element=(source, target, key),
+                    )
+                )
 
         graph.remove_edges_from(edges_to_remove)
 
-        if remove_isolated_nodes:
+        if drop_isolates:
             graph.remove_nodes_from(list(nx.isolates(graph)))
 
         self._apply_node_style(
@@ -3674,46 +3756,29 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         return graph
 
-    def _warn_deprecated_show_edge_labels(
-        self,
-        show_edge_labels: Any,
-        *,
-        stacklevel: int,
-    ) -> None:
-        """
-        Warn when the deprecated `show_edge_labels` argument is explicitly used.
-        """
-
-        if show_edge_labels is not _UNSET:
-            _warn_deprecated(
-                "`show_edge_labels`",
-                replacement="`edge_label`",
-                stacklevel=stacklevel,
-            )
-
     def _resolve_edge_label(
         self,
-        edge_label: Optional[AggregatedEdgeLabel],
-    ) -> Optional[Literal["count", "frequency"]]:
+        edge_label: Optional[str],
+    ) -> Optional[str]:
         """
-        Resolve the effective edge label quantity.
+        Resolve the effective edge label attribute.
         """
 
         if edge_label is None:
             return None
 
-        if edge_label in ("count", "frequency"):
+        if isinstance(edge_label, str):
             return edge_label
 
-        raise ValueError(
-            "unsupported edge_label: expected None, 'count' or 'frequency', "
-            f"but received {edge_label!r}"
+        raise TypeError(
+            "unsupported argument type for 'edge_label': expected str or None "
+            f"but received {type(edge_label)}"
         )
 
     def _format_edge_label(
         self,
         data: Mapping[str, Any],
-        edge_label: Literal["count", "frequency"],
+        edge_label: str,
         frequency: float,
     ) -> str:
         """
@@ -3728,7 +3793,13 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
             return self._format_count_label(count)
 
-        return f"{frequency:.2g}"
+        if edge_label == "frequency":
+            return f"{frequency:.2g}"
+
+        if edge_label not in data:
+            raise KeyError(f"missing edge attribute used as label: {edge_label!r}")
+
+        return str(data[edge_label])
 
     def _format_count_label(self, count: Any) -> str:
         """
@@ -3743,35 +3814,29 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def _apply_node_style(
         self,
         graph: InfluenceGraph,
-        node_style: Union[
-            AggregatedNodeStyle,
-            Callable[[Mapping[str, Any]], Mapping[str, Any]],
-            bool,
-            None,
-        ],
+        node_style: AggregatedNodeStyle,
     ) -> None:
         """
         Apply graphviz node styling in-place.
         """
 
-        if node_style is None or node_style is False:
+        if node_style is None:
             return
 
-        if node_style is True:
-            node_style = self._infer_node_style(graph)
-
-            if node_style is None:
-                warnings.warn(
-                    "node_style=True requires every node to define either "
-                    "'function_stability' or 'function_count'; no node was styled.",
-                    UserWarning,
-                    stacklevel=3,
-                )
-                return
-
         if callable(node_style):
-            for _, data in graph.nodes(data=True):
-                data.update(node_style(data))
+            parameters = _style_callable_parameters(node_style, "node_style")
+
+            for node, data in graph.nodes(data=True):
+                data.update(
+                    _evaluate_style_from_attributes(
+                        node_style,
+                        data,
+                        parameters,
+                        style_name="node_style",
+                        element_name="node",
+                        element=node,
+                    )
+                )
 
             return
 
@@ -3785,8 +3850,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         else:
             raise ValueError(
-                "unsupported node_style: expected None, False, True, 'count', "
-                f"'stability' or a callable, but received {node_style!r}"
+                "unsupported node_style: expected None, 'count', 'stability' "
+                f"or a callable, but received {node_style!r}"
             )
 
         missing_nodes = []
@@ -3797,7 +3862,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 missing_nodes.append(str(node))
                 continue
 
-            data.update(style_callable(data))
+            data.update(style_callable(data[required_attribute]))
             styled_count += 1
 
         if not missing_nodes:
@@ -3819,24 +3884,6 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             UserWarning,
             stacklevel=3,
         )
-
-    def _infer_node_style(
-        self,
-        graph: InfluenceGraph,
-    ) -> Optional[AggregatedNodeStyle]:
-        """
-        Infer a complete node styling strategy from available node attributes.
-        """
-
-        nodes = list(graph.nodes(data=True))
-
-        if any("function_stability" in data for _, data in nodes):
-            return "stability"
-
-        if any("function_count" in data for _, data in nodes):
-            return "count"
-
-        return None
 
     def _format_missing_nodes(self, missing_nodes: List[str]) -> str:
         """
@@ -3936,13 +3983,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
     def _frequency_bin_for_count(
         self,
         count: int,
-        bins: Iterable[float],
+        bins: Tuple[float, ...],
     ) -> Tuple[float, float]:
         """
         Return the frequency interval containing an edge count.
         """
 
-        bins = tuple(bins)
         frequency = count / self.total
 
         for lower, upper in zip(bins[:-1], bins[1:]):
@@ -3977,6 +4023,25 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             )
 
         return count
+
+    @staticmethod
+    def _validate_frequency_bins(bins: Iterable[float]) -> Tuple[float, ...]:
+        """
+        Validate frequency bins and return them as a tuple.
+        """
+
+        normalized = tuple(float(boundary) for boundary in bins)
+
+        if len(normalized) < 2:
+            raise ValueError("expected at least two frequency bin boundaries")
+
+        if any(left >= right for left, right in zip(normalized[:-1], normalized[1:])):
+            raise ValueError("frequency bin boundaries must be strictly increasing")
+
+        if normalized[0] > 0 or normalized[-1] < 1:
+            raise ValueError("frequency bins must cover the [0, 1] interval")
+
+        return normalized
 
     @staticmethod
     def _validate_total(total: Any) -> int:

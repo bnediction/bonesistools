@@ -165,7 +165,7 @@ def hvg(
     adata: AnnData
         Unimodal annotated data matrix.
     expression: str, optional
-        Expression matrix used to estimate variability. If None, use
+        Expression matrix used to estimate variability. If `None`, use
         `adata.X`; otherwise, use `adata.layers[expression]`. Use raw counts
         for `method='loess'` and log-normalized expression values for
         `method='binning'`.
@@ -184,7 +184,7 @@ def hvg(
         each bin using the median and median absolute deviation, and
         features are ranked by normalized dispersion scores [2, 3].
     n_features: int or None (default: 2000)
-        Number of highly variable features to select. If None, features are
+        Number of highly variable features to select. If `None`, features are
         selected using `score` and `mean` cutoffs instead.
     mean: tuple of float (default: (0.0125, 3.0))
         Mean-expression interval used when `n_features=None`. Features are

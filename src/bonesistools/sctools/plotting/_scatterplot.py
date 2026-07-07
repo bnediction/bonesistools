@@ -184,11 +184,11 @@ def embedding(
     title: str or dict, optional
         Figure title, or keyword arguments passed to `Axes.set_title`.
     legend: bool or mapping (default: True)
-        Legend configuration. False disables the legend. True draws the legend
+        Legend configuration. `False` disables the legend. `True` draws the legend
         using default Matplotlib parameters. If a mapping is provided, it is
         forwarded as keyword arguments to `Axes.legend`.
     labels: bool or mapping (default: False)
-        Label configuration. False disables labels. True draws labels
+        Label configuration. `False` disables labels. `True` draws labels
         retrieved from `scdata.obs[obs]` using default Matplotlib text
         parameters. If a mapping is provided, it is forwarded as keyword
         arguments to `Axes.text`.

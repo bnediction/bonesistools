@@ -183,7 +183,7 @@ def _get_expression_with_gene_names(
     adata: AnnData
         Unimodal annotated data matrix.
     expression: str, optional
-        Expression source. If None or `"X"`, use `adata.X`. If `"raw.X"`, use
+        Expression source. If `None` or `"X"`, use `adata.X`. If `"raw.X"`, use
         `adata.raw.X`. Otherwise, interpret as a layer key in `adata.layers`.
     var_subset: str or collection of str, optional
         Variables to select. If a string is provided, it is interpreted as a
@@ -349,7 +349,7 @@ def get_representation(
     use_rep: str, optional
         Deprecated alias for `obsm`.
     n_components: int, optional
-        Number of dimensions to use. If None, use all dimensions.
+        Number of dimensions to use. If `None`, use all dimensions.
 
     Returns
     -------

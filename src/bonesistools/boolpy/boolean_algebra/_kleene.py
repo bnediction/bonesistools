@@ -44,7 +44,8 @@ class KleeneValue:
     Parameters
     ----------
     value: bool, number, str or KleeneValue
-        Kleene truth value. Supported values are False, True, 0, 1, NaN and "*".
+        Kleene truth value. Supported values are `False`, `True`, `0`, `1`,
+        `NaN` and `"*"`.
 
     Raises
     ------

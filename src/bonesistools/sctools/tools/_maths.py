@@ -75,7 +75,7 @@ def pairwise_distances(
     adata: AnnData
         Unimodal annotated data matrix.
     n_components: int, optional
-        Number of dimensions to use. If None, use all dimensions.
+        Number of dimensions to use. If `None`, use all dimensions.
     representation: str, optional
         Representation key in `adata.obsm`.
     metric: Metric | Metric_Function (default: 'euclidean')
@@ -157,7 +157,7 @@ def barycenters(
     representation: str, optional
         Representation key in `scdata.obsm`.
     n_components: int, optional
-        Number of dimensions to use. If None, use all dimensions.
+        Number of dimensions to use. If `None`, use all dimensions.
     use_rep: str, optional
         Deprecated alias for `representation`.
 

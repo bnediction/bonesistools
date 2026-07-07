@@ -77,10 +77,10 @@ def normalize(
     target_sum: float (default: 1e4)
         Target total expression value per observation after normalization.
     expression: str, optional
-        Expression matrix to normalize. If None, use `adata.X`; otherwise, use
+        Expression matrix to normalize. If `None`, use `adata.X`; otherwise, use
         `adata.layers[expression]`.
     key_added: str, optional
-        Layer key used to store normalized values. If None, overwrite the
+        Layer key used to store normalized values. If `None`, overwrite the
         selected input expression matrix.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
@@ -196,13 +196,13 @@ def log1p(
     base: float (default: math.e)
         Logarithm base. The transformation is `log(X + 1) / log(base)`.
     expression: str, optional
-        Expression matrix to transform. If None, use `adata.X`; otherwise, use
+        Expression matrix to transform. If `None`, use `adata.X`; otherwise, use
         `adata.layers[expression]`.
     key_added: str, optional
-        Layer key used to store transformed values. If None, overwrite the
+        Layer key used to store transformed values. If `None`, overwrite the
         selected input expression matrix.
     max_memory: int or str, optional
-        Approximate maximum memory allocated to dense working arrays. If None,
+        Approximate maximum memory allocated to dense working arrays. If `None`,
         no chunking is used. Integers are interpreted as bytes. Human-readable
         strings such as `"512MB"`, `"2GB"` or `"1GiB"` are accepted.
     copy: bool (default: False)
@@ -358,17 +358,17 @@ def scale(
     adata: AnnData
         Unimodal annotated data matrix.
     expression: str, optional
-        Expression matrix to scale. If None and `representation` is None, use
+        Expression matrix to scale. If `None` and `representation` is None, use
         `adata.X`; otherwise use `adata.layers[expression]`.
     representation: str, optional
         Representation matrix in `adata.obsm` to scale.
     key_added: str, optional
-        Key used to store scaled values. If None, overwrite the selected input
+        Key used to store scaled values. If `None`, overwrite the selected input
         matrix.
     zero_center: bool (default: True)
-        If True, subtract feature means before variance scaling.
+        If `True`, subtract feature means before variance scaling.
     max_value: float, optional
-        Clip scaled values to this absolute value. If None, do not clip.
+        Clip scaled values to this absolute value. If `None`, do not clip.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
 

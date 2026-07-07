@@ -76,7 +76,7 @@ def pca(
         Boolean column in `adata.var`. If a collection is provided,
         it is interpreted as a collection of variable names.
     zero_center: bool (default: True)
-        If True, use centered PCA. If False, use truncated SVD.
+        If `True`, use centered PCA. If `False`, use truncated SVD.
     svd_solver: {'auto', 'full', 'arpack', 'randomized'} (default: 'auto')
         SVD solver passed to the sklearn estimator. If `'auto'`, use
         `'arpack'` when `zero_center=True` and `'randomized'` when
@@ -402,10 +402,10 @@ def umap(
     init_pos: str or ndarray (default: 'spectral')
         Initialization used by UMAP.
     a: float, optional
-        UMAP curve parameter. If None, UMAP determines it from `min_dist` and
+        UMAP curve parameter. If `None`, UMAP determines it from `min_dist` and
         `spread`.
     b: float, optional
-        UMAP curve parameter. If None, UMAP determines it from `min_dist` and
+        UMAP curve parameter. If `None`, UMAP determines it from `min_dist` and
         `spread`.
     key_added: str, optional
         Key used to store the embedding in `adata.obsm`. Defaults to `X_umap`.
@@ -616,7 +616,7 @@ def tsne(
     representation: str, optional (default: 'X_pca')
         Representation key in `adata.obsm` used as input.
     n_pcs: int, optional
-        Number of input representation dimensions to use. If None, use all
+        Number of input representation dimensions to use. If `None`, use all
         dimensions in `representation`.
     n_components: int (default: 2)
         Number of embedding dimensions to compute.
