@@ -67,7 +67,7 @@ bt.sct.datasets.clear("pbmc3k")
 Submodules:
 
 - Boolean algebra: `bt.bpy.ba`
-  - logical objects and transformations for Boolean-state reasoning
+  - logical objects, configuration sets and transformations for Boolean-state reasoning
 
 - Boolean network: `bt.bpy.bn`
   - Boolean model representation, conversion, analysis and exchange
@@ -75,17 +75,13 @@ Submodules:
 - influence graph: `bt.bpy.ig`
   - signed regulatory graph construction, comparison, analysis and display
 
+- input/output: `bt.bpy.io`
+  - BNet, GINML, ZGINML, hypercube and influence-graph readers
+
 Example:
 
 ```python
-bn = bt.bpy.bn.BooleanNetwork(
-    {
-        "A": "B & ~C",
-        "B": 1,
-        "C": 0,
-    }
-)
-
+bn = bt.bpy.io.read_bnet("model.bnet")
 graph = bn.to_influence_graph()
 
 graph.show()

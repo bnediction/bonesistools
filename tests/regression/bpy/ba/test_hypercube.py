@@ -77,9 +77,10 @@ def test_hypercube_comparisons():
     assert not fixed > partial
 
     assert bt.bpy.ba.Hypercube({"A": 0}) != bt.bpy.ba.Hypercube({"A": 1})
-    assert repr(fixed) == (
-        "Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})"
-    )
+    assert repr(fixed) == "Hypercube(A=0, B=1)"
+    assert repr(explicit_partial) == "Hypercube(A=0, B=*)"
+    assert repr(bt.bpy.ba.Hypercube({"A-B": 1})) == "Hypercube(A-B=1)"
+    assert repr(bt.bpy.ba.Hypercube({"A,B": 1})) == "Hypercube('A,B'=1)"
 
 
 def test_hypercube_identical_and_different():

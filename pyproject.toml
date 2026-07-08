@@ -53,6 +53,7 @@ dependencies = [
     "h5py>=3.7",
     "anndata>=0.8",
     "boolean.py>=4.0",
+    "clingo>=5.6",
 ]
 keywords = [
     "bioinformatics",
@@ -86,7 +87,9 @@ all = [
 ]
 graphviz = [ "graphviz>=0.20" ]
 mudata = [ "mudata>=0.3.1" ]
-mpbn = [ "mpbn>=4.1" ]
+bn = [
+    "mpbn>=4.1",
+]
 omics = [
     "igraph>=0.10",
     "leidenalg>=0.10",

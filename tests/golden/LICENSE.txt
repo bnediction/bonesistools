@@ -11,3 +11,26 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0).
 The bundled AnnData file was generated from the 10x Genomics PBMC3k filtered
 gene-barcode matrix using `bt.sct.datasets.load("pbmc3k")` and stored with
 HDF5 gzip compression.
+
+
+death_receptor_cell_fate.zginml
+-------------------------------
+
+Source: BioModels MODEL0912180000, Calzone et al. death receptor engagement
+model.
+URL: https://www.ebi.ac.uk/biomodels/MODEL0912180000
+License: Creative Commons CC0/public domain dedication for the encoded model.
+
+Citation:
+Calzone, L., Tournier, L., Fourquet, S., Thieffry, D., Zhivotovsky, B.,
+Barillot, E., & Zinovyev, A. (2010). Mathematical modelling of cell-fate
+decision in response to death receptor engagement. PLoS computational biology,
+6(3), e1000702.
+
+
+synthetic_30_node_dynamics.zginml
+---------------------------------
+
+Source: generated BoNesisTools test fixture.
+License: distributed under the same license terms as the BoNesisTools test
+suite.

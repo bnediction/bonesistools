@@ -679,6 +679,17 @@ def test_to_pydot_applies_signed_edge_styles_and_custom_options():
     }
 
 
+def test_to_pydot_handles_node_name_attribute():
+    ig = bt.bpy.ig.InfluenceGraph()
+    ig.add_node("A", name="node A")
+    ig.add_edge("A", "B", sign=1)
+
+    dot = ig.to_pydot()
+    nodes = {_pydot_get_string(node, "get_name"): node for node in dot.get_nodes()}
+
+    assert _pydot_get_string(nodes["A"], "get_label") == "node A"
+
+
 def test_show_uses_ipython_display(monkeypatch):
     ig = bt.bpy.ig.InfluenceGraph()
     displayed = []

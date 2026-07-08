@@ -27,7 +27,12 @@ Keep frozen artifacts in this directory or a dataset-specific subdirectory:
 ```text
 tests/golden/
     pbmc3k.h5ad
+    death_receptor_cell_fate.zginml
+    synthetic_30_node_dynamics.zginml
     expected/
+        bpy/
+            death_receptor_cell_fate_mp.npz
+            synthetic_30_node_dynamics.npz
         qc.npz
         hvg_loess.npz
         hvg_binning.npz
@@ -92,6 +97,63 @@ Regenerate these files intentionally with:
 
 ```bash
 BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py
+```
+
+### `death_receptor_cell_fate.zginml`
+
+Compressed GINML model for death-receptor cell fate decision, used as a
+realistic Boolean-network fixture for most-permissive reachable-attractor
+golden tests.
+
+Properties:
+
+* model: Calzone et al. death receptor engagement model;
+* format: ZGINML;
+* variables: 28 Boolean components;
+* golden coverage: `most-permissive` reachable attractors from selected
+  initial states.
+
+Source:
+
+* BioModels MODEL0912180000;
+* https://www.ebi.ac.uk/biomodels/MODEL0912180000
+* license: Creative Commons CC0/public domain dedication for the encoded
+  model.
+
+Citation:
+
+Calzone, L., Tournier, L., Fourquet, S., Thieffry, D., Zhivotovsky, B.,
+Barillot, E., & Zinovyev, A. (2010). Mathematical modelling of cell-fate
+decision in response to death receptor engagement. PLoS computational biology,
+6(3), e1000702.
+
+### `synthetic_30_node_dynamics.zginml`
+
+Synthetic ZGINML Boolean model generated for BoNesisTools golden tests. It is
+designed to exercise all reachable-attractor update semantics without making
+the golden suite expensive.
+
+Properties:
+
+* variables: 30 Boolean components;
+* initial state: one fully specified state;
+* golden coverage: `synchronous`, `asynchronous`, `general`, and
+  `most-permissive` reachable attractors.
+
+### `expected/bpy/*.npz`
+
+Compressed NumPy archives storing reference outputs for deterministic Boolean
+workflows:
+
+* `death_receptor_cell_fate_mp.npz`: parsed rules, influence-graph shape,
+  selected initial states, and most-permissive reachable attractors;
+* `synthetic_30_node_dynamics.npz`: parsed rules, influence-graph shape, and
+  reachable attractors under the four supported update semantics.
+
+Regenerate only Boolean golden outputs intentionally with:
+
+```bash
+BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section bpy
 ```
 
 ## Updating Golden Files

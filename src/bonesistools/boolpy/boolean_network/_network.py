@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
+from importlib import import_module
 from itertools import product
 from pathlib import Path
 from typing import (
@@ -32,16 +33,19 @@ from boolean.boolean import (
 )
 
 from ..._compat import Literal
-from ..._validation import _as_non_negative_integer
+from ..._validation import _as_literal, _as_non_negative_integer
 from ..boolean_algebra import (
     BooleanRule,
     ConfigurationLike,
+    ConfigurationSet,
+    Hypercube,
     HypercubeLike,
     PartialBoolean,
-    dnf_to_structure,
+    dnf_implicants,
     expressions_equivalent,
     is_configuration_like,
     is_hypercube_like,
+    prime_implicants,
     rule_to_string,
 )
 from ..influence_graph._influence_graph import (
@@ -53,12 +57,16 @@ from ..influence_graph._influence_graph import (
 )
 from ..plotting import frequency_edge_style
 from ..plotting._svg import SvgLength, scale_svg
+from ._dynamics import (
+    _reachable_attractors_with_explicit_backend,
+    _reachable_attractors_with_most_permissive_backend,
+)
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 if TYPE_CHECKING:
     from pydot import Dot
 
-EquivalenceMethod = Literal["simplify", "truth_table"]
+EquivalenceMethod = Literal["simplify", "truth_table", "asp"]
 NodeStyle = Literal["count", "stability"]
 
 
@@ -966,6 +974,185 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return fixed_points
 
+    def trapspaces(
+        self,
+        *,
+        kind: Literal["minimal"] = "minimal",
+        backend: Literal["asp"] = "asp",
+    ) -> Tuple[Hypercube, ...]:
+        """
+        Enumerate trap spaces of the Boolean network.
+
+        A trap space is a partial Boolean configuration closed under the
+        network dynamics: every component fixed in the hypercube is forced by
+        its update rule to keep the same value throughout the hypercube.
+
+        Currently only minimal trap spaces are supported. Minimality is with
+        respect to hypercube inclusion, so returned trap spaces are
+        inclusion-minimal closed hypercubes.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> bn.trapspaces()
+        (Hypercube(A=0, B=0), Hypercube(A=1, B=1))
+
+        Parameters
+        ----------
+        kind: {"minimal"} (default: "minimal")
+            Trap-space family to enumerate.
+        backend: {"asp"} (default: "asp")
+            Backend used for enumeration. The `"asp"` backend uses `clingo`.
+
+        Returns
+        -------
+        tuple of Hypercube
+            Trap spaces represented as partial Boolean configurations.
+
+        Raises
+        ------
+        ImportError
+            If `clingo` cannot be imported.
+        ValueError
+            If `kind` or `backend` is unsupported, or if the network is not
+            closed.
+        """
+
+        _as_literal(kind, choices=("minimal",), name="kind")
+        _as_literal(backend, choices=("asp",), name="backend")
+
+        self.validate()
+
+        return self._minimal_trapspaces_with_asp()
+
+    def reachable_attractors(
+        self,
+        initial_state: HypercubeLike,
+        *,
+        update: Literal[
+            "asynchronous", "synchronous", "general", "most-permissive"
+        ] = "asynchronous",
+        backend: Optional[Literal["explicit", "asp"]] = None,
+    ) -> Tuple[ConfigurationSet, ...]:
+        """
+        Return attractors reachable from an initial configuration or subspace.
+
+        Attractors are returned as exact `ConfigurationSet` objects. Iterating
+        over a returned set yields complete Boolean configurations, while
+        `len(...)` returns the number of configurations in the attractor.
+
+        Examples
+        --------
+        Synchronous dynamics are deterministic, so one initial configuration
+        reaches one cycle:
+
+        >>> bn = BooleanNetwork({"A": "~A"})
+        >>> attractors = bn.reachable_attractors({"A": 0}, update="synchronous")
+        >>> attractors[0].enumerate()
+        ({'A': 0}, {'A': 1})
+
+        Asynchronous dynamics can branch and reach several terminal strongly
+        connected components:
+
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> attractors = bn.reachable_attractors(
+        ...     {"A": 0, "B": 1},
+        ...     update="asynchronous",
+        ... )
+        >>> [attractor.enumerate() for attractor in attractors]
+        [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
+
+        A partial initial state is interpreted as the set of all compatible
+        complete configurations:
+
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> attractors = bn.reachable_attractors({"A": 0})
+        >>> [attractor.enumerate() for attractor in attractors]
+        [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
+
+        Parameters
+        ----------
+        initial_state: HypercubeLike
+            Initial Boolean configuration or subspace from which reachability
+            is explored. Missing or free components define multiple initial
+            configurations.
+        update: {"asynchronous", "synchronous", "general", "most-permissive"}
+            (default: "asynchronous")
+            Update semantics.
+
+            - `"synchronous"` updates every unstable component at once.
+            - `"asynchronous"` updates one unstable component at a time.
+            - `"general"` updates any non-empty subset of unstable components.
+            - `"most-permissive"` returns reachable minimal trap spaces using
+              most-permissive reachability.
+        backend: {None, "explicit", "asp"} (default: None)
+            Backend used for non-synchronous semantics. If `None`, use
+            `"explicit"` for `"asynchronous"` and `"general"`, and `"asp"` for
+            `"most-permissive"`. The backend parameter is ignored for
+            `"synchronous"` dynamics.
+
+        Returns
+        -------
+        tuple of ConfigurationSet
+            Reachable attractors. Each `ConfigurationSet` is an exact set of
+            complete Boolean configurations.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed, the initial state is invalid,
+            `update` is invalid, or `backend` is invalid for non-synchronous
+            dynamics.
+        """
+
+        update = _as_literal(
+            update,
+            choices=("asynchronous", "synchronous", "general", "most-permissive"),
+            name="update",
+        )
+
+        self.validate()
+        initial_states = ConfigurationSet(tuple(self.keys()), [initial_state])
+
+        if update == "synchronous":
+            return _reachable_attractors_with_explicit_backend(
+                self,
+                initial_states,
+                update=update,
+            )
+
+        if update == "most-permissive":
+            backend = _as_literal(
+                backend,
+                choices=("asp",),
+                name="backend",
+                allow_none=True,
+            )
+
+            if backend is None:
+                backend = "asp"
+
+            return _reachable_attractors_with_most_permissive_backend(
+                self,
+                initial_state,
+            )
+
+        backend = _as_literal(
+            backend,
+            choices=("explicit",),
+            name="backend",
+            allow_none=True,
+        )
+
+        if backend is None:
+            backend = "explicit"
+
+        return _reachable_attractors_with_explicit_backend(
+            self,
+            initial_states,
+            update=update,
+        )
+
     def equivalent(
         self,
         other: object,
@@ -995,7 +1182,7 @@ class BooleanNetwork(Dict[str, Expression]):
         ----------
         other: object
             BooleanNetworkLike object to compare with.
-        method: {"simplify", "truth_table"} (default: "simplify")
+        method: {"simplify", "truth_table", "asp"} (default: "simplify")
             Equivalence strategy used to compare component rules.
 
             - `"simplify"` compares rules after `boolean.py` simplification.
@@ -1004,6 +1191,7 @@ class BooleanNetwork(Dict[str, Expression]):
             - `"truth_table"` exhaustively evaluates each pair of rules on all
               assignments of their symbols. This is exact, but exponential in
               the number of symbols per rule.
+            - `"asp"` uses ASP to search for a counterexample assignment.
 
         Returns
         -------
@@ -1014,7 +1202,7 @@ class BooleanNetwork(Dict[str, Expression]):
         Raises
         ------
         ValueError
-            If `method` is not `"simplify"` or `"truth_table"`.
+            If `method` is not `"simplify"`, `"truth_table"` or `"asp"`.
         """
 
         if not is_boolean_network_like(other):
@@ -1325,6 +1513,170 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return None
 
+    def _minimal_trapspaces_with_asp(self) -> Tuple[Hypercube, ...]:
+
+        clingo = self._import_clingo()
+        components = tuple(sorted(self.components))
+        component_indices = {
+            component: index for index, component in enumerate(components)
+        }
+        base_program = self._trapspace_asp_base_program(
+            components=components,
+            component_indices=component_indices,
+        )
+
+        blockers: List[FrozenSet[Tuple[int, int]]] = []
+        trapspaces: Set[FrozenSet[Tuple[int, int]]] = set()
+
+        while True:
+            literals = self._solve_maximal_trapspace_literals(
+                clingo,
+                base_program=base_program,
+                blockers=blockers,
+                n_components=len(components),
+            )
+
+            if literals is None:
+                break
+
+            if literals in trapspaces:
+                break
+
+            trapspaces.add(literals)
+            blockers.append(literals)
+
+        return tuple(
+            Hypercube(
+                {components[index]: value for index, value in sorted(literals)}
+            )
+            for literals in sorted(trapspaces, key=self._trapspace_sort_key)
+        )
+
+    def _trapspace_asp_base_program(
+        self,
+        components: Tuple[str, ...],
+        component_indices: Mapping[str, int],
+    ) -> str:
+
+        facts = [f"component({index})." for index in range(len(components))]
+        implicant_id = 0
+
+        for target, rule in self.items():
+            target_index = component_indices[target]
+
+            for value in (0, 1):
+                for implicant in prime_implicants(
+                    rule,
+                    value=value,
+                    backend="asp",
+                    ba=self.ba,
+                ):
+                    facts.append(
+                        f"implicant({target_index}, {value}, {implicant_id})."
+                    )
+
+                    for source, source_value in implicant.items():
+                        if not source_value.is_fixed:
+                            raise ValueError(
+                                "invalid prime implicant with free component "
+                                f"{source!r}"
+                            )
+
+                        facts.append(
+                            "implicant_literal("
+                            f"{target_index}, {value}, {implicant_id}, "
+                            f"{component_indices[source]}, {source_value.value}"
+                            ")."
+                        )
+
+                    implicant_id += 1
+
+        return "\n".join(
+            [
+                *facts,
+                """
+                { fixed(I, 0); fixed(I, 1) } :- component(I).
+                :- fixed(I, 0), fixed(I, 1).
+
+                missing_literal(I, V, P) :-
+                    implicant_literal(I, V, P, J, W), not fixed(J, W).
+                supported(I, V) :-
+                    implicant(I, V, P), not missing_literal(I, V, P).
+                :- fixed(I, V), not supported(I, V).
+
+                #maximize { 1,I,V : fixed(I, V) }.
+                #show fixed/2.
+                """,
+            ]
+        )
+
+    def _solve_maximal_trapspace_literals(
+        self,
+        clingo: Any,
+        *,
+        base_program: str,
+        blockers: List[FrozenSet[Tuple[int, int]]],
+        n_components: int,
+    ) -> Optional[FrozenSet[Tuple[int, int]]]:
+
+        program = "\n".join(
+            [
+                base_program,
+                self._trapspace_blocker_program(
+                    blockers,
+                    n_components=n_components,
+                ),
+            ]
+        )
+
+        control = clingo.Control(
+            ["--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
+        )
+        control.add("base", [], program)
+        control.ground([("base", [])])
+
+        optimal_literals = None
+        with control.solve(yield_=True) as handle:
+            for model in handle:
+                optimal_literals = frozenset(
+                    (atom.arguments[0].number, atom.arguments[1].number)
+                    for atom in model.symbols(shown=True)
+                )
+
+        if optimal_literals is None:
+            return None
+
+        return optimal_literals
+
+    def _trapspace_blocker_program(
+        self,
+        blockers: List[FrozenSet[Tuple[int, int]]],
+        *,
+        n_components: int,
+    ) -> str:
+
+        lines = []
+
+        for blocker_id, literals in enumerate(blockers):
+            lines.append(f"blocker({blocker_id}).")
+
+            for component in range(n_components):
+                for value in (0, 1):
+                    if (component, value) not in literals:
+                        lines.append(
+                            f"outside_literal({blocker_id}, {component}, {value})."
+                        )
+
+        if blockers:
+            lines.extend(
+                [
+                    "outside(B) :- outside_literal(B, I, V), fixed(I, V).",
+                    ":- blocker(B), not outside(B).",
+                ]
+            )
+
+        return "\n".join(lines)
+
     def _normalize_state(self, state: HypercubeLike) -> Dict[str, int]:
 
         if not isinstance(state, MappingABC):
@@ -1445,6 +1797,25 @@ class BooleanNetwork(Dict[str, Expression]):
             )
 
         return int(value)
+
+    @staticmethod
+    def _import_clingo() -> Any:
+
+        try:
+            return import_module("clingo")
+
+        except ImportError as error:
+            raise ImportError(
+                "`BooleanNetwork.trapspaces(..., backend='asp')` requires "
+                "`clingo` to be installed."
+            ) from error
+
+    @staticmethod
+    def _trapspace_sort_key(
+        literals: FrozenSet[Tuple[int, int]]
+    ) -> Tuple[int, Tuple[Tuple[int, int], ...]]:
+
+        return len(literals), tuple(sorted(literals))
 
 
 class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
@@ -1862,7 +2233,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Dict[str, List]
             Dictionary mapping each component to the list of rules observed
             across the ensemble. Constant rules are stored as Python booleans;
-            non-constant rules are converted into nested DNF structures.
+            non-constant rules are converted into DNF implicants.
         """
 
         rule_structures: Dict[str, List[object]] = {
@@ -1878,7 +2249,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
                     rule_structures[component].append(False)
 
                 else:
-                    rule_structures[component].append(dnf_to_structure(bn.ba, rule))
+                    rule_structures[component].append(dnf_implicants(rule, ba=bn.ba))
 
         return rule_structures
 

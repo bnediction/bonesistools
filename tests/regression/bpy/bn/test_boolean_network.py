@@ -8,6 +8,7 @@ import pytest
 from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
+from bonesistools.boolpy.boolean_network import _dynamics, _network
 
 
 def _pydot_get(obj, method):
@@ -529,6 +530,285 @@ def test_boolean_network_fixed_points_and_predicate():
 
     no_fixed_point = bt.bpy.bn.BooleanNetwork({"A": "~A"})
     assert no_fixed_point.fixed_points() == []
+
+
+def test_boolean_network_trapspaces_minimal_fixed_points():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    assert bn.trapspaces() == (
+        bt.bpy.ba.Hypercube({"A": 0, "B": 0}),
+        bt.bpy.ba.Hypercube({"A": 1, "B": 1}),
+    )
+
+
+def test_boolean_network_trapspaces_universal_when_no_fixed_subspace():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A"})
+
+    assert bn.trapspaces() == (bt.bpy.ba.Hypercube({}),)
+
+
+def test_boolean_network_trapspaces_rejects_invalid_options():
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1})
+
+    with pytest.raises(ValueError, match="invalid argument value for 'kind'"):
+        bn.trapspaces(kind=cast(Any, "maximal"))
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.trapspaces(backend=cast(Any, "truth_table"))
+
+
+def test_boolean_network_trapspaces_rejects_open_network():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    with pytest.raises(ValueError, match="undefined components"):
+        bn.trapspaces()
+
+
+def test_boolean_network_trapspaces_asp_reports_missing_clingo(monkeypatch):
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1})
+
+    def missing_clingo(name: str) -> Any:
+        if name == "clingo":
+            raise ImportError("missing clingo")
+        return __import__(name)
+
+    monkeypatch.setattr(_network, "import_module", missing_clingo)
+
+    with pytest.raises(ImportError, match="requires `clingo` to be installed"):
+        bn.trapspaces()
+
+
+def test_boolean_network_reachable_attractors_synchronous_cycle():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A"})
+
+    attractors = bn.reachable_attractors(
+        {"A": 0},
+        update="synchronous",
+        backend=cast(Any, "ignored"),
+    )
+
+    assert len(attractors) == 1
+    assert isinstance(attractors[0], bt.bpy.ba.ConfigurationSet)
+    assert attractors[0].enumerate() == (
+        {"A": 0},
+        {"A": 1},
+    )
+
+
+def test_boolean_network_reachable_attractors_synchronous_partial_state():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A", "B": "B"})
+
+    attractors = bn.reachable_attractors(
+        {"A": "*"},
+        update="synchronous",
+        backend=cast(Any, "ignored"),
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        (
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 0},
+        ),
+        (
+            {"A": 0, "B": 1},
+            {"A": 1, "B": 1},
+        ),
+    )
+
+
+def test_boolean_network_reachable_attractors_asynchronous_branching():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    attractors = bn.reachable_attractors(
+        {"A": 0, "B": 1},
+        update="asynchronous",
+        backend="explicit",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"A": 0, "B": 0},),
+        ({"A": 1, "B": 1},),
+    )
+
+
+def test_boolean_network_reachable_attractors_asynchronous_partial_state():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    attractors = bn.reachable_attractors(
+        {"A": 0},
+        update="asynchronous",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"A": 0, "B": 0},),
+        ({"A": 1, "B": 1},),
+    )
+
+
+def test_boolean_network_reachable_attractors_explores_shared_paths_once(
+    monkeypatch,
+):
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+    calls = 0
+    next_configuration = bn.next_configuration
+
+    def counted_next_configuration(state):
+        nonlocal calls
+        calls += 1
+        return next_configuration(state)
+
+    monkeypatch.setattr(bn, "next_configuration", counted_next_configuration)
+
+    attractors = bn.reachable_attractors(
+        {},
+        update="asynchronous",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"A": 0, "B": 0},),
+        ({"A": 1, "B": 1},),
+    )
+    assert calls == 4
+
+
+def test_boolean_network_reachable_attractors_general_uses_subsets_of_updates():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    attractors = bn.reachable_attractors(
+        {"A": 0, "B": 1},
+        update="general",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"A": 0, "B": 0},),
+        ({"A": 1, "B": 1},),
+    )
+
+
+def test_boolean_network_smallest_closed_hypercube_uses_component_subset():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    assert _dynamics._smallest_closed_hypercube(
+        bn,
+        {"A": 0, "B": 1},
+        components_to_relax=("A",),
+    ) == bt.bpy.ba.Hypercube({"B": 1})
+
+    assert _dynamics._smallest_closed_hypercube(
+        bn,
+        {"A": 0, "B": 1},
+        components_to_relax=("A", "B"),
+    ) == bt.bpy.ba.Hypercube({})
+
+
+def test_boolean_network_smallest_closed_hypercube_accepts_depth_limit():
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1, "B": "A"})
+
+    assert _dynamics._smallest_closed_hypercube(
+        bn,
+        {"A": 0, "B": 0},
+        components_to_relax=("A", "B"),
+        depth=1,
+    ) == bt.bpy.ba.Hypercube({"B": 0})
+
+    assert _dynamics._smallest_closed_hypercube(
+        bn,
+        {"A": 0, "B": 0},
+        components_to_relax=("A", "B"),
+        depth=None,
+    ) == bt.bpy.ba.Hypercube({})
+
+
+def test_boolean_network_reachable_attractors_most_permissive():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": 1,
+            "B": "A",
+            "C": "(~A & B) | C",
+        }
+    )
+
+    attractors = bn.reachable_attractors(
+        {"A": 0, "B": 0, "C": 0},
+        update="most-permissive",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"A": 1, "B": 1, "C": 0},),
+        ({"A": 1, "B": 1, "C": 1},),
+    )
+
+
+def test_boolean_network_reachable_attractors_most_permissive_partial_state():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "AA": "AA",
+            "BB": "AA | BB",
+            "CC": "~AA | CC",
+        }
+    )
+
+    attractors = bn.reachable_attractors(
+        {"AA": 0},
+        update="most-permissive",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in attractors) == (
+        ({"AA": 0, "BB": 0, "CC": 1},),
+        ({"AA": 0, "BB": 1, "CC": 1},),
+    )
+
+
+def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A", "B": "~B"})
+
+    attractors = bn.reachable_attractors(
+        {"A": 0, "B": 0},
+        update="asynchronous",
+    )
+
+    assert len(attractors) == 1
+    assert attractors[0].enumerate() == (
+        {"A": 0, "B": 0},
+        {"A": 0, "B": 1},
+        {"A": 1, "B": 0},
+        {"A": 1, "B": 1},
+    )
+    assert attractors[0]._hypercubes == [bt.bpy.ba.Hypercube({})]
+
+
+def test_boolean_network_reachable_attractors_validate_options():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A"})
+
+    with pytest.raises(ValueError, match="invalid argument value for 'update'"):
+        bn.reachable_attractors({"A": 0}, update=cast(Any, "parallel"))
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachable_attractors({"A": 0}, backend=cast(Any, "bdd"))
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachable_attractors(
+            {"A": 0},
+            update="most-permissive",
+            backend=cast(Any, "explicit"),
+        )
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachable_attractors(
+            {"A": 0},
+            update="asynchronous",
+            backend=cast(Any, "asp"),
+        )
+
+    with pytest.raises(ValueError, match="unknown components"):
+        bn.reachable_attractors({"B": 0})
+
+
+def test_boolean_network_reachable_attractors_rejects_open_network():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    with pytest.raises(ValueError, match="undefined components"):
+        bn.reachable_attractors({"A": 0})
 
 
 def test_boolean_network_next_methods():

@@ -1835,7 +1835,7 @@ class InfluenceGraph(_MultiDiGraphBase):
                     )
                 )
 
-        dot = nx.drawing.nx_pydot.to_pydot(graph)
+        dot = _networkx_to_pydot(graph)
 
         dot.set_prog(program)
 
@@ -3263,7 +3263,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             edge_style=edge_style,
         )
 
-        dot = nx.drawing.nx_pydot.to_pydot(graph)
+        dot = _networkx_to_pydot(graph)
 
         dot.set_prog(program)
 
@@ -4050,3 +4050,22 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         return _as_positive_integer(total, "total")
+
+
+def _networkx_to_pydot(graph: nx.MultiDiGraph) -> "Dot":
+    """
+    Convert a NetworkX graph to pydot without pydot-reserved attribute clashes.
+    """
+
+    if not any("name" in data for _, data in graph.nodes(data=True)):
+        return nx.drawing.nx_pydot.to_pydot(graph)
+
+    graph = graph.copy()
+
+    for _, data in graph.nodes(data=True):
+        node_name = data.pop("name", None)
+
+        if node_name is not None and "label" not in data:
+            data["label"] = node_name
+
+    return nx.drawing.nx_pydot.to_pydot(graph)

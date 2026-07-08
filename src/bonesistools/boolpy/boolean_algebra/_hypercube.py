@@ -221,7 +221,12 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
             Representation containing explicitly specified component values.
         """
 
-        return f"Hypercube({dict(self)!r})"
+        values = ", ".join(
+            f"{_format_hypercube_component(component)}={value}"
+            for component, value in self._values.items()
+        )
+
+        return f"Hypercube({values})"
 
     def __eq__(self, other: object) -> bool:
         """
@@ -404,7 +409,7 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         >>> hc = Hypercube({"A": 0})
         >>> copied = hc.copy()
         >>> copied
-        Hypercube({'A': PartialBoolean(0)})
+        Hypercube(A=0)
 
         Returns
         -------
@@ -426,14 +431,14 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         --------
         >>> hc = Hypercube({"A": 0, "B": 1})
         >>> hc.drop(["B"])
-        Hypercube({'A': PartialBoolean(0)})
+        Hypercube(A=0)
         >>> hc
-        Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})
+        Hypercube(A=0, B=1)
 
         >>> hc.drop(["B"], inplace=True) is None
         True
         >>> hc
-        Hypercube({'A': PartialBoolean(0)})
+        Hypercube(A=0)
 
         Parameters
         ----------
@@ -858,7 +863,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
 
     >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
     >>> list(hcs.smaller_than({"A": 0, "B": 1}))
-    [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+    [Hypercube(A=0, B=1)]
 
     Parameters
     ----------
@@ -928,7 +933,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}])
         >>> list(hcs)
-        [Hypercube({'A': PartialBoolean(0)})]
+        [Hypercube(A=0)]
 
         Returns
         -------
@@ -1000,7 +1005,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         >>> hcs = HypercubeCollection([{"A": 0}])
         >>> copied = hcs.copy()
         >>> list(copied)
-        [Hypercube({'A': PartialBoolean(0)})]
+        [Hypercube(A=0)]
 
         Returns
         -------
@@ -1094,7 +1099,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}, {"A": 1}])
         >>> list(hcs.smaller_than({"A": 0, "B": 1}))
-        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+        [Hypercube(A=0, B=1)]
 
         Parameters
         ----------
@@ -1121,7 +1126,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}, {"A": 1}])
         >>> list(hcs.larger_than({"A": 0, "B": 1}))
-        [Hypercube({'A': PartialBoolean(0)})]
+        [Hypercube(A=0)]
 
         Parameters
         ----------
@@ -1152,7 +1157,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
         >>> list(hcs.maximal())
-        [Hypercube({'A': PartialBoolean(0)})]
+        [Hypercube(A=0)]
 
         Returns
         -------
@@ -1178,7 +1183,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
         >>> list(hcs.minimal())
-        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+        [Hypercube(A=0, B=1)]
 
         Returns
         -------
@@ -1204,7 +1209,7 @@ class HypercubeCollection(MutableSet[Hypercube]):
         --------
         >>> hcs = HypercubeCollection([{"A": 0}, {"A": 0, "B": 1}])
         >>> list(hcs.fully_specified())
-        [Hypercube({'A': PartialBoolean(0), 'B': PartialBoolean(1)})]
+        [Hypercube(A=0, B=1)]
 
         Returns
         -------
@@ -1258,3 +1263,14 @@ class HypercubeCollection(MutableSet[Hypercube]):
             "expected hypercube-like object "
             f"but received {type(hypercube)}"
         )
+
+
+def _format_hypercube_component(component: str) -> str:
+    """
+    Return a compact component name for Hypercube representations.
+    """
+
+    if "," in component:
+        return repr(component)
+
+    return component

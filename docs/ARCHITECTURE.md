@@ -27,18 +27,19 @@ Main responsibilities:
 
 - Boolean and partial Boolean values.
 - Hypercubes and hypercube collections.
+- Exact configuration sets over fixed Boolean components.
 - Boolean algebra parsing and representation helpers.
 - Structural typing utilities for Boolean abstractions.
 
 ### `boolean_network`
 
-Boolean network objects and related parsing utilities.
+Boolean network objects and related model utilities.
 
 Main responsibilities:
 
 - Boolean network representation.
 - Boolean network ensembles.
-- `.bnet` import/export.
+- `.bnet` export.
 - Rule validation and network-level operations.
 
 ### `influence_graph`
@@ -51,7 +52,18 @@ Main responsibilities:
 - Influence graph representation.
 - Signed path and walk algorithms.
 - Interaction scoring from signed walks.
-- Graph parsing utilities.
+
+### `input_output`
+
+Readers for Boolean modelling files and executable logical-model containers.
+
+Main responsibilities:
+
+- `.bnet` import.
+- GINML and ZGINML import.
+- Hypercube and influence-graph file readers.
+- `ExecutableModel` containers for logical models with initial states,
+  perturbations, metadata and raw files.
 
 ### `plotting`
 

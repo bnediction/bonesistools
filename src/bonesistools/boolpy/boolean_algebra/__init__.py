@@ -17,6 +17,7 @@ from ._algebra import (
     BooleanPredecessorInference,
 )
 from ._boolean import PartialBoolean
+from ._configuration import ConfigurationSet
 from ._hypercube import Hypercube, HypercubeCollection
 from ._kleene import (
     KleeneValue,
@@ -26,7 +27,12 @@ from ._kleene import (
     meet,
 )
 from ._representation import rule_to_string
-from ._structure import dnf_to_structure, expressions_equivalent
+from ._structure import (
+    Implicants,
+    dnf_implicants,
+    expressions_equivalent,
+    prime_implicants,
+)
 from ._typing import (
     BooleanRule,
     ConfigurationLike,
@@ -45,13 +51,16 @@ __all__ = [
     "BooleanPredecessorInference",
     "PartialBoolean",
     "KleeneValue",
+    "ConfigurationSet",
     "Hypercube",
     "HypercubeCollection",
     "diff",
     "meet",
     "join",
+    "Implicants",
     "expressions_equivalent",
-    "dnf_to_structure",
+    "dnf_implicants",
+    "prime_implicants",
     "rule_to_string",
     "read_hypercube",
     "read_hypercubes",
