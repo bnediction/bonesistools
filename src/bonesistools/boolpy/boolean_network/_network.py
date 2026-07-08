@@ -383,6 +383,75 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return type(self)(self, ba=self.ba, check=False)
 
+    def convert(self, target: str, **kwargs: Any) -> Any:
+        """
+        Convert the Boolean network to another Boolean-network representation.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "~B", "B": 1})
+        >>> # bn = bn.convert("mpbn")
+        >>> # bn = bn.convert("minibn.BooleanNetwork")
+
+        Parameters
+        ----------
+        target: str
+            Conversion target. Currently supported: `"mpbn"`, `"minibn"`,
+            and `"minibn.BooleanNetwork"`.
+        **kwargs: Any
+            Keyword arguments forwarded to the target constructor.
+
+        Returns
+        -------
+        Any
+            Converted Boolean network object.
+
+        Raises
+        ------
+        TypeError
+            If `target` is not a string.
+        ValueError
+            If `target` is unsupported.
+        ImportError
+            If the selected conversion requires an optional dependency that is
+            not installed.
+        """
+
+        if not isinstance(target, str):
+            raise TypeError(
+                f"unsupported argument type for 'target': "
+                f"expected {str} but received {type(target)}"
+            )
+
+        if target in ["minibn", "minibn.BooleanNetwork"]:
+            try:
+                from colomoto import minibn
+
+            except ImportError as error:
+                raise ImportError(
+                    "BooleanNetwork.convert('minibn.BooleanNetwork') requires "
+                    "colomoto.minibn to be installed."
+                ) from error
+
+            return minibn.BooleanNetwork(cast(str, self.to_bnet()), **kwargs)
+
+        if target == "mpbn":
+            try:
+                import mpbn
+
+            except ImportError as error:
+                raise ImportError(
+                    "BooleanNetwork.convert('mpbn') requires mpbn to be installed."
+                ) from error
+
+            mpbn_constructor = cast(Callable[..., Any], mpbn.MPBooleanNetwork)
+            return mpbn_constructor(cast(str, self.to_bnet()), **kwargs)
+
+        raise ValueError(
+            f"unsupported conversion target {target!r}: supported targets are "
+            "['minibn', 'minibn.BooleanNetwork', 'mpbn']"
+        )
+
     @property
     def components(self) -> Set[str]:
         """
@@ -1584,6 +1653,54 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         """
 
         del self._networks[index]
+
+    def convert(self, target: str, **kwargs: Any) -> List[Any]:
+        """
+        Convert all Boolean networks to another representation.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": "~B", "B": 1}])
+        >>> # mpbns = ensemble.convert("mpbn")
+        >>> # minibns = ensemble.convert("minibn.BooleanNetwork")
+
+        Parameters
+        ----------
+        target: str
+            Conversion target. Currently supported: `"mpbn"`, `"minibn"`,
+            and `"minibn.BooleanNetwork"`.
+        **kwargs: Any
+            Keyword arguments forwarded to the target constructor.
+
+        Returns
+        -------
+        list
+            Converted Boolean network objects.
+
+        Raises
+        ------
+        TypeError
+            If `target` is not a string.
+        ValueError
+            If `target` is unsupported.
+        ImportError
+            If the selected conversion requires an optional dependency that is
+            not installed.
+        """
+
+        if not isinstance(target, str):
+            raise TypeError(
+                f"unsupported argument type for 'target': "
+                f"expected {str} but received {type(target)}"
+            )
+
+        if target in ["minibn", "minibn.BooleanNetwork", "mpbn"]:
+            return [bn.convert(target, **kwargs) for bn in self]
+
+        raise ValueError(
+            f"unsupported conversion target {target!r}: supported targets are "
+            "['minibn', 'minibn.BooleanNetwork', 'mpbn']"
+        )
 
     def to_networkx(self, drop_isolates: bool = False) -> nx.MultiDiGraph[Any]:
         """

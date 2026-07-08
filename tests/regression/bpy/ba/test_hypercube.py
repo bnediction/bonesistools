@@ -122,7 +122,7 @@ def test_read_hypercube(tmp_path):
             fp,
         )
 
-    hc = bt.bpy.ba.read_hypercube(file)
+    hc = bt.bpy.io.read_hypercube(file)
 
     assert isinstance(hc, bt.bpy.ba.Hypercube)
     assert hc == {
@@ -130,6 +130,16 @@ def test_read_hypercube(tmp_path):
         "B": 1,
         "C": "*",
     }
+
+
+def test_deprecated_read_hypercube_routes_to_io(tmp_path):
+    file = tmp_path / "hypercube.json"
+    file.write_text('{"A": 1, "B": "*"}')
+
+    with pytest.warns(FutureWarning, match="bt.bpy.ba.read_hypercube"):
+        hc = bt.bpy.ba.read_hypercube(file)
+
+    assert hc == bt.bpy.io.read_hypercube(file)
 
 
 def test_read_hypercube_rejects_nested_json(tmp_path):
@@ -147,7 +157,7 @@ def test_read_hypercube_rejects_nested_json(tmp_path):
         )
 
     with pytest.raises(ValueError):
-        bt.bpy.ba.read_hypercube(file)
+        bt.bpy.io.read_hypercube(file)
 
 
 def test_read_hypercubes_from_json_converts_null_to_free_value(tmp_path):
@@ -162,7 +172,7 @@ def test_read_hypercubes_from_json_converts_null_to_free_value(tmp_path):
             fp,
         )
 
-    hypercubes = bt.bpy.ba.read_hypercubes(file)
+    hypercubes = bt.bpy.io.read_hypercubes(file)
 
     assert set(hypercubes) == {"hc1", "hc2"}
     assert hypercubes["hc1"] == {"A": 0, "B": "*"}
@@ -175,8 +185,8 @@ def test_read_hypercubes_from_csv_columns_and_rows(tmp_path):
         ",hc1,hc2\n" "A,0,1\n" "B,,0\n",
     )
 
-    by_columns = bt.bpy.ba.read_hypercubes(file, orientation="columns")
-    by_rows = bt.bpy.ba.read_hypercubes(file, orientation="rows")
+    by_columns = bt.bpy.io.read_hypercubes(file, orientation="columns")
+    by_rows = bt.bpy.io.read_hypercubes(file, orientation="rows")
 
     assert by_columns["hc1"] == {"A": 0, "B": "*"}
     assert by_columns["hc2"] == {"A": 1, "B": 0}
@@ -190,18 +200,28 @@ def test_read_hypercubes_from_tsv_and_rejects_invalid_inputs(tmp_path):
         "\thc1\n" "A\t1\n",
     )
 
-    hypercubes = bt.bpy.ba.read_hypercubes(tsv_file)
+    hypercubes = bt.bpy.io.read_hypercubes(tsv_file)
     assert hypercubes["hc1"] == {"A": 1}
 
     with pytest.warns(FutureWarning):
         with pytest.raises(ValueError):
-            bt.bpy.ba.read_hypercubes(tsv_file, axis=cast(Any, "diagonal"))
+            bt.bpy.io.read_hypercubes(tsv_file, axis=cast(Any, "diagonal"))
 
     unsupported_file = tmp_path / "hypercubes.txt"
     unsupported_file.write_text("A=1")
 
     with pytest.raises(ValueError, match="unsupported input format"):
-        bt.bpy.ba.read_hypercubes(unsupported_file)
+        bt.bpy.io.read_hypercubes(unsupported_file)
+
+
+def test_deprecated_read_hypercubes_routes_to_io(tmp_path):
+    file = tmp_path / "hypercubes.csv"
+    file.write_text(",hc1\nA,1\n")
+
+    with pytest.warns(FutureWarning, match="bt.bpy.ba.read_hypercubes"):
+        hypercubes = bt.bpy.ba.read_hypercubes(file)
+
+    assert hypercubes == bt.bpy.io.read_hypercubes(file)
 
 
 def test_hypercube_collection_initialization_and_set_behavior():

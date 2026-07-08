@@ -23,7 +23,7 @@ def bnet_directory(tmp_path):
 
 @pytest.fixture
 def bnet_ensemble(bnet_directory):
-    return bt.bpy.bn.read_bnet_directory(bnet_directory)
+    return bt.bpy.io.read_bnet_directory(bnet_directory)
 
 
 def test_read_bnet_directory_and_ensemble(bnet_ensemble):
@@ -31,28 +31,71 @@ def test_read_bnet_directory_and_ensemble(bnet_ensemble):
     assert bnet_ensemble.components == frozenset({"A", "B", "C"})
 
 
+def test_boolean_network_ensemble_convert_to_mpbn(bnet_ensemble):
+    mpbn = pytest.importorskip("mpbn")
+
+    converted = bnet_ensemble.convert("mpbn")
+
+    assert isinstance(converted, list)
+    assert len(converted) == len(bnet_ensemble)
+    assert all(isinstance(bn, mpbn.MPBooleanNetwork) for bn in converted)
+    assert all(set(bn) == {"A", "B", "C"} for bn in converted)
+
+
+def test_boolean_network_ensemble_convert_to_minibn(bnet_ensemble):
+    minibn = pytest.importorskip("colomoto.minibn")
+
+    converted = bnet_ensemble.convert("minibn.BooleanNetwork")
+    converted_alias = bnet_ensemble.convert("minibn")
+
+    assert isinstance(converted, list)
+    assert len(converted) == len(bnet_ensemble)
+    assert all(isinstance(bn, minibn.BooleanNetwork) for bn in converted)
+    assert all(set(bn) == {"A", "B", "C"} for bn in converted)
+
+    assert isinstance(converted_alias, list)
+    assert len(converted_alias) == len(bnet_ensemble)
+    assert all(isinstance(bn, minibn.BooleanNetwork) for bn in converted_alias)
+
+
+def test_boolean_network_ensemble_convert_validates_target(bnet_ensemble):
+    with pytest.raises(TypeError, match="unsupported argument type for 'target'"):
+        bnet_ensemble.convert(cast(Any, 1))
+
+    with pytest.raises(ValueError, match="unsupported conversion target"):
+        bnet_ensemble.convert(cast(Any, "unknown"))
+
+
 def test_read_bnet_directory_validation_and_recursive_loading(tmp_path):
     with pytest.raises(FileNotFoundError, match="directory does not exist"):
-        bt.bpy.bn.read_bnet_directory(tmp_path / "missing")
+        bt.bpy.io.read_bnet_directory(tmp_path / "missing")
 
     not_directory = tmp_path / "network.bnet"
     not_directory.write_text("A, 1\n")
     with pytest.raises(NotADirectoryError, match="path is not a directory"):
-        bt.bpy.bn.read_bnet_directory(not_directory)
+        bt.bpy.io.read_bnet_directory(not_directory)
 
     empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(ValueError, match="no '.bnet' file found"):
-        bt.bpy.bn.read_bnet_directory(empty)
+        bt.bpy.io.read_bnet_directory(empty)
 
     nested = tmp_path / "nested"
     nested.mkdir()
     (nested / "sub").mkdir()
     (nested / "sub" / "model.bnet").write_text("A, 1\n")
 
-    ensemble = bt.bpy.bn.read_bnet_directory(nested, recursive=True)
+    ensemble = bt.bpy.io.read_bnet_directory(nested, recursive=True)
     assert len(ensemble) == 1
     assert ensemble.components == frozenset({"A"})
+
+
+def test_deprecated_read_bnet_directory_routes_to_io(bnet_directory):
+    with pytest.warns(FutureWarning, match="bt.bpy.bn.read_bnet_directory"):
+        ensemble = bt.bpy.bn.read_bnet_directory(bnet_directory)
+
+    expected = bt.bpy.io.read_bnet_directory(bnet_directory)
+    assert [bn.rules for bn in ensemble] == [bn.rules for bn in expected]
 
 
 def test_boolean_network_ensemble_initialization_and_slice_mutation_errors():

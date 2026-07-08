@@ -14,6 +14,8 @@ bn
     Boolean networks and logical modelling utilities.
 ig
     Influence graph utilities.
+io
+    Input/output helpers.
 pl
     Plotting utilities.
 """
@@ -31,18 +33,23 @@ from .._warnings import _warn_deprecated
 from . import boolean_algebra as ba
 from . import boolean_network as bn
 from . import influence_graph as ig
+from . import input_output as io
 from . import plotting as pl
 
 del annotations
 
 _sys.modules.update(
-    {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig", "pl"]}
+    {
+        f"{__name__}.{alias}": globals()[alias]
+        for alias in ["ba", "bn", "ig", "io", "pl"]
+    }
 )
 
 _MODULES: _Dict[str, _ModuleType] = {
     "ba": ba,
     "bn": bn,
     "ig": ig,
+    "io": io,
     "pl": pl,
 }
 
@@ -58,6 +65,7 @@ __all__ = [
     "ba",
     "bn",
     "ig",
+    "io",
     "pl",
 ]
 

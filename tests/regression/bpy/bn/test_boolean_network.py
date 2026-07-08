@@ -240,6 +240,53 @@ def test_boolean_network_to_bnet_returns_string():
     assert bn.to_bnet() == "A, B&!C\nB, 0\nC, 1\n"
 
 
+def test_boolean_network_convert_to_mpbn():
+    mpbn = pytest.importorskip("mpbn")
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    converted = bn.convert("mpbn")
+
+    assert isinstance(converted, mpbn.MPBooleanNetwork)
+    assert set(converted) == {"A", "B", "C"}
+
+
+def test_boolean_network_convert_to_minibn():
+    minibn = pytest.importorskip("colomoto.minibn")
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B & ~C",
+            "B": 0,
+            "C": 1,
+        }
+    )
+
+    converted = bn.convert("minibn.BooleanNetwork")
+    converted_alias = bn.convert("minibn")
+
+    assert isinstance(converted, minibn.BooleanNetwork)
+    assert isinstance(converted_alias, minibn.BooleanNetwork)
+    assert set(converted) == {"A", "B", "C"}
+    assert set(converted_alias) == {"A", "B", "C"}
+
+
+def test_boolean_network_convert_validates_target():
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1})
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'target'"):
+        bn.convert(cast(Any, 1))
+
+    with pytest.raises(ValueError, match="unsupported conversion target"):
+        bn.convert(cast(Any, "unknown"))
+
+
 def test_boolean_network_rename_validates_inputs_and_collisions():
     bn = bt.bpy.bn.BooleanNetwork(
         {
@@ -330,12 +377,22 @@ def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):
     infile.write_text("# ignored\n\nA, B\nB, 1\n")
 
     bn = bt.bpy.bn.BooleanNetwork.from_bnet(infile)
-    read_bn = bt.bpy.bn.read_bnet(infile)
+    read_bn = bt.bpy.io.read_bnet(infile)
 
     assert bn.rules == {"A": "B", "B": "1"}
     assert read_bn.rules == bn.rules
     assert bn.to_bnet(outfile) is None
     assert outfile.read_text() == "A, B\nB, 1\n"
+
+
+def test_deprecated_read_bnet_routes_to_io(tmp_path):
+    infile = tmp_path / "network.bnet"
+    infile.write_text("A, B\nB, 1\n")
+
+    with pytest.warns(FutureWarning, match="bt.bpy.bn.read_bnet"):
+        bn = bt.bpy.bn.read_bnet(infile)
+
+    assert bn.rules == bt.bpy.io.read_bnet(infile).rules
 
 
 def test_boolean_network_structural_equality():

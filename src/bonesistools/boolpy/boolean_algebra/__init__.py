@@ -8,8 +8,11 @@ Boolean algebra, including partial Boolean values and Boolean
 differential and predecessor inference utilities.
 """
 
+from typing import Any as _Any
+from typing import Dict as _Dict
 from typing import List as _List
 
+from ..._warnings import _warn_deprecated
 from ._algebra import (
     BooleanPredecessorInference,
 )
@@ -22,7 +25,6 @@ from ._kleene import (
     join,
     meet,
 )
-from ._parser import read_hypercube, read_hypercubes
 from ._representation import rule_to_string
 from ._structure import dnf_to_structure, expressions_equivalent
 from ._typing import (
@@ -66,6 +68,42 @@ __all__ = [
     "is_partial_boolean_like",
     "is_hypercube_like",
 ]
+
+
+def read_hypercube(*args: _Any, **kwargs: _Any) -> Hypercube:
+    """
+    Deprecated. Read a hypercube from a JSON file.
+
+    Use `bt.bpy.io.read_hypercube(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.bpy.ba.read_hypercube`",
+        replacement="`bt.bpy.io.read_hypercube`",
+        stacklevel=2,
+    )
+
+    from ._parser import read_hypercube as _read_hypercube
+
+    return _read_hypercube(*args, **kwargs)
+
+
+def read_hypercubes(*args: _Any, **kwargs: _Any) -> _Dict[str, Hypercube]:
+    """
+    Deprecated. Read named hypercubes from a CSV, TSV or JSON file.
+
+    Use `bt.bpy.io.read_hypercubes(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.bpy.ba.read_hypercubes`",
+        replacement="`bt.bpy.io.read_hypercubes`",
+        stacklevel=2,
+    )
+
+    from ._parser import read_hypercubes as _read_hypercubes
+
+    return _read_hypercubes(*args, **kwargs)
 
 
 def __dir__() -> _List[str]:

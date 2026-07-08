@@ -52,7 +52,7 @@ _sys.modules.update(
 _sys.modules.update(
     {
         f"{__name__}.bpy.{alias}": getattr(bpy, alias)
-        for alias in ["ba", "bn", "ig", "pl"]
+        for alias in ["ba", "bn", "ig", "io", "pl"]
     }
 )
 

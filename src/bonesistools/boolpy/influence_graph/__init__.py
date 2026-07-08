@@ -7,12 +7,13 @@ The `ig` sub-package provides parsers, analyses and graph-related
 utilities for signed regulatory networks.
 """
 
+from typing import Any as _Any
 from typing import List as _List
 
+from ..._warnings import _warn_deprecated
 from ._algorithms import walks_from
 from ._distances import distance, similarity
 from ._influence_graph import AggregatedInfluenceGraph, InfluenceGraph
-from ._parser import read_influence_graph
 from ._scoring import (
     InteractionScore,
     infer_signed_interactions,
@@ -32,6 +33,24 @@ __all__ = [
     "infer_signed_interactions_from_walks",
     "interaction_scores_from_walks",
 ]
+
+
+def read_influence_graph(*args: _Any, **kwargs: _Any) -> object:
+    """
+    Deprecated. Read an influence graph from a tabular file.
+
+    Use `bt.bpy.io.read_influence_graph(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.bpy.ig.read_influence_graph`",
+        replacement="`bt.bpy.io.read_influence_graph`",
+        stacklevel=2,
+    )
+
+    from ._parser import read_influence_graph as _read_influence_graph
+
+    return _read_influence_graph(*args, **kwargs)
 
 
 def __dir__() -> _List[str]:

@@ -7,7 +7,7 @@ import networkx as nx
 import pytest
 
 import bonesistools as bt
-from bonesistools.boolpy.influence_graph import _parser
+from bonesistools.boolpy.input_output import _influence_graph
 
 
 def _edge_data(graph, source, target, key=0):
@@ -23,7 +23,7 @@ def test_read_influence_graph_keeps_edge_attributes(tmp_path):
         "C,A,,unknown\n",
     )
 
-    graph = bt.bpy.ig.read_influence_graph(infile)
+    graph = bt.bpy.io.read_influence_graph(infile)
 
     assert isinstance(graph, nx.MultiDiGraph)
     assert set(graph.nodes) == {"A", "B", "C"}
@@ -39,7 +39,7 @@ def test_read_influence_graph_supports_custom_separator(tmp_path):
         "source\ttarget\tsign\n" "A\tB\t1\n",
     )
 
-    graph = bt.bpy.ig.read_influence_graph(infile, sep="\t")
+    graph = bt.bpy.io.read_influence_graph(infile, sep="\t")
 
     assert list(graph.edges(data=True)) == [("A", "B", {"sign": 1.0})]
 
@@ -48,19 +48,19 @@ def test_read_influence_graph_validates_file_columns_and_signs(tmp_path):
     missing = tmp_path / "missing.csv"
 
     with pytest.raises(FileNotFoundError):
-        bt.bpy.ig.read_influence_graph(missing)
+        bt.bpy.io.read_influence_graph(missing)
 
     missing_column = tmp_path / "missing_column.csv"
     missing_column.write_text("source,target\nA,B\n")
 
     with pytest.raises(ValueError, match="missing columns"):
-        bt.bpy.ig.read_influence_graph(missing_column)
+        bt.bpy.io.read_influence_graph(missing_column)
 
     invalid_sign = tmp_path / "invalid_sign.csv"
     invalid_sign.write_text("source,target,sign\nA,B,0\n")
 
     with pytest.raises(ValueError, match="unsupported sign values"):
-        bt.bpy.ig.read_influence_graph(invalid_sign)
+        bt.bpy.io.read_influence_graph(invalid_sign)
 
 
 def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
@@ -68,7 +68,7 @@ def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
     infile.write_text("source,target,sign\nA,B,1\n")
 
     with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        bt.bpy.ig.read_influence_graph(infile, genesyn=cast(Any, object()))
+        bt.bpy.io.read_influence_graph(infile, genesyn=cast(Any, object()))
 
 
 def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
@@ -83,9 +83,9 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
     infile.write_text("source,target,sign\nA,B,1\n")
     genesyn = FakeGeneSynonyms()
 
-    monkeypatch.setattr(_parser, "GeneSynonyms", FakeGeneSynonyms)
+    monkeypatch.setattr(_influence_graph, "GeneSynonyms", FakeGeneSynonyms)
 
-    graph = bt.bpy.ig.read_influence_graph(
+    graph = bt.bpy.io.read_influence_graph(
         infile,
         genesyn=cast(Any, genesyn),
         input_identifier_type="gene_id",
@@ -102,3 +102,14 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
             },
         )
     ]
+
+
+def test_deprecated_read_influence_graph_routes_to_io(tmp_path):
+    infile = tmp_path / "graph.csv"
+    infile.write_text("source,target,sign\nA,B,1\n")
+
+    with pytest.warns(FutureWarning, match="bt.bpy.ig.read_influence_graph"):
+        graph = bt.bpy.ig.read_influence_graph(infile)
+
+    expected = bt.bpy.io.read_influence_graph(infile)
+    assert list(graph.edges(data=True)) == list(expected.edges(data=True))

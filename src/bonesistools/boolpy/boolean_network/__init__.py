@@ -17,7 +17,6 @@ from ._network import (
     BooleanNetworkEnsemble,
     frequency_edge_style,
 )
-from ._parser import read_bnet, read_bnet_directory
 
 __all__ = [
     "BooleanNetwork",
@@ -28,6 +27,42 @@ __all__ = [
     "bn_to_pydot",
     "typing",
 ]
+
+
+def read_bnet(*args: _Any, **kwargs: _Any) -> BooleanNetwork:
+    """
+    Deprecated. Read a Boolean network from a `.bnet` file.
+
+    Use `bt.bpy.io.read_bnet(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.bpy.bn.read_bnet`",
+        replacement="`bt.bpy.io.read_bnet`",
+        stacklevel=2,
+    )
+
+    from ._parser import read_bnet as _read_bnet
+
+    return _read_bnet(*args, **kwargs)
+
+
+def read_bnet_directory(*args: _Any, **kwargs: _Any) -> BooleanNetworkEnsemble:
+    """
+    Deprecated. Read `.bnet` files from a directory.
+
+    Use `bt.bpy.io.read_bnet_directory(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.bpy.bn.read_bnet_directory`",
+        replacement="`bt.bpy.io.read_bnet_directory`",
+        stacklevel=2,
+    )
+
+    from ._parser import read_bnet_directory as _read_bnet_directory
+
+    return _read_bnet_directory(*args, **kwargs)
 
 
 def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
