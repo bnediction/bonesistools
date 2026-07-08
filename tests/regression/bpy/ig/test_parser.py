@@ -109,7 +109,7 @@ def test_deprecated_read_influence_graph_routes_to_io(tmp_path):
     infile.write_text("source,target,sign\nA,B,1\n")
 
     with pytest.warns(FutureWarning, match="bt.bpy.ig.read_influence_graph"):
-        graph = bt.bpy.ig.read_influence_graph(infile)
+        graph = cast(nx.MultiDiGraph, bt.bpy.ig.read_influence_graph(infile))
 
     expected = bt.bpy.io.read_influence_graph(infile)
     assert list(graph.edges(data=True)) == list(expected.edges(data=True))

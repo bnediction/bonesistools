@@ -430,11 +430,7 @@ def _coerce_components(components: Iterable[str]) -> Tuple[str, ...]:
 def _normalize_hypercube(hypercube: Hypercube) -> Hypercube:
 
     return Hypercube(
-        {
-            component: value
-            for component, value in hypercube.items()
-            if value.is_fixed
-        }
+        {component: value for component, value in hypercube.items() if value.is_fixed}
     )
 
 
@@ -524,8 +520,7 @@ def _intersect_hypercubes(
     values = {}
     for component in components:
         intersection = (
-            left._get_value(component).as_set()
-            & right._get_value(component).as_set()
+            left._get_value(component).as_set() & right._get_value(component).as_set()
         )
         if not intersection:
             return None

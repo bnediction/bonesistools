@@ -139,8 +139,7 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
         zf.writestr("GINsim-data/regulatoryGraph.ginml", _toy_ginml().strip())
         zf.writestr(
             "GINsim-data/initialState",
-            dedent(
-                """
+            dedent("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <initialStates>
                   <initialState name="state_A" value="A;1 B;0"/>
@@ -148,13 +147,11 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
                   <initialState name="" value="A;1 B;1"/>
                   <input name="input_A" value="A;1"/>
                 </initialStates>
-                """
-            ).strip(),
+                """).strip(),
         )
         zf.writestr(
             "GINsim-data/reg2dyn_parameters",
-            dedent(
-                """
+            dedent("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <simulationParameters nodeOrder="A B C D E">
                   <parameter name="run_A" updating="Asynchronous">
@@ -166,13 +163,11 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
                     </inputs>
                   </parameter>
                 </simulationParameters>
-                """
-            ).strip(),
+                """).strip(),
         )
         zf.writestr(
             "GINsim-data/modelSimplifier",
-            dedent(
-                """
+            dedent("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <modelModifierConfig>
                   <modelSimplifications>
@@ -180,13 +175,11 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
                       strict="true" removeList="D E"/>
                   </modelSimplifications>
                 </modelModifierConfig>
-                """
-            ).strip(),
+                """).strip(),
         )
         zf.writestr(
             "GINsim-data/mutant",
-            dedent(
-                """
+            dedent("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <perturbationConfig>
                   <listOfPerturbations>
@@ -198,8 +191,7 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
                     <user key="simulation::A" value="A KO"/>
                   </listOfUsers>
                 </perturbationConfig>
-                """
-            ).strip(),
+                """).strip(),
         )
         zf.writestr("GINsim-data/notes.txt", "preserve me")
 
@@ -207,8 +199,7 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
 
     assert model.metadata["format"] == "zginml"
     assert (
-        model.metadata["archive"]["main_ginml"]
-        == "GINsim-data/regulatoryGraph.ginml"
+        model.metadata["archive"]["main_ginml"] == "GINsim-data/regulatoryGraph.ginml"
     )
     assert "GINsim-data/notes.txt" in model.metadata["archive"]["files"]
     assert model.metadata["unknown_companion_files"] == ["GINsim-data/notes.txt"]
@@ -272,15 +263,13 @@ def test_read_zginml_threshold_encodes_multivalued_initial_states(tmp_path):
         )
         zf.writestr(
             "initialState",
-            dedent(
-                """
+            dedent("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <initialStates>
                   <input name="RA_pharmacological" value="RA;2"/>
                   <input name="RA_physiological" value="RA;1"/>
                 </initialStates>
-                """
-            ).strip(),
+                """).strip(),
         )
 
     model = bt.bpy.io.read_zginml(archive)
@@ -296,8 +285,7 @@ def test_read_zginml_threshold_encodes_multivalued_initial_states(tmp_path):
 
 
 def _multivalued_ginml() -> str:
-    return dedent(
-        """
+    return dedent("""
         <?xml version="1.0" encoding="UTF-8"?>
         <gxl>
           <graph class="regulatory" id="multi" nodeorder="RA Target">
@@ -311,5 +299,4 @@ def _multivalued_ginml() -> str:
               effects="1:positive 2:positive"/>
           </graph>
         </gxl>
-        """
-    )
+        """)

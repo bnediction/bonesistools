@@ -362,8 +362,7 @@ def _boolean_rule_for_native_node(
         return "0"
 
     converted = [
-        _convert_ginml_expression(expression, nodes)
-        for expression in expressions
+        _convert_ginml_expression(expression, nodes) for expression in expressions
     ]
 
     return _join_or(converted)
@@ -401,8 +400,7 @@ def _boolean_rule_for_threshold_node(
         return "0"
 
     converted = [
-        _convert_ginml_expression(expression, nodes)
-        for expression in expressions
+        _convert_ginml_expression(expression, nodes) for expression in expressions
     ]
 
     return _join_or(converted)
@@ -484,8 +482,7 @@ def _convert_ginml_expression(
 
 def _threshold_condition(component: str, threshold: int, maxvalue: int) -> str:
     terms = [
-        _threshold_component(component, level)
-        for level in range(1, threshold + 1)
+        _threshold_component(component, level) for level in range(1, threshold + 1)
     ]
 
     if threshold == 1 and maxvalue == 1:

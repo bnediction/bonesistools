@@ -1546,9 +1546,7 @@ class BooleanNetwork(Dict[str, Expression]):
             blockers.append(literals)
 
         return tuple(
-            Hypercube(
-                {components[index]: value for index, value in sorted(literals)}
-            )
+            Hypercube({components[index]: value for index, value in sorted(literals)})
             for literals in sorted(trapspaces, key=self._trapspace_sort_key)
         )
 
@@ -1571,9 +1569,7 @@ class BooleanNetwork(Dict[str, Expression]):
                     backend="asp",
                     ba=self.ba,
                 ):
-                    facts.append(
-                        f"implicant({target_index}, {value}, {implicant_id})."
-                    )
+                    facts.append(f"implicant({target_index}, {value}, {implicant_id}).")
 
                     for source, source_value in implicant.items():
                         if not source_value.is_fixed:
@@ -1812,7 +1808,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
     @staticmethod
     def _trapspace_sort_key(
-        literals: FrozenSet[Tuple[int, int]]
+        literals: FrozenSet[Tuple[int, int]],
     ) -> Tuple[int, Tuple[Tuple[int, int], ...]]:
 
         return len(literals), tuple(sorted(literals))

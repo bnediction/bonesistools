@@ -650,14 +650,18 @@ def test_boolean_network_reachable_attractors_explores_shared_paths_once(
 ):
     bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
     calls = 0
-    next_configuration = bn.next_configuration
+    successor_state_bits = _dynamics._successor_state_bits
 
-    def counted_next_configuration(state):
+    def counted_successor_state_bits(*args, **kwargs):
         nonlocal calls
         calls += 1
-        return next_configuration(state)
+        return successor_state_bits(*args, **kwargs)
 
-    monkeypatch.setattr(bn, "next_configuration", counted_next_configuration)
+    monkeypatch.setattr(
+        _dynamics,
+        "_successor_state_bits",
+        counted_successor_state_bits,
+    )
 
     attractors = bn.reachable_attractors(
         {},

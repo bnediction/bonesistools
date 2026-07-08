@@ -5,6 +5,8 @@ from __future__ import annotations
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
+    Any,
+    Callable,
     Dict,
     FrozenSet,
     Iterable,
@@ -29,7 +31,8 @@ from ..boolean_algebra import (
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
 
-_StateKey = Tuple[int, ...]
+_StateBits = int
+_CompiledRule = Callable[[_StateBits], int]
 ImplicantsByValue = Dict[Literal[0, 1], Implicants]
 
 
@@ -42,25 +45,25 @@ def _reachable_attractors_with_explicit_backend(
     """Enumerate terminal SCCs reachable in the explicit state-transition graph."""
 
     components = tuple(network.keys())
-    successors: Dict[_StateKey, Tuple[_StateKey, ...]] = {}
+    compiled_rules = _compile_bitset_rules(network, components)
+    successors: Dict[_StateBits, Tuple[_StateBits, ...]] = {}
     pending = [
-        tuple(initial_state[component] for component in components)
+        _state_bits_from_mapping(initial_state, components)
         for initial_state in initial_states
     ]
 
     while pending:
-        state_key = pending.pop()
-        if state_key in successors:
+        state_bits = pending.pop()
+        if state_bits in successors:
             continue
 
-        state = dict(zip(components, state_key))
-        state_successors = _successor_state_keys(
-            network,
-            state,
+        state_successors = _successor_state_bits(
+            compiled_rules,
+            state_bits,
             update=update,
-            components=components,
+            n_components=len(components),
         )
-        successors[state_key] = state_successors
+        successors[state_bits] = state_successors
 
         for successor in state_successors:
             if successor not in successors:
@@ -69,7 +72,7 @@ def _reachable_attractors_with_explicit_backend(
     terminal_components = _terminal_strongly_connected_components(successors)
 
     return tuple(
-        _configuration_set_from_state_keys(component, components)
+        _configuration_set_from_state_bits(component, components)
         for component in sorted(terminal_components, key=lambda states: min(states))
     )
 
@@ -160,8 +163,7 @@ def _most_permissive_asp_base_program(
                 for source, source_value in implicant.items():
                     if not source_value.is_fixed:
                         raise ValueError(
-                            "invalid DNF implicant with free component "
-                            f"{source!r}"
+                            "invalid DNF implicant with free component " f"{source!r}"
                         )
 
                     facts.append(
@@ -308,7 +310,7 @@ def _hypercube_from_fixed_literals(
 
 
 def _fixed_literals_sort_key(
-    literals: FrozenSet[Tuple[str, int]]
+    literals: FrozenSet[Tuple[str, int]],
 ) -> Tuple[int, Tuple[Tuple[str, int], ...]]:
     """Return a deterministic sort key for fixed-literal sets."""
 
@@ -422,89 +424,179 @@ def _hypercube_sort_key(
     return len(literals), literals
 
 
-def _successor_state_keys(
+def _compile_bitset_rules(
     network: "BooleanNetwork",
-    state: Dict[str, int],
+    components: Tuple[str, ...],
+) -> Tuple[_CompiledRule, ...]:
+    """Compile Boolean rules into bitset evaluators."""
+
+    component_indices = {component: index for index, component in enumerate(components)}
+
+    return tuple(
+        _compile_bitset_rule(network, rule, component_indices)
+        for rule in network.values()
+    )
+
+
+def _compile_bitset_rule(
+    network: "BooleanNetwork",
+    rule: Any,
+    component_indices: Mapping[str, int],
+) -> _CompiledRule:
+    """Compile one Boolean expression into a bitset evaluator."""
+
+    if rule is network.ba.TRUE:
+        return lambda state: 1
+
+    if rule is network.ba.FALSE:
+        return lambda state: 0
+
+    if isinstance(rule, network.ba.Symbol):
+        index = component_indices[str(rule)]
+        return lambda state, index=index: (state >> index) & 1
+
+    if isinstance(rule, network.ba.NOT):
+        child = _compile_bitset_rule(network, rule.args[0], component_indices)
+        return lambda state, child=child: 1 - child(state)
+
+    if isinstance(rule, network.ba.AND):
+        children = tuple(
+            _compile_bitset_rule(network, child, component_indices)
+            for child in rule.args
+        )
+        return lambda state, children=children: int(
+            all(child(state) for child in children)
+        )
+
+    if isinstance(rule, network.ba.OR):
+        children = tuple(
+            _compile_bitset_rule(network, child, component_indices)
+            for child in rule.args
+        )
+        return lambda state, children=children: int(
+            any(child(state) for child in children)
+        )
+
+    raise TypeError(f"unsupported Boolean expression type: {type(rule)}")
+
+
+def _state_bits_from_mapping(
+    state: Mapping[str, int],
+    components: Tuple[str, ...],
+) -> _StateBits:
+    """Encode a concrete state mapping as an integer bitset."""
+
+    state_bits = 0
+    for index, component in enumerate(components):
+        if state[component]:
+            state_bits |= 1 << index
+
+    return state_bits
+
+
+def _successor_state_bits(
+    compiled_rules: Tuple[_CompiledRule, ...],
+    state: _StateBits,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
-    components: Tuple[str, ...],
-) -> Tuple[_StateKey, ...]:
-    """Return successor state keys under a finite-state update semantics."""
+    n_components: int,
+) -> Tuple[_StateBits, ...]:
+    """Return successor bitsets under a finite-state update semantics."""
 
-    next_state = network.next_configuration(state)
+    next_state = _next_state_bits(compiled_rules, state)
 
     if update == "synchronous":
         if next_state == state:
             return ()
 
-        return (tuple(next_state[component] for component in components),)
+        return (next_state,)
 
-    unstable = tuple(
-        component
-        for component in components
-        if next_state[component] != state[component]
-    )
-
-    if not unstable:
+    unstable_mask = state ^ next_state
+    if unstable_mask == 0:
         return ()
 
     if update == "asynchronous":
-        return tuple(
-            _updated_state_key(
-                state,
-                next_state,
-                updated_components=(component,),
-                components=components,
-            )
-            for component in unstable
-        )
+        return tuple(state ^ bit for bit in _iter_set_bits(unstable_mask))
 
+    n_unstable = unstable_mask.bit_count()
     return tuple(
-        _updated_state_key(
-            state,
-            next_state,
-            updated_components=updated_components,
-            components=components,
-        )
-        for size in range(1, len(unstable) + 1)
-        for updated_components in combinations(unstable, size)
+        state ^ updated_mask
+        for size in range(1, n_unstable + 1)
+        for updated_mask in _updated_bit_masks(unstable_mask, size, n_components)
     )
 
 
-def _updated_state_key(
-    state: Mapping[str, int],
-    next_state: Mapping[str, int],
-    *,
-    updated_components: Tuple[str, ...],
-    components: Tuple[str, ...],
-) -> _StateKey:
-    """Return the key obtained by updating selected components."""
+def _next_state_bits(
+    compiled_rules: Tuple[_CompiledRule, ...],
+    state: _StateBits,
+) -> _StateBits:
+    """Evaluate all compiled rules on a bitset state."""
 
-    updated = dict(state)
-    for component in updated_components:
-        updated[component] = next_state[component]
+    next_state = 0
+    for index, rule in enumerate(compiled_rules):
+        if rule(state):
+            next_state |= 1 << index
 
-    return tuple(updated[component] for component in components)
+    return next_state
 
 
-def _configuration_set_from_state_keys(
-    state_keys: Iterable[_StateKey],
+def _iter_set_bits(mask: int) -> Iterable[int]:
+    """Yield one-bit masks from low to high bit."""
+
+    bit = 1
+    while bit <= mask:
+        if mask & bit:
+            yield bit
+        bit <<= 1
+
+
+def _updated_bit_masks(
+    unstable_mask: int,
+    size: int,
+    n_components: int,
+) -> Iterable[int]:
+    """Yield masks selecting a fixed number of unstable components."""
+
+    unstable_bits = [
+        1 << index for index in range(n_components) if unstable_mask & (1 << index)
+    ]
+
+    for selected_bits in combinations(unstable_bits, size):
+        updated_mask = 0
+        for bit in selected_bits:
+            updated_mask |= bit
+        yield updated_mask
+
+
+def _configuration_set_from_state_bits(
+    state_bits: Iterable[_StateBits],
     components: Tuple[str, ...],
 ) -> ConfigurationSet:
-    """Convert explicit state keys into a compact ConfigurationSet."""
+    """Convert explicit state bitsets into a compact ConfigurationSet."""
 
     configurations = ConfigurationSet(components)
-    for state_key in sorted(state_keys):
-        configurations.add(dict(zip(components, state_key)))
+    for state in sorted(state_bits):
+        configurations.add(_state_mapping_from_bits(state, components))
 
     configurations.compress()
 
     return configurations
 
 
+def _state_mapping_from_bits(
+    state: _StateBits,
+    components: Tuple[str, ...],
+) -> Dict[str, int]:
+    """Decode a bitset state into a component-value mapping."""
+
+    return {
+        component: (state >> index) & 1 for index, component in enumerate(components)
+    }
+
+
 def _terminal_strongly_connected_components(
-    successors: Mapping[_StateKey, Tuple[_StateKey, ...]]
-) -> Tuple[Tuple[_StateKey, ...], ...]:
+    successors: Mapping[_StateBits, Tuple[_StateBits, ...]],
+) -> Tuple[Tuple[_StateBits, ...], ...]:
     """Return SCCs with no outgoing transition to another SCC."""
 
     components = _strongly_connected_components(successors)
@@ -527,18 +619,18 @@ def _terminal_strongly_connected_components(
 
 
 def _strongly_connected_components(
-    successors: Mapping[_StateKey, Tuple[_StateKey, ...]]
-) -> Tuple[Tuple[_StateKey, ...], ...]:
+    successors: Mapping[_StateBits, Tuple[_StateBits, ...]],
+) -> Tuple[Tuple[_StateBits, ...], ...]:
     """Compute SCCs of a directed graph encoded as a successor mapping."""
 
     index = 0
-    stack: List[_StateKey] = []
-    on_stack: Set[_StateKey] = set()
-    indices: Dict[_StateKey, int] = {}
-    lowlinks: Dict[_StateKey, int] = {}
-    components: List[Tuple[_StateKey, ...]] = []
+    stack: List[_StateBits] = []
+    on_stack: Set[_StateBits] = set()
+    indices: Dict[_StateBits, int] = {}
+    lowlinks: Dict[_StateBits, int] = {}
+    components: List[Tuple[_StateBits, ...]] = []
 
-    def visit(state: _StateKey) -> None:
+    def visit(state: _StateBits) -> None:
         nonlocal index
 
         indices[state] = index

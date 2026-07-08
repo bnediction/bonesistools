@@ -4060,7 +4060,7 @@ def _networkx_to_pydot(graph: nx.MultiDiGraph) -> "Dot":
     if not any("name" in data for _, data in graph.nodes(data=True)):
         return nx.drawing.nx_pydot.to_pydot(graph)
 
-    graph = graph.copy()
+    graph = cast(_MultiDiGraphBase, graph.copy())
 
     for _, data in graph.nodes(data=True):
         node_name = data.pop("name", None)

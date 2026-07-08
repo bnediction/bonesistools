@@ -192,11 +192,7 @@ def merge_duplicate_vars(
         obsm=merged.obsm,
         varm=merged.varm,
         obsp=merged.obsp,
-        layers={
-            key: value
-            for key, value in merged.layers.items()
-            if key is not None
-        },
+        layers={key: value for key, value in merged.layers.items() if key is not None},
     )
     return None
 

@@ -610,12 +610,17 @@ def _umap_connectivities_from_knn(
     n_obs: int,
 ) -> csr_matrix:
 
+    knn_indices = knn_indices.astype(np.int32, copy=False)
     knn_distances = knn_distances.astype(np.float32, copy=False)
+    knn_distances = _zero_self_distances(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+    )
     n_neighbors = knn_indices.shape[1]
     sigmas, rhos = _umap_smooth_knn_distances(knn_distances, n_neighbors)
 
     rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
-    columns = knn_indices.astype(np.int32, copy=False).ravel()
+    columns = knn_indices.ravel()
     shifted_distances = knn_distances - rhos[:, None]
     with np.errstate(over="ignore"):
         values = np.exp(-(shifted_distances / sigmas[:, None]))
@@ -699,6 +704,10 @@ def _sort_knn_arrays(
     knn_distances: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
 
+    knn_distances = _zero_self_distances(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+    )
     rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
     self_order = np.where(knn_indices == rows, 0, 1)
     order = np.lexsort(
@@ -713,6 +722,22 @@ def _sort_knn_arrays(
         np.take_along_axis(knn_indices, order, axis=1),
         np.take_along_axis(knn_distances, order, axis=1),
     )
+
+
+def _zero_self_distances(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+) -> np.ndarray:
+
+    rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
+    self_mask = knn_indices == rows
+    non_zero_self = self_mask & (knn_distances != 0.0)
+    if not np.any(non_zero_self):
+        return knn_distances
+
+    knn_distances = knn_distances.copy()
+    knn_distances[non_zero_self] = 0.0
+    return knn_distances
 
 
 def _umap_smooth_knn_distances(

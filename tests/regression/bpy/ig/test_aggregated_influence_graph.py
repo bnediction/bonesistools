@@ -637,7 +637,7 @@ def test_to_graphviz_can_force_frequency_edge_labels_on_exact_graph(fake_graphvi
 
 def test_to_graphviz_can_label_edges_from_custom_attribute(fake_graphviz):
     graph = _single_edge_graph()
-    graph["A"]["B"][0]["support"] = "manual"
+    cast(Any, graph["A"]["B"])[0]["support"] = "manual"
 
     rendered = graph.to_graphviz(edge_label="support")
 

@@ -288,11 +288,7 @@ def prime_implicants(
 
     return tuple(
         Hypercube(
-            {
-                str(symbol): bit
-                for symbol, bit in zip(symbols, cube)
-                if bit is not None
-            }
+            {str(symbol): bit for symbol, bit in zip(symbols, cube) if bit is not None}
         )
         for cube in prime_cubes
     )
@@ -389,7 +385,7 @@ def _expressions_equivalent_with_asp(
             *facts2,
             f"root(1, {root1}).",
             f"root(2, {root2}).",
-        """
+            """
         1 { assign(S, 0); assign(S, 1) } 1 :- symbol(S).
 
         value(E, V) :- const_expr(E, V).
@@ -557,8 +553,7 @@ def _compute_prime_cubes(
         cube
         for cube in prime_cubes
         if not any(
-            cube != other and _boolean_cube_covers(other, cube)
-            for other in prime_cubes
+            cube != other and _boolean_cube_covers(other, cube) for other in prime_cubes
         )
     )
 
@@ -693,8 +688,7 @@ def _combine_boolean_cubes(
 def _boolean_cube_covers(cube1: _BooleanCube, cube2: _BooleanCube) -> bool:
 
     return all(
-        value1 is None or value1 == value2
-        for value1, value2 in zip(cube1, cube2)
+        value1 is None or value1 == value2 for value1, value2 in zip(cube1, cube2)
     )
 
 
@@ -718,9 +712,7 @@ def _dnf_clauses(ba: BooleanAlgebra, expr: Expression) -> Tuple[_DNFClause, ...]
 
     if isinstance(expr_any, ba.OR):
         return tuple(
-            clause
-            for operand in expr_any.args
-            for clause in _dnf_clauses(ba, operand)
+            clause for operand in expr_any.args for clause in _dnf_clauses(ba, operand)
         )
 
     if isinstance(expr_any, ba.AND):
