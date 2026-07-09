@@ -8,9 +8,10 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union, overload
 
 from ..._typing import RandomStateSeed
 from ..._validation import _as_positive_integer, _as_seed
-from ._boolean import PartialBoolean
 from ._hypercube import Hypercube
-from ._typing import ConfigurationLike, HypercubeLike, PartialBooleanLike
+from ._typing import ConfigurationLike, HypercubeLike
+
+_EncodedHypercube = Tuple[int, int]
 
 
 class ConfigurationSet:
@@ -78,7 +79,7 @@ class ConfigurationSet:
         mentions an unknown component.
     """
 
-    __slots__ = ("_components", "_hypercubes")
+    __slots__ = ("_component_to_index", "_components", "_hypercubes")
 
     def __init__(
         self,
@@ -87,7 +88,10 @@ class ConfigurationSet:
     ) -> None:
 
         self._components = _coerce_components(components)
-        self._hypercubes: List[Hypercube] = []
+        self._component_to_index = {
+            component: index for index, component in enumerate(self._components)
+        }
+        self._hypercubes: List[_EncodedHypercube] = []
 
         if configurations is not None:
             for configuration in configurations:
@@ -105,7 +109,7 @@ class ConfigurationSet:
         except (TypeError, ValueError):
             return False
 
-        return self.contains(hypercube)
+        return self._contains_hypercube(hypercube)
 
     def __iter__(self) -> Iterator[Dict[str, int]]:
         """
@@ -152,7 +156,7 @@ class ConfigurationSet:
         """
 
         copied = ConfigurationSet(self._components)
-        copied._hypercubes = [hypercube.copy() for hypercube in self._hypercubes]
+        copied._hypercubes = list(self._hypercubes)
 
         return copied
 
@@ -181,18 +185,7 @@ class ConfigurationSet:
         """
 
         hypercube = self._coerce_hypercube(configuration)
-
-        if self.contains(hypercube):
-            return None
-
-        updated: List[Hypercube] = []
-        for stored in self._hypercubes:
-            if stored <= hypercube:
-                continue
-            updated.extend(_subtract_hypercube(stored, hypercube, self._components))
-
-        updated.append(hypercube)
-        self._hypercubes = updated
+        self._add_hypercube(hypercube)
 
     def compress(self) -> None:
         """
@@ -230,7 +223,7 @@ class ConfigurationSet:
                         for k, hypercube in enumerate(self._hypercubes)
                         if k not in {i, j}
                     ]
-                    self.add(merged)
+                    self._add_hypercube(merged)
                     changed = True
                     break
 
@@ -263,20 +256,7 @@ class ConfigurationSet:
         False
         """
 
-        hypercube = self._coerce_hypercube(configuration)
-        remaining = [hypercube]
-
-        for stored in self._hypercubes:
-            next_remaining = []
-            for current in remaining:
-                next_remaining.extend(
-                    _subtract_hypercube(current, stored, self._components)
-                )
-            remaining = next_remaining
-            if not remaining:
-                return True
-
-        return False
+        return self._contains_hypercube(self._coerce_hypercube(configuration))
 
     def count(self) -> int:
         """
@@ -290,7 +270,7 @@ class ConfigurationSet:
         """
 
         return sum(
-            _count_hypercube_configurations(hypercube, self._components)
+            _count_hypercube_configurations(hypercube, len(self._components))
             for hypercube in self._hypercubes
         )
 
@@ -377,7 +357,7 @@ class ConfigurationSet:
         index = int(rng.randint(total))  # pyright: ignore[reportAttributeAccessIssue]
 
         for hypercube in self._hypercubes:
-            size = _count_hypercube_configurations(hypercube, self._components)
+            size = _count_hypercube_configurations(hypercube, len(self._components))
             if index < size:
                 return _configuration_at_index(hypercube, self._components, index)
 
@@ -385,7 +365,46 @@ class ConfigurationSet:
 
         raise RuntimeError("failed to sample from ConfigurationSet")
 
-    def _coerce_hypercube(self, configuration: object) -> Hypercube:
+    def _add_hypercube(self, hypercube: _EncodedHypercube) -> None:
+
+        if self._contains_hypercube(hypercube):
+            return None
+
+        updated: List[_EncodedHypercube] = []
+        for stored in self._hypercubes:
+            if _is_encoded_subset(stored, hypercube):
+                continue
+            updated.extend(
+                _subtract_hypercube(stored, hypercube, len(self._components))
+            )
+
+        updated.append(hypercube)
+        self._hypercubes = updated
+
+    def _contains_hypercube(self, hypercube: _EncodedHypercube) -> bool:
+
+        remaining = [hypercube]
+
+        for stored in self._hypercubes:
+            next_remaining = []
+            for current in remaining:
+                next_remaining.extend(
+                    _subtract_hypercube(current, stored, len(self._components))
+                )
+            remaining = next_remaining
+            if not remaining:
+                return True
+
+        return False
+
+    def _as_hypercubes(self) -> Tuple[Hypercube, ...]:
+
+        return tuple(
+            _decode_hypercube(hypercube, self._components)
+            for hypercube in self._hypercubes
+        )
+
+    def _coerce_hypercube(self, configuration: object) -> _EncodedHypercube:
 
         if isinstance(configuration, Hypercube):
             hypercube = configuration.copy()
@@ -405,7 +424,10 @@ class ConfigurationSet:
                 f"{', '.join(sorted(unknown))}"
             )
 
-        return _normalize_hypercube(hypercube)
+        return _encode_hypercube(
+            _normalize_hypercube(hypercube),
+            self._component_to_index,
+        )
 
 
 def _coerce_components(components: Iterable[str]) -> Tuple[str, ...]:
@@ -434,122 +456,178 @@ def _normalize_hypercube(hypercube: Hypercube) -> Hypercube:
     )
 
 
-def _count_hypercube_configurations(
+def _encode_hypercube(
     hypercube: Hypercube,
-    components: Sequence[str],
+    component_to_index: Mapping[str, int],
+) -> _EncodedHypercube:
+
+    fixed_mask = 0
+    value_mask = 0
+    for component, value in hypercube.items():
+        bit = 1 << component_to_index[component]
+        fixed_mask |= bit
+        if value.value == 1:
+            value_mask |= bit
+
+    return fixed_mask, value_mask
+
+
+def _count_hypercube_configurations(
+    hypercube: _EncodedHypercube,
+    n_components: int,
 ) -> int:
 
-    count = 1
-    for component in components:
-        count *= len(hypercube._get_value(component).as_set())
-
-    return count
+    fixed_mask, _ = hypercube
+    return 1 << (n_components - _bit_count(fixed_mask))
 
 
 def _iter_hypercube_configurations(
-    hypercube: Hypercube,
+    hypercube: _EncodedHypercube,
     components: Sequence[str],
 ) -> Iterator[Dict[str, int]]:
 
-    values = [
-        sorted(hypercube._get_value(component).as_set()) for component in components
+    fixed_mask, value_mask = hypercube
+    free_indices = [
+        index for index in range(len(components)) if not fixed_mask & (1 << index)
     ]
 
-    for configuration in product(*values):
-        yield dict(zip(components, configuration))
+    for free_values in product((0, 1), repeat=len(free_indices)):
+        configuration = {}
+        free_position = 0
+        for index, component in enumerate(components):
+            bit = 1 << index
+            if fixed_mask & bit:
+                configuration[component] = 1 if value_mask & bit else 0
+            else:
+                configuration[component] = free_values[free_position]
+                free_position += 1
+        yield configuration
 
 
 def _configuration_at_index(
-    hypercube: Hypercube,
+    hypercube: _EncodedHypercube,
     components: Sequence[str],
     index: int,
 ) -> Dict[str, int]:
 
+    fixed_mask, value_mask = hypercube
     configuration = {}
-    for component in reversed(components):
-        values = sorted(hypercube._get_value(component).as_set())
-        value = values[index % len(values)]
-        configuration[component] = value
-        index //= len(values)
+    for component_index in reversed(range(len(components))):
+        bit = 1 << component_index
+        component = components[component_index]
+        if fixed_mask & bit:
+            configuration[component] = 1 if value_mask & bit else 0
+            continue
+
+        configuration[component] = index % 2
+        index //= 2
 
     return {component: configuration[component] for component in components}
 
 
-def _subtract_hypercube(
-    hypercube: Hypercube,
-    removed: Hypercube,
+def _decode_hypercube(
+    hypercube: _EncodedHypercube,
     components: Sequence[str],
-) -> Tuple[Hypercube, ...]:
+) -> Hypercube:
 
-    intersection = _intersect_hypercubes(hypercube, removed, components)
+    fixed_mask, value_mask = hypercube
+    return Hypercube(
+        {
+            component: 1 if value_mask & (1 << index) else 0
+            for index, component in enumerate(components)
+            if fixed_mask & (1 << index)
+        }
+    )
+
+
+def _subtract_hypercube(
+    hypercube: _EncodedHypercube,
+    removed: _EncodedHypercube,
+    n_components: int,
+) -> Tuple[_EncodedHypercube, ...]:
+
+    intersection = _intersect_hypercubes(hypercube, removed)
     if intersection is None:
-        return (hypercube.copy(),)
+        return (hypercube,)
 
-    if hypercube <= removed:
+    if _is_encoded_subset(hypercube, removed):
         return ()
 
     fragments = []
-    prefix: Dict[str, PartialBooleanLike] = {}
+    prefix_fixed = 0
+    prefix_value = 0
+    fixed_mask, value_mask = hypercube
+    intersection_fixed, intersection_value = intersection
+    all_mask = (1 << n_components) - 1
 
-    for index, component in enumerate(components):
-        hypercube_values = hypercube._get_value(component).as_set()
-        intersection_values = intersection._get_value(component).as_set()
+    for index in range(n_components):
+        bit = 1 << index
+        hypercube_values = _component_values(fixed_mask, value_mask, bit)
+        intersection_values = _component_values(
+            intersection_fixed,
+            intersection_value,
+            bit,
+        )
         excluded_values = hypercube_values - intersection_values
 
         for value in sorted(excluded_values):
-            fragment = dict(prefix)
-            fragment[component] = value
-            for tail_component in components[index + 1 :]:
-                tail_value = hypercube._get_value(tail_component)
-                if tail_value.is_fixed:
-                    fragment[tail_component] = tail_value.value
-            fragments.append(Hypercube(fragment))
+            tail_mask = all_mask ^ ((1 << (index + 1)) - 1)
+            tail_fixed = fixed_mask & tail_mask
+            fragment_fixed = prefix_fixed | bit | tail_fixed
+            fragment_value = (
+                prefix_value | (bit if value == 1 else 0) | (value_mask & tail_fixed)
+            )
+            fragments.append((fragment_fixed, fragment_value & fragment_fixed))
 
         if len(intersection_values) == 1:
-            prefix[component] = next(iter(intersection_values))
+            prefix_fixed |= bit
+            if next(iter(intersection_values)) == 1:
+                prefix_value |= bit
 
     return tuple(fragments)
 
 
 def _intersect_hypercubes(
-    left: Hypercube,
-    right: Hypercube,
-    components: Sequence[str],
-) -> Optional[Hypercube]:
+    left: _EncodedHypercube,
+    right: _EncodedHypercube,
+) -> Optional[_EncodedHypercube]:
 
-    values = {}
-    for component in components:
-        intersection = (
-            left._get_value(component).as_set() & right._get_value(component).as_set()
-        )
-        if not intersection:
-            return None
-        if len(intersection) == 1:
-            values[component] = next(iter(intersection))
+    left_fixed, left_value = left
+    right_fixed, right_value = right
+    if left_fixed & right_fixed & (left_value ^ right_value):
+        return None
 
-    return Hypercube(values)
+    fixed_mask = left_fixed | right_fixed
+    value_mask = (left_value & left_fixed) | (right_value & right_fixed)
+    return fixed_mask, value_mask & fixed_mask
 
 
 def _try_merge_hypercubes(
-    left: Hypercube,
-    right: Hypercube,
+    left: _EncodedHypercube,
+    right: _EncodedHypercube,
     components: Sequence[str],
-) -> Optional[Hypercube]:
+) -> Optional[_EncodedHypercube]:
 
     differences = []
-    values: Dict[str, PartialBoolean] = {}
+    fixed_mask = 0
+    value_mask = 0
+    left_fixed, left_value = left
+    right_fixed, right_value = right
 
-    for component in components:
-        left_value = left._get_value(component)
-        right_value = right._get_value(component)
+    for index in range(len(components)):
+        bit = 1 << index
+        left_values = _component_values(left_fixed, left_value, bit)
+        right_values = _component_values(right_fixed, right_value, bit)
 
-        if left_value == right_value:
-            if left_value.is_fixed:
-                values[component] = left_value
+        if left_values == right_values:
+            if len(left_values) == 1:
+                fixed_mask |= bit
+                if next(iter(left_values)) == 1:
+                    value_mask |= bit
             continue
 
-        if left_value.as_set() | right_value.as_set() == frozenset({0, 1}):
-            differences.append(component)
+        if left_values | right_values == frozenset({0, 1}):
+            differences.append(index)
             continue
 
         return None
@@ -557,4 +635,34 @@ def _try_merge_hypercubes(
     if len(differences) != 1:
         return None
 
-    return Hypercube(values)
+    return fixed_mask, value_mask
+
+
+def _is_encoded_subset(
+    left: _EncodedHypercube,
+    right: _EncodedHypercube,
+) -> bool:
+
+    left_fixed, left_value = left
+    right_fixed, right_value = right
+    return (
+        left_fixed & right_fixed == right_fixed
+        and (left_value ^ right_value) & right_fixed == 0
+    )
+
+
+def _component_values(
+    fixed_mask: int,
+    value_mask: int,
+    bit: int,
+) -> frozenset[int]:
+
+    if fixed_mask & bit:
+        return frozenset({1 if value_mask & bit else 0})
+
+    return frozenset({0, 1})
+
+
+def _bit_count(mask: int) -> int:
+
+    return bin(mask).count("1")

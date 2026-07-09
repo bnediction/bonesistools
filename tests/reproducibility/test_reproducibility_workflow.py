@@ -185,6 +185,8 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
     )
     neighbors_model.fit(representation_mtx)
     knn_distances, knn_indices = neighbors_model.kneighbors(representation_mtx)
+    knn_distances = knn_distances.astype(np.float32, copy=True)
+    knn_distances[knn_indices == np.arange(adata.n_obs)[:, None]] = 0.0
     reference_graph = cast(
         Any,
         fuzzy_simplicial_set(

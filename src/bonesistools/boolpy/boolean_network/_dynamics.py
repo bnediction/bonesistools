@@ -129,7 +129,7 @@ def _validate_initial_hypercube(
     if len(configurations._hypercubes) != 1:
         raise ValueError("invalid initial state representation")
 
-    return configurations._hypercubes[0]
+    return configurations._as_hypercubes()[0]
 
 
 def _most_permissive_asp_base_program(

@@ -778,7 +778,7 @@ def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():
         {"A": 1, "B": 0},
         {"A": 1, "B": 1},
     )
-    assert attractors[0]._hypercubes == [bt.bpy.ba.Hypercube({})]
+    assert len(attractors[0]._hypercubes) == 1
 
 
 def test_boolean_network_reachable_attractors_validate_options():

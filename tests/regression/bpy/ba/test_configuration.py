@@ -42,7 +42,11 @@ def test_configuration_set_replaces_redundant_specific_subspaces():
     configurations.add({"A": "*", "B": 0})
 
     assert len(configurations) == 2
-    assert configurations._hypercubes == [bt.bpy.ba.Hypercube({"B": 0})]
+    assert len(configurations._hypercubes) == 1
+    assert configurations.enumerate() == (
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+    )
 
 
 def test_configuration_set_keeps_exact_union_for_partially_overlapping_subspaces():
@@ -71,7 +75,11 @@ def test_configuration_set_compresses_adjacent_subspaces():
     configurations.compress()
 
     assert len(configurations) == 2
-    assert configurations._hypercubes == [bt.bpy.ba.Hypercube({"B": 0})]
+    assert len(configurations._hypercubes) == 1
+    assert configurations.enumerate() == (
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+    )
 
 
 def test_configuration_set_samples_reproducibly():
