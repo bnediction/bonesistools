@@ -17,6 +17,7 @@ from typing import (
     MutableMapping,
     NoReturn,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -33,7 +34,11 @@ from ..._validation import (
     _as_probability,
 )
 from ..._warnings import _warn_deprecated
-from ._graphviz import _networkx_to_graphviz, _set_pydot_defaults
+from ._graphviz import (
+    _graphviz_attributes,
+    _networkx_to_graphviz,
+    _set_pydot_defaults,
+)
 from ._styles import (
     _evaluate_style_from_attributes,
     _style_callable_parameters,
@@ -2833,6 +2838,11 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 collapsed.nodes[collapsed_node].update(data)
                 collapsed.nodes[collapsed_node].setdefault("members", {node})
 
+        _apply_collapsed_family_node_metrics(
+            collapsed=collapsed,
+            source=self,
+        )
+
         edge_frequencies = {}
 
         for source, target, data in self.edges(data=True):
@@ -3026,6 +3036,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         graph_attr: Optional[Mapping[str, Any]] = None,
         node_attr: Optional[Mapping[str, Any]] = None,
         node_style: AggregatedNodeStyle = None,
+        family_attr: Union[bool, Mapping[str, Any]] = True,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
@@ -3078,11 +3089,19 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             common Boolean rule structure for the node. Higher values indicate
             more stable inferred functions.
 
+            After family collapse, family nodes use conservative member
+            summaries: the minimum `function_stability` and the maximum
+            `function_count`, when all family members provide the metric.
+
             A callable defines a custom node style. Argument names are resolved
             from node attributes and the callable must return graphviz node
             attributes.
 
             If `None`, no additional node styling is applied.
+        family_attr: bool or Mapping[str, Any] (default: True)
+            Family-node attributes. `True` applies compact defaults, `False`
+            disables family-specific attributes, and a mapping updates the
+            default graphviz node attributes for collapsed families.
         edge_label: str or None (default: "count")
             Edge attribute displayed as label. If `None`, no edge label is
             displayed. `"count"` displays the occurrence count on exact
@@ -3129,6 +3148,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             min_frequency=min_frequency,
             drop_isolates=drop_isolates,
             node_style=node_style,
+            family_attr=family_attr,
             edge_label=edge_label,
             edge_style=edge_style,
         )
@@ -3154,6 +3174,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         graph_attr: Optional[Mapping[str, Any]] = None,
         node_attr: Optional[Mapping[str, Any]] = None,
         node_style: AggregatedNodeStyle = None,
+        family_attr: Union[bool, Mapping[str, Any]] = True,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
@@ -3214,11 +3235,19 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             common Boolean rule structure for the node. Higher values indicate
             more stable inferred functions.
 
+            After family collapse, family nodes use conservative member
+            summaries: the minimum `function_stability` and the maximum
+            `function_count`, when all family members provide the metric.
+
             A callable defines a custom node style. Argument names are resolved
             from node attributes and the callable must return pydot node
             attributes.
 
             If `None`, no additional node styling is applied.
+        family_attr: bool or Mapping[str, Any] (default: True)
+            Family-node attributes. `True` applies compact defaults, `False`
+            disables family-specific attributes, and a mapping updates the
+            default pydot node attributes for collapsed families.
         edge_label: str or None (default: "count")
             Edge attribute displayed as label. If `None`, no edge label is
             displayed. `"count"` displays the occurrence count on exact
@@ -3263,10 +3292,16 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             min_frequency=min_frequency,
             drop_isolates=drop_isolates,
             node_style=node_style,
+            family_attr=family_attr,
             edge_label=edge_label,
             edge_style=edge_style,
         )
 
+        _apply_networkx_defaults(
+            graph,
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+        )
         dot = _networkx_to_pydot(graph)
 
         dot.set_prog(program)
@@ -3292,6 +3327,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         graph_attr: Optional[Mapping[str, Any]] = None,
         node_attr: Optional[Mapping[str, Any]] = None,
         node_style: AggregatedNodeStyle = None,
+        family_attr: Union[bool, Mapping[str, Any]] = True,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
@@ -3356,11 +3392,19 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             common Boolean rule structure for the node. Higher values indicate
             more stable inferred functions.
 
+            After family collapse, family nodes use conservative member
+            summaries: the minimum `function_stability` and the maximum
+            `function_count`, when all family members provide the metric.
+
             A callable defines a custom node style. Argument names are resolved
             from node attributes and the callable must return pydot node
             attributes.
 
             If `None`, no additional node styling is applied.
+        family_attr: bool or Mapping[str, Any] (default: True)
+            Family-node attributes. `True` applies compact defaults, `False`
+            disables family-specific attributes, and a mapping updates the
+            default pydot node attributes for collapsed families.
         edge_label: str or None (default: "count")
             Edge attribute displayed as label. If `None`, no edge label is
             displayed. `"count"` displays the occurrence count on exact
@@ -3424,6 +3468,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 min_frequency=min_frequency,
                 drop_isolates=drop_isolates,
                 node_style=node_style,
+                family_attr=family_attr,
                 edge_label=edge_label,
                 edge_style=edge_style,
                 program=program,
@@ -3656,6 +3701,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         min_frequency: float,
         drop_isolates: bool,
         node_style: AggregatedNodeStyle,
+        family_attr: Union[bool, Mapping[str, Any]],
         edge_label: Optional[str],
         edge_style: AggregatedEdgeStyle,
     ) -> InfluenceGraph:
@@ -3753,6 +3799,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             graph=graph,
             node_style=node_style,
         )
+        _apply_family_node_rendering(graph, family_attr=family_attr)
 
         return graph
 
@@ -4097,3 +4144,253 @@ def _networkx_to_pydot(graph: nx.MultiDiGraph) -> "Dot":
             data["label"] = node_name
 
     return nx.drawing.nx_pydot.to_pydot(graph)
+
+
+def _apply_networkx_defaults(
+    graph: nx.MultiDiGraph,
+    *,
+    node_attr: Optional[Mapping[str, Any]],
+    edge_attr: Optional[Mapping[str, Any]],
+) -> None:
+    """
+    Apply graphviz defaults to existing NetworkX node and edge attributes.
+    """
+
+    node_defaults = _graphviz_attributes(node_attr)
+    edge_defaults = _graphviz_attributes(edge_attr)
+
+    if node_defaults:
+        for _, data in graph.nodes(data=True):
+            for key, value in node_defaults.items():
+                data.setdefault(key, value)
+
+    if edge_defaults:
+        for _, _, data in graph.edges(data=True):
+            for key, value in edge_defaults.items():
+                data.setdefault(key, value)
+
+
+def _apply_family_node_rendering(
+    graph: nx.MultiDiGraph,
+    *,
+    family_attr: Union[bool, Mapping[str, Any]],
+) -> None:
+    """
+    Use compact default labels for collapsed family nodes.
+    """
+
+    if family_attr is False:
+        return None
+
+    default_attributes = {
+        "margin": "0",
+        "shape": "box",
+        "style": "rounded",
+    }
+    if family_attr is True:
+        attributes = default_attributes
+    elif isinstance(family_attr, MappingInstance):
+        attributes = {
+            **default_attributes,
+            **_graphviz_attributes(family_attr),
+        }
+    else:
+        raise TypeError(
+            "unsupported argument type for 'family_attr': expected "
+            f"bool or mapping but received {type(family_attr)}"
+        )
+
+    for _, data in graph.nodes(data=True):
+        members = data.get("members")
+        if (
+            not isinstance(members, (set, frozenset, list, tuple))
+            or len(members) <= 1
+        ):
+            continue
+
+        data.setdefault("label", _wrapped_family_label(members))
+        _update_family_node_attributes(data, attributes)
+
+    return None
+
+
+def _apply_collapsed_family_node_metrics(
+    collapsed: nx.MultiDiGraph,
+    source: nx.MultiDiGraph,
+) -> None:
+    """
+    Add conservative member-level node metrics to collapsed family nodes.
+    """
+
+    for _, data in collapsed.nodes(data=True):
+        members = data.get("members")
+        if (
+            not isinstance(members, (set, frozenset, list, tuple))
+            or len(members) <= 1
+        ):
+            continue
+
+        stability_values = _family_member_attribute_values(
+            graph=source,
+            members=members,
+            attribute="function_stability",
+        )
+        if stability_values is not None:
+            data["function_stability"] = min(stability_values)
+
+        count_values = _family_member_attribute_values(
+            graph=source,
+            members=members,
+            attribute="function_count",
+        )
+        if count_values is not None:
+            data["function_count"] = max(count_values)
+
+
+def _family_member_attribute_values(
+    graph: nx.MultiDiGraph,
+    members: Iterable[Any],
+    *,
+    attribute: str,
+) -> Optional[List[Any]]:
+    """
+    Return member attribute values only when every member provides them.
+    """
+
+    values = []
+    for member in members:
+        member_data = graph.nodes[member]
+        if attribute not in member_data:
+            return None
+        values.append(member_data[attribute])
+
+    return values
+
+
+def _update_family_node_attributes(
+    data: MutableMapping[str, Any],
+    attributes: Mapping[str, str],
+) -> None:
+    """
+    Apply family attributes without dropping existing style flags.
+    """
+
+    for key, value in attributes.items():
+        if key == "style" and key in data:
+            data[key] = _merge_graphviz_style_flags(str(data[key]), value)
+            continue
+
+        data[key] = value
+
+
+def _merge_graphviz_style_flags(first: str, second: str) -> str:
+    """
+    Merge comma-separated graphviz style flags while preserving order.
+    """
+
+    flags = []
+    for style in (first, second):
+        for flag in style.split(","):
+            flag = flag.strip()
+            if flag and flag not in flags:
+                flags.append(flag)
+
+    return ",".join(flags)
+
+
+def _wrapped_family_label(
+    members: Iterable[Any],
+    *,
+    max_line_length: int = 40,
+) -> str:
+    """
+    Return a pipe-separated family label wrapped to compact line lengths.
+    """
+
+    labels = sorted(str(member) for member in members)
+    lines = _greedy_wrapped_label_lines(
+        labels,
+        max_line_length=max_line_length,
+    )
+    if len(lines) > 1:
+        lines = _balanced_wrapped_label_lines(
+            labels,
+            n_lines=len(lines),
+        )
+
+    return "\n".join(lines)
+
+
+def _greedy_wrapped_label_lines(
+    labels: Sequence[str],
+    *,
+    max_line_length: int,
+) -> List[str]:
+    """
+    Wrap labels without exceeding the target line length when possible.
+    """
+
+    lines: List[str] = []
+    current_line = labels[0]
+
+    for label in labels[1:]:
+        candidate = f"{current_line}|{label}"
+        if len(candidate) <= max_line_length:
+            current_line = candidate
+            continue
+
+        lines.append(current_line)
+        current_line = label
+
+    lines.append(current_line)
+    return lines
+
+
+def _balanced_wrapped_label_lines(
+    labels: Sequence[str],
+    *,
+    n_lines: int,
+) -> List[str]:
+    """
+    Rewrap labels into lines with similar text lengths.
+    """
+
+    n_labels = len(labels)
+    scores: List[List[Tuple[int, int]]] = [
+        [(0, -1)] * (n_labels + 1) for _ in range(n_lines + 1)
+    ]
+
+    for end in range(1, n_labels + 1):
+        scores[1][end] = (_label_line_length(labels, 0, end), 0)
+
+    for n in range(2, n_lines + 1):
+        for end in range(n, n_labels + 1):
+            best_score = None
+            best_start = -1
+            for start in range(n - 1, end):
+                previous_score, _ = scores[n - 1][start]
+                line_score = _label_line_length(labels, start, end)
+                score = max(previous_score, line_score)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_start = start
+
+            scores[n][end] = (cast(int, best_score), best_start)
+
+    lines: List[str] = []
+    end = n_labels
+    for n in range(n_lines, 0, -1):
+        _, start = scores[n][end]
+        lines.append("|".join(labels[start:end]))
+        end = start
+
+    lines.reverse()
+    return lines
+
+
+def _label_line_length(labels: Sequence[str], start: int, end: int) -> int:
+    """
+    Return the character length of a pipe-joined label slice.
+    """
+
+    return sum(len(label) for label in labels[start:end]) + end - start - 1

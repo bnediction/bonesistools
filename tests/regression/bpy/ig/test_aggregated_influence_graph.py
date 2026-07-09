@@ -28,6 +28,10 @@ def _rendered_edges(graph):
     )
 
 
+def _rendered_nodes(graph):
+    return {node: attrs for node, attrs in graph.nodes}
+
+
 def _pydot_get_string(obj, method):
     return cast(str, getattr(cast(Any, obj), method)()).strip('"')
 
@@ -549,6 +553,10 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
         ("TF", "g1|g2", "3", "normal"),
         ("g1|g2", "out", "2", "tee"),
     ]
+    assert _rendered_nodes(family)["g1|g2"]["label"] == "g1|g2"
+    assert _rendered_nodes(family)["g1|g2"]["margin"] == "0"
+    assert _rendered_nodes(family)["g1|g2"]["shape"] == "box"
+    assert _rendered_nodes(family)["g1|g2"]["style"] == "rounded"
 
     feedback_graph = AggregatedInfluenceGraph(total=4)
     feedback_graph.add_edges_from(
@@ -785,6 +793,58 @@ def test_to_graphviz_can_style_nodes_from_function_stability(
     assert node_attrs["B"]["fillcolor"] == "cornsilk"
 
 
+def test_to_graphviz_styles_family_from_lowest_member_stability(fake_graphviz):
+    graph = _collapse_graph()
+    graph.nodes["TF"]["function_stability"] = 1.0
+    graph.nodes["g1"]["function_stability"] = 1.0
+    graph.nodes["g2"]["function_stability"] = 0.75
+    graph.nodes["out"]["function_stability"] = 1.0
+
+    rendered = graph.to_graphviz(collapse="family", node_style="stability")
+    family_attrs = _rendered_nodes(rendered)["g1|g2"]
+
+    assert family_attrs["function_stability"] == "0.75"
+    assert family_attrs["fillcolor"] == "lightgoldenrod1"
+    assert family_attrs["shape"] == "box"
+    assert set(family_attrs["style"].split(",")) == {"rounded", "filled"}
+
+
+def test_to_graphviz_styles_family_as_orange_when_all_members_are_orange(
+    fake_graphviz,
+):
+    graph = _collapse_graph()
+    graph.nodes["TF"]["function_stability"] = 1.0
+    graph.nodes["g1"]["function_stability"] = 1.0
+    graph.nodes["g2"]["function_stability"] = 1.0
+    graph.nodes["out"]["function_stability"] = 1.0
+
+    rendered = graph.to_graphviz(collapse="family", node_style="stability")
+    family_attrs = _rendered_nodes(rendered)["g1|g2"]
+
+    assert family_attrs["function_stability"] == "1.0"
+    assert family_attrs["fillcolor"] == "darkgoldenrod2"
+    assert family_attrs["shape"] == "box"
+    assert set(family_attrs["style"].split(",")) == {"rounded", "filled", "bold"}
+
+
+def test_to_graphviz_styles_family_from_highest_member_function_count(
+    fake_graphviz,
+):
+    graph = _collapse_graph()
+    graph.nodes["TF"]["function_count"] = 1
+    graph.nodes["g1"]["function_count"] = 1
+    graph.nodes["g2"]["function_count"] = 2
+    graph.nodes["out"]["function_count"] = 1
+
+    rendered = graph.to_graphviz(collapse="family", node_style="count")
+    family_attrs = _rendered_nodes(rendered)["g1|g2"]
+
+    assert family_attrs["function_count"] == "2"
+    assert family_attrs["fillcolor"] == "lightgoldenrod1"
+    assert family_attrs["shape"] == "box"
+    assert set(family_attrs["style"].split(",")) == {"rounded", "filled"}
+
+
 def test_to_graphviz_callable_node_style_uses_named_attributes(fake_graphviz):
     graph = AggregatedInfluenceGraph(total=4)
     graph.add_node("A", function_stability=1.0, function_count=2)
@@ -935,6 +995,87 @@ def test_to_pydot_supports_collapse_modes():
         ("TF", "g1|g2", "3", "normal"),
         ("g1|g2", "out", "2", "tee"),
     ]
+    family_nodes = {
+        _pydot_get_string(node, "get_name"): node for node in family.get_nodes()
+    }
+    family_node = cast(Any, family_nodes["g1|g2"])
+
+    assert _pydot_get_string(family_node, "get_label") == "g1|g2"
+    assert _pydot_get_string(family_node, "get_margin") == "0"
+    assert _pydot_get_string(family_node, "get_shape") == "box"
+    assert _pydot_get_string(family_node, "get_style") == "rounded"
+
+
+def test_to_graphviz_wraps_long_family_labels(fake_graphviz):
+    graph = AggregatedInfluenceGraph(total=4)
+    family = (
+        "Apex1",
+        "Cbx3",
+        "Exosc8",
+        "Fasn",
+        "Gnl3",
+        "Hspa4",
+        "Hspd1",
+        "Hspe1",
+        "Nap1l1",
+        "Ncl",
+        "Nme1",
+        "Nop56",
+        "Odc1",
+        "Ppat",
+        "Ppid",
+        "Rcc1",
+        "Srm",
+        "Tfrc",
+        "Thrap3",
+    )
+    for gene in family:
+        graph.add_edge("TF", gene, sign=1, count=3)
+
+    rendered = graph.to_graphviz(collapse="family")
+    family_name = "|".join(sorted(family))
+    label = _rendered_nodes(rendered)[family_name]["label"]
+
+    assert "\n" in label
+    assert label.replace("\n", "|") == family_name
+    assert all(len(line) <= 40 for line in label.splitlines())
+    assert _rendered_nodes(rendered)[family_name]["margin"] == "0"
+    assert _rendered_nodes(rendered)[family_name]["shape"] == "box"
+    assert _rendered_nodes(rendered)[family_name]["style"] == "rounded"
+
+
+def test_to_graphviz_family_attr_can_be_disabled(fake_graphviz):
+    graph = _collapse_graph()
+
+    rendered = graph.to_graphviz(collapse="family", family_attr=False)
+    family_attrs = _rendered_nodes(rendered)["g1|g2"]
+
+    assert "height" not in family_attrs
+    assert "label" not in family_attrs
+    assert "margin" not in family_attrs
+    assert "shape" not in family_attrs
+    assert "style" not in family_attrs
+
+
+def test_to_graphviz_family_attr_updates_default_family_attributes(fake_graphviz):
+    graph = _collapse_graph()
+
+    rendered = graph.to_graphviz(
+        collapse="family",
+        family_attr={
+            "height": "0.1",
+            "margin": "0.02",
+            "shape": "oval",
+            "style": "dashed",
+        },
+    )
+    family_attrs = _rendered_nodes(rendered)["g1|g2"]
+
+    assert family_attrs["label"] == "g1|g2"
+    assert family_attrs["height"] == "0.1"
+    assert family_attrs["margin"] == "0.02"
+    assert family_attrs["shape"] == "oval"
+    assert family_attrs["style"] == "dashed"
 
 
 def test_to_pydot_accepts_default_graph_node_and_edge_attributes():
@@ -953,6 +1094,35 @@ def test_to_pydot_accepts_default_graph_node_and_edge_attributes():
     assert cast(Any, dot).get_edge_defaults() == [{"fontcolor": "gray"}]
 
 
+def test_to_pydot_applies_node_and_edge_attributes_to_rendered_items():
+    pytest.importorskip("pydot")
+
+    graph = _single_edge_graph()
+    graph.nodes["A"]["function_stability"] = 1.0
+    graph.nodes["B"]["function_stability"] = 0.5
+
+    dot = graph.to_pydot(
+        node_attr={"fontsize": 100},
+        node_style="stability",
+        edge_attr={"fontsize": 100},
+        edge_style="frequency",
+    )
+
+    node_attrs = {
+        _pydot_get_string(node, "get_name"): cast(Any, node).get_attributes()
+        for node in cast(Any, dot).get_nodes()
+        if _pydot_get_string(node, "get_name") in {"A", "B"}
+    }
+    edge_attrs = cast(Any, dot).get_edges()[0].get_attributes()
+
+    assert node_attrs["A"]["fontsize"] == "100"
+    assert node_attrs["A"]["fillcolor"] == "darkgoldenrod2"
+    assert node_attrs["B"]["fontsize"] == "100"
+    assert node_attrs["B"]["fillcolor"] == "cornsilk"
+    assert edge_attrs["fontsize"] == "100"
+    assert edge_attrs["style"] == "bold"
+
+
 def test_show_supports_collapse_modes(monkeypatch):
     calls = {}
 
@@ -969,6 +1139,7 @@ def test_show_supports_collapse_modes(monkeypatch):
         min_frequency=0.0,
         drop_isolates=False,
         node_style=None,
+        family_attr=True,
         edge_label="count",
         edge_style=None,
         program="dot",
@@ -985,6 +1156,7 @@ def test_show_supports_collapse_modes(monkeypatch):
             "min_frequency": min_frequency,
             "drop_isolates": drop_isolates,
             "node_style": node_style,
+            "family_attr": family_attr,
             "edge_label": edge_label,
             "edge_style": edge_style,
             "program": program,
@@ -1017,6 +1189,7 @@ def test_show_supports_collapse_modes(monkeypatch):
         min_frequency=0.5,
         drop_isolates=True,
         node_style="stability",
+        family_attr={"shape": "oval"},
         edge_label="frequency",
         edge_style=None,
         program="neato",
@@ -1034,6 +1207,7 @@ def test_show_supports_collapse_modes(monkeypatch):
         "min_frequency": 0.5,
         "drop_isolates": True,
         "node_style": "stability",
+        "family_attr": {"shape": "oval"},
         "edge_label": "frequency",
         "edge_style": None,
         "program": "neato",

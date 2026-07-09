@@ -1029,7 +1029,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
     def reachable_attractors(
         self,
-        initial_state: HypercubeLike,
+        initial_state: Optional[HypercubeLike] = None,
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
@@ -1072,12 +1072,20 @@ class BooleanNetwork(Dict[str, Expression]):
         >>> [attractor.enumerate() for attractor in attractors]
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
+        If no initial state is provided, all configurations are considered
+        initial:
+
+        >>> attractors = bn.reachable_attractors()
+        >>> [attractor.enumerate() for attractor in attractors]
+        [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
+
         Parameters
         ----------
-        initial_state: HypercubeLike
+        initial_state: HypercubeLike, optional
             Initial Boolean configuration or subspace from which reachability
             is explored. Missing or free components define multiple initial
-            configurations.
+            configurations. If `None`, all configurations are considered
+            initial.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
             (default: "asynchronous")
             Update semantics.
@@ -1118,7 +1126,13 @@ class BooleanNetwork(Dict[str, Expression]):
         )
 
         self.validate()
-        initial_states = ConfigurationSet(tuple(self.keys()), [initial_state])
+        resolved_initial_state: HypercubeLike
+        if initial_state is None:
+            resolved_initial_state = {}
+        else:
+            resolved_initial_state = initial_state
+
+        initial_states = ConfigurationSet(tuple(self.keys()), [resolved_initial_state])
 
         if update == "synchronous":
             backend = _as_literal(
@@ -1154,7 +1168,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
             return _reachable_attractors_with_most_permissive_backend(
                 self,
-                initial_state,
+                resolved_initial_state,
             )
 
         backend = _as_literal(
@@ -2415,6 +2429,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         graph_attr: Optional[Mapping[str, Any]] = None,
         node_attr: Optional[Mapping[str, Any]] = None,
         node_style: AggregatedNodeStyle = "stability",
+        family_attr: Union[bool, Mapping[str, Any]] = True,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
@@ -2480,6 +2495,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             attributes.
 
             If `None`, no additional node styling is applied.
+        family_attr: bool or Mapping[str, Any] (default: True)
+            Family-node attributes. `True` applies compact defaults, `False`
+            disables family-specific attributes, and a mapping updates the
+            default pydot node attributes for collapsed families.
         edge_label: str or None (default: "count")
             Edge attribute displayed as label. If `None`, no edge label is
             displayed. `"count"` displays the occurrence count on exact
@@ -2530,6 +2549,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             min_frequency=min_frequency,
             drop_isolates=drop_isolates,
             node_style=node_style,
+            family_attr=family_attr,
             edge_label=edge_label,
             edge_style=edge_style,
             program=program,

@@ -108,6 +108,7 @@ q.log
 src/bonesistools/databases/omnipath/.cache/
 /data/
 /results/
+/benchmark_results/
 benchmarks/results/
 !tests/
 !tests/data/

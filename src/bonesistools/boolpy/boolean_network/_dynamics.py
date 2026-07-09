@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from importlib import import_module
-from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -116,9 +115,11 @@ def _reachable_attractors_with_explicit_backend(
         _state_bits_from_mapping(initial_state, components)
         for initial_state in initial_states
     ]
+    scheduled = set(pending)
 
     while pending:
         state_bits = pending.pop()
+        scheduled.discard(state_bits)
         if state_bits in successors:
             continue
 
@@ -131,8 +132,9 @@ def _reachable_attractors_with_explicit_backend(
         successors[state_bits] = state_successors
 
         for successor in state_successors:
-            if successor not in successors:
+            if successor not in successors and successor not in scheduled:
                 pending.append(successor)
+                scheduled.add(successor)
 
     terminal_components = _terminal_strongly_connected_components(successors)
 
@@ -183,17 +185,25 @@ def _bdd_transition_relation(
 
     if update == "asynchronous":
         relation = bdd.false
+        unchanged_prefixes = [bdd.true]
+        for current_value, next_value in zip(current_values, next_values):
+            unchanged_prefixes.append(
+                unchanged_prefixes[-1] & _bdd_equivalence(next_value, current_value)
+            )
+
+        unchanged_suffixes = [bdd.true] * (len(components) + 1)
+        for index in range(len(components) - 1, -1, -1):
+            unchanged_suffixes[index] = unchanged_suffixes[index + 1] & (
+                _bdd_equivalence(next_values[index], current_values[index])
+            )
+
         for updated_index, (current_value, next_value, rule) in enumerate(
             zip(current_values, next_values, rules)
         ):
             transition = _bdd_exclusive_or(current_value, rule)
             transition &= _bdd_equivalence(next_value, rule)
-
-            for index, (other_current, other_next) in enumerate(
-                zip(current_values, next_values)
-            ):
-                if index != updated_index:
-                    transition &= _bdd_equivalence(other_next, other_current)
+            transition &= unchanged_prefixes[updated_index]
+            transition &= unchanged_suffixes[updated_index + 1]
 
             relation |= transition
 
@@ -346,30 +356,15 @@ def _reachable_attractors_with_most_permissive_backend(
         components=components,
         initial_state=initial_hypercube,
     )
-    blockers: List[FrozenSet[Tuple[str, int]]] = []
-    trapspaces: Set[FrozenSet[Tuple[str, int]]] = set()
-
-    while True:
-        literals = _solve_reachable_trapspace_literals(
-            clingo,
-            base_program=base_program,
-            blockers=blockers,
-            components=components,
-        )
-
-        if literals is None:
-            break
-
-        if literals in trapspaces:
-            blockers.append(literals)
-            continue
-
-        trapspaces.add(literals)
-        blockers.append(literals)
+    trapspaces = _solve_reachable_trapspaces_literals(
+        clingo,
+        base_program=base_program,
+        components=components,
+    )
 
     return tuple(
         ConfigurationSet(components, [_hypercube_from_fixed_literals(literals)])
-        for literals in sorted(trapspaces, key=_fixed_literals_sort_key)
+        for literals in trapspaces
     )
 
 
@@ -408,26 +403,25 @@ def _most_permissive_asp_base_program(
                 ")."
             )
 
-    implicant_id = 0
+    clause_id = 0
     for target, rule in network.items():
         target_symbol = _asp_string(clingo, target)
-        for value in (0, 1):
-            for implicant in dnf_implicants(rule, value=value, ba=network.ba):
-                facts.append(f"implicant({target_symbol}, {value}, {implicant_id}).")
-                for source, source_value in implicant.items():
-                    if not source_value.is_fixed:
-                        raise ValueError(
-                            "invalid DNF implicant with free component " f"{source!r}"
-                        )
-
-                    facts.append(
-                        "implicant_literal("
-                        f"{target_symbol}, {value}, {implicant_id}, "
-                        f"{_asp_string(clingo, source)}, "
-                        f"{cast(int, source_value.value)}"
-                        ")."
+        for implicant in dnf_implicants(rule, value=1, ba=network.ba):
+            facts.append(f"positive_clause({target_symbol}, {clause_id}).")
+            for source, source_value in implicant.items():
+                if not source_value.is_fixed:
+                    raise ValueError(
+                        "invalid DNF implicant with free component " f"{source!r}"
                     )
-                implicant_id += 1
+
+                facts.append(
+                    "positive_clause_literal("
+                    f"{target_symbol}, {clause_id}, "
+                    f"{_asp_string(clingo, source)}, "
+                    f"{cast(int, source_value.value)}"
+                    ")."
+                )
+            clause_id += 1
 
     return "\n".join(
         [
@@ -443,10 +437,24 @@ def _most_permissive_asp_base_program(
             1 { final_reach(N,0); final_reach(N,1) } 2 :- node(N).
             mp_reach(final,N,V) :- final_reach(N,V).
 
-            mp_eval(T,N,V) :-
+            has_positive_clause(N) :- positive_clause(N,C).
+
+            positive_clause_satisfied(T,N,C) :-
                 timepoint(T),
-                implicant(N,V,P),
-                mp_reach(T,L,W) : implicant_literal(N,V,P,L,W).
+                positive_clause(N,C),
+                mp_reach(T,L,W) : positive_clause_literal(N,C,L,W).
+            positive_clause_falsified(T,N,C) :-
+                timepoint(T),
+                positive_clause_literal(N,C,L,W),
+                opposite(W,V),
+                mp_reach(T,L,V).
+
+            mp_eval(T,N,1) :- positive_clause_satisfied(T,N,C).
+            mp_eval(T,N,0) :- timepoint(T), node(N), not has_positive_clause(N).
+            mp_eval(T,N,0) :-
+                timepoint(T),
+                has_positive_clause(N),
+                positive_clause_falsified(T,N,C) : positive_clause(N,C).
 
             final_reach(N,V) :- mp_eval(final,N,V).
             fixed(N,V) :-
@@ -515,6 +523,80 @@ def _solve_reachable_trapspace_literals(
             )
 
     return optimal_literals
+
+
+def _solve_reachable_trapspaces_literals(
+    clingo: object,
+    *,
+    base_program: str,
+    components: Tuple[str, ...],
+) -> Tuple[FrozenSet[Tuple[str, int]], ...]:
+    """Enumerate reachable minimal trap spaces with incremental blockers."""
+
+    control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
+        ["--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
+    )
+    control.add("base", [], base_program)
+    control.ground([("base", [])])
+
+    blocker_id = 0
+    trapspaces: List[FrozenSet[Tuple[str, int]]] = []
+    seen: Set[FrozenSet[Tuple[str, int]]] = set()
+
+    while True:
+        optimal_literals = None
+        with control.solve(yield_=True) as handle:
+            for model in handle:
+                optimal_literals = frozenset(
+                    (atom.arguments[0].string, atom.arguments[1].number)
+                    for atom in model.symbols(shown=True)
+                )
+
+        if optimal_literals is None:
+            break
+
+        if optimal_literals not in seen:
+            trapspaces.append(optimal_literals)
+            seen.add(optimal_literals)
+
+        blocker_part = f"blocker_{blocker_id}"
+        control.add(
+            blocker_part,
+            [],
+            _incremental_trapspace_blocker_program(
+                clingo,
+                blocker_id=blocker_id,
+                literals=optimal_literals,
+                components=components,
+            ),
+        )
+        control.ground([(blocker_part, [])])
+        blocker_id += 1
+
+    return tuple(sorted(trapspaces, key=_fixed_literals_sort_key))
+
+
+def _incremental_trapspace_blocker_program(
+    clingo: object,
+    *,
+    blocker_id: int,
+    literals: FrozenSet[Tuple[str, int]],
+    components: Tuple[str, ...],
+) -> str:
+    """Return one blocker constraint for an already enumerated trap space."""
+
+    outside = f"outside_{blocker_id}"
+    lines = []
+
+    for component in components:
+        for value in (0, 1):
+            if (component, value) not in literals:
+                lines.append(
+                    f"{outside} :- fixed({_asp_string(clingo, component)}, {value})."
+                )
+
+    lines.append(f":- not {outside}.")
+    return "\n".join(lines)
 
 
 def _trapspace_blocker_program(
@@ -772,11 +854,9 @@ def _successor_state_bits(
     if update == "asynchronous":
         return tuple(state ^ bit for bit in _iter_set_bits(unstable_mask))
 
-    n_unstable = unstable_mask.bit_count()
     return tuple(
         state ^ updated_mask
-        for size in range(1, n_unstable + 1)
-        for updated_mask in _updated_bit_masks(unstable_mask, size, n_components)
+        for updated_mask in _iter_nonzero_submasks(unstable_mask)
     )
 
 
@@ -797,29 +877,19 @@ def _next_state_bits(
 def _iter_set_bits(mask: int) -> Iterable[int]:
     """Yield one-bit masks from low to high bit."""
 
-    bit = 1
-    while bit <= mask:
-        if mask & bit:
-            yield bit
-        bit <<= 1
+    while mask:
+        bit = mask & -mask
+        yield bit
+        mask ^= bit
 
 
-def _updated_bit_masks(
-    unstable_mask: int,
-    size: int,
-    n_components: int,
-) -> Iterable[int]:
-    """Yield masks selecting a fixed number of unstable components."""
+def _iter_nonzero_submasks(mask: int) -> Iterable[int]:
+    """Yield all non-zero submasks of a bit mask."""
 
-    unstable_bits = [
-        1 << index for index in range(n_components) if unstable_mask & (1 << index)
-    ]
-
-    for selected_bits in combinations(unstable_bits, size):
-        updated_mask = 0
-        for bit in selected_bits:
-            updated_mask |= bit
-        yield updated_mask
+    submask = mask
+    while submask:
+        yield submask
+        submask = (submask - 1) & mask
 
 
 def _configuration_set_from_state_bits(
@@ -828,13 +898,68 @@ def _configuration_set_from_state_bits(
 ) -> ConfigurationSet:
     """Convert explicit state bitsets into a compact ConfigurationSet."""
 
+    states = tuple(sorted(state_bits))
+    hypercube = _complete_hypercube_from_state_bits(
+        states,
+        n_components=len(components),
+    )
+    if hypercube is not None:
+        return ConfigurationSet(
+            components,
+            [_partial_state_mapping_from_bits(hypercube, components)],
+        )
+
     configurations = ConfigurationSet(components)
-    for state in sorted(state_bits):
+    for state in states:
         configurations.add(_state_mapping_from_bits(state, components))
 
     configurations.compress()
 
     return configurations
+
+
+def _complete_hypercube_from_state_bits(
+    states: Tuple[_StateBits, ...],
+    *,
+    n_components: int,
+) -> Optional[Tuple[_StateBits, _StateBits]]:
+    """Return fixed bits when states cover one complete hypercube."""
+
+    if not states:
+        return None
+
+    all_mask = (1 << n_components) - 1
+    common_ones = all_mask
+    common_zeros = all_mask
+
+    for state in states:
+        common_ones &= state
+        common_zeros &= ~state & all_mask
+
+    fixed_mask = common_ones | common_zeros
+    expected_size = 1 << (n_components - fixed_mask.bit_count())
+    if len(states) != expected_size:
+        return None
+
+    fixed_values = common_ones & fixed_mask
+    if all((state & fixed_mask) == fixed_values for state in states):
+        return fixed_mask, fixed_values
+
+    return None
+
+
+def _partial_state_mapping_from_bits(
+    hypercube: Tuple[_StateBits, _StateBits],
+    components: Tuple[str, ...],
+) -> Dict[str, int]:
+    """Decode fixed bits into a partial configuration mapping."""
+
+    fixed_mask, value_mask = hypercube
+    return {
+        component: 1 if value_mask & (1 << index) else 0
+        for index, component in enumerate(components)
+        if fixed_mask & (1 << index)
+    }
 
 
 def _state_mapping_from_bits(

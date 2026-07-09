@@ -729,6 +729,25 @@ def test_boolean_network_reachable_attractors_asynchronous_partial_state():
     )
 
 
+@pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
+def test_boolean_network_reachable_attractors_defaults_to_fully_free_state(update):
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    omitted = bn.reachable_attractors(
+        update=cast(Any, update),
+        backend="explicit",
+    )
+    explicit = bn.reachable_attractors(
+        {},
+        update=cast(Any, update),
+        backend="explicit",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in omitted) == tuple(
+        attractor.enumerate() for attractor in explicit
+    )
+
+
 def test_boolean_network_reachable_attractors_explores_shared_paths_once(
     monkeypatch,
 ):
@@ -844,6 +863,17 @@ def test_boolean_network_reachable_attractors_most_permissive_partial_state():
     assert tuple(attractor.enumerate() for attractor in attractors) == (
         ({"AA": 0, "BB": 0, "CC": 1},),
         ({"AA": 0, "BB": 1, "CC": 1},),
+    )
+
+
+def test_boolean_network_reachable_attractors_most_permissive_defaults_to_free_state():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "A", "B": "B"})
+
+    omitted = bn.reachable_attractors(update="most-permissive")
+    explicit = bn.reachable_attractors({}, update="most-permissive")
+
+    assert tuple(attractor.enumerate() for attractor in omitted) == tuple(
+        attractor.enumerate() for attractor in explicit
     )
 
 
