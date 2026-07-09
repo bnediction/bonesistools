@@ -489,8 +489,8 @@ def test_knn_arrays_are_sorted_canonically():
         sorted_distances,
         np.array(
             [
-                [0.0, 0.2, 0.5, 0.5],
-                [0.0, 0.1, 0.1, 0.7],
+                [1e-7, 0.2, 0.5, 0.5],
+                [1e-7, 0.1, 0.1, 0.7],
             ],
             dtype=np.float32,
         ),
