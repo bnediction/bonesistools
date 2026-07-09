@@ -13,7 +13,7 @@ import bonesistools as bt
 from bonesistools.sctools.preprocessing import _genename
 
 
-def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
+def test_convert_gene_identifiers_copy_and_axis_validation(
     monkeypatch,
     fake_gene_synonyms_cls,
 ):
@@ -26,7 +26,7 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
     )
 
     converted_var = bt.sct.pp.convert_gene_identifiers(adata, axis="var", copy=True)
-    converted_obs = bt.sct.pp.standardize_gene_identifiers(
+    converted_obs = bt.sct.pp.convert_gene_identifiers(
         adata,
         axis="obs",
         copy=True,
@@ -39,6 +39,23 @@ def test_convert_and_standardize_gene_identifiers_copy_and_axis_validation(
 
     with pytest.raises(ValueError, match="invalid argument value for 'axis'"):
         bt.sct.pp.convert_gene_identifiers(adata, axis=cast(Any, "bad"))
+
+
+def test_standardize_gene_identifiers_is_deprecated(
+    monkeypatch,
+    fake_gene_synonyms_cls,
+):
+    monkeypatch.setattr(_genename, "create_gene_synonyms", fake_gene_synonyms_cls)
+    adata = ad.AnnData(
+        X=np.ones((1, 1)),
+        var=pd.DataFrame(index=["Tp53"]),
+    )
+
+    with pytest.warns(FutureWarning, match="bt.sct.pp.standardize_gene_identifiers"):
+        result = bt.sct.pp.standardize_gene_identifiers(adata)
+
+    assert result is None
+    assert adata.var_names.tolist() == ["Trp53"]
 
 
 def _dense_list(value: object) -> list:

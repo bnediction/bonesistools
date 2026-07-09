@@ -31,7 +31,7 @@ from ..._compat import Literal
 from ..._validation import _as_boolean, _as_callable, _as_literal, _as_probability
 from ..._warnings import _warn_deprecated
 from .._typing import VarSubset, anndata_checker
-from ._conversion import anndata_to_dataframe
+from ._conversion import to_dataframe
 from ._stats import (
     CORRECTION_METHODS,
     CorrectionMethod,
@@ -119,7 +119,7 @@ def logfoldchanges(
     logfoldchanges = []
     counts_df = cast(
         pd.DataFrame,
-        anndata_to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log),
+        to_dataframe(adata, obs=groupby, layer=layer, is_log=is_log),
     )
 
     if cluster_rebalancing:

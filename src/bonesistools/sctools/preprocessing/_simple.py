@@ -7,6 +7,7 @@ from typing import Union
 import numpy as np
 from anndata import AnnData
 
+from ..._warnings import _warn_deprecated
 from .._typing import (
     AnnDataAxisWithBoth,
     anndata_checker,
@@ -16,7 +17,7 @@ from ._transfer import merge as merge
 
 
 @anndata_checker
-def sort_anndata(
+def sort(
     adata: AnnData,
     on: AnnDataAxisWithBoth = "both",
     copy: bool = False,
@@ -61,3 +62,22 @@ def sort_anndata(
         adata._inplace_subset_var(var_order)
 
     return adata if copy else None
+
+
+def sort_anndata(
+    adata: AnnData,
+    on: AnnDataAxisWithBoth = "both",
+    copy: bool = False,
+) -> Union[AnnData, None]:
+    """
+    Deprecated. Sort observations and/or variables by their AnnData index names.
+
+    Use `bt.sct.pp.sort(...)` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.sct.pp.sort_anndata`",
+        replacement="`bt.sct.pp.sort`",
+        stacklevel=2,
+    )
+    return sort(adata, on=on, copy=copy)

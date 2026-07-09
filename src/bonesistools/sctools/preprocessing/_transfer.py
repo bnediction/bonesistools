@@ -22,7 +22,7 @@ from .._typing import (
     type_checker,
 )
 from .._validation import _as_anndata_axis
-from ..tools import anndata_to_dataframe
+from ..tools import to_dataframe
 
 
 @overload
@@ -105,7 +105,7 @@ def transfer_layer(
         )
 
     for layer in layers:
-        df = anndata_to_dataframe(adata=right_ad, obs=None, layer=layer)
+        df = to_dataframe(adata=right_ad, obs=None, layer=layer)
         left_cols = set(left_ad.var.index)
         left_idx = set(left_ad.obs.index)
         right_cols = set(right_ad.var.index)

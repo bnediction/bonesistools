@@ -10,16 +10,17 @@ from OmniPath-related resources such as CollecTRI and DoRothEA.
 
 from typing import List as _List
 
-from ._collectri import collectri, load_collectri_grn
-from ._dorothea import dorothea, load_dorothea_grn
+from ._collectri import collectri
+from ._collectri import load_collectri_grn as load_collectri_grn
+from ._dorothea import dorothea
+from ._dorothea import load_dorothea_grn as load_dorothea_grn
 
 __all__ = [
     "collectri",
     "dorothea",
-    "load_collectri_grn",
-    "load_dorothea_grn",
 ]
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"load_collectri_grn", "load_dorothea_grn"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

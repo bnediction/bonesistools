@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from bonesistools.boolpy.plotting import (
+import bonesistools as bt
+from bonesistools.boolpy.influence_graph._styles import (
     count_node_style,
     frequency_edge_style,
     stability_node_style,
@@ -33,3 +34,12 @@ def test_count_and_stability_node_style_thresholds():
     assert stability_node_style(0.75)["fillcolor"] == "lightgoldenrod1"
     assert stability_node_style(0.5)["fillcolor"] == "cornsilk"
     assert stability_node_style(0.49)["style"] == "rounded,filled,dotted"
+
+
+def test_style_helpers_are_private_influence_graph_helpers():
+    for name in ["count_node_style", "frequency_edge_style", "stability_node_style"]:
+        assert name not in dir(bt.bpy.ig)
+        assert not hasattr(bt.bpy.ig, name)
+
+    assert "frequency_edge_style" not in dir(bt.bpy.bn)
+    assert not hasattr(bt.bpy.bn, "frequency_edge_style")

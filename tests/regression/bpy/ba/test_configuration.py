@@ -82,6 +82,26 @@ def test_configuration_set_compresses_adjacent_subspaces():
     )
 
 
+def test_configuration_set_equality_is_semantic_not_representational():
+
+    compact = bt.bpy.ba.ConfigurationSet(["A", "B"], [{"B": 0}])
+
+    expanded = bt.bpy.ba.ConfigurationSet(["A", "B"])
+    expanded.add({"A": 0, "B": 0})
+    expanded.add({"A": 1, "B": 0})
+
+    reordered = bt.bpy.ba.ConfigurationSet(["B", "A"], [{"B": 0}])
+    different = bt.bpy.ba.ConfigurationSet(["A", "B"], [{"A": 0}])
+    different_components = bt.bpy.ba.ConfigurationSet(["A", "C"], [{"A": 0}])
+
+    assert compact == expanded
+    assert expanded == compact
+    assert compact == reordered
+    assert compact != different
+    assert compact != different_components
+    assert compact.__eq__(object()) is NotImplemented
+
+
 def test_configuration_set_samples_reproducibly():
 
     configurations = bt.bpy.ba.ConfigurationSet(["A", "B"], [{"A": "*"}])

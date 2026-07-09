@@ -121,7 +121,7 @@ def test_nestorowa_reads_source_files(monkeypatch, tmp_path):
     assert _user_layer_keys(adata) == []
 
 
-def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
+def test_io_load_nestorowa_uses_cache(monkeypatch, tmp_path):
     _patch_gene_mapping(monkeypatch)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
     monkeypatch.setitem(
@@ -148,8 +148,8 @@ def test_datasets_load_nestorowa_uses_cache(monkeypatch, tmp_path):
 
     monkeypatch.setattr(nestorowa_module, "_download", fake_download)
 
-    first = bt.sct.datasets.load("nestorowa", quiet=True)
-    second = bt.sct.datasets.load("nestorowa", quiet=True)
+    first = bt.sct.io.load("nestorowa", quiet=True)
+    second = bt.sct.io.load("nestorowa", quiet=True)
 
     assert first.shape == (3, 2)
     assert second.shape == (3, 2)
@@ -188,13 +188,19 @@ def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
 
     monkeypatch.setattr(nestorowa_module, "_download", fake_download)
 
-    with pytest.warns(DeprecationWarning, match="datasets.load"):
-        adata = bt.sct.datasets.nestorowa(quiet=True)
-    loaded = bt.sct.datasets.load("nestorowa", quiet=True)
+    with pytest.warns(FutureWarning, match="bt.sct.io.load"):
+        adata = bt.sct.io.nestorowa(quiet=True)
+    with pytest.warns(FutureWarning):
+        deprecated_adata = bt.sct.datasets.nestorowa(quiet=True)
+    loaded = bt.sct.io.load("nestorowa", quiet=True)
 
     assert adata.shape == (3, 2)
     assert (
         adata.obs["label"].astype(str).tolist()
+        == loaded.obs["label"].astype(str).tolist()
+    )
+    assert (
+        deprecated_adata.obs["label"].astype(str).tolist()
         == loaded.obs["label"].astype(str).tolist()
     )
     np.testing.assert_array_equal(
@@ -203,9 +209,9 @@ def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
     )
 
 
-def test_datasets_load_unknown_lists_available_datasets():
+def test_io_load_unknown_lists_available_datasets():
     with pytest.raises(ValueError, match="nestorowa.*pbmc3k|pbmc3k.*nestorowa"):
-        bt.sct.datasets.load("unknown")
+        bt.sct.io.load("unknown")
 
 
 def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
@@ -221,12 +227,10 @@ def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
     )
     adata.var["ensembl"] = adata.var_names.astype(str)
 
-    def fake_convert_gene_identifiers(scdata, **_):
+    def fake_convert_gene_identifiers(scdata, **kwargs):
 
-        scdata.var_names = ["GeneA", "GeneA", "GeneB"]
-        return None
-
-    def fake_standardize_gene_identifiers(scdata, **_):
+        if kwargs.get("input_identifier_type") == "ensembl_id":
+            scdata.var_names = ["GeneA", "GeneA", "GeneB"]
 
         return None
 
@@ -235,12 +239,6 @@ def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
         "convert_gene_identifiers",
         fake_convert_gene_identifiers,
     )
-    monkeypatch.setattr(
-        sct.pp,
-        "standardize_gene_identifiers",
-        fake_standardize_gene_identifiers,
-    )
-
     nestorowa_module._map_ensembl_to_official_names(adata)
 
     assert adata.var_names.tolist() == ["GeneA", "GeneB"]

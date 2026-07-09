@@ -36,7 +36,7 @@ def load(
     """
     Load a built-in single-cell dataset.
 
-    Use `bt.sct.datasets.info(name)` for dataset metadata, including source,
+    Use `bt.sct.io.info(name)` for dataset metadata, including source,
     licensing, and citation information.
 
     Parameters
@@ -48,8 +48,8 @@ def load(
 
     Examples
     --------
-    >>> adata = bt.sct.datasets.load("nestorowa")
-    >>> adata = bt.sct.datasets.load("pbmc3k")
+    >>> adata = bt.sct.io.load("nestorowa")
+    >>> adata = bt.sct.io.load("pbmc3k")
 
     Returns
     -------
@@ -80,7 +80,7 @@ def info(name: str) -> Dict[str, object]:
 
     Examples
     --------
-    >>> metadata = bt.sct.datasets.info("pbmc3k")
+    >>> metadata = bt.sct.io.info("pbmc3k")
 
     Returns
     -------
@@ -102,7 +102,7 @@ def available() -> pd.DataFrame:
 
     Examples
     --------
-    >>> bt.sct.datasets.available()
+    >>> bt.sct.io.available()
 
     Returns
     -------
@@ -131,8 +131,8 @@ def clear(*names: str) -> None:
 
     Examples
     --------
-    >>> bt.sct.datasets.clear("pbmc3k")
-    >>> bt.sct.datasets.clear()
+    >>> bt.sct.io.clear("pbmc3k")
+    >>> bt.sct.io.clear()
     """
 
     if len(names) == 0:
@@ -186,7 +186,7 @@ def _validate_dataset_shape(
     details = "; ".join(errors)
     raise ValueError(
         f"invalid cached dataset {name!r}: {details}. "
-        f"Clear cached files with bt.sct.datasets.clear({name!r}) and retry."
+        f"Clear cached files with bt.sct.io.clear({name!r}) and retry."
     )
 
 

@@ -141,7 +141,7 @@ instead of `axis`.
 
 ## Dataset registry
 
-Built-in single-cell datasets are registered in `bt.sct.datasets` through a
+Built-in single-cell datasets are registered in `bt.sct.io` through a
 small Python loader registry and a JSON metadata file:
 
 * `_DATASET_LOADERS`: maps dataset names to loader functions;

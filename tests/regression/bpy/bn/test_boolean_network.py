@@ -8,7 +8,7 @@ import pytest
 from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
-from bonesistools.boolpy.boolean_network import _dynamics, _network
+from bonesistools.boolpy.boolean_network import _dynamics, _network, _typing
 
 
 def _pydot_get(obj, method):
@@ -220,12 +220,19 @@ def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
 
 
 def test_is_boolean_network_like_validates_mapping_rules():
-    assert bt.bpy.bn.typing.is_boolean_network_like({"A": "B", "B": 1})
-    assert bt.bpy.bn.typing.is_boolean_network_like(bt.bpy.bn.BooleanNetwork({"A": 1}))
+    assert _typing.is_boolean_network_like({"A": "B", "B": 1})
+    assert _typing.is_boolean_network_like(bt.bpy.bn.BooleanNetwork({"A": 1}))
 
-    assert not bt.bpy.bn.typing.is_boolean_network_like({"A": object()})
-    assert not bt.bpy.bn.typing.is_boolean_network_like({1: "A"})
-    assert not bt.bpy.bn.typing.is_boolean_network_like(object())
+    assert not _typing.is_boolean_network_like({"A": object()})
+    assert not _typing.is_boolean_network_like({1: "A"})
+    assert not _typing.is_boolean_network_like(object())
+
+
+def test_boolean_network_typing_namespace_is_not_exposed_publicly():
+    assert "typing" not in dir(bt.bpy.bn)
+
+    with pytest.raises(AttributeError):
+        bt.bpy.bn.typing
 
 
 def test_boolean_network_to_bnet_returns_string():
@@ -584,7 +591,7 @@ def test_boolean_network_reachable_attractors_synchronous_cycle():
     attractors = bn.reachable_attractors(
         {"A": 0},
         update="synchronous",
-        backend=cast(Any, "ignored"),
+        backend="explicit",
     )
 
     assert len(attractors) == 1
@@ -601,7 +608,7 @@ def test_boolean_network_reachable_attractors_synchronous_partial_state():
     attractors = bn.reachable_attractors(
         {"A": "*"},
         update="synchronous",
-        backend=cast(Any, "ignored"),
+        backend="explicit",
     )
 
     assert tuple(attractor.enumerate() for attractor in attractors) == (
@@ -614,6 +621,83 @@ def test_boolean_network_reachable_attractors_synchronous_partial_state():
             {"A": 1, "B": 1},
         ),
     )
+
+
+def test_boolean_network_reachable_attractors_synchronous_bdd_matches_explicit():
+    pytest.importorskip("dd.autoref")
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "~A",
+            "B": "B",
+            "C": "A | C",
+        }
+    )
+
+    explicit = bn.reachable_attractors(
+        {"A": "*", "B": 1, "C": 0},
+        update="synchronous",
+        backend="explicit",
+    )
+    bdd = bn.reachable_attractors(
+        {"A": "*", "B": 1, "C": 0},
+        update="synchronous",
+        backend="bdd",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in bdd) == tuple(
+        attractor.enumerate() for attractor in explicit
+    )
+
+
+@pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
+def test_boolean_network_reachable_attractors_bdd_matches_explicit(update):
+    pytest.importorskip("dd.autoref")
+
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "A": "B",
+            "B": "A",
+            "C": "~C",
+        }
+    )
+
+    explicit = bn.reachable_attractors(
+        {"A": 0, "C": "*"},
+        update=cast(Any, update),
+        backend="explicit",
+    )
+    bdd = bn.reachable_attractors(
+        {"A": 0, "C": "*"},
+        update=cast(Any, update),
+        backend="bdd",
+    )
+
+    assert tuple(attractor.enumerate() for attractor in bdd) == tuple(
+        attractor.enumerate() for attractor in explicit
+    )
+
+
+@pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
+def test_boolean_network_reachable_attractors_bdd_reports_missing_dd(
+    monkeypatch,
+    update,
+):
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A"})
+
+    def missing_dd(name: str) -> Any:
+        if name == "dd.autoref":
+            raise ImportError("missing dd")
+        return __import__(name)
+
+    monkeypatch.setattr(_dynamics, "import_module", missing_dd)
+
+    with pytest.raises(ImportError, match="backend='bdd'"):
+        bn.reachable_attractors(
+            {"A": 0},
+            update=cast(Any, update),
+            backend="bdd",
+        )
 
 
 def test_boolean_network_reachable_attractors_asynchronous_branching():
@@ -788,7 +872,11 @@ def test_boolean_network_reachable_attractors_validate_options():
         bn.reachable_attractors({"A": 0}, update=cast(Any, "parallel"))
 
     with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
-        bn.reachable_attractors({"A": 0}, backend=cast(Any, "bdd"))
+        bn.reachable_attractors(
+            {"A": 0},
+            update="synchronous",
+            backend=cast(Any, "asp"),
+        )
 
     with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
         bn.reachable_attractors(
@@ -943,6 +1031,11 @@ def test_boolean_network_to_pydot():
 
     assert _pydot_get(edges[("C", "A")], "get_color") == "red2"
     assert _pydot_get(edges[("C", "A")], "get_arrowhead") == "tee"
+
+
+def test_deprecated_bn_to_pydot_is_not_promoted_from_bn_namespace():
+    assert "bn_to_pydot" not in dir(bt.bpy.bn)
+    assert hasattr(bt.bpy.bn, "bn_to_pydot")
 
 
 def test_boolean_network_show(monkeypatch):

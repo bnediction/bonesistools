@@ -3,9 +3,9 @@
 """
 Utilities for Boolean algebra and partial Boolean abstractions.
 
-The `ba` sub-package provides helper structures and operations for
-Boolean algebra, including partial Boolean values and Boolean
-differential and predecessor inference utilities.
+The `ba` sub-package provides structures and operations for Boolean algebra,
+including partial Boolean values, Kleene truth values, hypercubes,
+configuration sets, implicants and predecessor inference utilities.
 """
 
 from typing import Any as _Any
@@ -21,30 +21,15 @@ from ._configuration import ConfigurationSet
 from ._hypercube import Hypercube, HypercubeCollection
 from ._kleene import (
     KleeneValue,
-    KleeneValueLike,
     diff,
     join,
     meet,
 )
 from ._representation import rule_to_string
 from ._structure import (
-    Implicants,
     dnf_implicants,
     expressions_equivalent,
     prime_implicants,
-)
-from ._typing import (
-    BooleanRule,
-    ConfigurationLike,
-    HypercubeLike,
-    PartialBooleanLike,
-    is_boolean_expression_available,
-    is_boolean_expression_like,
-    is_boolean_rule_like,
-    is_configuration_like,
-    is_hypercube_like,
-    is_kleene_value_like,
-    is_partial_boolean_like,
 )
 
 __all__ = [
@@ -57,25 +42,10 @@ __all__ = [
     "diff",
     "meet",
     "join",
-    "Implicants",
     "expressions_equivalent",
     "dnf_implicants",
     "prime_implicants",
     "rule_to_string",
-    "read_hypercube",
-    "read_hypercubes",
-    "BooleanRule",
-    "ConfigurationLike",
-    "KleeneValueLike",
-    "PartialBooleanLike",
-    "HypercubeLike",
-    "is_boolean_expression_available",
-    "is_boolean_expression_like",
-    "is_boolean_rule_like",
-    "is_configuration_like",
-    "is_kleene_value_like",
-    "is_partial_boolean_like",
-    "is_hypercube_like",
 ]
 
 
@@ -116,4 +86,5 @@ def read_hypercubes(*args: _Any, **kwargs: _Any) -> _Dict[str, Hypercube]:
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"read_hypercube", "read_hypercubes"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

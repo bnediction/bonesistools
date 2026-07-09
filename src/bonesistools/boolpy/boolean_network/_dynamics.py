@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
@@ -22,11 +23,11 @@ from ..._compat import Literal
 from ..boolean_algebra import (
     ConfigurationSet,
     Hypercube,
-    HypercubeLike,
-    Implicants,
     dnf_implicants,
     prime_implicants,
 )
+from ..boolean_algebra._structure import Implicants
+from ..boolean_algebra._typing import HypercubeLike
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
@@ -34,6 +35,70 @@ if TYPE_CHECKING:
 _StateBits = int
 _CompiledRule = Callable[[_StateBits], int]
 ImplicantsByValue = Dict[Literal[0, 1], Implicants]
+
+
+def _reachable_attractors_with_bdd_backend(
+    network: "BooleanNetwork",
+    initial_states: ConfigurationSet,
+    *,
+    update: Literal["asynchronous", "synchronous", "general"],
+) -> Tuple[ConfigurationSet, ...]:
+    """Compute reachable attractors through a BDD reachability set."""
+
+    bdd_module = _import_dd_autoref()
+    bdd = bdd_module.BDD()
+    components = tuple(network.keys())
+    current_vars = tuple(f"x{index}" for index in range(len(components)))
+    next_vars = tuple(f"y{index}" for index in range(len(components)))
+
+    ordered_vars = tuple(
+        variable for pair in zip(current_vars, next_vars) for variable in pair
+    )
+    bdd.declare(*ordered_vars)
+
+    transition = _bdd_transition_relation(
+        network,
+        bdd=bdd,
+        components=components,
+        current_vars=current_vars,
+        next_vars=next_vars,
+        update=update,
+    )
+    initial = _bdd_initial_states(
+        bdd=bdd,
+        components=components,
+        current_vars=current_vars,
+        initial_states=initial_states,
+    )
+    reachable = _bdd_reachable_states(
+        bdd=bdd,
+        initial=initial,
+        transition=transition,
+        current_vars=current_vars,
+        next_vars=next_vars,
+    )
+    reachable_state_bits = _bdd_state_bits(
+        bdd=bdd,
+        states=reachable,
+        current_vars=current_vars,
+    )
+
+    compiled_rules = _compile_bitset_rules(network, components)
+    successors = {
+        state: _successor_state_bits(
+            compiled_rules,
+            state,
+            update=update,
+            n_components=len(components),
+        )
+        for state in reachable_state_bits
+    }
+    terminal_components = _terminal_strongly_connected_components(successors)
+
+    return tuple(
+        _configuration_set_from_state_bits(component, components)
+        for component in sorted(terminal_components, key=lambda states: min(states))
+    )
 
 
 def _reachable_attractors_with_explicit_backend(
@@ -75,6 +140,195 @@ def _reachable_attractors_with_explicit_backend(
         _configuration_set_from_state_bits(component, components)
         for component in sorted(terminal_components, key=lambda states: min(states))
     )
+
+
+def _import_dd_autoref() -> Any:
+    """Import the optional BDD backend."""
+
+    try:
+        return import_module("dd.autoref")
+
+    except ImportError as error:
+        raise ImportError(
+            "`BooleanNetwork.reachable_attractors(..., backend='bdd')` requires "
+            "the optional dependency `dd` to be installed."
+        ) from error
+
+
+def _bdd_transition_relation(
+    network: "BooleanNetwork",
+    *,
+    bdd: Any,
+    components: Tuple[str, ...],
+    current_vars: Tuple[str, ...],
+    next_vars: Tuple[str, ...],
+    update: Literal["asynchronous", "synchronous", "general"],
+) -> Any:
+    """Build a transition relation as a BDD."""
+
+    component_vars = dict(zip(components, current_vars))
+    current_values = tuple(bdd.var(variable) for variable in current_vars)
+    next_values = tuple(bdd.var(variable) for variable in next_vars)
+    rules = tuple(
+        _bdd_rule(network, network[component], bdd=bdd, variables=component_vars)
+        for component in components
+    )
+
+    if update == "synchronous":
+        relation = bdd.true
+        for next_value, rule in zip(next_values, rules):
+            relation &= _bdd_equivalence(next_value, rule)
+
+        return relation
+
+    if update == "asynchronous":
+        relation = bdd.false
+        for updated_index, (current_value, next_value, rule) in enumerate(
+            zip(current_values, next_values, rules)
+        ):
+            transition = _bdd_exclusive_or(current_value, rule)
+            transition &= _bdd_equivalence(next_value, rule)
+
+            for index, (other_current, other_next) in enumerate(
+                zip(current_values, next_values)
+            ):
+                if index != updated_index:
+                    transition &= _bdd_equivalence(other_next, other_current)
+
+            relation |= transition
+
+        return relation
+
+    relation = bdd.true
+    updates = bdd.false
+    for current_value, next_value, rule in zip(current_values, next_values, rules):
+        updated = _bdd_exclusive_or(current_value, rule)
+        updated &= _bdd_equivalence(next_value, rule)
+        unchanged = _bdd_equivalence(next_value, current_value)
+        relation &= unchanged | updated
+        updates |= updated
+
+    return relation & updates
+
+
+def _bdd_equivalence(left: Any, right: Any) -> Any:
+    """Return a BDD encoding logical equivalence."""
+
+    return (left & right) | (~left & ~right)
+
+
+def _bdd_exclusive_or(left: Any, right: Any) -> Any:
+    """Return a BDD encoding exclusive disjunction."""
+
+    return (left & ~right) | (~left & right)
+
+
+def _bdd_rule(
+    network: "BooleanNetwork",
+    rule: Any,
+    *,
+    bdd: Any,
+    variables: Mapping[str, str],
+) -> Any:
+    """Convert a Boolean rule into a BDD over current-state variables."""
+
+    if rule is network.ba.TRUE:
+        return bdd.true
+
+    if rule is network.ba.FALSE:
+        return bdd.false
+
+    if isinstance(rule, network.ba.Symbol):
+        return bdd.var(variables[str(rule)])
+
+    if isinstance(rule, network.ba.NOT):
+        return ~_bdd_rule(network, rule.args[0], bdd=bdd, variables=variables)
+
+    if isinstance(rule, network.ba.AND):
+        value = bdd.true
+        for child in rule.args:
+            value &= _bdd_rule(network, child, bdd=bdd, variables=variables)
+        return value
+
+    if isinstance(rule, network.ba.OR):
+        value = bdd.false
+        for child in rule.args:
+            value |= _bdd_rule(network, child, bdd=bdd, variables=variables)
+        return value
+
+    raise TypeError(f"unsupported Boolean expression type: {type(rule)}")
+
+
+def _bdd_initial_states(
+    *,
+    bdd: Any,
+    components: Tuple[str, ...],
+    current_vars: Tuple[str, ...],
+    initial_states: ConfigurationSet,
+) -> Any:
+    """Encode an initial ConfigurationSet as a BDD."""
+
+    states = bdd.false
+    for hypercube in initial_states._as_hypercubes():
+        state = bdd.true
+        for component, current_var in zip(components, current_vars):
+            if component not in hypercube:
+                continue
+
+            value = hypercube[component]
+            if value.is_fixed:
+                variable = bdd.var(current_var)
+                state &= variable if value.value else ~variable
+
+        states |= state
+
+    return states
+
+
+def _bdd_reachable_states(
+    *,
+    bdd: Any,
+    initial: Any,
+    transition: Any,
+    current_vars: Tuple[str, ...],
+    next_vars: Tuple[str, ...],
+) -> Any:
+    """Compute the reachable-state set as a BDD fixpoint."""
+
+    reachable = initial
+    frontier = initial
+    rename_next_to_current = dict(zip(next_vars, current_vars))
+
+    while frontier != bdd.false:
+        successors = bdd.exist(current_vars, frontier & transition)
+        successors = bdd.let(rename_next_to_current, successors)
+        new_frontier = successors & ~reachable
+        if new_frontier == bdd.false:
+            break
+
+        reachable |= new_frontier
+        frontier = new_frontier
+
+    return reachable
+
+
+def _bdd_state_bits(
+    *,
+    bdd: Any,
+    states: Any,
+    current_vars: Tuple[str, ...],
+) -> Tuple[_StateBits, ...]:
+    """Decode a BDD state set into sorted bitsets."""
+
+    decoded = []
+    for assignment in bdd.pick_iter(states, care_vars=current_vars):
+        state_bits = 0
+        for index, current_var in enumerate(current_vars):
+            if assignment.get(current_var, False):
+                state_bits |= 1 << index
+        decoded.append(state_bits)
+
+    return tuple(sorted(decoded))
 
 
 def _reachable_attractors_with_most_permissive_backend(
@@ -623,46 +877,54 @@ def _strongly_connected_components(
 ) -> Tuple[Tuple[_StateBits, ...], ...]:
     """Compute SCCs of a directed graph encoded as a successor mapping."""
 
-    index = 0
-    stack: List[_StateBits] = []
-    on_stack: Set[_StateBits] = set()
-    indices: Dict[_StateBits, int] = {}
-    lowlinks: Dict[_StateBits, int] = {}
+    visited: Set[_StateBits] = set()
+    finishing_order: List[_StateBits] = []
+
+    for start in successors:
+        if start in visited:
+            continue
+
+        stack = [(start, False)]
+        while stack:
+            state, expanded = stack.pop()
+            if expanded:
+                finishing_order.append(state)
+                continue
+
+            if state in visited:
+                continue
+
+            visited.add(state)
+            stack.append((state, True))
+            for successor in successors[state]:
+                if successor not in visited:
+                    stack.append((successor, False))
+
+    predecessors: Dict[_StateBits, List[_StateBits]] = {
+        state: [] for state in successors
+    }
+    for state, state_successors in successors.items():
+        for successor in state_successors:
+            predecessors[successor].append(state)
+
+    assigned: Set[_StateBits] = set()
     components: List[Tuple[_StateBits, ...]] = []
-
-    def visit(state: _StateBits) -> None:
-        nonlocal index
-
-        indices[state] = index
-        lowlinks[state] = index
-        index += 1
-        stack.append(state)
-        on_stack.add(state)
-
-        for successor in successors[state]:
-            if successor not in indices:
-                visit(successor)
-                lowlinks[state] = min(lowlinks[state], lowlinks[successor])
-            elif successor in on_stack:
-                lowlinks[state] = min(lowlinks[state], indices[successor])
-
-        if lowlinks[state] != indices[state]:
-            return None
+    for start in reversed(finishing_order):
+        if start in assigned:
+            continue
 
         component = []
-        while True:
-            successor = stack.pop()
-            on_stack.remove(successor)
-            component.append(successor)
-            if successor == state:
-                break
+        stack = [start]
+        assigned.add(start)
+
+        while stack:
+            state = stack.pop()
+            component.append(state)
+            for predecessor in predecessors[state]:
+                if predecessor not in assigned:
+                    assigned.add(predecessor)
+                    stack.append(predecessor)
 
         components.append(tuple(component))
-
-        return None
-
-    for state in successors:
-        if state not in indices:
-            visit(state)
 
     return tuple(components)

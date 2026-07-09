@@ -714,6 +714,7 @@ def _sort_knn_arrays(
         np.take_along_axis(knn_distances, order, axis=1),
     )
 
+
 def _umap_smooth_knn_distances(
     distances: np.ndarray,
     n_neighbors: int,

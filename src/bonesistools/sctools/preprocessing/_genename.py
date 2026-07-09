@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional, Union, overload
 
 from ..._compat import Literal
+from ..._warnings import _warn_deprecated
 from ...databases.ncbi import genesyn as create_gene_synonyms
 from ...databases.ncbi._genesyn import support_legacy_gene_synonyms_args
 from ...databases.ncbi._typing import (
@@ -167,11 +168,9 @@ def standardize_gene_identifiers(
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
     """
-    Standardize gene names by converting them to official names.
+    Deprecated. Convert gene names to official names.
 
-    This is a convenience wrapper around `convert_gene_identifiers` with
-    `input_identifier_type="name"` and
-    `output_identifier_type="official_name"`.
+    Use `convert_gene_identifiers(...)` instead.
 
     Parameters
     ----------
@@ -200,11 +199,14 @@ def standardize_gene_identifiers(
         - `scdata.var.index`: standardized identifiers if `axis="var"`.
     """
 
+    _warn_deprecated(
+        "`bt.sct.pp.standardize_gene_identifiers`",
+        replacement="`bt.sct.pp.convert_gene_identifiers`",
+        stacklevel=2,
+    )
     return convert_gene_identifiers(
         scdata=scdata,
         axis=axis,
-        input_identifier_type="name",
-        output_identifier_type="official_name",
         genesyn=genesyn,
         copy=copy,
     )

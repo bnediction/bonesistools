@@ -19,12 +19,18 @@ Credits: BNeDiction; PEPR Santé Numérique 2030.
 from __future__ import annotations
 
 import sys as _sys
+from importlib import import_module as _import_module
 from typing import List as _List
 
-from . import boolpy as bpy
-from . import databases as dbs
-from . import sctools as sct
 from ._metadata import package_version as _package_version
+
+bpy = _import_module(f"{__name__}.boolpy")
+dbs = _import_module(f"{__name__}.databases")
+sct = _import_module(f"{__name__}.sctools")
+
+boolpy = bpy
+databases = dbs
+sctools = sct
 
 del annotations
 
@@ -45,17 +51,19 @@ _sys.modules.update(
 _sys.modules.update(
     {
         f"{__name__}.sct.{alias}": getattr(sct, alias)
-        for alias in ["pp", "tl", "pl", "datasets"]
+        for alias in ["pp", "tl", "io", "pl"]
     }
 )
+_sys.modules[f"{__name__}.sct.datasets"] = sct._datasets
 
 _sys.modules.update(
     {
         f"{__name__}.bpy.{alias}": getattr(bpy, alias)
-        for alias in ["ba", "bn", "ig", "io", "pl"]
+        for alias in ["ba", "bn", "ig", "io"]
     }
 )
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"boolpy", "databases", "sctools"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

@@ -80,7 +80,7 @@ def from_geo(
 
     Examples
     --------
-    >>> adata = bt.sct.datasets.from_geo("GSM4138110")
+    >>> adata = bt.sct.io.from_geo("GSM4138110")
 
     Returns
     -------

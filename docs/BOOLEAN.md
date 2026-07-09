@@ -117,6 +117,9 @@ states.sample(3, seed=0)
 `ConfigurationSet` keeps an exact, non-redundant internal representation, but
 does not guarantee a globally minimal representation.
 
+Equality is semantic: `a == b` compares the complete configurations
+represented by each object, not the internal hypercubes used to store them.
+
 For example:
 
 ```python
@@ -207,11 +210,19 @@ Supported update semantics are:
 - `"most-permissive"`: return reachable minimal trap spaces under
   most-permissive reachability.
 
-For `"asynchronous"` and `"general"` dynamics, the `"explicit"` backend explores
-the reachable state space explicitly. For `"most-permissive"` dynamics, the
-`"asp"` backend computes the smallest closed hypercube from each compatible
-initial configuration and selects the minimal trap spaces included in it. The
-`backend` parameter is ignored for synchronous dynamics.
+For `"synchronous"`, `"asynchronous"` and `"general"` dynamics, the
+`"explicit"` backend explores the reachable state space explicitly. The
+optional `"bdd"` backend computes the reachable state set symbolically using
+binary decision diagrams for these finite-state update semantics. Install it
+with:
+
+```bash
+pip install "bonesistools[bdd]"
+```
+
+For `"most-permissive"` dynamics, the `"asp"` backend computes reachable
+minimal trap spaces. The `"bdd"` backend is not used for most-permissive
+reachability.
 
 ## Boolean Model I/O
 
@@ -231,14 +242,14 @@ bn = model.get("boolean_network")
 - `read_ginml(path)` reads a GINML logical model.
 - `read_zginml(path)` reads a ZGINML archive and preserves companion files.
 
-### ExecutableModel
+### Imported Logical Models
 
 GINML and ZGINML files may contain more than a Boolean network. They can also
 store an influence graph, initial states, perturbations, simulation settings,
 layout data, annotations and other GINsim-specific sections.
 
-`read_ginml(...)` and `read_zginml(...)` therefore return an
-`ExecutableModel` with:
+`read_ginml(...)` and `read_zginml(...)` therefore return a model container
+with:
 
 - `boolean_network`: a `BooleanNetwork` when rules can be safely converted;
 - `influence_graph`: an `InfluenceGraph` when signed interactions are present;

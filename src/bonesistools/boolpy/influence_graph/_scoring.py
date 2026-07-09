@@ -21,7 +21,7 @@ from ..._validation import _as_positive_integer, _as_probability
 
 
 @dataclass(frozen=True)
-class InteractionScore:
+class _InteractionScore:
     """
     Signed influence score accumulated from directed walks.
 
@@ -61,7 +61,7 @@ def interaction_scores_from_walks(
     genes: Optional[Iterable[str]] = None,
     max_depth: int = 3,
     weights: Optional[Sequence[float]] = None,
-) -> Dict[str, Dict[str, InteractionScore]]:
+) -> Dict[str, Dict[str, _InteractionScore]]:
     """
     Estimate signed interaction scores from bounded directed walks.
 
@@ -84,7 +84,8 @@ def interaction_scores_from_walks(
     Returns
     -------
     dict
-        Nested mapping `source -> target -> InteractionScore`.
+        Nested mapping `source -> target -> score object`. Each score object
+        exposes `score`, `total_weight`, `path_number` and `normalized_score`.
 
     Raises
     ------
@@ -99,7 +100,7 @@ def interaction_scores_from_walks(
     genes = list(graph.nodes if genes is None else genes)
     gene_set = set(genes)
 
-    scores: Dict[str, Dict[str, InteractionScore]] = {gene: {} for gene in genes}
+    scores: Dict[str, Dict[str, _InteractionScore]] = {gene: {} for gene in genes}
     accumulators: Dict[str, Dict[str, Dict[str, float]]] = {gene: {} for gene in genes}
 
     for source in genes:
@@ -163,7 +164,7 @@ def interaction_scores_from_walks(
 
     for source, targets in accumulators.items():
         for target, values in targets.items():
-            scores[source][target] = InteractionScore(
+            scores[source][target] = _InteractionScore(
                 score=values["score"],
                 total_weight=values["total_weight"],
                 path_number=int(values["path_number"]),
@@ -173,7 +174,7 @@ def interaction_scores_from_walks(
 
 
 def infer_signed_interactions(
-    scores: Mapping[str, Mapping[str, InteractionScore]],
+    scores: Mapping[str, Mapping[str, _InteractionScore]],
     genes: Optional[Iterable[str]] = None,
     minimum_path_number: int = 1,
     threshold: float = 0.75,
@@ -184,8 +185,10 @@ def infer_signed_interactions(
 
     Parameters
     ----------
-    scores: Mapping[str, Mapping[str, InteractionScore]]
-        Nested interaction scores.
+    scores: Mapping
+        Nested interaction scores as returned by
+        `interaction_scores_from_walks()`. Score objects must expose
+        `path_number` and `normalized_score`.
     genes: Iterable[str], optional
         Genes to compare. If `None`, use keys from `scores`.
     minimum_path_number: int (default: 1)
@@ -258,7 +261,7 @@ def infer_signed_interactions_from_walks(
 
     This convenience function combines `interaction_scores_from_walks()` and
     `infer_signed_interactions()`. Use `interaction_scores_from_walks()`
-    directly when intermediate `InteractionScore` objects should be inspected.
+    directly when intermediate score attributes should be inspected.
 
     Parameters
     ----------
@@ -358,13 +361,13 @@ def _path_weight(
         )
 
 
-def _empty_score() -> InteractionScore:
+def _empty_score() -> _InteractionScore:
 
-    return InteractionScore(score=0.0, total_weight=0.0, path_number=0)
+    return _InteractionScore(score=0.0, total_weight=0.0, path_number=0)
 
 
 def _passes_threshold(
-    score: InteractionScore,
+    score: _InteractionScore,
     minimum_path_number: int,
     threshold: float,
 ) -> bool:

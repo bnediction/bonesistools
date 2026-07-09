@@ -33,15 +33,15 @@ from ..._validation import (
     _as_probability,
 )
 from ..._warnings import _warn_deprecated
-from ..plotting._graphviz import _networkx_to_graphviz, _set_pydot_defaults
-from ..plotting._styles import (
+from ._graphviz import _networkx_to_graphviz, _set_pydot_defaults
+from ._styles import (
     _evaluate_style_from_attributes,
     _style_callable_parameters,
     count_node_style,
     frequency_edge_style,
     stability_node_style,
 )
-from ..plotting._svg import SvgLength, scale_svg
+from ._svg import SvgLength, scale_svg
 
 if TYPE_CHECKING:
     from pydot import Dot
@@ -57,7 +57,11 @@ AggregatedNodeStyle = Union[
     Callable[..., Mapping[str, Any]],
     None,
 ]
-AggregatedEdgeStyle = Union[Callable[..., Mapping[str, Any]], None]
+AggregatedEdgeStyle = Union[
+    Literal["frequency"],
+    Callable[..., Mapping[str, Any]],
+    None,
+]
 _UNSET = object()
 
 StructuralSignature = Tuple[
@@ -3024,7 +3028,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         node_style: AggregatedNodeStyle = None,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
-        edge_style: AggregatedEdgeStyle = frequency_edge_style,
+        edge_style: AggregatedEdgeStyle = "frequency",
         program: str = "dot",
     ):
         """
@@ -3091,10 +3095,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
-        edge_style: Callable or None
+        edge_style: {"frequency"} or callable or None
             Edge styling strategy.
 
-            By default, `frequency_edge_style` styles edges according to their
+            The `"frequency"` strategy styles edges according to their
             `frequency` attribute, i.e. `count / total`.
 
             A callable defines a custom edge style. Argument names are resolved
@@ -3152,7 +3156,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         node_style: AggregatedNodeStyle = None,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
-        edge_style: AggregatedEdgeStyle = frequency_edge_style,
+        edge_style: AggregatedEdgeStyle = "frequency",
         program: str = "dot",
     ) -> "Dot":
         """
@@ -3227,10 +3231,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
-        edge_style: Callable or None
+        edge_style: {"frequency"} or callable or None
             Edge styling strategy.
 
-            By default, `frequency_edge_style` styles edges according to their
+            The `"frequency"` strategy styles edges according to their
             `frequency` attribute, i.e. `count / total`.
 
             A callable defines a custom edge style. Argument names are resolved
@@ -3290,7 +3294,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         node_style: AggregatedNodeStyle = None,
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
-        edge_style: AggregatedEdgeStyle = frequency_edge_style,
+        edge_style: AggregatedEdgeStyle = "frequency",
         program: str = "dot",
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
@@ -3369,10 +3373,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
-        edge_style: callable or None (default: frequency_edge_style)
+        edge_style: {"frequency"} or callable or None (default: "frequency")
             Edge styling strategy.
 
-            By default, `frequency_edge_style` styles edges according to their
+            The `"frequency"` strategy styles edges according to their
             `frequency` attribute, i.e. `count / total`.
 
             A callable defines a custom edge style. Argument names are resolved
@@ -3693,16 +3697,12 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 f"or 'both', but received {collapse!r}"
             )
 
-        if edge_style is not None and not callable(edge_style):
-            raise TypeError(
-                f"unsupported argument type for 'edge_style': expected "
-                f"callable or None but received {type(edge_style)}"
-            )
+        edge_style_callable = self._resolve_edge_style(edge_style)
 
         edge_style_parameters = (
             None
-            if edge_style is None
-            else _style_callable_parameters(edge_style, "edge_style")
+            if edge_style_callable is None
+            else _style_callable_parameters(edge_style_callable, "edge_style")
         )
         edges_to_remove = []
 
@@ -3732,10 +3732,10 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                     frequency=frequency,
                 )
 
-            if edge_style is not None:
+            if edge_style_callable is not None:
                 data.update(
                     _evaluate_style_from_attributes(
-                        edge_style,
+                        edge_style_callable,
                         data,
                         cast(Tuple[Any, ...], edge_style_parameters),
                         style_name="edge_style",
@@ -3755,6 +3755,34 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         )
 
         return graph
+
+    def _resolve_edge_style(
+        self,
+        edge_style: AggregatedEdgeStyle,
+    ) -> Optional[Callable[..., Mapping[str, Any]]]:
+        """
+        Resolve an edge styling strategy to a callable.
+        """
+
+        if edge_style is None:
+            return None
+
+        if edge_style == "frequency":
+            return frequency_edge_style
+
+        if isinstance(edge_style, str):
+            raise ValueError(
+                "unsupported edge_style: expected None, 'frequency' or "
+                f"a callable, but received {edge_style!r}"
+            )
+
+        if callable(edge_style):
+            return edge_style
+
+        raise TypeError(
+            "unsupported argument type for 'edge_style': expected "
+            f"None, 'frequency' or callable but received {type(edge_style)}"
+        )
 
     def _resolve_edge_label(
         self,

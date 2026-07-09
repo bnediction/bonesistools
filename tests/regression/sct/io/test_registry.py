@@ -11,6 +11,7 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
+import bonesistools.sctools.datasets as datasets_module
 from bonesistools.sctools.datasets import _pbmc3k as pbmc3k_module
 from bonesistools.sctools.datasets import _registry as registry_module
 
@@ -62,7 +63,7 @@ def _as_csr(matrix: Any) -> csr_matrix:
     return cast(csr_matrix, matrix)
 
 
-def test_datasets_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
+def test_io_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
     monkeypatch.setitem(
         registry_module._DATASETS,
@@ -89,8 +90,8 @@ def test_datasets_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pbmc3k_module, "_download", fake_download)
 
-    first = bt.sct.datasets.load("pbmc3k", quiet=True)
-    second = bt.sct.datasets.load("pbmc3k", quiet=True)
+    first = bt.sct.io.load("pbmc3k", quiet=True)
+    second = bt.sct.io.load("pbmc3k", quiet=True)
 
     assert first.shape == (2, 3)
     assert first.obs_names.tolist() == ["cell1", "cell2"]
@@ -111,7 +112,7 @@ def test_datasets_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
     assert downloaded == [pbmc3k_module._PBMC3K_URL]
 
 
-def test_datasets_load_rejects_invalid_cached_shape(monkeypatch, tmp_path):
+def test_io_load_rejects_invalid_cached_shape(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
 
     def fake_loader(_cache_dir: Path, _quiet: bool) -> ad.AnnData:
@@ -130,14 +131,14 @@ def test_datasets_load_rejects_invalid_cached_shape(monkeypatch, tmp_path):
             "invalid cached dataset 'pbmc3k'.*"
             "expected 2700 observations but found 1.*"
             "expected 32738 features but found 1.*"
-            "bt\\.sct\\.datasets\\.clear\\('pbmc3k'\\)"
+            "bt\\.sct\\.io\\.clear\\('pbmc3k'\\)"
         ),
     ):
-        bt.sct.datasets.load("pbmc3k", quiet=True)
+        bt.sct.io.load("pbmc3k", quiet=True)
 
 
-def test_datasets_info_pbmc3k_contains_source_license_url_and_citation():
-    metadata = bt.sct.datasets.info("PBMC3K")
+def test_io_info_pbmc3k_contains_source_license_url_and_citation():
+    metadata = bt.sct.io.info("PBMC3K")
 
     assert metadata["name"] == "pbmc3k"
     assert metadata["organism"] == "Homo sapiens"
@@ -156,8 +157,8 @@ def test_datasets_info_pbmc3k_contains_source_license_url_and_citation():
     assert len(str(metadata["description"])) > 0
 
 
-def test_datasets_info_nestorowa_contains_source_license_and_counts_url():
-    metadata = bt.sct.datasets.info("nestorowa")
+def test_io_info_nestorowa_contains_source_license_and_counts_url():
+    metadata = bt.sct.io.info("nestorowa")
 
     assert metadata["organism"] == "Mus musculus"
     assert metadata["tissue"] == "bone marrow"
@@ -169,8 +170,8 @@ def test_datasets_info_nestorowa_contains_source_license_and_counts_url():
     assert str(metadata["url"]).endswith("acc=GSE81682")
 
 
-def test_datasets_available_lists_registered_datasets():
-    datasets = bt.sct.datasets.available()
+def test_io_available_lists_registered_datasets():
+    datasets = bt.sct.io.available()
 
     assert "nestorowa" in datasets.index
     assert "pbmc3k" in datasets.index
@@ -182,10 +183,10 @@ def test_datasets_available_lists_registered_datasets():
 
 
 def test_dataset_metadata_entries_follow_documented_conventions():
-    datasets = bt.sct.datasets.available()
+    datasets = bt.sct.io.available()
 
     for name in datasets.index:
-        metadata = bt.sct.datasets.info(str(name))
+        metadata = bt.sct.io.info(str(name))
 
         assert _REQUIRED_METADATA_FIELDS <= set(metadata)
         assert isinstance(metadata["description"], str)
@@ -203,15 +204,15 @@ def test_dataset_metadata_entries_follow_documented_conventions():
         assert "cells" in metadata
         assert "genes" in metadata or "peaks" in metadata
 
-    assert not str(bt.sct.datasets.info("pbmc3k")["url"]).endswith(".tar.gz")
+    assert not str(bt.sct.io.info("pbmc3k")["url"]).endswith(".tar.gz")
 
 
-def test_datasets_info_unknown_lists_available_datasets():
+def test_io_info_unknown_lists_available_datasets():
     with pytest.raises(ValueError, match="nestorowa.*pbmc3k|pbmc3k.*nestorowa"):
-        bt.sct.datasets.info("unknown")
+        bt.sct.io.info("unknown")
 
 
-def test_datasets_clear_removes_named_and_full_cache(monkeypatch, tmp_path):
+def test_io_clear_removes_named_and_full_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
     root = registry_module._dataset_cache_root()
     pbmc3k_dir = registry_module._dataset_cache_dir("pbmc3k")
@@ -221,18 +222,36 @@ def test_datasets_clear_removes_named_and_full_cache(monkeypatch, tmp_path):
     (nestorowa_dir / "data").mkdir(parents=True)
     (nestorowa_dir / "data" / "file.txt").write_text("nestorowa")
 
-    bt.sct.datasets.clear("pbmc3k")
-    bt.sct.datasets.clear("pbmc3k")
+    bt.sct.io.clear("pbmc3k")
+    bt.sct.io.clear("pbmc3k")
 
     assert not pbmc3k_dir.exists()
     assert nestorowa_dir.exists()
 
-    bt.sct.datasets.clear()
-    bt.sct.datasets.clear()
+    bt.sct.io.clear()
+    bt.sct.io.clear()
 
     assert not root.exists()
 
 
-def test_datasets_clear_unknown_lists_available_datasets():
+def test_io_clear_unknown_lists_available_datasets():
     with pytest.raises(ValueError, match="nestorowa.*pbmc3k|pbmc3k.*nestorowa"):
-        bt.sct.datasets.clear("unknown")
+        bt.sct.io.clear("unknown")
+
+
+def test_deprecated_datasets_namespace_warns_and_delegates(monkeypatch):
+    sentinel = object()
+
+    monkeypatch.setattr(datasets_module, "_load", lambda *_args, **_kwargs: sentinel)
+
+    with pytest.warns(FutureWarning):
+        loaded = bt.sct.datasets.load("pbmc3k", quiet=True)
+
+    assert loaded is sentinel
+
+
+def test_deprecated_datasets_namespace_hides_technical_imports():
+    datasets = bt.sct.datasets
+
+    assert not hasattr(datasets, "AnnData")
+    assert not hasattr(datasets, "warnings")

@@ -57,7 +57,7 @@ jobs:
 
       - name: Install package and test dependencies
         run: |
-          pip install -e ".[omics]"
+          pip install -e ".[omics,bdd]"
           pip install pytest
 
       - name: Check reproducibility tests
@@ -66,6 +66,7 @@ jobs:
         run: |
           pytest \
             tests/reproducibility/test_reproducibility_omnipath.py \
+            tests/reproducibility/test_reproducibility_boolean_backends.py \
             tests/reproducibility/test_reproducibility_stats.py \
             tests/reproducibility/test_reproducibility_workflow.py \
             -q

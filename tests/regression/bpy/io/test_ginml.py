@@ -8,6 +8,7 @@ from zipfile import ZipFile
 import pytest
 
 import bonesistools as bt
+from bonesistools.boolpy.input_output._executable_model import ExecutableModel
 
 
 def _write_text(path: Union[str, Path], content: str) -> Path:
@@ -54,7 +55,7 @@ def test_read_ginml_returns_executable_model_with_boolean_network(tmp_path):
 
     model = bt.bpy.io.read_ginml(path)
 
-    assert isinstance(model, bt.bpy.io.ExecutableModel)
+    assert isinstance(model, ExecutableModel)
     assert model.metadata["graph"]["id"] == "toy"
     assert model.metadata["node_order"] == ["A", "B", "C", "D", "E"]
 
@@ -232,8 +233,13 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
     ]
 
 
-def test_executable_model_get_returns_available_containers_and_validates_attribute():
-    model = bt.bpy.io.ExecutableModel()
+def test_executable_model_is_not_promoted_from_io_namespace():
+    assert "ExecutableModel" not in dir(bt.bpy.io)
+    assert not hasattr(bt.bpy.io, "ExecutableModel")
+
+
+def test_imported_model_get_returns_available_containers_and_validates_attribute():
+    model = ExecutableModel()
 
     assert model.get("initial_states") == {}
     assert model.get("perturbations") == {}

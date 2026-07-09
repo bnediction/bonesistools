@@ -846,6 +846,23 @@ def test_to_graphviz_rejects_invalid_edge_style():
         graph.to_graphviz(edge_style=cast(Any, False))
 
 
+def test_to_graphviz_rejects_unknown_edge_style():
+    graph = _single_edge_graph()
+
+    with pytest.raises(ValueError, match="unsupported edge_style"):
+        graph.to_graphviz(edge_style=cast(Any, "bad"))
+
+
+def test_to_graphviz_accepts_frequency_edge_style(fake_graphviz):
+    graph = _single_edge_graph(total=4)
+
+    rendered = graph.to_graphviz(edge_style="frequency")
+
+    assert isinstance(rendered, fake_graphviz)
+    assert rendered.edges[0][2]["style"] == "bold"
+    assert rendered.edges[0][2]["penwidth"] == "2"
+
+
 def test_to_graphviz_callable_edge_style_uses_named_attributes(fake_graphviz):
     graph = _single_edge_graph(total=4)
 

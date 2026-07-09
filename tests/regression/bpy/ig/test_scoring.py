@@ -7,10 +7,12 @@ import bonesistools as bt
 from bonesistools.boolpy.influence_graph import _scoring
 
 
-def test_influence_graph_scoring_is_exported_from_public_namespace():
-    score = bt.bpy.ig.InteractionScore(score=0.0, total_weight=0.0, path_number=0)
+def test_influence_graph_scoring_functions_are_public_without_score_constructor():
+    score = _scoring._InteractionScore(score=0.0, total_weight=0.0, path_number=0)
 
     assert score.normalized_score == 0.0
+    assert "InteractionScore" not in dir(bt.bpy.ig)
+    assert not hasattr(bt.bpy.ig, "InteractionScore")
     assert callable(bt.bpy.ig.infer_signed_interactions)
     assert callable(bt.bpy.ig.infer_signed_interactions_from_walks)
     assert callable(bt.bpy.ig.interaction_scores_from_walks)
@@ -107,7 +109,7 @@ def test_scores_from_walks_handles_digraphs_and_missing_sources():
         weights=[1.0, 0.5],
     )
 
-    assert scores["A"]["C"] == bt.bpy.ig.InteractionScore(
+    assert scores["A"]["C"] == _scoring._InteractionScore(
         score=0.5,
         total_weight=0.5,
         path_number=1,
@@ -159,14 +161,14 @@ def test_infer_signed_interactions_from_walks_matches_two_step_pipeline():
 def test_infer_signed_interactions_keeps_clear_dominant_direction():
     scores = {
         "A": {
-            "B": bt.bpy.ig.InteractionScore(
+            "B": _scoring._InteractionScore(
                 score=3.0,
                 total_weight=4.0,
                 path_number=4,
             )
         },
         "B": {
-            "A": bt.bpy.ig.InteractionScore(
+            "A": _scoring._InteractionScore(
                 score=-1.0,
                 total_weight=4.0,
                 path_number=4,
@@ -184,7 +186,7 @@ def test_infer_signed_interactions_keeps_clear_dominant_direction():
 def test_infer_signed_interactions_accepts_threshold_boundaries():
     positive_scores = {
         "A": {
-            "B": bt.bpy.ig.InteractionScore(
+            "B": _scoring._InteractionScore(
                 score=1.0,
                 total_weight=1.0,
                 path_number=1,
@@ -194,7 +196,7 @@ def test_infer_signed_interactions_accepts_threshold_boundaries():
     }
     negative_scores = {
         "A": {
-            "B": bt.bpy.ig.InteractionScore(
+            "B": _scoring._InteractionScore(
                 score=-0.25,
                 total_weight=1.0,
                 path_number=1,
@@ -218,14 +220,14 @@ def test_infer_signed_interactions_accepts_threshold_boundaries():
 def test_infer_signed_interactions_can_keep_bidirectional_edges():
     scores = {
         "A": {
-            "B": bt.bpy.ig.InteractionScore(
+            "B": _scoring._InteractionScore(
                 score=4.0,
                 total_weight=4.0,
                 path_number=4,
             )
         },
         "B": {
-            "A": bt.bpy.ig.InteractionScore(
+            "A": _scoring._InteractionScore(
                 score=-4.0,
                 total_weight=4.0,
                 path_number=4,
@@ -247,28 +249,28 @@ def test_infer_signed_interactions_can_keep_bidirectional_edges():
 def test_infer_signed_interactions_rejects_weak_or_ambiguous_scores():
     scores = {
         "A": {
-            "B": bt.bpy.ig.InteractionScore(
+            "B": _scoring._InteractionScore(
                 score=3.0,
                 total_weight=4.0,
                 path_number=4,
             )
         },
         "B": {
-            "A": bt.bpy.ig.InteractionScore(
+            "A": _scoring._InteractionScore(
                 score=3.0,
                 total_weight=4.0,
                 path_number=4,
             )
         },
         "C": {
-            "D": bt.bpy.ig.InteractionScore(
+            "D": _scoring._InteractionScore(
                 score=1.0,
                 total_weight=1.0,
                 path_number=1,
             )
         },
         "D": {
-            "C": bt.bpy.ig.InteractionScore(
+            "C": _scoring._InteractionScore(
                 score=0.0,
                 total_weight=0.0,
                 path_number=0,

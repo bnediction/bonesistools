@@ -121,7 +121,7 @@ def test_geo_validates_gsm_accessions():
         geo._as_gsm(cast(Any, 12345))
 
     with pytest.raises(TypeError):
-        bt.sct.datasets.from_geo(cast(Any, 12345), quiet=True)
+        bt.sct.io.from_geo(cast(Any, 12345), quiet=True)
 
     with pytest.raises(ValueError):
         geo._as_gsm("GSE12345")
@@ -130,10 +130,10 @@ def test_geo_validates_gsm_accessions():
         geo._as_gsm("foo")
 
     with pytest.raises(ValueError):
-        bt.sct.datasets.from_geo("GSE12345", quiet=True)
+        bt.sct.io.from_geo("GSE12345", quiet=True)
 
     with pytest.raises(ValueError):
-        bt.sct.datasets.from_geo("foo", quiet=True)
+        bt.sct.io.from_geo("foo", quiet=True)
 
 
 def test_geo_gsm_path_generation():
@@ -410,7 +410,7 @@ def test_geo_from_geo_uses_cache_without_downloading(monkeypatch, tmp_path):
 
     monkeypatch.setattr(geo, "urlopen", fail_urlopen)
 
-    adata = bt.sct.datasets.from_geo(
+    adata = bt.sct.io.from_geo(
         "GSM5492245",
         cache_dir=tmp_path / "cache",
         quiet=True,
@@ -446,7 +446,7 @@ def test_geo_from_geo_makes_duplicate_var_names_unique_before_anndata_warning(
 
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always")
-        adata = bt.sct.datasets.from_geo(
+        adata = bt.sct.io.from_geo(
             "GSM5492245",
             cache_dir=tmp_path / "cache",
             quiet=True,

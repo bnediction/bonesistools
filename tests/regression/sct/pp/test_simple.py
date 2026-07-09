@@ -11,7 +11,7 @@ from scipy.sparse import csr_matrix
 import bonesistools as bt
 
 
-def test_sort_anndata_reorders_observations_and_variables_stably():
+def test_sort_reorders_observations_and_variables_stably():
     adata = ad.AnnData(
         X=np.array(
             [
@@ -24,7 +24,7 @@ def test_sort_anndata_reorders_observations_and_variables_stably():
         var=pd.DataFrame({"kind": ["z", "x", "y"]}, index=["gene3", "gene1", "gene2"]),
     )
 
-    result = bt.sct.pp.sort_anndata(adata, on="both")
+    result = bt.sct.pp.sort(adata, on="both")
 
     assert result is None
     assert adata.obs_names.tolist() == ["cell1", "cell2", "cell3"]
@@ -41,20 +41,34 @@ def test_sort_anndata_reorders_observations_and_variables_stably():
     )
 
 
-def test_sort_anndata_copy_preserves_input_and_can_sort_one_axis():
+def test_sort_copy_preserves_input_and_can_sort_one_axis():
     adata = ad.AnnData(
         X=np.array([[1.0, 2.0], [3.0, 4.0]]),
         obs=pd.DataFrame(index=["cell2", "cell1"]),
         var=pd.DataFrame(index=["gene2", "gene1"]),
     )
 
-    copied = bt.sct.pp.sort_anndata(adata, on="obs", copy=True)
+    copied = bt.sct.pp.sort(adata, on="obs", copy=True)
 
     assert copied is not None
     assert adata.obs_names.tolist() == ["cell2", "cell1"]
     assert adata.var_names.tolist() == ["gene2", "gene1"]
     assert copied.obs_names.tolist() == ["cell1", "cell2"]
     assert copied.var_names.tolist() == ["gene2", "gene1"]
+
+
+def test_sort_anndata_is_deprecated():
+    adata = ad.AnnData(
+        X=np.array([[1.0], [2.0]]),
+        obs=pd.DataFrame(index=["cell2", "cell1"]),
+        var=pd.DataFrame(index=["gene1"]),
+    )
+
+    with pytest.warns(FutureWarning, match="bt.sct.pp.sort_anndata"):
+        result = bt.sct.pp.sort_anndata(adata)
+
+    assert result is None
+    assert adata.obs_names.tolist() == ["cell1", "cell2"]
 
 
 def test_filter_obs_and_filter_var_subset_in_place(mini_adata):

@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 
 import numpy as np
+import pytest
 from scipy.sparse import csr_matrix
 
 import bonesistools as bt
 
 
-def test_anndata_to_dataframe_uses_layer_obs_and_log_base(mini_adata):
+def test_to_dataframe_uses_layer_obs_and_log_base(mini_adata):
     mini_adata.uns["log1p"] = {"base": 2}
     mini_adata.layers["log2_counts"] = np.log1p(mini_adata.layers["counts"]) / np.log(2)
 
-    df = bt.sct.tl.anndata_to_dataframe(
+    df = bt.sct.tl.to_dataframe(
         mini_adata,
         obs=["cluster", "batch"],
         layer="log2_counts",
@@ -22,18 +23,18 @@ def test_anndata_to_dataframe_uses_layer_obs_and_log_base(mini_adata):
     assert df["batch"].tolist() == ["b1", "b2", "b1", "b2"]
 
 
-def test_anndata_to_dataframe_handles_sparse_x_sparse_layer_and_obs_string(mini_adata):
+def test_to_dataframe_handles_sparse_x_sparse_layer_and_obs_string(mini_adata):
     sparse_adata = mini_adata.copy()
     sparse_adata.X = csr_matrix(sparse_adata.X)
 
-    x_df = bt.sct.tl.anndata_to_dataframe(sparse_adata)
+    x_df = bt.sct.tl.to_dataframe(sparse_adata)
 
     assert np.allclose(x_df, mini_adata.X)
 
     sparse_adata.layers["sparse_log_counts"] = csr_matrix(
         np.log1p(mini_adata.layers["counts"])
     )
-    layer_df = bt.sct.tl.anndata_to_dataframe(
+    layer_df = bt.sct.tl.to_dataframe(
         sparse_adata,
         obs="cluster",
         layer="sparse_log_counts",
@@ -46,3 +47,12 @@ def test_anndata_to_dataframe_handles_sparse_x_sparse_layer_and_obs_string(mini_
         mini_adata.layers["counts"],
     )
     assert layer_df["cluster"].tolist() == ["A", "A", "B", "B"]
+
+
+def test_deprecated_anndata_to_dataframe_warns_and_delegates(mini_adata):
+    with pytest.warns(FutureWarning, match="bt.sct.tl.to_dataframe"):
+        deprecated = bt.sct.tl.anndata_to_dataframe(mini_adata)
+
+    current = bt.sct.tl.to_dataframe(mini_adata)
+
+    assert deprecated.equals(current)

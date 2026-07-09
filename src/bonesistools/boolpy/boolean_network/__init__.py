@@ -11,21 +11,14 @@ from typing import Any as _Any
 from typing import List as _List
 
 from ..._warnings import _warn_deprecated
-from . import _typing as typing
 from ._network import (
     BooleanNetwork,
     BooleanNetworkEnsemble,
-    frequency_edge_style,
 )
 
 __all__ = [
     "BooleanNetwork",
     "BooleanNetworkEnsemble",
-    "frequency_edge_style",
-    "read_bnet",
-    "read_bnet_directory",
-    "bn_to_pydot",
-    "typing",
 ]
 
 
@@ -82,4 +75,10 @@ def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {
+        "bn_to_pydot",
+        "read_bnet",
+        "read_bnet_directory",
+        "typing",
+    }
+    return sorted((set(globals()) | set(__all__)) - hidden)

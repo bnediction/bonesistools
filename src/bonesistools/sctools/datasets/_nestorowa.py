@@ -213,7 +213,6 @@ def _map_ensembl_to_official_names(adata: AnnData) -> None:
     from ..preprocessing import (
         convert_gene_identifiers,
         merge_duplicate_vars,
-        standardize_gene_identifiers,
     )
 
     convert_gene_identifiers(
@@ -223,7 +222,7 @@ def _map_ensembl_to_official_names(adata: AnnData) -> None:
         output_identifier_type="official_name",
         copy=False,
     )
-    standardize_gene_identifiers(
+    convert_gene_identifiers(
         adata,
         axis="var",
         copy=False,

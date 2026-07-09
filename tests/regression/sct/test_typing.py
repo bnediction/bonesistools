@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from anndata import AnnData
 
+import bonesistools as bt
 from bonesistools.sctools import _typing
 
 _TYPING_PATH = Path(_typing.__file__)
@@ -97,6 +98,25 @@ def test_type_checker_accepts_direct_and_decorator_usage():
 
     with pytest.raises(Exception, match="Expected verification arguments"):
         no_options("A")
+
+
+def test_sct_typing_alias_is_not_exposed_publicly():
+    assert "typing" not in dir(bt.sct)
+
+    with pytest.raises(AttributeError):
+        bt.sct.typing
+
+
+def test_sct_namespace_exposes_short_aliases_only():
+    assert {"pp", "tl", "io", "pl"} <= set(dir(bt.sct))
+    for name in [
+        "datasets",
+        "input_output",
+        "plotting",
+        "preprocessing",
+        "tools",
+    ]:
+        assert name not in dir(bt.sct)
 
 
 def test_anndata_checkers_validate_checked_arguments():

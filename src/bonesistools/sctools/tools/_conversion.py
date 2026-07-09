@@ -13,11 +13,12 @@ from anndata import AnnData
 from pandas import DataFrame
 from scipy.sparse import issparse
 
+from ..._warnings import _warn_deprecated
 from .._typing import Keys, anndata_checker
 
 
 @anndata_checker
-def anndata_to_dataframe(
+def to_dataframe(
     adata: AnnData,
     obs: Optional[Keys] = None,
     layer: Optional[str] = None,
@@ -76,3 +77,29 @@ def anndata_to_dataframe(
         counts_df = counts_df.join(obs_df)
 
     return counts_df
+
+
+def anndata_to_dataframe(
+    adata: AnnData,
+    obs: Optional[Keys] = None,
+    layer: Optional[str] = None,
+    is_log: bool = False,
+) -> DataFrame:
+    """
+    Convert an AnnData expression matrix to a DataFrame.
+
+    Deprecated. Use `bt.sct.tl.to_dataframe` instead.
+    """
+
+    _warn_deprecated(
+        "`bt.sct.tl.anndata_to_dataframe()`",
+        replacement="`bt.sct.tl.to_dataframe()`",
+        stacklevel=2,
+    )
+
+    return to_dataframe(
+        adata,
+        obs=obs,
+        layer=layer,
+        is_log=is_log,
+    )

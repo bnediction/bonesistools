@@ -64,7 +64,7 @@ def available_expected_names(expected_dir: Path = EXPECTED_DIR) -> Tuple[str, ..
 
 
 def _collect_reachable_attractors(
-    model: bt.bpy.io.ExecutableModel,
+    model: Any,
     states: Mapping[str, Mapping[str, int]],
     *,
     updates: Tuple[
@@ -121,7 +121,7 @@ def _collect_reachable_attractors(
 
 
 def _synthetic_30_node_initial_states(
-    model: bt.bpy.io.ExecutableModel,
+    model: Any,
 ) -> Dict[str, Dict[str, int]]:
 
     return {
@@ -130,7 +130,7 @@ def _synthetic_30_node_initial_states(
 
 
 def _death_receptor_cell_fate_initial_states(
-    model: bt.bpy.io.ExecutableModel,
+    model: Any,
 ) -> Dict[str, Dict[str, int]]:
 
     archive_initial = _plain_state(model.initial_states["FAS1"])

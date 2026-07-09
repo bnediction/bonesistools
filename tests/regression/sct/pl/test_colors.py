@@ -7,6 +7,7 @@ import pytest
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 import bonesistools as bt
+from bonesistools.sctools.plotting import _colors
 
 
 def test_rgb_and_rgb2hex_convert_channels():
@@ -39,8 +40,8 @@ def test_get_color_returns_rgb_or_hex_and_rejects_invalid_values():
     assert bt.sct.pl.get_color("black", color_type="hex") == "#000000"
     assert bt.sct.pl.get_color("charcoal", color_type="hex") == "#3a3a3a"
     assert bt.sct.pl.get_color("burgundy", color_type="hex") == "#6f1d1b"
-    assert bt.sct.pl.HEX_COLORS["burgundy"] == "#6f1d1b"
-    assert bt.sct.pl.rgb2hex(bt.sct.pl.RGB_COLORS["burgundy"]) == "#6f1d1b"
+    assert _colors.HEX_COLORS["burgundy"] == "#6f1d1b"
+    assert bt.sct.pl.rgb2hex(_colors.RGB_COLORS["burgundy"]) == "#6f1d1b"
 
     with pytest.raises(ValueError, match="invalid argument value for 'color_type'"):
         bt.sct.pl.get_color("black", color_type=cast(Any, "hsl"))
@@ -69,16 +70,16 @@ def test_earth_palette_matches_expected_hex_values():
     ]
 
     assert [
-        bt.sct.pl.rgb2hex(color) for color in bt.sct.pl.EARTH_COLORS
+        bt.sct.pl.rgb2hex(color) for color in _colors.EARTH_COLORS
     ] == expected_hex
     assert bt.sct.pl.get_palette("earth").hex == expected_hex
-    assert bt.sct.pl.earth_cm.N == len(bt.sct.pl.EARTH_COLORS)
+    assert bt.sct.pl.get_colormap("earth").N == len(_colors.EARTH_COLORS)
 
 
 def test_classic_palette_starts_with_qualitative_colors_without_duplicates():
     classic_hex = bt.sct.pl.get_palette("classic").hex
     qualitative_hex = [
-        bt.sct.pl.rgb2hex(color) for color in bt.sct.pl.QUALITATIVE_COLORS
+        bt.sct.pl.rgb2hex(color) for color in _colors.QUALITATIVE_COLORS
     ]
 
     assert classic_hex[: len(qualitative_hex)] == qualitative_hex
@@ -89,19 +90,39 @@ def test_palette_registry_returns_palette_and_colormap():
     palette = bt.sct.pl.get_palette("earth")
     colormap = bt.sct.pl.get_colormap("earth")
 
-    assert isinstance(palette, bt.sct.pl.Palette)
+    assert isinstance(palette, _colors.Palette)
     assert palette.name == "earth"
-    assert palette.colors == bt.sct.pl.EARTH_COLORS
-    assert next(palette.cycle()) == bt.sct.pl.EARTH_COLORS[0]
+    assert palette.colors == _colors.EARTH_COLORS
+    assert next(palette.cycle()) == _colors.EARTH_COLORS[0]
     assert isinstance(colormap, ListedColormap)
     assert colormap.name == "earth"
-    assert colormap.N == len(bt.sct.pl.EARTH_COLORS)
-    assert bt.sct.pl.PALETTES["classic"].colors == bt.sct.pl.CLASSIC_COLORS
-    assert bt.sct.pl.PALETTES["light"].colors == bt.sct.pl.LIGHT_COLORS
-    assert bt.sct.pl.light_cm.N == len(bt.sct.pl.LIGHT_COLORS)
+    assert colormap.N == len(_colors.EARTH_COLORS)
+    assert bt.sct.pl.get_palette("classic").colors == _colors.CLASSIC_COLORS
+    assert bt.sct.pl.get_palette("light").colors == _colors.LIGHT_COLORS
+    assert bt.sct.pl.get_colormap("light").N == len(_colors.LIGHT_COLORS)
 
     with pytest.raises(ValueError, match="invalid argument value for 'name'"):
         bt.sct.pl.get_palette("unknown")
+
+
+def test_palette_internals_are_not_exposed_publicly():
+    assert "PALETTES" not in dir(bt.sct.pl)
+    assert not hasattr(bt.sct.pl, "PALETTES")
+    for name in [
+        "CLASSIC_COLORS",
+        "LIGHT_COLORS",
+        "EARTH_COLORS",
+        "QUALITATIVE_COLORS",
+        "HEX_COLORS",
+        "RGB_COLORS",
+        "Palette",
+        "color_cycle",
+        "classic_cm",
+        "light_cm",
+        "earth_cm",
+    ]:
+        assert name not in dir(bt.sct.pl)
+        assert not hasattr(bt.sct.pl, name)
 
 
 def test_generate_colormap_shorter_and_longer_than_base_colormap():
@@ -125,7 +146,7 @@ def test_generate_colormap_shorter_and_longer_than_base_colormap():
     assert longer.N == 40
     assert isinstance(longer_with_default_shades, ListedColormap)
     assert longer_with_default_shades.N == (
-        math.ceil(40 / bt.sct.pl.classic_cm.N) * bt.sct.pl.classic_cm.N
+        math.ceil(40 / _colors.classic_cm.N) * _colors.classic_cm.N
     )
 
 

@@ -15,20 +15,17 @@ from ._algorithms import walks_from
 from ._distances import distance, similarity
 from ._influence_graph import AggregatedInfluenceGraph, InfluenceGraph
 from ._scoring import (
-    InteractionScore,
     infer_signed_interactions,
     infer_signed_interactions_from_walks,
     interaction_scores_from_walks,
 )
 
 __all__ = [
-    "read_influence_graph",
     "walks_from",
     "distance",
     "similarity",
     "AggregatedInfluenceGraph",
     "InfluenceGraph",
-    "InteractionScore",
     "infer_signed_interactions",
     "infer_signed_interactions_from_walks",
     "interaction_scores_from_walks",
@@ -54,4 +51,5 @@ def read_influence_graph(*args: _Any, **kwargs: _Any) -> object:
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"read_influence_graph"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

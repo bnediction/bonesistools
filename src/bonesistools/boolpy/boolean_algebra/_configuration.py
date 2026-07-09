@@ -26,7 +26,8 @@ class ConfigurationSet:
     The stored representation is exact and non-redundant: adding a more general
     subspace removes more specific stored subspaces that it covers. The
     representation is not guaranteed to use the globally minimal number of
-    internal subspaces.
+    internal subspaces. Equality therefore compares represented configurations,
+    not the internal subspace encoding.
 
     Examples
     --------
@@ -110,6 +111,26 @@ class ConfigurationSet:
             return False
 
         return self._contains_hypercube(hypercube)
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Test semantic equality of represented configurations.
+
+        Two ConfigurationSet objects are equal when they represent exactly the
+        same complete Boolean configurations over the same component names,
+        regardless of the internal subspaces used to encode them.
+        """
+
+        if not isinstance(other, ConfigurationSet):
+            return NotImplemented
+
+        if set(self._components) != set(other._components):
+            return False
+
+        if self.count() != other.count():
+            return False
+
+        return self._covers(other) and other._covers(self)
 
     def __iter__(self) -> Iterator[Dict[str, int]]:
         """
@@ -396,6 +417,15 @@ class ConfigurationSet:
                 return True
 
         return False
+
+    def _covers(self, other: "ConfigurationSet") -> bool:
+
+        return all(
+            self._contains_hypercube(
+                self._coerce_hypercube(_decode_hypercube(hypercube, other._components))
+            )
+            for hypercube in other._hypercubes
+        )
 
     def _as_hypercubes(self) -> Tuple[Hypercube, ...]:
 

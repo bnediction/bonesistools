@@ -11,7 +11,7 @@ from typing import Mapping as _Mapping
 from typing_extensions import TypeAlias as _TypeAlias
 from typing_extensions import TypeGuard as _TypeGuard
 
-from ..boolean_algebra import BooleanRule, is_boolean_rule_like
+from ..boolean_algebra._typing import BooleanRule, is_boolean_rule_like
 
 BooleanNetworkLike: _TypeAlias = _Mapping[str, BooleanRule]
 

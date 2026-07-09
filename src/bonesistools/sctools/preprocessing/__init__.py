@@ -19,29 +19,30 @@ from ._classification import (
 )
 from ._duplicates import (
     merge_duplicate_vars,
-    var_names_merge_duplicates,
 )
+from ._duplicates import var_names_merge_duplicates as var_names_merge_duplicates
 from ._filter import (
     filter_obs,
     filter_var,
 )
 from ._genename import (
     convert_gene_identifiers,
-    standardize_gene_identifiers,
 )
+from ._genename import standardize_gene_identifiers as standardize_gene_identifiers
 from ._hvg import hvg
 from ._qc import qc
 from ._simple import (
-    sort_anndata,
+    sort,
 )
+from ._simple import sort_anndata as sort_anndata
 from ._transfer import (
     merge,
     transfer_layer,
-    transfer_obs_its,
-    transfer_obs_sti,
     transfer_obs_to_integrated,
     transfer_obs_to_specific,
 )
+from ._transfer import transfer_obs_its as transfer_obs_its
+from ._transfer import transfer_obs_sti as transfer_obs_sti
 from ._transform import (
     log1p,
     normalize,
@@ -59,17 +60,12 @@ __all__ = [
     "ribosomal_genes",
     "hvg",
     "merge",
-    "sort_anndata",
+    "sort",
     "transfer_layer",
     "transfer_obs_to_integrated",
     "transfer_obs_to_specific",
-    "transfer_obs_sti",
-    "transfer_obs_its",
     "convert_gene_identifiers",
-    "standardize_gene_identifiers",
     "merge_duplicate_vars",
-    "var_names_merge_duplicates",
-    "regress_out",
 ]
 
 
@@ -90,4 +86,12 @@ def regress_out(*args: _Any, **kwargs: _Any) -> _Any:
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {
+        "regress_out",
+        "sort_anndata",
+        "standardize_gene_identifiers",
+        "transfer_obs_its",
+        "transfer_obs_sti",
+        "var_names_merge_duplicates",
+    }
+    return sorted((set(globals()) | set(__all__)) - hidden)

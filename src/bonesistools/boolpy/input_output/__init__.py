@@ -10,13 +10,11 @@ influence graphs and Boolean algebra objects.
 from typing import List as _List
 
 from ._boolean_network import read_bnet, read_bnet_directory
-from ._executable_model import ExecutableModel
 from ._ginml import read_ginml, read_zginml
 from ._hypercube import read_hypercube, read_hypercubes
 from ._influence_graph import read_influence_graph
 
 __all__ = [
-    "ExecutableModel",
     "read_bnet",
     "read_bnet_directory",
     "read_ginml",

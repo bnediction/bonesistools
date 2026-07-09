@@ -27,6 +27,66 @@ def test_version_matches_pyproject():
     assert bt.__version__ == expected
 
 
+def test_root_namespace_exposes_short_aliases_only():
+    assert {"sct", "bpy", "dbs"} <= set(dir(bt))
+
+    for name in ["sctools", "boolpy", "databases"]:
+        assert name not in dir(bt)
+        assert hasattr(bt, name)
+
+
+def test_deprecated_public_names_are_hidden_from_tab_completion():
+    deprecated_names = {
+        bt.bpy.ba: ["read_hypercube", "read_hypercubes"],
+        bt.bpy.bn: ["bn_to_pydot", "read_bnet", "read_bnet_directory"],
+        bt.bpy.ig: ["read_influence_graph"],
+        bt.sct.pp: [
+            "regress_out",
+            "sort_anndata",
+            "standardize_gene_identifiers",
+            "transfer_obs_its",
+            "transfer_obs_sti",
+            "var_names_merge_duplicates",
+        ],
+        bt.sct.tl: [
+            "Knnbs",
+            "anndata_to_dataframe",
+            "calculate_logfoldchanges",
+            "kneighbors_graph",
+            "mitochondrial_genes",
+            "ribosomal_genes",
+            "to_csv",
+            "to_mtx",
+            "to_npz",
+        ],
+        bt.sct.pl: [
+            "add_graph",
+            "boxplot",
+            "draw_paga",
+            "ecdf_plot",
+            "embedding_plot",
+            "kde_plot",
+        ],
+        bt.sct.io: ["nestorowa"],
+        bt.sct.datasets: [
+            "available",
+            "clear",
+            "from_geo",
+            "info",
+            "load",
+            "nestorowa",
+        ],
+        bt.dbs.ncbi: ["GeneSynonyms"],
+        bt.dbs.omnipath: ["load_collectri_grn", "load_dorothea_grn"],
+    }
+
+    for module, names in deprecated_names.items():
+        module_dir = dir(module)
+        for name in names:
+            assert name not in module_dir
+            assert hasattr(module, name)
+
+
 def test_package_version_uses_installed_metadata_when_pyproject_is_unavailable(
     monkeypatch,
 ):

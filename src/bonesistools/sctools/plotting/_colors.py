@@ -5,13 +5,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from itertools import cycle as _cycle
-from types import MappingProxyType
 from typing import (
     Any,
     Dict,
     Iterator,
     List,
-    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -355,18 +353,26 @@ _PALETTES: Dict[str, Palette] = {
     "earth": Palette(name="earth", colors=EARTH_COLORS),
 }
 
-PALETTES: Mapping[str, Palette] = MappingProxyType(_PALETTES)
+color_cycle = _PALETTES["classic"].cycle()
 
-color_cycle = PALETTES["classic"].cycle()
-
-classic_cm = PALETTES["classic"].cmap
-light_cm = PALETTES["light"].cmap
-earth_cm = PALETTES["earth"].cmap
+classic_cm = _PALETTES["classic"].cmap
+light_cm = _PALETTES["light"].cmap
+earth_cm = _PALETTES["earth"].cmap
 
 
 def get_color(color: str, color_type: Literal["rgb", "hex"] = "rgb"):
     """
     Return a named color in RGB or hexadecimal format.
+
+    Available colors are: `"black"`, `"white"`, `"blue"`, `"red"`,
+    `"green"`, `"violet"`, `"lightgreen"`, `"coral"`, `"yellow"`,
+    `"darkyellow"`, `"lightyellow"`, `"darkorange"`, `"darkred"`,
+    `"lightorange"`, `"limegreen"`, `"pink"`, `"orchid"`, `"magenta"`,
+    `"purple"`, `"indigo"`, `"slateblue"`, `"lightgray"`, `"gray"`,
+    `"charcoal"`, `"brown"`, `"darkgreen"`, `"gold"`, `"amber"`,
+    `"orange"`, `"rust"`, `"salmon"`, `"maroon"`, `"beet"`, `"plum"`,
+    `"mauve"`, `"teal"`, `"olive"`, `"navy"`, `"skyblue"`,
+    `"beige"`, `"burgundy"`, `"sage"` and `"moss"`.
 
     Parameters
     ----------
@@ -407,6 +413,12 @@ def get_palette(name: str) -> Palette:
     """
     Return a named palette.
 
+    Available palettes are:
+
+    - `"classic"`: default qualitative palette.
+    - `"light"`: brighter qualitative palette.
+    - `"earth"`: muted palette for compact categorical displays.
+
     Parameters
     ----------
     name: str
@@ -423,17 +435,19 @@ def get_palette(name: str) -> Palette:
         If `name` is unknown.
     """
 
-    if name not in PALETTES:
+    if name not in _PALETTES:
         raise ValueError(
             f"invalid argument value for 'name': palette not found: {name!r}"
         )
 
-    return PALETTES[name]
+    return _PALETTES[name]
 
 
 def get_colormap(name: str) -> ListedColormap:
     """
     Return a named palette as a Matplotlib listed colormap.
+
+    Available colormaps are `"classic"`, `"light"` and `"earth"`.
 
     Parameters
     ----------
@@ -463,7 +477,7 @@ def generate_colormap(
         Number of colors in the returned colormap.
     shade_number: int (optional, default: None)
         Number of shades in the returned colormap.
-    cm: matplotlib.colors.Colormap (default: classic_cm)
+    cm: matplotlib.colors.Colormap (default: classic palette colormap)
         Initial colormap to use for creating new colormap.
 
     Returns

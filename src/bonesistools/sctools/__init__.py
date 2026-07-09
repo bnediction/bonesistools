@@ -13,36 +13,43 @@ pp
     Preprocessing utilities.
 tl
     Analysis and inference tools.
+io
+    Input/output helpers.
 pl
     Plotting utilities.
-datasets
-    Bundled example datasets.
 """
 
 import sys as _sys
+from importlib import import_module as _import_module
 from typing import List as _List
 
-from . import _typing as typing
-from . import datasets
-from . import plotting as pl
-from . import preprocessing as pp
-from . import tools as tl
+pp = _import_module(f"{__name__}.preprocessing")
+tl = _import_module(f"{__name__}.tools")
+io = _import_module(f"{__name__}.input_output")
+pl = _import_module(f"{__name__}.plotting")
+_datasets = _import_module(f"{__name__}.datasets")
+
+for _name in ["preprocessing", "tools", "input_output", "plotting", "datasets"]:
+    globals().pop(_name, None)
+
+datasets = _datasets
 
 __all__ = [
     "pp",
     "tl",
+    "io",
     "pl",
-    "datasets",
-    "typing",
 ]
 
 _sys.modules.update(
     {
         f"{__name__}.{alias}": globals()[alias]
-        for alias in ["pp", "tl", "pl", "datasets"]
+        for alias in ["pp", "tl", "io", "pl"]
     }
 )
+_sys.modules[f"{__name__}.datasets"] = _datasets
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"datasets"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

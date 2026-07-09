@@ -4,7 +4,7 @@
 Utilities for Boolean modelling.
 
 The `bpy` package provides tools for Boolean algebra, Boolean networks,
-influence graphs and plotting.
+and influence graphs.
 
 Sub-packages
 ------------
@@ -16,13 +16,12 @@ ig
     Influence graph utilities.
 io
     Input/output helpers.
-pl
-    Plotting utilities.
 """
 
 from __future__ import annotations
 
 import sys as _sys
+from importlib import import_module as _import_module
 from types import ModuleType as _ModuleType
 from typing import Dict as _Dict
 from typing import List as _List
@@ -30,18 +29,26 @@ from typing import Tuple as _Tuple
 from typing import cast as _cast
 
 from .._warnings import _warn_deprecated
-from . import boolean_algebra as ba
-from . import boolean_network as bn
-from . import influence_graph as ig
-from . import input_output as io
-from . import plotting as pl
+
+ba = _import_module(f"{__name__}.boolean_algebra")
+bn = _import_module(f"{__name__}.boolean_network")
+ig = _import_module(f"{__name__}.influence_graph")
+io = _import_module(f"{__name__}.input_output")
+
+for _name in [
+    "boolean_algebra",
+    "boolean_network",
+    "influence_graph",
+    "input_output",
+]:
+    globals().pop(_name, None)
 
 del annotations
 
 _sys.modules.update(
     {
         f"{__name__}.{alias}": globals()[alias]
-        for alias in ["ba", "bn", "ig", "io", "pl"]
+        for alias in ["ba", "bn", "ig", "io"]
     }
 )
 
@@ -50,7 +57,6 @@ _MODULES: _Dict[str, _ModuleType] = {
     "bn": bn,
     "ig": ig,
     "io": io,
-    "pl": pl,
 }
 
 _DEPRECATED: _Dict[str, _Tuple[str, str]] = {
@@ -66,7 +72,6 @@ __all__ = [
     "bn",
     "ig",
     "io",
-    "pl",
 ]
 
 

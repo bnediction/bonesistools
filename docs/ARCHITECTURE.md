@@ -55,20 +55,15 @@ Main responsibilities:
 
 ### `input_output`
 
-Readers for Boolean modelling files and executable logical-model containers.
+Readers for Boolean modelling files and imported logical-model containers.
 
 Main responsibilities:
 
 - `.bnet` import.
 - GINML and ZGINML import.
 - Hypercube and influence-graph file readers.
-- `ExecutableModel` containers for logical models with initial states,
-  perturbations, metadata and raw files.
-
-### `plotting`
-
-Shared visualization helpers and graph export backends for Boolean networks
-and influence graphs.
+- Imported logical-model containers with Boolean networks, influence graphs,
+  initial states, perturbations and metadata when available.
 
 ## Single-cell tools: `sctools`
 

@@ -35,18 +35,20 @@ from boolean.boolean import (
 from ..._compat import Literal
 from ..._validation import _as_literal, _as_non_negative_integer
 from ..boolean_algebra import (
-    BooleanRule,
-    ConfigurationLike,
     ConfigurationSet,
     Hypercube,
-    HypercubeLike,
     PartialBoolean,
     dnf_implicants,
     expressions_equivalent,
-    is_configuration_like,
-    is_hypercube_like,
     prime_implicants,
     rule_to_string,
+)
+from ..boolean_algebra._typing import (
+    BooleanRule,
+    ConfigurationLike,
+    HypercubeLike,
+    is_configuration_like,
+    is_hypercube_like,
 )
 from ..influence_graph._influence_graph import (
     AggregatedEdgeStyle,
@@ -55,9 +57,9 @@ from ..influence_graph._influence_graph import (
     CollapseMode,
     InfluenceGraph,
 )
-from ..plotting import frequency_edge_style
-from ..plotting._svg import SvgLength, scale_svg
+from ..influence_graph._svg import SvgLength, scale_svg
 from ._dynamics import (
+    _reachable_attractors_with_bdd_backend,
     _reachable_attractors_with_explicit_backend,
     _reachable_attractors_with_most_permissive_backend,
 )
@@ -1032,7 +1034,7 @@ class BooleanNetwork(Dict[str, Expression]):
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
         ] = "asynchronous",
-        backend: Optional[Literal["explicit", "asp"]] = None,
+        backend: Optional[Literal["explicit", "bdd", "asp"]] = None,
     ) -> Tuple[ConfigurationSet, ...]:
         """
         Return attractors reachable from an initial configuration or subspace.
@@ -1085,11 +1087,12 @@ class BooleanNetwork(Dict[str, Expression]):
             - `"general"` updates any non-empty subset of unstable components.
             - `"most-permissive"` returns reachable minimal trap spaces using
               most-permissive reachability.
-        backend: {None, "explicit", "asp"} (default: None)
-            Backend used for non-synchronous semantics. If `None`, use
-            `"explicit"` for `"asynchronous"` and `"general"`, and `"asp"` for
-            `"most-permissive"`. The backend parameter is ignored for
-            `"synchronous"` dynamics.
+        backend: {None, "explicit", "bdd", "asp"} (default: None)
+            Backend used for attractor computation. If `None`, use
+            `"explicit"` for `"synchronous"`, `"asynchronous"` and
+            `"general"`, and `"asp"` for `"most-permissive"`. The `"bdd"`
+            backend is supported for `"synchronous"`, `"asynchronous"` and
+            `"general"` dynamics.
 
         Returns
         -------
@@ -1099,9 +1102,12 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Raises
         ------
+        ImportError
+            If `backend="bdd"` is requested but the optional dependency `dd`
+            is not installed.
         ValueError
             If the network is not closed, the initial state is invalid,
-            `update` is invalid, or `backend` is invalid for non-synchronous
+            `update` is invalid, or `backend` is invalid for the requested
             dynamics.
         """
 
@@ -1115,6 +1121,20 @@ class BooleanNetwork(Dict[str, Expression]):
         initial_states = ConfigurationSet(tuple(self.keys()), [initial_state])
 
         if update == "synchronous":
+            backend = _as_literal(
+                backend,
+                choices=("explicit", "bdd"),
+                name="backend",
+                allow_none=True,
+            )
+
+            if backend == "bdd":
+                return _reachable_attractors_with_bdd_backend(
+                    self,
+                    initial_states,
+                    update=update,
+                )
+
             return _reachable_attractors_with_explicit_backend(
                 self,
                 initial_states,
@@ -1139,13 +1159,17 @@ class BooleanNetwork(Dict[str, Expression]):
 
         backend = _as_literal(
             backend,
-            choices=("explicit",),
+            choices=("explicit", "bdd"),
             name="backend",
             allow_none=True,
         )
 
-        if backend is None:
-            backend = "explicit"
+        if backend == "bdd":
+            return _reachable_attractors_with_bdd_backend(
+                self,
+                initial_states,
+                update=update,
+            )
 
         return _reachable_attractors_with_explicit_backend(
             self,
@@ -2393,7 +2417,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         node_style: AggregatedNodeStyle = "stability",
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
-        edge_style: AggregatedEdgeStyle = frequency_edge_style,
+        edge_style: AggregatedEdgeStyle = "frequency",
         program: str = "dot",
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
@@ -2468,10 +2492,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
-        edge_style: callable or None (default: frequency_edge_style)
+        edge_style: {"frequency"} or callable or None (default: "frequency")
             Edge styling strategy.
 
-            By default, `frequency_edge_style` styles edges according to their
+            The `"frequency"` strategy styles edges according to their
             `frequency` attribute, i.e. `count / total`.
 
             A callable defines a custom edge style. Argument names are resolved

@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 from pathlib import Path
-from typing import Any, Optional, Union, cast
+from typing import Optional, Union
 
-import pandas as pd
 from anndata import AnnData
-from scipy import io, sparse
+
+from ..._warnings import _warn_deprecated
+from ..input_output import _write as _io_write
 
 PathInput = Union[str, Path]
 
@@ -14,78 +15,42 @@ def to_csv(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> 
     """
     Write an AnnData matrix to a CSV file.
 
-    Parameters
-    ----------
-    adata: AnnData
-        Annotated data matrix to export.
-    filename: str or Path
-        Output path. The `.csv` suffix is added if missing.
-    layer: str, optional
-        Layer to export instead of `adata.X`.
+    Deprecated. Use `bt.sct.io.to_csv` instead.
     """
 
-    filename = str(filename)
-    if not filename.endswith(".csv"):
-        filename = Path(f"{filename}.csv")
-
-    X = _get_dense_matrix(adata, layer)
-    pd.DataFrame(X).to_csv(path_or_buf=filename, sep=",")
+    _warn_deprecated(
+        "`bt.sct.tl.to_csv()`",
+        replacement="`bt.sct.io.to_csv()`",
+        stacklevel=2,
+    )
+    _io_write.to_csv(adata, filename, layer=layer)
 
 
 def to_mtx(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData matrix to a Matrix Market file.
 
-    Parameters
-    ----------
-    adata: AnnData
-        Annotated data matrix to export.
-    filename: str or Path
-        Output path. The `.mtx` suffix is added if missing.
-    layer: str, optional
-        Layer to export instead of `adata.X`.
+    Deprecated. Use `bt.sct.io.to_mtx` instead.
     """
 
-    filename = str(filename)
-    if not filename.endswith(".mtx"):
-        filename = Path(f"{filename}.mtx")
-
-    X = _get_matrix(adata, layer)
-    io.mmwrite(filename, X)
+    _warn_deprecated(
+        "`bt.sct.tl.to_mtx()`",
+        replacement="`bt.sct.io.to_mtx()`",
+        stacklevel=2,
+    )
+    _io_write.to_mtx(adata, filename, layer=layer)
 
 
 def to_npz(adata: AnnData, filename: PathInput, layer: Optional[str] = None) -> None:
     """
     Write an AnnData sparse matrix to a NumPy `.npz` file.
 
-    Parameters
-    ----------
-    adata: AnnData
-        Annotated data matrix to export.
-    filename: str or Path
-        Output path. The `.npz` suffix is added if missing.
-    layer: str, optional
-        Layer to export instead of `adata.X`.
+    Deprecated. Use `bt.sct.io.to_npz` instead.
     """
 
-    filename = str(filename)
-    if not filename.endswith(".npz"):
-        filename = Path(f"{filename}.npz")
-
-    X = _get_matrix(adata, layer)
-    sparse.save_npz(filename, X)
-
-
-def _get_dense_matrix(adata: AnnData, layer: Optional[str]) -> Any:
-
-    X = _get_matrix(adata, layer)
-
-    if sparse.issparse(X):
-        return cast(Any, X).toarray()
-
-    return cast(Any, X)
-
-
-def _get_matrix(adata: AnnData, layer: Optional[str]) -> Any:
-
-    return adata.X if layer is None else adata.layers[layer]
+    _warn_deprecated(
+        "`bt.sct.tl.to_npz()`",
+        replacement="`bt.sct.io.to_npz()`",
+        stacklevel=2,
+    )
+    _io_write.to_npz(adata, filename, layer=layer)

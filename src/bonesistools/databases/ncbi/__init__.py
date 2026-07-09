@@ -10,13 +10,14 @@ across heterogeneous biological resources.
 
 from typing import List as _List
 
-from ._genesyn import GeneSynonyms, genesyn
+from ._genesyn import GeneSynonyms as GeneSynonyms
+from ._genesyn import genesyn
 
 __all__ = [
-    "GeneSynonyms",
     "genesyn",
 ]
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {"GeneSynonyms"}
+    return sorted((set(globals()) | set(__all__)) - hidden)

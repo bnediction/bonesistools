@@ -40,22 +40,22 @@ Submodules:
   - expression transformations, feature selection, filtering and metadata utilities
 
 - tools: `bt.sct.tl`
-  - embeddings, neighborhood graphs, clustering, differential analysis and matrix utilities
+  - embeddings, neighborhood graphs, clustering and differential analysis
+
+- input/output: `bt.sct.io`
+  - registered single-cell example datasets, GEO import and matrix export helpers
 
 - plotting: `bt.sct.pl`
   - visualization helpers for embeddings, trajectories, distributions and summaries
 
-- datasets: `bt.sct.datasets`
-  - registered single-cell example datasets loaded with `bt.sct.datasets.load(...)`
-
 Example:
 
 ```python
-bt.sct.datasets.available()
-bt.sct.datasets.info("pbmc3k")
-adata = bt.sct.datasets.load("pbmc3k")
-adata = bt.sct.datasets.load("nestorowa")
-bt.sct.datasets.clear("pbmc3k")
+bt.sct.io.available()
+bt.sct.io.info("pbmc3k")
+adata = bt.sct.io.load("pbmc3k")
+adata = bt.sct.io.load("nestorowa")
+bt.sct.io.clear("pbmc3k")
 ```
 
 ---

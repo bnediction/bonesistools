@@ -11,13 +11,15 @@ feature classification utilities.
 from typing import List as _List
 
 from ._binarize import DEABinarizer
-from ._classification import mitochondrial_genes, ribosomal_genes
+from ._classification import mitochondrial_genes as mitochondrial_genes
+from ._classification import ribosomal_genes as ribosomal_genes
 from ._clustering import kmeans, leiden, louvain
-from ._conversion import anndata_to_dataframe
+from ._conversion import anndata_to_dataframe as anndata_to_dataframe
+from ._conversion import to_dataframe
 from ._embedding import pca, spectral, tsne, umap
 from ._graph import paga
+from ._markers import calculate_logfoldchanges as calculate_logfoldchanges
 from ._markers import (
-    calculate_logfoldchanges,
     dea,
     logfoldchanges,
     ora,
@@ -26,20 +28,18 @@ from ._markers import (
 from ._maths import barycenters, pairwise_distances
 from ._neighbors import (
     KNNSC,
-    Knnbs,
-    kneighbors_graph,
     knn_graph,
     neighbors,
     shared_neighbors,
 )
+from ._neighbors import Knnbs as Knnbs
+from ._neighbors import kneighbors_graph as kneighbors_graph
 from ._regress import regress_out
 from ._stats import welch_tests, wilcoxon_tests
 from ._utils import get_expression, get_pairwise, get_representation
-from ._write import (
-    to_csv,
-    to_mtx,
-    to_npz,
-)
+from ._write import to_csv as to_csv
+from ._write import to_mtx as to_mtx
+from ._write import to_npz as to_npz
 
 __all__ = [
     "get_expression",
@@ -47,9 +47,7 @@ __all__ = [
     "get_pairwise",
     "DEABinarizer",
     "KNNSC",
-    "Knnbs",
     "knn_graph",
-    "kneighbors_graph",
     "neighbors",
     "shared_neighbors",
     "kmeans",
@@ -59,25 +57,30 @@ __all__ = [
     "spectral",
     "tsne",
     "umap",
-    "anndata_to_dataframe",
+    "to_dataframe",
     "paga",
     "pairwise_distances",
     "barycenters",
     "regress_out",
     "welch_tests",
     "wilcoxon_tests",
-    "to_csv",
-    "to_mtx",
-    "to_npz",
     "logfoldchanges",
-    "calculate_logfoldchanges",
     "dea",
     "ora",
     "smirnov_tests",
-    "mitochondrial_genes",
-    "ribosomal_genes",
 ]
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    hidden = {
+        "Knnbs",
+        "anndata_to_dataframe",
+        "calculate_logfoldchanges",
+        "kneighbors_graph",
+        "mitochondrial_genes",
+        "ribosomal_genes",
+        "to_csv",
+        "to_mtx",
+        "to_npz",
+    }
+    return sorted((set(globals()) | set(__all__)) - hidden)

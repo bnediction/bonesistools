@@ -51,7 +51,7 @@ outputs.
 
 ### `pbmc3k.h5ad`
 
-Compressed AnnData file generated from `bt.sct.datasets.load("pbmc3k")`.
+Compressed AnnData file generated from `bt.sct.io.load("pbmc3k")`.
 
 Properties:
 
@@ -67,7 +67,7 @@ from pathlib import Path
 import bonesistools as bt
 
 output = Path("tests/golden/pbmc3k.h5ad")
-adata = bt.sct.datasets.load("pbmc3k", quiet=False)
+adata = bt.sct.io.load("pbmc3k", quiet=False)
 adata.write_h5ad(output, compression="gzip")
 PY
 ```
