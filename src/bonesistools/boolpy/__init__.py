@@ -21,7 +21,6 @@ io
 from __future__ import annotations
 
 import sys as _sys
-from importlib import import_module as _import_module
 from types import ModuleType as _ModuleType
 from typing import Dict as _Dict
 from typing import List as _List
@@ -29,11 +28,10 @@ from typing import Tuple as _Tuple
 from typing import cast as _cast
 
 from .._warnings import _warn_deprecated
-
-ba = _import_module(f"{__name__}.boolean_algebra")
-bn = _import_module(f"{__name__}.boolean_network")
-ig = _import_module(f"{__name__}.influence_graph")
-io = _import_module(f"{__name__}.input_output")
+from . import boolean_algebra as ba
+from . import boolean_network as bn
+from . import influence_graph as ig
+from . import input_output as io
 
 for _name in [
     "boolean_algebra",
@@ -46,10 +44,7 @@ for _name in [
 del annotations
 
 _sys.modules.update(
-    {
-        f"{__name__}.{alias}": globals()[alias]
-        for alias in ["ba", "bn", "ig", "io"]
-    }
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["ba", "bn", "ig", "io"]}
 )
 
 _MODULES: _Dict[str, _ModuleType] = {
@@ -89,4 +84,4 @@ def __getattr__(name: str) -> object:
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) | set(__all__))
+    return sorted(name for name in set(globals()) | set(__all__) if name[0] != "_")

@@ -4202,10 +4202,7 @@ def _apply_family_node_rendering(
 
     for _, data in graph.nodes(data=True):
         members = data.get("members")
-        if (
-            not isinstance(members, (set, frozenset, list, tuple))
-            or len(members) <= 1
-        ):
+        if not isinstance(members, (set, frozenset, list, tuple)) or len(members) <= 1:
             continue
 
         data.setdefault("label", _wrapped_family_label(members))
@@ -4224,10 +4221,7 @@ def _apply_collapsed_family_node_metrics(
 
     for _, data in collapsed.nodes(data=True):
         members = data.get("members")
-        if (
-            not isinstance(members, (set, frozenset, list, tuple))
-            or len(members) <= 1
-        ):
+        if not isinstance(members, (set, frozenset, list, tuple)) or len(members) <= 1:
             continue
 
         stability_values = _family_member_attribute_values(

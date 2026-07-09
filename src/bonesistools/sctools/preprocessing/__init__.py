@@ -94,4 +94,6 @@ def __dir__() -> _List[str]:
         "transfer_obs_sti",
         "var_names_merge_duplicates",
     }
-    return sorted((set(globals()) | set(__all__)) - hidden)
+    return sorted(
+        name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
+    )

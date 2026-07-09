@@ -117,6 +117,8 @@ include = [
 [tool.hatch.build.targets.wheel]
 packages = [ "src/bonesistools" ]
 artifacts = [
+    "src/bonesistools/py.typed",
+    "src/bonesistools/**/*.pyi",
     "src/bonesistools/databases/hcop/data/*.tsv.gz",
     "src/bonesistools/databases/ncbi/data/gi/*.tsv.gz",
     "src/bonesistools/sctools/datasets/*.json",

@@ -855,8 +855,7 @@ def _successor_state_bits(
         return tuple(state ^ bit for bit in _iter_set_bits(unstable_mask))
 
     return tuple(
-        state ^ updated_mask
-        for updated_mask in _iter_nonzero_submasks(unstable_mask)
+        state ^ updated_mask for updated_mask in _iter_nonzero_submasks(unstable_mask)
     )
 
 

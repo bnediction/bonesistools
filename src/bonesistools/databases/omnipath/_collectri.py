@@ -10,7 +10,7 @@ import pandas as pd
 from ..._validation import _as_boolean
 from ..._warnings import _warn_deprecated
 from ...boolpy.influence_graph import InfluenceGraph
-from ..ncbi import GeneSynonyms
+from ..ncbi._genesyn import GeneSynonyms
 from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
 from ._archive import (
     OmnipathVersion,

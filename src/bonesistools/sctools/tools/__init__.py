@@ -83,4 +83,6 @@ def __dir__() -> _List[str]:
         "to_mtx",
         "to_npz",
     }
-    return sorted((set(globals()) | set(__all__)) - hidden)
+    return sorted(
+        name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
+    )

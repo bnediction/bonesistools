@@ -42,14 +42,13 @@ __all__ = [
 ]
 
 _sys.modules.update(
-    {
-        f"{__name__}.{alias}": globals()[alias]
-        for alias in ["pp", "tl", "io", "pl"]
-    }
+    {f"{__name__}.{alias}": globals()[alias] for alias in ["pp", "tl", "io", "pl"]}
 )
 _sys.modules[f"{__name__}.datasets"] = _datasets
 
 
 def __dir__() -> _List[str]:
     hidden = {"datasets"}
-    return sorted((set(globals()) | set(__all__)) - hidden)
+    return sorted(
+        name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
+    )

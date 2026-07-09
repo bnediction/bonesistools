@@ -69,18 +69,14 @@ def test_earth_palette_matches_expected_hex_values():
         "#388e8e",
     ]
 
-    assert [
-        bt.sct.pl.rgb2hex(color) for color in _colors.EARTH_COLORS
-    ] == expected_hex
+    assert [bt.sct.pl.rgb2hex(color) for color in _colors.EARTH_COLORS] == expected_hex
     assert bt.sct.pl.get_palette("earth").hex == expected_hex
     assert bt.sct.pl.get_colormap("earth").N == len(_colors.EARTH_COLORS)
 
 
 def test_classic_palette_starts_with_qualitative_colors_without_duplicates():
     classic_hex = bt.sct.pl.get_palette("classic").hex
-    qualitative_hex = [
-        bt.sct.pl.rgb2hex(color) for color in _colors.QUALITATIVE_COLORS
-    ]
+    qualitative_hex = [bt.sct.pl.rgb2hex(color) for color in _colors.QUALITATIVE_COLORS]
 
     assert classic_hex[: len(qualitative_hex)] == qualitative_hex
     assert len(classic_hex) == len(set(classic_hex))

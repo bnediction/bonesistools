@@ -137,4 +137,4 @@ def nestorowa(
 
 
 def __dir__() -> _List[str]:
-    return sorted(set(globals()) - set(__all__))
+    return sorted(name for name in set(globals()) - set(__all__) if name[0] != "_")
