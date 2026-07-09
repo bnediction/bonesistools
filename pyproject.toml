@@ -73,7 +73,8 @@ paths = ["LICENSE"]
 
 [project.optional-dependencies]
 all = [
-    "dd>=0.6",
+    "dd>=0.5.7,<0.6; python_version < '3.11'",
+    "dd>=0.6; python_version >= '3.11'",
     "graphviz>=0.20",
     "mudata>=0.3.1",
     "multiprocess>=0.70.18",
@@ -86,7 +87,10 @@ all = [
     "umap-learn>=0.5",
     "mpbn>=4.1",
 ]
-bdd = [ "dd>=0.6" ]
+bdd = [
+    "dd>=0.5.7,<0.6; python_version < '3.11'",
+    "dd>=0.6; python_version >= '3.11'",
+]
 graphviz = [ "graphviz>=0.20" ]
 mudata = [ "mudata>=0.3.1" ]
 bn = [
