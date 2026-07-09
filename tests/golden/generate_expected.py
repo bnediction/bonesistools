@@ -13,7 +13,7 @@ from _boolean_workflow import (
 from _boolean_workflow import (
     save_expected as save_boolean_expected,
 )
-from _workflow import EXPECTED_DIR, run_workflow, save_expected
+from _omics_workflow import EXPECTED_DIR, run_omics_workflow, save_expected
 
 
 def main() -> None:
@@ -28,7 +28,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.section in ["all", "sct"]:
-        outputs = run_workflow()
+        outputs = run_omics_workflow()
 
         for path in EXPECTED_DIR.glob("*.npz"):
             path.unlink()

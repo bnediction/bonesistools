@@ -56,7 +56,7 @@ def load_pbmc3k() -> ad.AnnData:
     return ad.read_h5ad(PBMC3K_PATH)
 
 
-def run_workflow() -> Dict[str, Dict[str, Any]]:
+def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
 
     adata = load_pbmc3k()
     outputs: Dict[str, Dict[str, Any]] = {}

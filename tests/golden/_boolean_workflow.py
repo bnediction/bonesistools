@@ -24,7 +24,7 @@ def run_boolean_workflow() -> Dict[str, Dict[str, Any]]:
         "death_receptor_cell_fate_mp": _collect_reachable_attractors(
             death_receptor_model,
             _death_receptor_cell_fate_initial_states(death_receptor_model),
-            updates=("most-permissive",),
+            updates=("synchronous", "most-permissive"),
         ),
         "synthetic_30_node_dynamics": _collect_reachable_attractors(
             synthetic_model,

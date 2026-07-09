@@ -2,24 +2,24 @@
 
 import pytest
 
-from ._workflow import (
+from ._omics_workflow import (
     assert_array_keys,
     assert_close_arrays,
     assert_equal_arrays,
     available_expected_names,
     load_expected,
-    run_workflow,
+    run_omics_workflow,
 )
 
 
 @pytest.fixture(scope="module")
 def golden_outputs():
 
-    return run_workflow()
+    return run_omics_workflow()
 
 
 @pytest.mark.parametrize("name", available_expected_names())
-def test_golden_workflow_matches_expected_outputs(golden_outputs, name):
+def test_golden_omics_workflow_matches_expected_outputs(golden_outputs, name):
     result = golden_outputs[name]
     expected = load_expected(name)
 
