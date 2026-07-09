@@ -23,9 +23,7 @@ from ..boolean_algebra import (
     ConfigurationSet,
     Hypercube,
     dnf_implicants,
-    prime_implicants,
 )
-from ..boolean_algebra._structure import Implicants
 from ..boolean_algebra._typing import HypercubeLike
 
 if TYPE_CHECKING:
@@ -33,7 +31,6 @@ if TYPE_CHECKING:
 
 _StateBits = int
 _CompiledRule = Callable[[_StateBits], int]
-ImplicantsByValue = Dict[Literal[0, 1], Implicants]
 
 
 def _reachable_attractors_with_bdd_backend(
@@ -651,97 +648,6 @@ def _fixed_literals_sort_key(
     """Return a deterministic sort key for fixed-literal sets."""
 
     return len(literals), tuple(sorted(literals))
-
-
-def _smallest_closed_hypercube(
-    network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    *,
-    components_to_relax: Iterable[str],
-    depth: Optional[int] = None,
-) -> Hypercube:
-    """Return the smallest closed hypercube obtained by relaxing components in K."""
-
-    hypercube = Hypercube(initial_state)
-    fixed = {
-        component
-        for component in components_to_relax
-        if component in hypercube and hypercube[component].is_fixed
-    }
-    implicants: Dict[str, ImplicantsByValue] = {}
-
-    iteration = 0
-    while fixed and (depth is None or iteration < depth):
-        changed = False
-        current_hypercube = hypercube.copy() if depth is not None else hypercube
-
-        for component in tuple(fixed):
-            current_value = hypercube[component]
-            if not current_value.is_fixed:
-                fixed.remove(component)
-                continue
-
-            current_fixed_value = cast(Literal[0, 1], current_value.value)
-            target_value = cast(Literal[0, 1], 1 - current_fixed_value)
-            if _rule_can_take_value_in_hypercube(
-                network,
-                component,
-                value=target_value,
-                hypercube=current_hypercube,
-                implicants=implicants,
-            ):
-                hypercube.pop(component, None)
-                fixed.remove(component)
-                changed = True
-
-        if not changed:
-            break
-
-        iteration += 1
-
-    return hypercube
-
-
-def _rule_can_take_value_in_hypercube(
-    network: "BooleanNetwork",
-    component: str,
-    *,
-    value: Literal[0, 1],
-    hypercube: Hypercube,
-    implicants: Dict[str, ImplicantsByValue],
-) -> bool:
-    """Test whether a rule can take a value inside a hypercube."""
-
-    if component not in implicants:
-        implicants[component] = {}
-
-    if value not in implicants[component]:
-        implicants[component][value] = prime_implicants(
-            network[component],
-            value=value,
-            backend="asp",
-            ba=network.ba,
-        )
-
-    return any(
-        _implicant_intersects_hypercube(implicant, hypercube)
-        for implicant in implicants[component][value]
-    )
-
-
-def _implicant_intersects_hypercube(
-    implicant: Hypercube,
-    hypercube: Hypercube,
-) -> bool:
-    """Test whether an implicant has at least one state in a hypercube."""
-
-    for component, value in implicant.items():
-        if component in hypercube:
-            hypercube_value = hypercube[component]
-            if hypercube_value.is_fixed and hypercube_value != value:
-                return False
-
-    return True
 
 
 def _hypercube_sort_key(

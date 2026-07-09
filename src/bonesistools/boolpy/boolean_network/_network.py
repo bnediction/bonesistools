@@ -13,6 +13,7 @@ from typing import (
     Dict,
     FrozenSet,
     Iterable,
+    Iterator,
     List,
     Mapping,
     MutableSequence,
@@ -62,6 +63,10 @@ from ._dynamics import (
     _reachable_attractors_with_bdd_backend,
     _reachable_attractors_with_explicit_backend,
     _reachable_attractors_with_most_permissive_backend,
+)
+from ._most_permissive import (
+    _reachability_with_most_permissive_hypercube_backend,
+    _reachable_configurations_with_most_permissive_hypercube_backend,
 )
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
@@ -1189,6 +1194,133 @@ class BooleanNetwork(Dict[str, Expression]):
             self,
             initial_states,
             update=update,
+        )
+
+    def reachable_configurations(
+        self,
+        initial_state: HypercubeLike,
+        *,
+        update: Literal["most-permissive"] = "most-permissive",
+        backend: Literal["hypercube"] = "hypercube",
+    ) -> Iterator[Dict[str, int]]:
+        """
+        Iterate over configurations reachable from one initial configuration.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": 1, "B": "A"})
+        >>> list(bn.reachable_configurations({"A": 0, "B": 0}))
+        [{'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1}]
+
+        Parameters
+        ----------
+        initial_state: HypercubeLike
+            Initial complete Boolean configuration.
+        update: {"most-permissive"} (default: "most-permissive")
+            Update semantics.
+        backend: {"hypercube"} (default: "hypercube")
+            Backend used for enumeration. The `"hypercube"` backend uses the
+            compact most-permissive transition-space decomposition into closed
+            hypercubes and irreversible components.
+
+        Returns
+        -------
+        Iterator[dict[str, int]]
+            Complete Boolean configurations reachable from `initial_state`.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed, the initial state is invalid,
+            `update` is invalid or `backend` is invalid.
+        """
+
+        _as_literal(
+            update,
+            choices=("most-permissive",),
+            name="update",
+        )
+        _as_literal(
+            backend,
+            choices=("hypercube",),
+            name="backend",
+        )
+
+        self.validate()
+
+        return _reachable_configurations_with_most_permissive_hypercube_backend(
+            self,
+            initial_state,
+        )
+
+    def reachability(
+        self,
+        initial_state: HypercubeLike,
+        target_state: HypercubeLike,
+        *,
+        update: Literal["most-permissive"] = "most-permissive",
+        backend: Literal["hypercube"] = "hypercube",
+    ) -> bool:
+        """
+        Test one-step reachability between two configurations.
+
+        Examples
+        --------
+        Most-permissive reachability keeps irreversible components explicit.
+        In this example, `A` can irreversibly become 1 from the initial
+        configuration, but `B` cannot become 1 while `A` remains 0:
+
+        >>> bn = BooleanNetwork({"A": 1, "B": "A"})
+        >>> bn.reachability({"A": 0, "B": 0}, {"A": 1, "B": 0})
+        True
+        >>> bn.reachability({"A": 0, "B": 0}, {"A": 1, "B": 1})
+        True
+        >>> bn.reachability({"A": 0, "B": 0}, {"A": 0, "B": 1})
+        False
+
+        Parameters
+        ----------
+        initial_state: HypercubeLike
+            Initial complete Boolean configuration.
+        target_state: HypercubeLike
+            Target complete Boolean configuration.
+        update: {"most-permissive"} (default: "most-permissive")
+            Update semantics.
+        backend: {"hypercube"} (default: "hypercube")
+            Backend used for reachability. The `"hypercube"` backend uses the
+            compact most-permissive transition-space decomposition into closed
+            hypercubes and irreversible components.
+
+        Returns
+        -------
+        bool
+            Whether `target_state` is reachable from `initial_state` under the
+            selected update semantics.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed, a state is invalid, `update` is
+            invalid or `backend` is invalid.
+        """
+
+        _as_literal(
+            update,
+            choices=("most-permissive",),
+            name="update",
+        )
+        _as_literal(
+            backend,
+            choices=("hypercube",),
+            name="backend",
+        )
+
+        self.validate()
+
+        return _reachability_with_most_permissive_hypercube_backend(
+            self,
+            initial_state,
+            target_state,
         )
 
     def equivalent(

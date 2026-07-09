@@ -8,7 +8,12 @@ import pytest
 from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
-from bonesistools.boolpy.boolean_network import _dynamics, _network, _typing
+from bonesistools.boolpy.boolean_network import (
+    _dynamics,
+    _most_permissive,
+    _network,
+    _typing,
+)
 
 
 def _pydot_get(obj, method):
@@ -21,6 +26,40 @@ def _pydot_get_string(obj, method):
 
 def _edge_data(graph, source, target, key=0):
     return cast(Any, graph[source][target])[key]
+
+
+def _configuration_from_bits(bits):
+    return {f"x{index}": int(bit) for index, bit in enumerate(bits, start=1)}
+
+
+def _configuration_bits(configuration):
+    return "".join(str(configuration[f"x{index}"]) for index in range(1, 4))
+
+
+def _assert_most_permissive_stg(bn, expected_targets):
+    states = tuple(expected_targets)
+
+    for source in states:
+        enumerated = [
+            _configuration_bits(configuration)
+            for configuration in bn.reachable_configurations(
+                _configuration_from_bits(source)
+            )
+        ]
+        enumerated_targets = {target for target in enumerated if target != source}
+
+        assert len(enumerated) == len(set(enumerated))
+        assert set(enumerated) == expected_targets[source] | {source}
+        assert enumerated_targets == expected_targets[source]
+
+        for target in states:
+            if target == source:
+                continue
+
+            assert bn.reachability(
+                _configuration_from_bits(source),
+                _configuration_from_bits(target),
+            ) is (target in expected_targets[source])
 
 
 def test_boolean_network_coerces_string_rules():
@@ -795,30 +834,142 @@ def test_boolean_network_reachable_attractors_general_uses_subsets_of_updates():
 def test_boolean_network_smallest_closed_hypercube_uses_component_subset():
     bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    assert _dynamics._smallest_closed_hypercube(
+    assert _most_permissive._smallest_closed_hypercube(
         bn,
         {"A": 0, "B": 1},
         components_to_relax=("A",),
     ) == bt.bpy.ba.Hypercube({"B": 1})
 
-    assert _dynamics._smallest_closed_hypercube(
+    assert _most_permissive._smallest_closed_hypercube(
         bn,
         {"A": 0, "B": 1},
         components_to_relax=("A", "B"),
     ) == bt.bpy.ba.Hypercube({})
 
 
+def test_boolean_network_smallest_closed_hypercube_matches_cmsb22_figure_2():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "x1": 1,
+            "x2": "x1",
+            "x3": "(~x1 & x2) | x3",
+        }
+    )
+    initial_state = {"x1": 0, "x2": 0, "x3": 1}
+
+    assert _most_permissive._smallest_closed_hypercube(
+        bn,
+        initial_state,
+        components_to_relax=("x1",),
+    ) == bt.bpy.ba.Hypercube({"x2": 0, "x3": 1})
+
+    assert _most_permissive._smallest_closed_hypercube(
+        bn,
+        initial_state,
+        components_to_relax=("x1", "x2"),
+    ) == bt.bpy.ba.Hypercube({"x3": 1})
+
+    assert _most_permissive._smallest_closed_hypercube(
+        bn,
+        initial_state,
+        components_to_relax=("x1", "x2", "x3"),
+    ) == bt.bpy.ba.Hypercube({"x3": 1})
+
+    initial_state = {"x1": 0, "x2": 1, "x3": 1}
+
+    assert _most_permissive._smallest_closed_hypercube(
+        bn,
+        initial_state,
+        components_to_relax=("x1", "x2", "x3"),
+    ) == bt.bpy.ba.Hypercube({"x3": 1})
+
+    assert _most_permissive._smallest_closed_hypercube(
+        bn,
+        initial_state,
+        components_to_relax=("x2", "x3"),
+    ) == bt.bpy.ba.Hypercube({"x1": 0, "x3": 1})
+
+
+def test_boolean_network_reachability_matches_cmsb22_figure_2():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "x1": 1,
+            "x2": "x1",
+            "x3": "(~x1 & x2) | x3",
+        }
+    )
+    initial_state = {"x1": 0, "x2": 0, "x3": 1}
+
+    assert bn.reachability(
+        initial_state,
+        {"x1": 1, "x2": 0, "x3": 1},
+    )
+    assert bn.reachability(
+        initial_state,
+        {"x1": 1, "x2": 1, "x3": 1},
+    )
+    assert not bn.reachability(
+        initial_state,
+        {"x1": 0, "x2": 0, "x3": 0},
+    )
+    assert not bn.reachability(
+        initial_state,
+        {"x1": 0, "x2": 1, "x3": 1},
+    )
+
+
+def test_boolean_network_mp_transition_space_matches_cmsb22_figure_3_left():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "x1": 1,
+            "x2": "x1",
+            "x3": "(~x1 & x2) | x3",
+        }
+    )
+    expected_targets = {
+        "000": {"100", "101", "110", "111"},
+        "101": {"111"},
+        "100": {"110"},
+        "110": set(),
+        "111": set(),
+    }
+
+    _assert_most_permissive_stg(bn, expected_targets)
+
+
+def test_boolean_network_mp_transition_space_matches_cmsb22_figure_3_right():
+    bn = bt.bpy.bn.BooleanNetwork(
+        {
+            "x1": "x1 & ~x3",
+            "x2": "x1",
+            "x3": "~x1",
+        }
+    )
+    expected_targets = {
+        "000": {"001"},
+        "001": set(),
+        "010": {"000", "001", "011"},
+        "011": {"001"},
+        "100": {"110"},
+        "101": {"000", "001", "010", "011", "100", "110", "111"},
+        "110": set(),
+        "111": {"000", "001", "010", "011", "100", "101", "110"},
+    }
+
+    _assert_most_permissive_stg(bn, expected_targets)
+
+
 def test_boolean_network_smallest_closed_hypercube_accepts_depth_limit():
     bn = bt.bpy.bn.BooleanNetwork({"A": 1, "B": "A"})
 
-    assert _dynamics._smallest_closed_hypercube(
+    assert _most_permissive._smallest_closed_hypercube(
         bn,
         {"A": 0, "B": 0},
         components_to_relax=("A", "B"),
         depth=1,
     ) == bt.bpy.ba.Hypercube({"B": 0})
 
-    assert _dynamics._smallest_closed_hypercube(
+    assert _most_permissive._smallest_closed_hypercube(
         bn,
         {"A": 0, "B": 0},
         components_to_relax=("A", "B"),
@@ -875,6 +1026,86 @@ def test_boolean_network_reachable_attractors_most_permissive_defaults_to_free_s
     assert tuple(attractor.enumerate() for attractor in omitted) == tuple(
         attractor.enumerate() for attractor in explicit
     )
+
+
+def test_boolean_network_reachability_most_permissive_tracks_irreversibles():
+    bn = bt.bpy.bn.BooleanNetwork({"A": 1, "B": "A"})
+
+    assert bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 0, "B": 0},
+    )
+    assert bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+    )
+    assert bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 1},
+    )
+    assert not bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 0, "B": 1},
+    )
+
+
+def test_boolean_network_reachability_most_permissive_allows_reversible_space():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    assert bn.reachability(
+        {"A": 0, "B": 1},
+        {"A": 0, "B": 0},
+    )
+    assert bn.reachability(
+        {"A": 0, "B": 1},
+        {"A": 1, "B": 1},
+    )
+    assert bn.reachability(
+        {"A": 0, "B": 1},
+        {"A": 1, "B": 0},
+    )
+
+
+def test_boolean_network_reachability_validate_options_and_states():
+    bn = bt.bpy.bn.BooleanNetwork({"A": "~A", "B": "A"})
+
+    with pytest.raises(ValueError, match="invalid argument value for 'update'"):
+        bn.reachable_configurations(
+            {"A": 0, "B": 0},
+            update=cast(Any, "asynchronous"),
+        )
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachable_configurations(
+            {"A": 0, "B": 0},
+            backend=cast(Any, "asp"),
+        )
+
+    with pytest.raises(ValueError, match="initial_state must define fixed values"):
+        list(bn.reachable_configurations({"A": 0}))
+
+    with pytest.raises(ValueError, match="invalid argument value for 'update'"):
+        bn.reachability(
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 0},
+            update=cast(Any, "asynchronous"),
+        )
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachability(
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 0},
+            backend=cast(Any, "asp"),
+        )
+
+    with pytest.raises(ValueError, match="initial_state must define fixed values"):
+        bn.reachability({"A": 0}, {"A": 1, "B": 0})
+
+    with pytest.raises(ValueError, match="target_state must define fixed values"):
+        bn.reachability({"A": 0, "B": 0}, {"A": 1})
+
+    with pytest.raises(ValueError, match="unknown components in initial_state"):
+        bn.reachability({"A": 0, "B": 0, "C": 0}, {"A": 1, "B": 0})
 
 
 def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():
