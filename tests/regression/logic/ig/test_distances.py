@@ -77,9 +77,9 @@ def test_signed_hamming_uses_complete_node_union_domain_by_default():
     assert bt.logic.ig.similarity(graph1, graph2, metric="hamming") == pytest.approx(
         15 / 16
     )
-    assert bt.logic.ig.distance(
-        graph1, graph2, metric="hamming"
-    ) == pytest.approx(1 / 16)
+    assert bt.logic.ig.distance(graph1, graph2, metric="hamming") == pytest.approx(
+        1 / 16
+    )
 
 
 def test_signed_hamming_uses_explicit_domain():

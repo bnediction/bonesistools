@@ -190,9 +190,9 @@ def test_nestorowa_deprecated_alias_calls_registry(monkeypatch, tmp_path):
     with pytest.warns(FutureWarning, match="bt.omics.io.load"):
         adata = getattr(bt.omics.io, "nestorowa")(quiet=True)
     with pytest.warns(FutureWarning):
-        deprecated_adata = getattr(
-            getattr(bt.omics, "datasets"), "nestorowa"
-        )(quiet=True)
+        deprecated_adata = getattr(getattr(bt.omics, "datasets"), "nestorowa")(
+            quiet=True
+        )
     loaded = bt.omics.io.load("nestorowa", quiet=True)
 
     assert adata.shape == (3, 2)

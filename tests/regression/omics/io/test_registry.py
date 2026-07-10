@@ -245,9 +245,7 @@ def test_deprecated_datasets_namespace_warns_and_delegates(monkeypatch):
     monkeypatch.setattr(datasets_module, "_load", lambda *_args, **_kwargs: sentinel)
 
     with pytest.warns(FutureWarning):
-        loaded = getattr(getattr(bt.omics, "datasets"), "load")(
-            "pbmc3k", quiet=True
-        )
+        loaded = getattr(getattr(bt.omics, "datasets"), "load")("pbmc3k", quiet=True)
 
     assert loaded is sentinel
 
