@@ -13,7 +13,7 @@ from sklearn.neighbors import NearestNeighbors
 from umap.umap_ import fuzzy_simplicial_set
 
 import bonesistools as bt
-from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.omics.toy_data import make_nestorowa_hvg_adata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
@@ -26,17 +26,21 @@ def _load_nestorowa_hvg() -> ad.AnnData:
     return make_nestorowa_hvg_adata()
 
 
+def _as_array(value: Any) -> np.ndarray:
+    return np.asarray(value)
+
+
 def _run_clustering_workflow():
 
     adata = _load_nestorowa_hvg()
 
-    bt.sct.tl.pca(
+    bt.omics.tl.pca(
         adata,
         n_components=20,
         seed=10,
         copy=False,
     )
-    bt.sct.tl.neighbors(
+    bt.omics.tl.neighbors(
         adata,
         n_neighbors=15,
         representation="X_pca",
@@ -46,7 +50,7 @@ def _run_clustering_workflow():
         n_jobs=1,
         copy=False,
     )
-    bt.sct.tl.leiden(
+    bt.omics.tl.leiden(
         adata,
         neighbors_key="neighbors",
         resolution=0.35,
@@ -54,7 +58,7 @@ def _run_clustering_workflow():
         seed=10,
         copy=False,
     )
-    bt.sct.tl.umap(
+    bt.omics.tl.umap(
         adata,
         neighbors_key="neighbors",
         n_components=2,
@@ -64,7 +68,7 @@ def _run_clustering_workflow():
         n_jobs=1,
         copy=False,
     )
-    bt.sct.tl.tsne(
+    bt.omics.tl.tsne(
         adata,
         representation="X_pca",
         n_pcs=20,
@@ -86,7 +90,7 @@ def _run_clustering_workflow():
             category=UserWarning,
             module="sklearn.manifold._spectral_embedding",
         )
-        bt.sct.tl.spectral(
+        bt.omics.tl.spectral(
             adata,
             neighbors_key="neighbors",
             n_components=2,
@@ -137,8 +141,14 @@ def test_clustering_workflow_is_reproducible_across_runs():
     first = _run_clustering_workflow()
     second = _run_clustering_workflow()
 
-    assert np.array_equal(first.obsm["X_pca"], second.obsm["X_pca"])
-    assert np.array_equal(first.varm["PCs"], second.varm["PCs"])
+    assert np.array_equal(
+        _as_array(first.obsm["X_pca"]),
+        _as_array(second.obsm["X_pca"]),
+    )
+    assert np.array_equal(
+        _as_array(first.varm["PCs"]),
+        _as_array(second.varm["PCs"]),
+    )
     _assert_same_value(first.uns["pca"], second.uns["pca"])
 
     first_distances = cast(csr_matrix, first.obsp["distances"])
@@ -157,20 +167,29 @@ def test_clustering_workflow_is_reproducible_across_runs():
     assert first.obs["cluster"].equals(second.obs["cluster"])
     _assert_same_value(first.uns["cluster"], second.uns["cluster"])
 
-    assert np.array_equal(first.obsm["X_umap"], second.obsm["X_umap"])
+    assert np.array_equal(
+        _as_array(first.obsm["X_umap"]),
+        _as_array(second.obsm["X_umap"]),
+    )
     _assert_same_value(first.uns["X_umap"], second.uns["X_umap"])
 
-    assert np.array_equal(first.obsm["X_tsne"], second.obsm["X_tsne"])
+    assert np.array_equal(
+        _as_array(first.obsm["X_tsne"]),
+        _as_array(second.obsm["X_tsne"]),
+    )
     _assert_same_value(first.uns["X_tsne"], second.uns["X_tsne"])
 
-    assert np.array_equal(first.obsm["X_se"], second.obsm["X_se"])
+    assert np.array_equal(
+        _as_array(first.obsm["X_se"]),
+        _as_array(second.obsm["X_se"]),
+    )
     _assert_same_value(first.uns["X_se"], second.uns["X_se"])
 
 
 def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
 
     adata = _load_nestorowa_hvg()
-    bt.sct.tl.pca(
+    bt.omics.tl.pca(
         adata,
         n_components=20,
         seed=10,
@@ -205,7 +224,7 @@ def test_neighbors_connectivities_match_umap_reference_on_nestorowa():
         reference_graph.tocsr(),
     )
 
-    bt.sct.tl.neighbors(
+    bt.omics.tl.neighbors(
         adata,
         n_neighbors=15,
         representation="X_pca",
@@ -236,13 +255,13 @@ def test_neighbors_are_reproducible_on_nestorowa(backend):
     second = _load_nestorowa_hvg()
 
     for adata in [first, second]:
-        bt.sct.tl.pca(
+        bt.omics.tl.pca(
             adata,
             n_components=20,
             seed=10,
             copy=False,
         )
-        bt.sct.tl.neighbors(
+        bt.omics.tl.neighbors(
             adata,
             n_neighbors=15,
             representation="X_pca",
@@ -275,7 +294,7 @@ def test_qc_numba_backend_is_reproducible_on_nestorowa():
     second.X = csr_matrix(second.X)
 
     for adata in [first, second]:
-        bt.sct.pp.qc(
+        bt.omics.pp.qc(
             adata,
             percent_top=[10, 20, 50],
             backend="numba",

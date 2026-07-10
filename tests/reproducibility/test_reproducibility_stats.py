@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-from tests.regression.sct.toy_data import make_nestorowa_hvg_adata
+from tests.regression.omics.toy_data import make_nestorowa_hvg_adata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
@@ -24,13 +24,13 @@ def test_wilcoxon_tests_are_reproducible_on_nestorowa():
 
     adata = _load_nestorowa_hvg()
 
-    whole = bt.sct.tl.wilcoxon_tests(
+    whole = bt.omics.tl.wilcoxon_tests(
         adata,
         groupby="label",
         groups="all",
         correction="benjamini-hochberg",
     )
-    memory_limited = bt.sct.tl.wilcoxon_tests(
+    memory_limited = bt.omics.tl.wilcoxon_tests(
         adata,
         groupby="label",
         groups="all",

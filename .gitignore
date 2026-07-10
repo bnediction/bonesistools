@@ -32,6 +32,7 @@ venv.bak/
 .coverage.*
 coverage.xml
 htmlcov/
+.cache/
 .pytest_cache/
 .mypy_cache/
 .pyright/

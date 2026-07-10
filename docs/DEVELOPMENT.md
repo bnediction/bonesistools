@@ -19,7 +19,7 @@ Only place types here when they are reused by multiple modules. Keep highly
 local types close to their implementation.
 
 AnnData-specific aliases such as `AnnDataAxis` and `AnnDataAxisWithBoth` live
-in `sctools/_typing.py`.
+in `omics/_typing.py`.
 
 Avoid creating aliases for short, readable type annotations in public APIs.
 Prefer writing the annotation directly so users can understand the signature
@@ -57,7 +57,7 @@ Avoid duplicating validation logic in public functions when a reusable helper
 already exists.
 
 AnnData-specific validation helpers such as `_as_anndata_axis` live in
-`sctools/_validation.py`.
+`omics/_validation.py`.
 
 Do not centralize checks that are already handled cleanly by the underlying
 library. For example, prefer using `adata.obsm[key]`, `adata.obs[key]` or
@@ -65,7 +65,7 @@ library. For example, prefer using `adata.obsm[key]`, `adata.obs[key]` or
 `KeyError`, unless bonesistools needs to add domain-specific behavior.
 
 Shared single-cell statistical helpers, such as expression mean and variance
-calculations, live in `sctools/_stats.py`.
+calculations, live in `omics/_stats.py`.
 
 ### `_warnings.py`
 
@@ -141,7 +141,7 @@ instead of `axis`.
 
 ## Dataset registry
 
-Built-in single-cell datasets are registered in `bt.sct.io` through a
+Built-in single-cell datasets are registered in `bt.omics.io` through a
 small Python loader registry and a JSON metadata file:
 
 * `_DATASET_LOADERS`: maps dataset names to loader functions;

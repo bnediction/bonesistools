@@ -6,12 +6,12 @@ analyses of the BoNesis framework.
 
 Packages
 --------
-sct
+omics
     Single-cell and multimodal annotated data tools.
-bpy
+logic
     Boolean modelling utilities.
-dbs
-    Biological database interfaces.
+resources
+    Biological database and prior-knowledge resources.
 
 Credits: BNeDiction; PEPR Santé Numérique 2030.
 """
@@ -19,51 +19,114 @@ Credits: BNeDiction; PEPR Santé Numérique 2030.
 from __future__ import annotations
 
 import sys as _sys
+from types import ModuleType as _ModuleType
+from typing import Dict as _Dict
 from typing import List as _List
+from typing import Tuple as _Tuple
 
-from . import boolpy as bpy
-from . import databases as dbs
-from . import sctools as sct
+from . import logic, omics, resources
 from ._metadata import package_version as _package_version
-
-boolpy = bpy
-databases = dbs
-sctools = sct
-
-del annotations
+from ._warnings import _warn_deprecated
 
 __credits__ = "BNeDiction; PEPR Santé Numérique 2030"
 __version__ = _package_version()
 
 __all__ = [
     "__version__",
-    "sct",
-    "bpy",
-    "dbs",
+    "omics",
+    "logic",
+    "resources",
 ]
 
-_sys.modules.update(
-    {f"{__name__}.{alias}": globals()[alias] for alias in ["sct", "bpy", "dbs"]}
-)
+_DEPRECATED_ALIASES: _Dict[str, _Tuple[str, _ModuleType]] = {
+    "sct": ("omics", omics),
+    "bpy": ("logic", logic),
+    "dbs": ("resources", resources),
+}
 
 _sys.modules.update(
     {
-        f"{__name__}.sct.{alias}": getattr(sct, alias)
+        f"{__name__}.{alias}": module
+        for alias, (_, module) in _DEPRECATED_ALIASES.items()
+    }
+)
+_sys.modules[f"{__name__}.sctools"] = omics
+_sys.modules[f"{__name__}.boolpy"] = logic
+_sys.modules[f"{__name__}.databases"] = resources
+
+_sys.modules.update(
+    {
+        f"{__name__}.omics.{alias}": getattr(omics, alias)
         for alias in ["pp", "tl", "io", "pl"]
     }
 )
-_sys.modules[f"{__name__}.sct.datasets"] = getattr(sct, "_datasets")
+_sys.modules[f"{__name__}.omics.datasets"] = getattr(omics, "_datasets")
+_sys.modules.update(
+    {
+        f"{__name__}.sctools.{alias}": getattr(omics, alias)
+        for alias in ["pp", "tl", "io", "pl"]
+    }
+)
+_sys.modules[f"{__name__}.sctools.datasets"] = getattr(omics, "_datasets")
+_sys.modules.update(
+    {
+        f"{__name__}.sct.{alias}": getattr(omics, alias)
+        for alias in ["pp", "tl", "io", "pl"]
+    }
+)
+_sys.modules[f"{__name__}.sct.datasets"] = getattr(omics, "_datasets")
 
 _sys.modules.update(
     {
-        f"{__name__}.bpy.{alias}": getattr(bpy, alias)
+        f"{__name__}.logic.{alias}": getattr(logic, alias)
+        for alias in ["ba", "bn", "ig", "io"]
+    }
+)
+_sys.modules.update(
+    {
+        f"{__name__}.boolpy.{alias}": getattr(logic, alias)
+        for alias in ["ba", "bn", "ig", "io"]
+    }
+)
+
+_sys.modules.update(
+    {
+        f"{__name__}.resources.{alias}": getattr(resources, alias)
+        for alias in ["hcop", "ncbi", "omnipath"]
+    }
+)
+_sys.modules.update(
+    {
+        f"{__name__}.dbs.{alias}": getattr(resources, alias)
+        for alias in ["hcop", "ncbi", "omnipath"]
+    }
+)
+_sys.modules.update(
+    {
+        f"{__name__}.databases.{alias}": getattr(resources, alias)
+        for alias in ["hcop", "ncbi", "omnipath"]
+    }
+)
+_sys.modules.update(
+    {
+        f"{__name__}.bpy.{alias}": getattr(logic, alias)
         for alias in ["ba", "bn", "ig", "io"]
     }
 )
 
 
+def __getattr__(name: str) -> object:
+    if name in _DEPRECATED_ALIASES:
+        replacement, module = _DEPRECATED_ALIASES[name]
+        _warn_deprecated(
+            f"`bt.{name}`",
+            replacement=f"`bt.{replacement}`",
+            stacklevel=2,
+        )
+        return module
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def __dir__() -> _List[str]:
-    hidden = {"boolpy", "databases", "sctools"}
-    return sorted(
-        name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
-    )
+    return sorted(name for name in (set(globals()) | set(__all__)) if name[0] != "_")

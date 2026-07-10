@@ -1,6 +1,6 @@
 # Boolean Modelling
 
-Boolean modelling utilities are exposed through `bt.bpy`.
+Boolean modelling utilities are exposed through `bt.logic`.
 
 ```python
 import bonesistools as bt
@@ -8,16 +8,16 @@ import bonesistools as bt
 
 ## Boolean Algebra
 
-Boolean-algebra utilities are exposed through `bt.bpy.ba`.
+Boolean-algebra utilities are exposed through `bt.logic.ba`.
 
 ### Partial Boolean Values
 
 `PartialBoolean` represents a set-theoretic partial Boolean value:
 
 ```python
-bt.bpy.ba.PartialBoolean(0)    # admissible values: {0}
-bt.bpy.ba.PartialBoolean(1)    # admissible values: {1}
-bt.bpy.ba.PartialBoolean("*")  # admissible values: {0, 1}
+bt.logic.ba.PartialBoolean(0)    # admissible values: {0}
+bt.logic.ba.PartialBoolean(1)    # admissible values: {1}
+bt.logic.ba.PartialBoolean("*")  # admissible values: {0, 1}
 ```
 
 `"*"` means an unspecified or free Boolean value. It is not a Kleene truth
@@ -28,7 +28,7 @@ value.
 `Hypercube` represents a partial Boolean configuration.
 
 ```python
-cube = bt.bpy.ba.Hypercube({"A": 0, "B": "*"})
+cube = bt.logic.ba.Hypercube({"A": 0, "B": "*"})
 
 cube.contains({"A": 0, "B": 1})
 # True
@@ -37,7 +37,7 @@ cube.contains({"A": 0, "B": 1})
 Missing components are interpreted as free:
 
 ```python
-bt.bpy.ba.Hypercube({"A": 0}) == bt.bpy.ba.Hypercube({"A": 0, "B": "*"})
+bt.logic.ba.Hypercube({"A": 0}) == bt.logic.ba.Hypercube({"A": 0, "B": "*"})
 # True
 ```
 
@@ -50,7 +50,7 @@ The implementation is compact and hidden. Users interact with configurations,
 not with the internal representation.
 
 ```python
-states = bt.bpy.ba.ConfigurationSet(["A", "B"])
+states = bt.logic.ba.ConfigurationSet(["A", "B"])
 states.add({"A": 0, "B": 0})
 states.add({"A": "*", "B": 0})
 ```
@@ -123,7 +123,7 @@ represented by each object, not the internal hypercubes used to store them.
 For example:
 
 ```python
-states = bt.bpy.ba.ConfigurationSet(["A", "B"])
+states = bt.logic.ba.ConfigurationSet(["A", "B"])
 states.add({"A": 0, "B": 0})
 states.add({"A": "*", "B": 0})
 ```
@@ -143,7 +143,7 @@ states.enumerate()
 representation without changing the represented configurations:
 
 ```python
-states = bt.bpy.ba.ConfigurationSet(["A", "B"])
+states = bt.logic.ba.ConfigurationSet(["A", "B"])
 states.add({"A": 0, "B": 0})
 states.add({"A": 1, "B": 0})
 states.compress()
@@ -166,7 +166,7 @@ from boolean import BooleanAlgebra
 ba = BooleanAlgebra()
 rule = ba.parse("A & B | A & C")
 
-bt.bpy.ba.prime_implicants(rule)
+bt.logic.ba.prime_implicants(rule)
 ```
 
 ## Reachable Attractors
@@ -175,7 +175,7 @@ bt.bpy.ba.prime_implicants(rule)
 `ConfigurationSet` objects.
 
 ```python
-bn = bt.bpy.bn.BooleanNetwork({"A": "B", "B": "A"})
+bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
 attractors = bn.reachable_attractors(
     {"A": 0, "B": 1},
@@ -226,10 +226,10 @@ reachability.
 
 ## Boolean Model I/O
 
-Boolean-model readers are exposed through `bt.bpy.io`.
+Boolean-model readers are exposed through `bt.logic.io`.
 
 ```python
-model = bt.bpy.io.read_zginml("model.zginml")
+model = bt.logic.io.read_zginml("model.zginml")
 graph = model.get("influence_graph")
 bn = model.get("boolean_network")
 ```

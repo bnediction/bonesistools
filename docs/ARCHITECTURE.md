@@ -8,16 +8,16 @@ single-cell analysis utilities, and biological database resources.
 The top-level `bonesistools` package exposes the public namespaces used by the
 library:
 
-- `bonesistools.boolpy`: Boolean modelling and signed graph utilities.
-- `bonesistools.sctools`: single-cell and multimodal analysis helpers.
-- `bonesistools.databases`: interfaces to external biological resources.
+- `bonesistools.logic`: Boolean modelling and signed graph utilities.
+- `bonesistools.omics`: single-cell and multimodal analysis helpers.
+- `bonesistools.resources`: interfaces to external biological resources.
 - `bonesistools.grntools`: deprecated compatibility namespace.
 
 Internal compatibility helpers are grouped in `_compat.py`.
 
-## Boolean modelling: `boolpy`
+## Boolean modelling: `logic`
 
-`boolpy` contains domain objects and algorithms for Boolean modelling.
+`logic` contains domain objects and algorithms for Boolean modelling.
 
 ### `boolean_algebra`
 
@@ -65,9 +65,9 @@ Main responsibilities:
 - Imported logical-model containers with Boolean networks, influence graphs,
   initial states, perturbations and metadata when available.
 
-## Single-cell tools: `sctools`
+## Omics tools: `omics`
 
-`sctools` provides Scanpy-like utilities for annotated single-cell and
+`omics` provides Scanpy-like utilities for annotated single-cell and
 multimodal data objects.
 
 ### `preprocessing`
@@ -110,9 +110,9 @@ Main responsibilities:
 
 Small packaged datasets used for examples and tests.
 
-## Biological resources: `databases`
+## Biological resources: `resources`
 
-`databases` contains loaders and interfaces for external biological resources.
+`resources` contains loaders and interfaces for external biological resources.
 
 ### `ncbi`
 

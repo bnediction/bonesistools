@@ -31,7 +31,7 @@ def _canonical_attractors(
 def test_reachable_attractors_match_between_explicit_and_bdd_backends(update):
     pytest.importorskip("dd.autoref")
 
-    bn = bt.bpy.bn.BooleanNetwork(
+    bn = bt.logic.bn.BooleanNetwork(
         {
             "A": "B",
             "B": "A",

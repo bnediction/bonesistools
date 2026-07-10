@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from bonesistools.databases.omnipath import dorothea
+from bonesistools.resources.omnipath import dorothea
 
 REFERENCE_DIR = Path(__file__).parent
 MODERN_REFERENCE = REFERENCE_DIR / "dorothea_current_mouse_A.sha256"

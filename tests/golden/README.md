@@ -26,21 +26,23 @@ Keep frozen artifacts in this directory or a dataset-specific subdirectory:
 
 ```text
 tests/golden/
-    pbmc3k.h5ad
-    death_receptor_cell_fate.zginml
-    synthetic_30_node_dynamics.zginml
-    expected/
-        bpy/
+    omics/
+        pbmc3k.h5ad
+        expected/
+            qc.npz
+            hvg_loess.npz
+            hvg_binning.npz
+            pca.npz
+            neighbors.npz
+            spectral.npz
+            umap.npz
+            tsne.npz
+    logic/
+        death_receptor_cell_fate.zginml
+        synthetic_30_node_dynamics.zginml
+        expected/
             death_receptor_cell_fate_mp.npz
             synthetic_30_node_dynamics.npz
-        qc.npz
-        hvg_loess.npz
-        hvg_binning.npz
-        pca.npz
-        neighbors.npz
-        spectral.npz
-        umap.npz
-        tsne.npz
 ```
 
 The files are test resources, not source data loaders. Tests in this directory
@@ -49,9 +51,9 @@ outputs.
 
 ## Current Artifacts
 
-### `pbmc3k.h5ad`
+### `omics/pbmc3k.h5ad`
 
-Compressed AnnData file generated from `bt.sct.io.load("pbmc3k")`.
+Compressed AnnData file generated from `bt.omics.io.load("pbmc3k")`.
 
 Properties:
 
@@ -66,8 +68,8 @@ conda run --no-capture-output -n py313 python - <<'PY'
 from pathlib import Path
 import bonesistools as bt
 
-output = Path("tests/golden/pbmc3k.h5ad")
-adata = bt.sct.io.load("pbmc3k", quiet=False)
+output = Path("tests/golden/omics/pbmc3k.h5ad")
+adata = bt.omics.io.load("pbmc3k", quiet=False)
 adata.write_h5ad(output, compression="gzip")
 PY
 ```
@@ -78,7 +80,7 @@ Source:
 * https://www.10xgenomics.com/datasets/3-k-pbm-cs-from-a-healthy-donor-1-standard-1-1-0
 * license: Creative Commons Attribution 4.0 International (CC BY 4.0).
 
-### `expected/*.npz`
+### `omics/expected/*.npz`
 
 Compressed NumPy archives storing reference outputs for the deterministic
 PBMC3k preprocessing workflow:
@@ -96,10 +98,10 @@ PBMC3k preprocessing workflow:
 Regenerate these files intentionally with:
 
 ```bash
-BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py
+BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section omics
 ```
 
-### `death_receptor_cell_fate.zginml`
+### `logic/death_receptor_cell_fate.zginml`
 
 Compressed GINML model for death-receptor cell fate decision, used as a
 realistic Boolean-network fixture for most-permissive reachable-attractor
@@ -127,7 +129,7 @@ Barillot, E., & Zinovyev, A. (2010). Mathematical modelling of cell-fate
 decision in response to death receptor engagement. PLoS computational biology,
 6(3), e1000702.
 
-### `synthetic_30_node_dynamics.zginml`
+### `logic/synthetic_30_node_dynamics.zginml`
 
 Synthetic ZGINML Boolean model generated for BoNesisTools golden tests. It is
 designed to exercise all reachable-attractor update semantics without making
@@ -140,7 +142,7 @@ Properties:
 * golden coverage: `synchronous`, `asynchronous`, `general`, and
   `most-permissive` reachable attractors.
 
-### `expected/bpy/*.npz`
+### `logic/expected/*.npz`
 
 Compressed NumPy archives storing reference outputs for deterministic Boolean
 workflows:
@@ -153,7 +155,7 @@ workflows:
 Regenerate only Boolean golden outputs intentionally with:
 
 ```bash
-BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section bpy
+BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section logic
 ```
 
 ## Updating Golden Files

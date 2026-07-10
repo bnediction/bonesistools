@@ -22,66 +22,66 @@ The package provides:
 import bonesistools as bt
 ```
 
-`BoNesisTools` exposes four main namespaces:
+`BoNesisTools` exposes three main namespaces:
 
-- `bt.sct` — single-cell and multimodal annotated data tools
-- `bt.bpy` — Boolean modelling and graph utilities
-- `bt.dbs` — biological database interfaces
+- `bt.omics` — single-cell and multimodal annotated data tools
+- `bt.logic` — Boolean modelling and graph utilities
+- `bt.resources` — biological database interfaces
 
 ---
 
 ## Single-cell tools
 
-`bt.sct` is inspired by [Scanpy](https://github.com/scverse/scanpy) while providing additional and complementary features for single-cell analyses.
+`bt.omics` is inspired by [Scanpy](https://github.com/scverse/scanpy) while providing additional and complementary features for single-cell analyses.
 
 Submodules:
 
-- preprocessing: `bt.sct.pp`
+- preprocessing: `bt.omics.pp`
   - expression transformations, feature selection, filtering and metadata utilities
 
-- tools: `bt.sct.tl`
+- tools: `bt.omics.tl`
   - embeddings, neighborhood graphs, clustering and differential analysis
 
-- input/output: `bt.sct.io`
+- input/output: `bt.omics.io`
   - registered single-cell example datasets, GEO import and matrix export helpers
 
-- plotting: `bt.sct.pl`
+- plotting: `bt.omics.pl`
   - visualization helpers for embeddings, trajectories, distributions and summaries
 
 Example:
 
 ```python
-bt.sct.io.available()
-bt.sct.io.info("pbmc3k")
-adata = bt.sct.io.load("pbmc3k")
-adata = bt.sct.io.load("nestorowa")
-bt.sct.io.clear("pbmc3k")
+bt.omics.io.available()
+bt.omics.io.info("pbmc3k")
+adata = bt.omics.io.load("pbmc3k")
+adata = bt.omics.io.load("nestorowa")
+bt.omics.io.clear("pbmc3k")
 ```
 
 ---
 
 ## Boolean modelling utilities
 
-`bt.bpy` provides utilities for Boolean modelling, logical abstractions and signed regulatory graphs.
+`bt.logic` provides utilities for Boolean modelling, logical abstractions and signed regulatory graphs.
 
 Submodules:
 
-- Boolean algebra: `bt.bpy.ba`
+- Boolean algebra: `bt.logic.ba`
   - logical objects, configuration sets and transformations for Boolean-state reasoning
 
-- Boolean network: `bt.bpy.bn`
+- Boolean network: `bt.logic.bn`
   - Boolean model representation, conversion, analysis and exchange
 
-- influence graph: `bt.bpy.ig`
+- influence graph: `bt.logic.ig`
   - signed regulatory graph construction, comparison, analysis and display
 
-- input/output: `bt.bpy.io`
+- input/output: `bt.logic.io`
   - BNet, GINML, ZGINML, hypercube and influence-graph readers
 
 Example:
 
 ```python
-bn = bt.bpy.io.read_bnet("model.bnet")
+bn = bt.logic.io.read_bnet("model.bnet")
 graph = bn.to_influence_graph()
 
 graph.show()
@@ -91,26 +91,26 @@ graph.show()
 
 ## Biological external resources
 
-`bt.dbs` provides lightweight interfaces and utilities for biological
+`bt.resources` provides lightweight interfaces and utilities for biological
 external resources.
 
 Submodules:
 
-- NCBI: `bt.dbs.ncbi`
+- NCBI: `bt.resources.ncbi`
   - gene identifier, synonym and annotation utilities
 
-- OmniPath: `bt.dbs.omnipath`
+- OmniPath: `bt.resources.omnipath`
   - regulatory interaction datasets
 
-- HCOP: `bt.dbs.hcop`
+- HCOP: `bt.resources.hcop`
   - orthology resources
 
 Example:
 
 ```python
-genesyn = bt.dbs.ncbi.genesyn()
+genesyn = bt.resources.ncbi.genesyn()
 
-grn = bt.dbs.omnipath.collectri(
+grn = bt.resources.omnipath.collectri(
     organism="mouse",
     genesyn=genesyn,
 )

@@ -32,16 +32,16 @@ jobs:
 
       - name: Check wheel content
         run: |
-          unzip -l dist/*.whl | grep "bonesistools/sctools/datasets/datasets.json"
-          unzip -l dist/*.whl | grep "bonesistools/databases/ncbi/data/gi/"
-          unzip -l dist/*.whl | grep "bonesistools/databases/hcop/data/human_mouse_hcop.tsv.gz"
+          unzip -l dist/*.whl | grep "bonesistools/omics/input_output/datasets.json"
+          unzip -l dist/*.whl | grep "bonesistools/resources/ncbi/data/gi/"
+          unzip -l dist/*.whl | grep "bonesistools/resources/hcop/data/human_mouse_hcop.tsv.gz"
 
       - name: Test built wheel
         run: |
           python -m venv /tmp/bonesistools-wheel-test
           source /tmp/bonesistools-wheel-test/bin/activate
           pip install dist/*.whl
-          python -c "import bonesistools as bt; print(bt.sct.datasets.info('nestorowa')['cells'])"
+          python -c "import bonesistools as bt; print(bt.omics.io.info('nestorowa')['cells'])"
 
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1

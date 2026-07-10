@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bonesistools"
 description = "Bioinformatics toolkit for upstream and downstream analyses around the BoNesis framework"
-version = "1.3.0"
+version = "1.4.0"
 license = "CECILL-2.1"
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [
@@ -119,9 +119,9 @@ packages = [ "src/bonesistools" ]
 artifacts = [
     "src/bonesistools/py.typed",
     "src/bonesistools/**/*.pyi",
-    "src/bonesistools/databases/hcop/data/*.tsv.gz",
-    "src/bonesistools/databases/ncbi/data/gi/*.tsv.gz",
-    "src/bonesistools/sctools/datasets/*.json",
+    "src/bonesistools/resources/hcop/data/*.tsv.gz",
+    "src/bonesistools/resources/ncbi/data/gi/*.tsv.gz",
+    "src/bonesistools/omics/input_output/*.json",
 ]
 
 [project.urls]
@@ -139,7 +139,7 @@ select = ["E", "F", "I"]
 typing-modules = ["bonesistools._compat"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/bonesistools/sctools/datasets/datasets.json" = ["E501"]
+"src/bonesistools/omics/input_output/datasets.json" = ["E501"]
 
 [tool.pyright]
 typeCheckingMode = "standard"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import importlib
 from pathlib import Path
 
 import pytest
@@ -28,19 +29,42 @@ def test_version_matches_pyproject():
 
 
 def test_root_namespace_exposes_short_aliases_only():
-    assert {"sct", "bpy", "dbs"} <= set(dir(bt))
+    assert {"omics", "logic", "resources"} <= set(dir(bt))
 
-    for name in ["sctools", "boolpy", "databases"]:
+    for name in ["sct", "bpy", "dbs", "sctools", "boolpy", "databases"]:
         assert name not in dir(bt)
-        assert hasattr(bt, name)
+
+
+def test_deprecated_root_aliases_remain_accessible():
+    aliases = {
+        "sct": bt.omics,
+        "bpy": bt.logic,
+        "dbs": bt.resources,
+    }
+
+    for name, module in aliases.items():
+        with pytest.warns(FutureWarning, match=f"`bt.{name}`"):
+            assert getattr(bt, name) is module
+
+
+def test_legacy_package_import_paths_remain_compatible():
+    aliases = {
+        "bonesistools.sctools": bt.omics,
+        "bonesistools.boolpy": bt.logic,
+        "bonesistools.databases": bt.resources,
+    }
+
+    for name, module in aliases.items():
+        assert importlib.import_module(name) is module
 
 
 def test_deprecated_public_names_are_hidden_from_tab_completion():
+    datasets_module = importlib.import_module("bonesistools.omics.datasets")
     deprecated_names = {
-        bt.bpy.ba: ["read_hypercube", "read_hypercubes"],
-        bt.bpy.bn: ["bn_to_pydot", "read_bnet", "read_bnet_directory"],
-        bt.bpy.ig: ["read_influence_graph"],
-        bt.sct.pp: [
+        bt.logic.ba: ["read_hypercube", "read_hypercubes"],
+        bt.logic.bn: ["bn_to_pydot", "read_bnet", "read_bnet_directory"],
+        bt.logic.ig: ["read_influence_graph"],
+        bt.omics.pp: [
             "regress_out",
             "sort_anndata",
             "standardize_gene_identifiers",
@@ -48,7 +72,7 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
             "transfer_obs_sti",
             "var_names_merge_duplicates",
         ],
-        bt.sct.tl: [
+        bt.omics.tl: [
             "Knnbs",
             "anndata_to_dataframe",
             "calculate_logfoldchanges",
@@ -59,7 +83,7 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
             "to_mtx",
             "to_npz",
         ],
-        bt.sct.pl: [
+        bt.omics.pl: [
             "add_graph",
             "boxplot",
             "draw_paga",
@@ -67,8 +91,8 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
             "embedding_plot",
             "kde_plot",
         ],
-        bt.sct.io: ["nestorowa"],
-        bt.sct.datasets: [
+        bt.omics.io: ["nestorowa"],
+        datasets_module: [
             "available",
             "clear",
             "from_geo",
@@ -76,8 +100,8 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
             "load",
             "nestorowa",
         ],
-        bt.dbs.ncbi: ["GeneSynonyms"],
-        bt.dbs.omnipath: ["load_collectri_grn", "load_dorothea_grn"],
+        bt.resources.ncbi: ["GeneSynonyms"],
+        bt.resources.omnipath: ["load_collectri_grn", "load_dorothea_grn"],
     }
 
     for module, names in deprecated_names.items():
