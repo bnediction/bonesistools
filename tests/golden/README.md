@@ -38,10 +38,14 @@ tests/golden/
             umap.npz
             tsne.npz
     logic/
-        death_receptor_cell_fate.zginml
-        synthetic_30_node_dynamics.zginml
+        data/
+            README.md
+            death_receptor_cell_fate.zginml
+            sea_urchin_dorsal_ventral_axis.sbml
+            synthetic_30_node_dynamics.zginml
         expected/
             death_receptor_cell_fate_mp.npz
+            sea_urchin_dorsal_ventral_axis.bnet
             synthetic_30_node_dynamics.npz
 ```
 
@@ -101,7 +105,7 @@ Regenerate these files intentionally with:
 BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section omics
 ```
 
-### `logic/death_receptor_cell_fate.zginml`
+### `logic/data/death_receptor_cell_fate.zginml`
 
 Compressed GINML model for death-receptor cell fate decision, used as a
 realistic Boolean-network fixture for most-permissive reachable-attractor
@@ -129,7 +133,26 @@ Barillot, E., & Zinovyev, A. (2010). Mathematical modelling of cell-fate
 decision in response to death receptor engagement. PLoS computational biology,
 6(3), e1000702.
 
-### `logic/synthetic_30_node_dynamics.zginml`
+### `logic/data/sea_urchin_dorsal_ventral_axis.sbml`
+
+SBML Level 3 Qual model of the regulatory network controlling dorsal-ventral
+axis specification in the sea urchin embryo. It exercises Booleanization of
+components with maximum levels 2 and 3, MathML logical conditions, signed
+influences, and layout metadata.
+
+Properties:
+
+* source components: 31;
+* Booleanized components: 42;
+* maximum source level: 3;
+* format: SBML Level 3 Qual;
+* golden coverage: rules, signed influence graph, threshold metadata, and
+  layout metadata.
+
+Source, licensing, checksums, and citations for the logical-model fixtures are
+documented in `logic/data/README.md`.
+
+### `logic/data/synthetic_30_node_dynamics.zginml`
 
 Synthetic ZGINML Boolean model generated for BoNesisTools golden tests. It is
 designed to exercise all reachable-attractor update semantics without making
@@ -142,7 +165,7 @@ Properties:
 * golden coverage: `synchronous`, `asynchronous`, `general`, and
   `most-permissive` reachable attractors.
 
-### `logic/expected/*.npz`
+### `logic/expected/`
 
 Compressed NumPy archives storing reference outputs for deterministic Boolean
 workflows:
@@ -151,6 +174,21 @@ workflows:
   selected initial states, and most-permissive reachable attractors;
 * `synthetic_30_node_dynamics.npz`: parsed rules, influence-graph shape, and
   reachable attractors under the four supported update semantics.
+
+The readable `logic/expected/sea_urchin_dorsal_ventral_axis.bnet` reference
+contains the 42 Boolean rules produced independently with BioLQM from the
+bundled SBML model. Golden tests compare imported rules semantically with this
+reference and separately validate the complete signed influence graph.
+
+The BioLQM reference was generated with:
+
+```bash
+bioLQM \
+    tests/golden/logic/data/sea_urchin_dorsal_ventral_axis.sbml \
+    -m booleanize \
+    -of bnet \
+    tests/golden/logic/expected/sea_urchin_dorsal_ventral_axis.bnet
+```
 
 Regenerate only Boolean golden outputs intentionally with:
 

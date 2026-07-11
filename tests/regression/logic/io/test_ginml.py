@@ -126,10 +126,15 @@ def test_read_ginml_threshold_encodes_simple_multivalued_inputs(tmp_path):
     assert graph.edge_sign("RA_b1", "RA_b2") == 1
     assert graph["RA_b1"]["Target"][0]["id"] == "RA:Target"
     assert graph["RA_b2"]["Target"][0]["id"] == "RA:Target"
+    expected_graph = model.get("boolean_network").to_influence_graph()
+    assert set(graph) == set(expected_graph)
     assert {
         (source, target, attributes["sign"])
         for source, target, attributes in graph.edges(data=True)
-    } == model.get("boolean_network").influences()
+    } == {
+        (source, target, attributes["sign"])
+        for source, target, attributes in expected_graph.edges(data=True)
+    }
 
 
 def test_read_ginml_regularizes_multivalued_target_thresholds(tmp_path):
@@ -201,6 +206,32 @@ def test_read_ginml_expands_multivalued_intervals_by_exact_level(tmp_path):
         network.next_state("Target", {"X_b1": 1, "X_b2": 1, "X_b3": 1, "Target": 0})
         == 0
     )
+
+
+def test_read_ginml_negates_complete_multivalued_regulator_condition(tmp_path):
+    path = _write_text(
+        tmp_path / "negated-multivalued.ginml",
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gxl>
+          <graph class="regulatory" id="negated" nodeorder="X Target">
+            <node id="X" maxvalue="2" input="true"/>
+            <node id="Target" maxvalue="1">
+              <value val="1"><exp str="!X"/></value>
+            </node>
+            <edge id="X:Target" from="X" to="Target"
+              minvalue="1" maxvalue="2" sign="negative"/>
+          </graph>
+        </gxl>
+        """,
+    )
+
+    network = bt.logic.io.read_ginml(path).get("boolean_network")
+
+    assert network.rules["Target"] == "~((X_b1 & ~X_b2) | (X_b1 & X_b2))"
+    assert network.next_state("Target", {"X_b1": 0, "X_b2": 0, "Target": 0}) == 1
+    assert network.next_state("Target", {"X_b1": 1, "X_b2": 0, "Target": 0}) == 0
+    assert network.next_state("Target", {"X_b1": 1, "X_b2": 1, "Target": 0}) == 0
 
 
 def test_read_ginml_explicit_context_overrides_multivalued_function(tmp_path):

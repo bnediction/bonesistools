@@ -232,6 +232,8 @@ Boolean-model readers are exposed through `bt.logic.io`.
 model = bt.logic.io.read_zginml("model.zginml")
 graph = model.get("influence_graph")
 bn = model.get("boolean_network")
+
+sbml_model = bt.logic.io.read_sbml("model.sbml")
 ```
 
 ### Readers
@@ -241,6 +243,7 @@ bn = model.get("boolean_network")
   Boolean-network ensemble.
 - `read_ginml(path)` reads a GINML logical model.
 - `read_zginml(path)` reads a ZGINML archive and preserves companion files.
+- `read_sbml(path)` reads an SBML Level 3 Qual logical model.
 
 ### Imported Logical Models
 
@@ -298,6 +301,29 @@ RA -> RA_b1, RA_b2
 If Boolean conversion is unavailable, signed interactions from the original
 GINML graph are retained instead.
 
-Unsupported logical parameters or companion files are not silently discarded:
-they are reported in `metadata`. In that case, `boolean_network` may be `None`
-while `influence_graph`, initial states and metadata remain available.
+Unsupported GINsim logical parameters or companion files are not silently
+discarded: they are reported in `metadata`. In that case, `boolean_network`
+may be `None` while `influence_graph`, initial states and metadata remain
+available.
+
+### SBML Level 3 Qual
+
+`read_sbml(...)` supports logical models using the SBML Level 3 Qual package.
+Qualitative species, function terms, default terms and supported MathML
+conditions are converted through the same threshold Booleanization used for
+GINML models. Explicit `initialLevel` values are exposed as the named
+`initial_states["default"]` hypercube.
+
+SBML layout positions and dimensions, model annotations, species attributes
+and transition metadata are preserved when available. The returned influence
+graph is aligned with `boolean_network.to_influence_graph()` modulo these
+source-format attributes.
+
+Other SBML documents are rejected with:
+
+```text
+ValueError: unsupported SBML document (expected an SBML Level 3 document using the Qual package)
+```
+
+Unsupported Qual or MathML constructions raise a `ValueError`; the reader does
+not guess their logical meaning.

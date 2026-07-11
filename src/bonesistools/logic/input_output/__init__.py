@@ -13,6 +13,7 @@ from ._boolean_network import read_bnet, read_bnet_directory
 from ._ginml import read_ginml, read_zginml
 from ._hypercube import read_hypercube, read_hypercubes
 from ._influence_graph import read_influence_graph
+from ._sbml import read_sbml
 
 __all__ = [
     "read_bnet",
@@ -21,6 +22,7 @@ __all__ = [
     "read_hypercube",
     "read_hypercubes",
     "read_influence_graph",
+    "read_sbml",
     "read_zginml",
 ]
 

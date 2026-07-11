@@ -10,9 +10,11 @@ import numpy as np
 import bonesistools as bt
 
 GOLDEN_DIR = Path(__file__).parent
+DATA_DIR = GOLDEN_DIR / "data"
 EXPECTED_DIR = GOLDEN_DIR / "expected"
-DEATH_RECEPTOR_CELL_FATE_PATH = GOLDEN_DIR / "death_receptor_cell_fate.zginml"
-SYNTHETIC_30_NODE_DYNAMICS_PATH = GOLDEN_DIR / "synthetic_30_node_dynamics.zginml"
+DEATH_RECEPTOR_CELL_FATE_PATH = DATA_DIR / "death_receptor_cell_fate.zginml"
+SEA_URCHIN_DORSAL_VENTRAL_AXIS_PATH = DATA_DIR / "sea_urchin_dorsal_ventral_axis.sbml"
+SYNTHETIC_30_NODE_DYNAMICS_PATH = DATA_DIR / "synthetic_30_node_dynamics.zginml"
 
 
 def run_boolean_workflow() -> Dict[str, Dict[str, Any]]:

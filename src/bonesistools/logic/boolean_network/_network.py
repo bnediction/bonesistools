@@ -44,6 +44,7 @@ from ..boolean_algebra import (
     prime_implicants,
     rule_to_string,
 )
+from ..boolean_algebra._structure import _constant_expression_as_bool
 from ..boolean_algebra._typing import (
     BooleanRule,
     ConfigurationLike,
@@ -795,12 +796,10 @@ class BooleanNetwork(Dict[str, Expression]):
             for name, value in configuration.items()
         }
         value = self[component].subs(substitutions).simplify()
+        evaluated = _constant_expression_as_bool(self.ba, value)
 
-        if value is self.ba.TRUE:
-            return 1
-
-        if value is self.ba.FALSE:
-            return 0
+        if evaluated is not None:
+            return int(evaluated)
 
         raise ValueError(
             "Boolean rule could not be fully evaluated: "
@@ -850,12 +849,10 @@ class BooleanNetwork(Dict[str, Expression]):
 
         for component, rule in self.items():
             value = rule.subs(substitutions).simplify()
+            evaluated = _constant_expression_as_bool(self.ba, value)
 
-            if value is self.ba.TRUE:
-                next_configuration[component] = 1
-
-            elif value is self.ba.FALSE:
-                next_configuration[component] = 0
+            if evaluated is not None:
+                next_configuration[component] = int(evaluated)
 
             else:
                 raise ValueError(

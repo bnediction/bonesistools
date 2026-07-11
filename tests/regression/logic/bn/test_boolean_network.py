@@ -1206,6 +1206,23 @@ def test_boolean_network_next_methods():
         unchecked.next_configuration({"A": 0})
 
 
+def test_boolean_network_next_methods_evaluate_composed_constants():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "~((B & ~C) | (B & C))",
+            "B": "B",
+            "C": "C",
+        }
+    )
+
+    assert bn.next_state("A", {"A": 0, "B": 0, "C": 0}) == 1
+    assert bn.next_configuration({"A": 0, "B": 0, "C": 0}) == {
+        "A": 1,
+        "B": 0,
+        "C": 0,
+    }
+
+
 def test_boolean_network_fixed_points_validate_inputs():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 

@@ -60,7 +60,7 @@ Readers for Boolean modelling files and imported logical-model containers.
 Main responsibilities:
 
 - `.bnet` import.
-- GINML and ZGINML import.
+- GINML, ZGINML and SBML Level 3 Qual import.
 - Hypercube and influence-graph file readers.
 - Imported logical-model containers with Boolean networks, influence graphs,
   initial states, perturbations and metadata when available.

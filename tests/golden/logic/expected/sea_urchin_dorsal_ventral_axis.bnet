@@ -1,0 +1,46 @@
+# model in BoolNet format
+# the header targets, factors is mandatory to be importable in the R package BoolNet
+
+targets, factors
+Admp1,          Smad2_3_4_b1&!Smad1_4_5_8_b1
+Admp1_In,       Admp1_In
+Admp2,          !Smad1_4_5_8_b1&Frz | Smad1_4_5_8_b1&!Smad1_4_5_8_b2&Frz | Smad1_4_5_8_b1&Smad1_4_5_8_b2
+Admp2_Trans,    0
+Alk1_2_3_6_b1,  !Bmp2_4_In_b1&!Chordin_In_b1&!Admp2_Trans&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | !Bmp2_4_In_b1&!Chordin_In_b1&Admp2_Trans | !Bmp2_4_In_b1&Chordin_In_b1&!Chordin_In_b2&!Tolloid_In&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | !Bmp2_4_In_b1&Chordin_In_b1&!Chordin_In_b2&Tolloid_In&!Admp2_Trans&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | !Bmp2_4_In_b1&Chordin_In_b1&!Chordin_In_b2&Tolloid_In&Admp2_Trans | !Bmp2_4_In_b1&Chordin_In_b1&Chordin_In_b2&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | Bmp2_4_In_b1&!Bmp2_4_In_b2&!Chordin_In_b1&!Admp1_In&!Admp2_Trans&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | Bmp2_4_In_b1&!Bmp2_4_In_b2&!Chordin_In_b1&!Admp1_In&Admp2_Trans | Bmp2_4_In_b1&!Bmp2_4_In_b2&!Chordin_In_b1&Admp1_In | Bmp2_4_In_b1&!Bmp2_4_In_b2&Chordin_In_b1&!Chordin_In_b2&!Tolloid_In&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | Bmp2_4_In_b1&!Bmp2_4_In_b2&Chordin_In_b1&!Chordin_In_b2&Tolloid_In&!Admp1_In&!Admp2_Trans&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | Bmp2_4_In_b1&!Bmp2_4_In_b2&Chordin_In_b1&!Chordin_In_b2&Tolloid_In&!Admp1_In&Admp2_Trans | Bmp2_4_In_b1&!Bmp2_4_In_b2&Chordin_In_b1&!Chordin_In_b2&Tolloid_In&Admp1_In | Bmp2_4_In_b1&!Bmp2_4_In_b2&Chordin_In_b1&Chordin_In_b2&Alk1_2_3_6_b1&Alk1_2_3_6_b2 | Bmp2_4_In_b1&Bmp2_4_In_b2
+Alk1_2_3_6_b2,  Bmp2_4_In_b1&Bmp2_4_In_b2&Alk1_2_3_6_b1
+Alk4_5_7_b1,    !Nodal_In_b1&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&!Nodal_In_b2&!Lefty_In&!Panda&!Alk4_5_7_b1&Univin | Nodal_In_b1&!Nodal_In_b2&!Lefty_In&!Panda&Alk4_5_7_b1&!Alk4_5_7_b2&Univin | Nodal_In_b1&!Nodal_In_b2&!Lefty_In&!Panda&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&!Nodal_In_b2&!Lefty_In&Panda&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&!Nodal_In_b2&Lefty_In&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&Nodal_In_b2&!Nodal_In_b3&!Panda&!Alk4_5_7_b1&Univin | Nodal_In_b1&Nodal_In_b2&!Nodal_In_b3&!Panda&Alk4_5_7_b1&!Alk4_5_7_b2&Univin | Nodal_In_b1&Nodal_In_b2&!Nodal_In_b3&!Panda&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&Nodal_In_b2&!Nodal_In_b3&Panda&Alk4_5_7_b1&Alk4_5_7_b2 | Nodal_In_b1&Nodal_In_b2&Nodal_In_b3&!Alk4_5_7_b1&Univin | Nodal_In_b1&Nodal_In_b2&Nodal_In_b3&Alk4_5_7_b1&!Alk4_5_7_b2&Univin | Nodal_In_b1&Nodal_In_b2&Nodal_In_b3&Alk4_5_7_b1&Alk4_5_7_b2
+Alk4_5_7_b2,    Nodal_In_b1&Nodal_In_b2&Nodal_In_b3&Alk4_5_7_b1&Univin
+Bmp2_4_In_b1,   Bmp2_4_In_b1
+Bmp2_4_In_b2,   Bmp2_4_In_b1&Bmp2_4_In_b2
+Bmp2_4_b1,      !Smad2_3_4_b1&Bmp2_4_b1&Bmp2_4_b2 | Smad2_3_4_b1
+Bmp2_4_b2,      Smad2_3_4_b1&Smad2_3_4_b2&Bmp2_4_b1
+Brachyury,      !FoxA&!Repressor_R1 | FoxA
+Chordin_In_b1,  Chordin_In_b1
+Chordin_In_b2,  Chordin_In_b1&Chordin_In_b2
+Chordin_b1,     !Smad2_3_4_b1&Chordin_b1&Chordin_b2 | Smad2_3_4_b1
+Chordin_b2,     Smad2_3_4_b1&Chordin_b1
+FGFA,           !Smad2_3_4_b1&!Smad1_4_5_8_b1 | !Smad2_3_4_b1&Smad1_4_5_8_b1&!Smad1_4_5_8_b2
+FoxA,           !FoxA&Brachyury&!Repressor_R1 | FoxA&!Repressor_R1
+Frz,            Wnt_In
+Glypican5,      Smad1_4_5_8_b1&Smad1_4_5_8_b2
+Goosecoid,      Smad2_3_4_b1
+IrxA,           Tbx2_3
+Lefty,          Smad2_3_4_b1
+Lefty_In,       Lefty_In
+Nodal_In_b1,    Nodal_In_b1
+Nodal_In_b2,    Nodal_In_b1&Nodal_In_b2
+Nodal_In_b3,    Nodal_In_b1&Nodal_In_b2&Nodal_In_b3
+Nodal_b1,       !Smad2_3_4_b1&Nodal_b1&Nodal_b2 | Smad2_3_4_b1
+Nodal_b2,       Smad2_3_4_b1&Nodal_b1
+Onecut,         !Smad2_3_4_b1&!Goosecoid&!IrxA
+Panda,          0
+Repressor_R1,   !Goosecoid
+Smad1_4_5_8_b1, !Smad2_3_4_b1&!Alk1_2_3_6_b1&Smad1_4_5_8_b1&Smad1_4_5_8_b2 | !Smad2_3_4_b1&Alk1_2_3_6_b1 | Smad2_3_4_b1&!Alk1_2_3_6_b1&Smad1_4_5_8_b1&Smad1_4_5_8_b2 | Smad2_3_4_b1&Alk1_2_3_6_b1&!Alk1_2_3_6_b2&Smad1_4_5_8_b1&Smad1_4_5_8_b2 | Smad2_3_4_b1&Alk1_2_3_6_b1&Alk1_2_3_6_b2
+Smad1_4_5_8_b2, !Smad2_3_4_b1&Alk1_2_3_6_b1&Smad1_4_5_8_b1 | Smad2_3_4_b1&!Smad2_3_4_b2&Alk1_2_3_6_b1&Alk1_2_3_6_b2&Smad1_4_5_8_b1
+Smad2_3_4_b1,   !Alk4_5_7_b1&Smad2_3_4_b1&Smad2_3_4_b2 | Alk4_5_7_b1&!Alk4_5_7_b2&!Smad2_3_4_b1&!Smad1_4_5_8_b1&!Smad6 | Alk4_5_7_b1&!Alk4_5_7_b2&Smad2_3_4_b1&!Smad2_3_4_b2&!Smad1_4_5_8_b1&!Smad6 | Alk4_5_7_b1&!Alk4_5_7_b2&Smad2_3_4_b1&Smad2_3_4_b2 | Alk4_5_7_b1&Alk4_5_7_b2
+Smad2_3_4_b2,   Alk4_5_7_b1&Alk4_5_7_b2&Smad2_3_4_b1
+Smad6,          !Smad1_4_5_8_b1&Tbx2_3 | Smad1_4_5_8_b1&!Smad1_4_5_8_b2&Tbx2_3 | Smad1_4_5_8_b1&Smad1_4_5_8_b2
+Tbx2_3,         Smad1_4_5_8_b1&Smad1_4_5_8_b2
+Tolloid_In,     Tolloid_In
+Univin,         !Smad1_4_5_8_b1 | Smad1_4_5_8_b1&!Smad1_4_5_8_b2
+Wnt_In,         Wnt_In

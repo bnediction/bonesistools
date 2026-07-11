@@ -1,8 +1,8 @@
 Golden test data licenses
 =========================
 
-sct/pbmc3k.h5ad
--------------------
+omics/pbmc3k.h5ad
+-----------------
 
 Source: 10x Genomics, 3k PBMCs from a Healthy Donor.
 URL: https://www.10xgenomics.com/datasets/3-k-pbm-cs-from-a-healthy-donor-1-standard-1-1-0
@@ -13,24 +13,8 @@ gene-barcode matrix using `bt.omics.io.load("pbmc3k")` and stored with
 HDF5 gzip compression.
 
 
-bpy/death_receptor_cell_fate.zginml
---------------------------------------
+logic/data/*
+------------
 
-Source: BioModels MODEL0912180000, Calzone et al. death receptor engagement
-model.
-URL: https://www.ebi.ac.uk/biomodels/MODEL0912180000
-License: Creative Commons CC0/public domain dedication for the encoded model.
-
-Citation:
-Calzone, L., Tournier, L., Fourquet, S., Thieffry, D., Zhivotovsky, B.,
-Barillot, E., & Zinovyev, A. (2010). Mathematical modelling of cell-fate
-decision in response to death receptor engagement. PLoS computational biology,
-6(3), e1000702.
-
-
-bpy/synthetic_30_node_dynamics.zginml
-----------------------------------------
-
-Source: generated BoNesisTools test fixture.
-License: distributed under the same license terms as the BoNesisTools test
-suite.
+Source, licensing, checksum, and citation details for each logical-model
+fixture are documented in `logic/data/README.md`.

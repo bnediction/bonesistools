@@ -27,6 +27,18 @@ from xml.etree import ElementTree
 from ..boolean_algebra import Hypercube
 from ..boolean_network import BooleanNetwork
 from ..influence_graph import InfluenceGraph
+from ._booleanization import (
+    _booleanize_logical_model,
+    _encode_state,
+    _join_and,
+    _join_or,
+    _level_range_rule,
+    _LogicalModel,
+    _negate_rule,
+    _normalize_component_names,
+    _syntactic_influences,
+    _threshold_component,
+)
 from ._executable_model import ExecutableModel
 
 
@@ -660,7 +672,7 @@ def _build_booleanized_influence_graph(
     boolean_network: BooleanNetwork,
 ) -> InfluenceGraph:
     graph = InfluenceGraph()
-    component_names = _boolean_component_names(nodes)
+    component_names = _normalize_component_names(nodes)
     component_origins = {}
 
     graph.graph.update(
@@ -698,7 +710,7 @@ def _build_booleanized_influence_graph(
         key = (str(edge["source"]), str(edge["target"]))
         edges_by_components.setdefault(key, []).append(edge)
 
-    for source, target, sign in _syntactic_boolean_influences(boolean_network):
+    for source, target, sign in _syntactic_influences(boolean_network):
         original_source = component_origins[source]
         original_target = component_origins[target]
         candidates = edges_by_components.get(
@@ -779,37 +791,18 @@ def _booleanized_edge_attributes(
     }
 
 
-def _syntactic_boolean_influences(
-    boolean_network: BooleanNetwork,
-) -> List[Tuple[str, str, int]]:
-    influences = set()
-
-    def collect(expression: Any, target: str, sign: int = 1) -> None:
-        if isinstance(expression, boolean_network.ba.Symbol):
-            influences.add((str(expression.obj), target, sign))
-            return
-
-        if isinstance(expression, boolean_network.ba.NOT):
-            collect(expression.args[0], target, -sign)
-            return
-
-        for argument in expression.args:
-            collect(argument, target, sign)
-
-    for target, rule in boolean_network.items():
-        collect(rule, target)
-
-    return sorted(influences)
-
-
 def _build_boolean_network(
     nodes: Mapping[str, Mapping[str, Any]],
     edges: List[Dict[str, Any]],
     metadata: Dict[str, Any],
 ) -> Optional[BooleanNetwork]:
     try:
-        component_names = _boolean_component_names(nodes)
-        rules = _boolean_rules_from_ginml_nodes(nodes, edges, component_names)
+        component_names = _normalize_component_names(nodes)
+        logical_model = _logical_model_from_ginml_nodes(
+            nodes,
+            edges,
+            component_names,
+        )
         renamed_components = {
             source: target
             for source, target in component_names.items()
@@ -819,7 +812,7 @@ def _build_boolean_network(
         if renamed_components:
             metadata["boolean_component_names"] = renamed_components
 
-        return BooleanNetwork(rules)
+        return _booleanize_logical_model(logical_model)
 
     except ValueError as error:
         metadata["boolean_network_reason"] = str(error)
@@ -833,12 +826,12 @@ def _build_boolean_network(
         return None
 
 
-def _boolean_rules_from_ginml_nodes(
+def _logical_model_from_ginml_nodes(
     nodes: Mapping[str, Mapping[str, Any]],
     edges: Iterable[Mapping[str, Any]],
     component_names: Mapping[str, str],
-) -> Dict[str, str]:
-    rules = {}
+) -> _LogicalModel:
+    threshold_rules = {}
     incoming_edges: Dict[str, List[Mapping[str, Any]]] = {
         node_id: [] for node_id in nodes
     }
@@ -847,22 +840,24 @@ def _boolean_rules_from_ginml_nodes(
         incoming_edges.setdefault(str(edge["target"]), []).append(edge)
 
     for node_id, node in nodes.items():
-        maxvalue = int(node["maxvalue"])
-        component = component_names[node_id]
-
-        if maxvalue == 1:
-            rules[component] = _boolean_rule_for_native_node(
-                node_id,
-                node,
-                nodes,
-                incoming_edges[node_id],
-                component_names,
-            )
+        if bool(node["input"]):
             continue
 
-        for threshold in range(1, maxvalue + 1):
-            rules[_threshold_component(component, threshold)] = (
-                _boolean_rule_for_threshold_node(
+        max_level = int(node["maxvalue"])
+
+        if max_level == 1:
+            threshold_rules[node_id] = {
+                1: _boolean_rule_for_native_node(
+                    node_id,
+                    node,
+                    nodes,
+                    incoming_edges[node_id],
+                    component_names,
+                )
+            }
+        else:
+            threshold_rules[node_id] = {
+                threshold: _desired_rule_for_threshold_node(
                     node_id,
                     threshold,
                     node,
@@ -870,35 +865,17 @@ def _boolean_rules_from_ginml_nodes(
                     incoming_edges[node_id],
                     component_names,
                 )
-            )
+                for threshold in range(1, max_level + 1)
+            }
 
-    return rules
-
-
-def _boolean_component_names(
-    nodes: Mapping[str, Mapping[str, Any]],
-) -> Dict[str, str]:
-    component_names = {
-        node_id: re.sub(r"[^A-Za-z0-9_]", "_", node_id) for node_id in nodes
-    }
-
-    for node_id, component in component_names.items():
-        if not component or component[0].isdigit():
-            component_names[node_id] = f"_{component}"
-
-    duplicates = [
-        component
-        for component in set(component_names.values())
-        if list(component_names.values()).count(component) > 1
-    ]
-
-    if duplicates:
-        raise ValueError(
-            "Boolean component-name normalization creates duplicate names: "
-            + ", ".join(sorted(duplicates))
-        )
-
-    return component_names
+    return _LogicalModel(
+        max_levels={node_id: int(node["maxvalue"]) for node_id, node in nodes.items()},
+        input_components=frozenset(
+            node_id for node_id, node in nodes.items() if bool(node["input"])
+        ),
+        threshold_rules=threshold_rules,
+        component_names=component_names,
+    )
 
 
 def _boolean_rule_for_native_node(
@@ -991,7 +968,7 @@ def _logical_rule_from_regulatory_contexts(
             terms.append(
                 activity
                 if interaction_id in active_edge_ids
-                else _negate_boolean_condition(activity)
+                else _negate_rule(activity)
             )
 
         context = _join_and(terms)
@@ -1011,7 +988,7 @@ def _logical_rule_from_regulatory_contexts(
 
     if interactions and fallback_rule == "0":
         inactive_context = _join_and(
-            _negate_boolean_condition(activity) for _, activity in interactions
+            _negate_rule(activity) for _, activity in interactions
         )
         rule = _override_rule_in_contexts(
             rule,
@@ -1047,7 +1024,7 @@ def _override_rule_in_contexts(
 
     if fallback_rule != "0" and negative_rule != "0":
         fallback_outside_negative_contexts = (
-            f"({fallback_rule}) & {_negate_boolean_condition(negative_rule)}"
+            f"({fallback_rule}) & {_negate_rule(negative_rule)}"
         )
 
     if positive_rule == fallback_outside_negative_contexts:
@@ -1087,11 +1064,11 @@ def _ginml_interaction_conditions(
             interactions.extend(
                 (
                     f"{edge_id}:{level}",
-                    _multivalued_range_condition(
+                    _level_range_rule(
                         component,
                         minimum=level,
                         maximum=level,
-                        maxvalue=maxvalue,
+                        max_level=maxvalue,
                     ),
                 )
                 for level in effect_levels
@@ -1101,11 +1078,11 @@ def _ginml_interaction_conditions(
         interactions.append(
             (
                 str(edge_id),
-                _multivalued_range_condition(
+                _level_range_rule(
                     component,
                     minimum=int(attributes.get("minvalue", 1)),
                     maximum=int(attributes.get("maxvalue", maxvalue)),
-                    maxvalue=maxvalue,
+                    max_level=maxvalue,
                 ),
             )
         )
@@ -1113,20 +1090,7 @@ def _ginml_interaction_conditions(
     return interactions
 
 
-def _negate_boolean_condition(condition: str) -> str:
-    if condition == "0":
-        return "1"
-
-    if condition == "1":
-        return "0"
-
-    if condition.startswith("~") and " " not in condition:
-        return condition[1:]
-
-    return f"~({condition})"
-
-
-def _boolean_rule_for_threshold_node(
+def _desired_rule_for_threshold_node(
     node_id: str,
     threshold: int,
     node: Mapping[str, Any],
@@ -1134,18 +1098,6 @@ def _boolean_rule_for_threshold_node(
     incoming_edges: List[Mapping[str, Any]],
     component_names: Mapping[str, str],
 ) -> str:
-    component = component_names[node_id]
-    threshold_component = _threshold_component(component, threshold)
-
-    if bool(node["input"]):
-        if threshold == 1:
-            return threshold_component
-
-        return (
-            f"{_threshold_component(component, threshold - 1)} "
-            f"& {threshold_component}"
-        )
-
     expressions = []
 
     for value in node["values"]:
@@ -1167,7 +1119,7 @@ def _boolean_rule_for_threshold_node(
         ]
         expression_rule = _join_or(converted)
 
-    desired_rule = _logical_rule_from_regulatory_contexts(
+    return _logical_rule_from_regulatory_contexts(
         node_id,
         node,
         nodes,
@@ -1176,43 +1128,6 @@ def _boolean_rule_for_threshold_node(
         threshold=threshold,
         fallback_rule=expression_rule,
     )
-
-    return _regularized_threshold_rule(
-        desired_rule,
-        component=component,
-        threshold=threshold,
-        maxvalue=int(node["maxvalue"]),
-    )
-
-
-def _regularized_threshold_rule(
-    desired_rule: str,
-    *,
-    component: str,
-    threshold: int,
-    maxvalue: int,
-) -> str:
-    terms = []
-
-    if desired_rule != "0":
-        desired_terms = [
-            _threshold_component(component, level) for level in range(1, threshold)
-        ]
-
-        if desired_rule != "1":
-            desired_terms.append(f"({desired_rule})")
-
-        terms.append(_join_and(desired_terms))
-
-    if threshold < maxvalue:
-        terms.append(
-            _join_and(
-                _threshold_component(component, level)
-                for level in range(1, threshold + 2)
-            )
-        )
-
-    return _join_or(terms)
 
 
 def _expressions_for_value(node: Mapping[str, Any], value: int) -> List[str]:
@@ -1337,11 +1252,11 @@ def _ginml_regulator_condition(
                     continue
 
                 conditions.append(
-                    _multivalued_range_condition(
+                    _level_range_rule(
                         component,
                         minimum=selected_level,
                         maximum=selected_level,
-                        maxvalue=maxvalue,
+                        max_level=maxvalue,
                     )
                 )
 
@@ -1354,11 +1269,11 @@ def _ginml_regulator_condition(
             continue
 
         conditions.append(
-            _multivalued_range_condition(
+            _level_range_rule(
                 component,
                 minimum=minimum,
                 maximum=maximum,
-                maxvalue=maxvalue,
+                max_level=maxvalue,
             )
         )
 
@@ -1370,7 +1285,11 @@ def _ginml_regulator_condition(
         )
 
     condition = _join_or(conditions)
-    return condition if len(conditions) == 1 else f"({condition})"
+
+    if " & " in condition or " | " in condition:
+        return f"({condition})"
+
+    return condition
 
 
 def _ginml_effect_levels(effects: Any) -> List[int]:
@@ -1387,64 +1306,6 @@ def _ginml_effect_levels(effects: Any) -> List[int]:
         levels.append(int(level))
 
     return levels
-
-
-def _multivalued_range_condition(
-    component: str,
-    *,
-    minimum: int,
-    maximum: int,
-    maxvalue: int,
-) -> str:
-    if minimum == 1 and maximum == 1 and maxvalue == 1:
-        return component
-
-    level_conditions = []
-
-    for level in range(minimum, maximum + 1):
-        if level == 0:
-            level_conditions.append(f"~{_threshold_component(component, 1)}")
-            continue
-
-        terms = [
-            _threshold_component(component, threshold)
-            for threshold in range(1, level + 1)
-        ]
-
-        if level < maxvalue:
-            terms.append(f"~{_threshold_component(component, level + 1)}")
-
-        level_conditions.append(_join_and(terms))
-
-    return f"({_join_or(level_conditions)})"
-
-
-def _threshold_component(component: str, threshold: int) -> str:
-    return f"{component}_b{threshold}"
-
-
-def _join_or(expressions: Iterable[str]) -> str:
-    expressions = [expression for expression in expressions if expression]
-
-    if not expressions:
-        return "0"
-
-    if len(expressions) == 1:
-        return expressions[0]
-
-    return " | ".join(f"({expression})" for expression in expressions)
-
-
-def _join_and(expressions: Iterable[str]) -> str:
-    expressions = [expression for expression in expressions if expression != "1"]
-
-    if "0" in expressions:
-        return "0"
-
-    if not expressions:
-        return "1"
-
-    return " & ".join(expressions)
 
 
 def _select_main_ginml_file(ginml_files: List[str]) -> str:
@@ -1759,9 +1620,6 @@ def _parse_state_assignment(
 
         component, value_text = item.split(";", maxsplit=1)
 
-        if component not in nodes:
-            raise ValueError(f"unknown state component {component!r}")
-
         if not value_text.isdigit():
             raise ValueError(
                 f"unsupported state value {value_text!r}: only Boolean "
@@ -1769,30 +1627,16 @@ def _parse_state_assignment(
                 "Hypercube values"
             )
 
-        component_value = int(value_text)
-        component_metadata = nodes.get(component)
-        boolean_component = component_names.get(component, component)
-        maxvalue = 1
+        state[component] = int(value_text)
 
-        if isinstance(component_metadata, Mapping):
-            maxvalue = int(component_metadata.get("maxvalue", 1))
-
-        if component_value > maxvalue:
-            raise ValueError(
-                f"unsupported state value {value_text!r} for {component!r}: "
-                f"expected a value between 0 and {maxvalue}"
-            )
-
-        if maxvalue == 1:
-            state[boolean_component] = component_value
-            continue
-
-        for threshold in range(1, maxvalue + 1):
-            state[_threshold_component(boolean_component, threshold)] = int(
-                component_value >= threshold
-            )
-
-    return state
+    return _encode_state(
+        state,
+        max_levels={
+            component: int(metadata.get("maxvalue", 1))
+            for component, metadata in nodes.items()
+        },
+        component_names=component_names,
+    )
 
 
 def _children(
