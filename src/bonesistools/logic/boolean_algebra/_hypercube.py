@@ -211,6 +211,117 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         for component, value in kwargs.items():
             self[component] = value
 
+    def rename(self, old: str, new: str) -> None:
+        """
+        Rename one explicitly specified hypercube component.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"Trp53": 1})
+        >>> hc.rename("Trp53", "TP53")
+        >>> hc
+        Hypercube(TP53=1)
+
+        Parameters
+        ----------
+        old: str
+            Component to rename.
+        new: str
+            New component name.
+
+        Raises
+        ------
+        TypeError
+            If `old` or `new` is not a string.
+        KeyError
+            If `old` is not explicitly specified in the hypercube.
+        ValueError
+            If `new` already exists.
+        """
+
+        if not isinstance(old, str):
+            raise TypeError(
+                f"unsupported argument type for 'old': "
+                f"expected {str} but received {type(old)}"
+            )
+
+        if not isinstance(new, str):
+            raise TypeError(
+                f"unsupported argument type for 'new': "
+                f"expected {str} but received {type(new)}"
+            )
+
+        if old == new:
+            return None
+
+        if old not in self:
+            raise KeyError(f"component {old!r} not found")
+
+        self.relabel({old: new})
+
+    def relabel(self, mapping: Mapping[str, str]) -> None:
+        """
+        Relabel several explicitly specified hypercube components.
+
+        Components absent from the hypercube are ignored. Relabeling must not
+        merge two explicitly specified components, because that would silently
+        drop or contradict one hypercube constraint.
+
+        Examples
+        --------
+        >>> hc = Hypercube({"Trp53": 1, "Myc": 0})
+        >>> hc.relabel({"Trp53": "TP53", "Myc": "MYC"})
+        >>> hc
+        Hypercube(TP53=1, MYC=0)
+
+        Parameters
+        ----------
+        mapping: Mapping[str, str]
+            Component rename mapping.
+
+        Raises
+        ------
+        TypeError
+            If `mapping` is not a mapping from strings to strings.
+        ValueError
+            If relabeling would merge two explicitly specified components.
+        """
+
+        if not isinstance(mapping, Mapping):
+            raise TypeError(
+                f"unsupported argument type for 'mapping': "
+                f"expected {Mapping} but received {type(mapping)}"
+            )
+
+        for old, new in mapping.items():
+            if not isinstance(old, str):
+                raise TypeError(
+                    "unsupported mapping key type: "
+                    f"expected {str} but received {type(old)}"
+                )
+            if not isinstance(new, str):
+                raise TypeError(
+                    "unsupported mapping value type: "
+                    f"expected {str} but received {type(new)}"
+                )
+
+        active_mapping = {
+            old: new for old, new in mapping.items() if old in self and old != new
+        }
+        if not active_mapping:
+            return None
+
+        renamed_components = [
+            active_mapping.get(component, component) for component in self._values
+        ]
+        if len(set(renamed_components)) != len(renamed_components):
+            raise ValueError("relabeling would merge hypercube components")
+
+        self._values = {
+            active_mapping.get(component, component): value
+            for component, value in self._values.items()
+        }
+
     def __repr__(self) -> str:
         """
         Return a representation of the hypercube.

@@ -30,6 +30,40 @@ class ExecutableModel:
     perturbations: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    def __repr__(self) -> str:
+        """
+        Return a compact representation of the executable model.
+
+        Large containers are summarized by their sizes to keep notebook
+        displays readable while preserving full access through attributes.
+        """
+
+        boolean_network = self.boolean_network
+        if boolean_network is None:
+            boolean_network_repr = "boolean_network=None"
+        else:
+            boolean_network_repr = (
+                f"boolean_network(components={len(boolean_network.components)})"
+            )
+
+        influence_graph = self.influence_graph
+        if influence_graph is None:
+            influence_graph_repr = "influence_graph=None"
+        else:
+            influence_graph_repr = (
+                f"influence_graph(nodes={influence_graph.number_of_nodes()}, "
+                f"edges={influence_graph.number_of_edges()})"
+            )
+
+        return (
+            f"{type(self).__name__}("
+            f"{boolean_network_repr}, "
+            f"{influence_graph_repr}, "
+            f"initial_states(hypercubes={len(self.initial_states)}), "
+            f"perturbations(n={len(self.perturbations)}), "
+            f"metadata(entries={len(self.metadata)}))"
+        )
+
     def get(self, attribute: str) -> Any:
         """
         Return an executable-model attribute or raise if it is unavailable.

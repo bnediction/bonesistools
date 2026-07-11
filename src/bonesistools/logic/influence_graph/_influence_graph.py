@@ -4183,7 +4183,7 @@ def _apply_family_node_rendering(
         return None
 
     default_attributes = {
-        "margin": "0",
+        "margin": "0.08,0.04",
         "shape": "box",
         "style": "rounded",
     }

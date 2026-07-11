@@ -252,8 +252,10 @@ layout data, annotations and other GINsim-specific sections.
 with:
 
 - `boolean_network`: a `BooleanNetwork` when rules can be safely converted;
-- `influence_graph`: an `InfluenceGraph` when signed interactions are present;
-- `initial_states`: named `Hypercube` objects when states are Boolean;
+- `influence_graph`: an `InfluenceGraph` aligned with the converted Boolean
+  network when available, or with signed GINML interactions otherwise;
+- `initial_states`: named `Hypercube` objects, with multi-valued levels encoded
+  through the same Boolean threshold variables as the network;
 - `perturbations`: parsed perturbation records when recognized;
 - `metadata`: supported and unsupported model metadata.
 
@@ -272,7 +274,6 @@ clear reason when the requested object is unavailable.
 GINML/ZGINML import is conservative. BoNesisTools does not try to fully
 reimplement GINsim.
 
-Signed interactions are converted to an `InfluenceGraph` when possible.
 Logical rules are converted to a `BooleanNetwork` only when they are directly
 representable or when a multi-valued component can be safely encoded with
 monotone Boolean threshold variables:
@@ -284,6 +285,18 @@ RA with maxvalue=2
 ```
 
 For example, `RA:2` is converted to `RA_b1 & RA_b2`.
+
+When this conversion succeeds, the `InfluenceGraph` uses the same Boolean
+components and rule dependencies. Attributes of a multi-valued GINML component
+are copied to each threshold node, while `ginml_component` and
+`ginml_threshold` record its origin:
+
+```text
+RA -> RA_b1, RA_b2
+```
+
+If Boolean conversion is unavailable, signed interactions from the original
+GINML graph are retained instead.
 
 Unsupported logical parameters or companion files are not silently discarded:
 they are reported in `metadata`. In that case, `boolean_network` may be `None`

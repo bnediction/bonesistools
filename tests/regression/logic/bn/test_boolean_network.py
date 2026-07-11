@@ -56,10 +56,12 @@ def _assert_most_permissive_stg(bn, expected_targets):
             if target == source:
                 continue
 
-            assert bn.reachability(
-                _configuration_from_bits(source),
-                _configuration_from_bits(target),
-            ) is (target in expected_targets[source])
+            for backend in ("auto", "asp", "hypercube"):
+                assert bn.reachability(
+                    _configuration_from_bits(source),
+                    _configuration_from_bits(target),
+                    backend=cast(Any, backend),
+                ) is (target in expected_targets[source])
 
 
 def test_boolean_network_coerces_string_rules():
@@ -1066,6 +1068,17 @@ def test_boolean_network_reachability_most_permissive_allows_reversible_space():
     )
 
 
+def test_boolean_network_reachability_most_permissive_rejects_self_support():
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    for backend in ("auto", "asp", "hypercube"):
+        assert not bn.reachability(
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 1},
+            backend=cast(Any, backend),
+        )
+
+
 def test_boolean_network_reachability_validate_options_and_states():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
 
@@ -1095,7 +1108,7 @@ def test_boolean_network_reachability_validate_options_and_states():
         bn.reachability(
             {"A": 0, "B": 0},
             {"A": 1, "B": 0},
-            backend=cast(Any, "asp"),
+            backend=cast(Any, "explicit"),
         )
 
     with pytest.raises(ValueError, match="initial_state must define fixed values"):

@@ -427,6 +427,19 @@ def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
     assert mouse_genesyn(interactions) == [("Trp53", "Nfkb1", {"sign": -1})]
     assert list(mouse_genesyn(("Tp53", "unknown"))) == ["Trp53", "unknown"]
 
+    hypercube = bt.logic.ba.Hypercube({"Tp53": 1, "NF-kappaB": 0, "unknown": "*"})
+    converted_hypercube = mouse_genesyn.convert_hypercube(hypercube, copy=True)
+    assert isinstance(converted_hypercube, bt.logic.ba.Hypercube)
+    assert converted_hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
+    assert hypercube == {"Tp53": 1, "NF-kappaB": 0, "unknown": "*"}
+
+    dispatched_hypercube = mouse_genesyn(hypercube)
+    assert isinstance(dispatched_hypercube, bt.logic.ba.Hypercube)
+    assert dispatched_hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
+
+    assert mouse_genesyn.convert_hypercube(hypercube, copy=False) is None
+    assert hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
+
 
 def test_gene_synonyms_convert_influence_graph_preserves_opposite_signs(
     mouse_genesyn,
@@ -471,6 +484,22 @@ def test_gene_synonyms_convert_influence_graph_ignores_duplicate_edges_after_rel
         ("a", "b", 1),
         ("b", "d", 1),
     ]
+
+
+def test_gene_synonyms_convert_hypercube_rejects_component_merges(
+    mouse_genesyn,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        _genesyn.GeneSynonyms,
+        "_GeneSynonyms__conversion_function",
+        lambda *args, **kwargs: (lambda gene, **_kwargs: {"a": "x", "b": "x"}[gene]),
+    )
+
+    hypercube = bt.logic.ba.Hypercube({"a": 0, "b": 1})
+
+    with pytest.raises(ValueError, match="merge hypercube components"):
+        mouse_genesyn.convert_hypercube(hypercube)
 
 
 def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
@@ -525,6 +554,13 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     assert mouse_genesyn.standardize_interaction_list(interactions) == [
         ("Trp53", "Nfkb1", {"sign": 1})
     ]
+
+    hypercube = bt.logic.ba.Hypercube({"Tp53": 1, "NF-kappaB": 0})
+    assert mouse_genesyn.standardize_hypercube(hypercube) == {
+        "Trp53": 1,
+        "Nfkb1": 0,
+    }
+    assert hypercube == {"Tp53": 1, "NF-kappaB": 0}
 
     with pytest.warns(FutureWarning):
         assert mouse_genesyn.get_gene_id("Tp53", gene_type="name") == "22059"

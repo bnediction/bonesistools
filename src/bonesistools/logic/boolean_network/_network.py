@@ -65,6 +65,7 @@ from ._dynamics import (
     _reachable_attractors_with_most_permissive_backend,
 )
 from ._most_permissive import (
+    _reachability_with_most_permissive_asp_backend,
     _reachability_with_most_permissive_hypercube_backend,
     _reachable_configurations_with_most_permissive_hypercube_backend,
 )
@@ -1259,7 +1260,7 @@ class BooleanNetwork(Dict[str, Expression]):
         target_state: HypercubeLike,
         *,
         update: Literal["most-permissive"] = "most-permissive",
-        backend: Literal["hypercube"] = "hypercube",
+        backend: Literal["auto", "hypercube", "asp"] = "auto",
     ) -> bool:
         """
         Test one-step reachability between two configurations.
@@ -1286,9 +1287,12 @@ class BooleanNetwork(Dict[str, Expression]):
             Target complete Boolean configuration.
         update: {"most-permissive"} (default: "most-permissive")
             Update semantics.
-        backend: {"hypercube"} (default: "hypercube")
-            Backend used for reachability. The `"hypercube"` backend uses the
-            compact most-permissive transition-space decomposition into closed
+        backend: {"auto", "hypercube", "asp"} (default: "auto")
+            Backend used for reachability. If `"auto"`, use `"asp"`.
+            The `"asp"` backend asks `clingo` to directly search for a
+            component set `K` satisfying the most-permissive transition
+            conditions. The `"hypercube"` backend uses the compact
+            most-permissive transition-space decomposition into closed
             hypercubes and irreversible components.
 
         Returns
@@ -1311,11 +1315,18 @@ class BooleanNetwork(Dict[str, Expression]):
         )
         _as_literal(
             backend,
-            choices=("hypercube",),
+            choices=("auto", "hypercube", "asp"),
             name="backend",
         )
 
         self.validate()
+
+        if backend in {"auto", "asp"}:
+            return _reachability_with_most_permissive_asp_backend(
+                self,
+                initial_state,
+                target_state,
+            )
 
         return _reachability_with_most_permissive_hypercube_backend(
             self,

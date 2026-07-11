@@ -54,6 +54,50 @@ def test_hypercube_copy_drop_and_update():
     assert hc == {"A": 0, "C": 1, "D": "*"}
 
 
+def test_hypercube_rename_and_relabel():
+    hc = bt.logic.ba.Hypercube({"Trp53": 1, "Myc": 0, "free": "*"})
+
+    hc.rename("Trp53", "TP53")
+    assert hc == {"TP53": 1, "Myc": 0, "free": "*"}
+
+    hc.relabel({"Myc": "MYC", "missing": "ignored"})
+    assert hc == {"TP53": 1, "MYC": 0, "free": "*"}
+
+    hc.relabel({"TP53": "MYC_old", "MYC": "TP53"})
+    assert hc == {"MYC_old": 1, "TP53": 0, "free": "*"}
+
+    hc.rename("free", "free")
+    assert hc == {"MYC_old": 1, "TP53": 0, "free": "*"}
+
+
+def test_hypercube_relabel_rejects_invalid_inputs_and_component_merges():
+    hc = bt.logic.ba.Hypercube({"A": 0, "B": 1, "C": "*"})
+
+    with pytest.raises(KeyError, match="component 'missing' not found"):
+        hc.rename("missing", "D")
+
+    with pytest.raises(ValueError, match="merge hypercube components"):
+        hc.rename("A", "B")
+
+    with pytest.raises(ValueError, match="merge hypercube components"):
+        hc.relabel({"A": "D", "B": "D"})
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'old'"):
+        hc.rename(cast(Any, 1), "D")
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'new'"):
+        hc.rename("A", cast(Any, 1))
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'mapping'"):
+        hc.relabel(cast(Any, object()))
+
+    with pytest.raises(TypeError, match="unsupported mapping key type"):
+        hc.relabel(cast(Any, {1: "D"}))
+
+    with pytest.raises(TypeError, match="unsupported mapping value type"):
+        hc.relabel(cast(Any, {"A": 1}))
+
+
 def test_hypercube_comparisons():
 
     fixed = bt.logic.ba.Hypercube({"A": 0, "B": 1})

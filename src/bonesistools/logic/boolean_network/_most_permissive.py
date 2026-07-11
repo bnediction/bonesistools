@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
+    Any,
     Dict,
     Iterable,
     Iterator,
@@ -15,6 +16,9 @@ from typing import (
     Tuple,
     cast,
 )
+
+from boolean import Expression
+from boolean.boolean import _FALSE, _TRUE
 
 from ..._compat import Literal
 from ..boolean_algebra import Hypercube, prime_implicants
@@ -37,6 +41,49 @@ def _reachability_with_most_permissive_hypercube_backend(
     return _most_permissive_transition_space(network, initial_state).contains(
         target_state
     )
+
+
+def _reachability_with_most_permissive_asp_backend(
+    network: "BooleanNetwork",
+    initial_state: HypercubeLike,
+    target_state: HypercubeLike,
+) -> bool:
+    """Test one-step most-permissive reachability with direct ASP search."""
+
+    components = tuple(network.keys())
+    initial_hypercube = _validate_complete_hypercube(
+        components,
+        initial_state,
+        name="initial_state",
+    )
+    target_hypercube = _validate_complete_hypercube(
+        components,
+        target_state,
+        name="target_state",
+    )
+
+    clingo = network._import_clingo()
+    control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
+        ["--models=1", "--warn=none"]
+    )
+    control.add(
+        "base",
+        [],
+        _most_permissive_reachability_asp_program(
+            network,
+            clingo=clingo,
+            components=components,
+            initial_state=initial_hypercube,
+            target_state=target_hypercube,
+        ),
+    )
+    control.ground([("base", [])])
+
+    with control.solve(yield_=True) as handle:
+        for _ in handle:
+            return True
+
+    return False
 
 
 def _reachable_configurations_with_most_permissive_hypercube_backend(
@@ -227,6 +274,172 @@ def _most_permissive_transition_space(
     )
 
 
+def _most_permissive_reachability_asp_program(
+    network: "BooleanNetwork",
+    *,
+    clingo: Any,
+    components: Tuple[str, ...],
+    initial_state: Hypercube,
+    target_state: Hypercube,
+) -> str:
+    """Build an ASP decision program for one-step MP reachability."""
+
+    facts = [
+        "opposite(0,1).",
+        "opposite(1,0).",
+        f"level_value(1..{len(components)}).",
+    ]
+
+    for component in components:
+        component_symbol = _asp_string(clingo, component)
+        initial_value = cast(int, initial_state[component].value)
+        target_value = cast(int, target_state[component].value)
+
+        facts.extend(
+            [
+                f"node({component_symbol}).",
+                f"initial({component_symbol},{initial_value}).",
+                f"target({component_symbol},{target_value}).",
+            ]
+        )
+
+    next_expression_id = 0
+    for target, rule in network.items():
+        target_symbol = _asp_string(clingo, target)
+        root_id, expression_facts, next_expression_id = _asp_expression_tree_facts(
+            network,
+            rule,
+            clingo=clingo,
+            next_expression_id=next_expression_id,
+        )
+        facts.append(f"root({target_symbol},{root_id}).")
+        facts.extend(expression_facts)
+
+    return "\n".join(
+        [
+            *facts,
+            """
+            { free(N) } :- node(N).
+            1 { level(N,L) : level_value(L) } 1 :- free(N).
+
+            changed(N) :- target(N,V), initial(N,U), opposite(V,U).
+            :- changed(N), not free(N).
+
+            lower(L,N) :- level(L,A), level(N,B), A < B.
+            derivation_free_source(N,L) :- free(N), free(L), lower(L,N).
+
+            1 { derivation_value(N,L,0); derivation_value(N,L,1) } 1 :-
+                free(N), node(L), derivation_free_source(N,L).
+            derivation_value(N,L,V) :-
+                free(N), node(L), initial(L,V),
+                not derivation_free_source(N,L).
+
+            1 { final_value(N,L,0); final_value(N,L,1) } 1 :-
+                free(N), node(L), free(L).
+            final_value(N,L,V) :-
+                free(N), node(L), initial(L,V), not free(L).
+
+            derivation_eval(Q,E,V) :- free(Q), const_expr(E,V).
+            derivation_eval(Q,E,V) :-
+                free(Q), symbol_expr(E,N), derivation_value(Q,N,V).
+            derivation_eval(Q,E,V) :-
+                free(Q), not_expr(E,C), derivation_eval(Q,C,W), opposite(W,V).
+            derivation_eval(Q,E,0) :-
+                free(Q), and_expr(E), arg(E,C), derivation_eval(Q,C,0).
+            derivation_eval(Q,E,1) :-
+                free(Q), and_expr(E), derivation_eval(Q,C,1) : arg(E,C).
+            derivation_eval(Q,E,1) :-
+                free(Q), or_expr(E), arg(E,C), derivation_eval(Q,C,1).
+            derivation_eval(Q,E,0) :-
+                free(Q), or_expr(E), derivation_eval(Q,C,0) : arg(E,C).
+
+            final_eval(Q,E,V) :- free(Q), const_expr(E,V).
+            final_eval(Q,E,V) :- free(Q), symbol_expr(E,N), final_value(Q,N,V).
+            final_eval(Q,E,V) :-
+                free(Q), not_expr(E,C), final_eval(Q,C,W), opposite(W,V).
+            final_eval(Q,E,0) :-
+                free(Q), and_expr(E), arg(E,C), final_eval(Q,C,0).
+            final_eval(Q,E,1) :-
+                free(Q), and_expr(E), final_eval(Q,C,1) : arg(E,C).
+            final_eval(Q,E,1) :-
+                free(Q), or_expr(E), arg(E,C), final_eval(Q,C,1).
+            final_eval(Q,E,0) :-
+                free(Q), or_expr(E), final_eval(Q,C,0) : arg(E,C).
+
+            :- free(N), initial(N,V), opposite(V,W), root(N,E),
+               not derivation_eval(N,E,W).
+            :- free(N), target(N,V), root(N,E), not final_eval(N,E,V).
+            """,
+        ]
+    )
+
+
+def _asp_expression_tree_facts(
+    network: "BooleanNetwork",
+    expr: Expression,
+    *,
+    clingo: Any,
+    next_expression_id: int,
+) -> Tuple[int, Tuple[str, ...], int]:
+    """Return ASP facts encoding one Boolean expression tree."""
+
+    expression_id = next_expression_id
+    next_expression_id += 1
+
+    if isinstance(expr, _TRUE):
+        return expression_id, (f"const_expr({expression_id},1).",), next_expression_id
+
+    if isinstance(expr, _FALSE):
+        return expression_id, (f"const_expr({expression_id},0).",), next_expression_id
+
+    expr_any: Any = expr
+
+    if isinstance(expr_any, network.ba.NOT):
+        child_id, child_facts, next_expression_id = _asp_expression_tree_facts(
+            network,
+            expr_any.args[0],
+            clingo=clingo,
+            next_expression_id=next_expression_id,
+        )
+
+        return (
+            expression_id,
+            (f"not_expr({expression_id},{child_id}).", *child_facts),
+            next_expression_id,
+        )
+
+    if isinstance(expr_any, network.ba.AND) or isinstance(expr_any, network.ba.OR):
+        expression_facts = [
+            f"{'and' if isinstance(expr_any, network.ba.AND) else 'or'}_expr("
+            f"{expression_id})."
+        ]
+
+        for operand in expr_any.args:
+            child_id, child_facts, next_expression_id = _asp_expression_tree_facts(
+                network,
+                operand,
+                clingo=clingo,
+                next_expression_id=next_expression_id,
+            )
+            expression_facts.append(f"arg({expression_id},{child_id}).")
+            expression_facts.extend(child_facts)
+
+        return expression_id, tuple(expression_facts), next_expression_id
+
+    if expr_any.isliteral:
+        return (
+            expression_id,
+            (
+                "symbol_expr("
+                f"{expression_id},{_asp_string(clingo, str(expr_any.obj))}"
+                ").",
+            ),
+            next_expression_id,
+        )
+
+    raise ValueError(f"invalid Boolean expression for ASP reachability: {expr!r}")
+
+
 def _validate_complete_hypercube(
     components: Tuple[str, ...],
     state: HypercubeLike,
@@ -397,3 +610,9 @@ def _implicant_intersects_hypercube(
                 return False
 
     return True
+
+
+def _asp_string(clingo: Any, value: str) -> str:
+    """Return a clingo string literal."""
+
+    return str(clingo.String(value))

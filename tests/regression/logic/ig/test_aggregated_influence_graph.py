@@ -554,7 +554,7 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
         ("g1|g2", "out", "2", "tee"),
     ]
     assert _rendered_nodes(family)["g1|g2"]["label"] == "g1|g2"
-    assert _rendered_nodes(family)["g1|g2"]["margin"] == "0"
+    assert _rendered_nodes(family)["g1|g2"]["margin"] == "0.08,0.04"
     assert _rendered_nodes(family)["g1|g2"]["shape"] == "box"
     assert _rendered_nodes(family)["g1|g2"]["style"] == "rounded"
 
@@ -1001,7 +1001,7 @@ def test_to_pydot_supports_collapse_modes():
     family_node = cast(Any, family_nodes["g1|g2"])
 
     assert _pydot_get_string(family_node, "get_label") == "g1|g2"
-    assert _pydot_get_string(family_node, "get_margin") == "0"
+    assert _pydot_get_string(family_node, "get_margin") == "0.08,0.04"
     assert _pydot_get_string(family_node, "get_shape") == "box"
     assert _pydot_get_string(family_node, "get_style") == "rounded"
 
@@ -1039,7 +1039,7 @@ def test_to_graphviz_wraps_long_family_labels(fake_graphviz):
     assert "\n" in label
     assert label.replace("\n", "|") == family_name
     assert all(len(line) <= 40 for line in label.splitlines())
-    assert _rendered_nodes(rendered)[family_name]["margin"] == "0"
+    assert _rendered_nodes(rendered)[family_name]["margin"] == "0.08,0.04"
     assert _rendered_nodes(rendered)[family_name]["shape"] == "box"
     assert _rendered_nodes(rendered)[family_name]["style"] == "rounded"
 

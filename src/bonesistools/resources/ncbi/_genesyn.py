@@ -17,6 +17,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from ...logic.boolean_algebra import Hypercube
     from ...logic.boolean_network._typing import BooleanNetworkLike
 
 import copy
@@ -369,7 +370,13 @@ class GeneSynonyms:
 
     def __call__(
         self,
-        data: Union[InteractionList, DataFrame, Graph[Any], "BooleanNetworkLike"],
+        data: Union[
+            InteractionList,
+            DataFrame,
+            Graph[Any],
+            "Hypercube",
+            "BooleanNetworkLike",
+        ],
         *args: Any,
         **kwargs: Any,
     ):
@@ -382,7 +389,8 @@ class GeneSynonyms:
 
         Parameters
         ----------
-        data: sequence, InteractionList, DataFrame, Graph or BooleanNetworkLike
+        data: sequence, InteractionList, DataFrame, Graph, Hypercube or
+            BooleanNetworkLike
             Object containing gene identifiers to convert.
         *args: Any
             Positional arguments forwarded to the selected conversion method.
@@ -397,6 +405,7 @@ class GeneSynonyms:
 
         """
 
+        from ...logic.boolean_algebra import Hypercube
         from ...logic.boolean_network._typing import is_boolean_network_like
 
         if _is_interaction_list(data):
@@ -413,13 +422,15 @@ class GeneSynonyms:
             return self.convert_df(data, *args, **kwargs)
         elif isinstance(data, Graph):
             return self.convert_graph(data, *args, **kwargs)
+        elif isinstance(data, Hypercube):
+            return self.convert_hypercube(data, *args, **kwargs)
         elif is_boolean_network_like(data):
             return self.convert_bn(data, *args, **kwargs)
         else:
             raise TypeError(
                 f"unsupported argument type for 'data': "
-                f"expected sequence, {DataFrame}, {Graph} or Boolean network-like "
-                f"object but received {type(data)}"
+                f"expected sequence, {DataFrame}, {Graph}, Hypercube or "
+                f"Boolean network-like object but received {type(data)}"
             )
 
     @support_legacy_gene_synonyms_args
@@ -545,6 +556,74 @@ class GeneSynonyms:
         aliases = sequence_constructor(aliases)
 
         return aliases
+
+    @support_legacy_gene_synonyms_args
+    def convert_hypercube(
+        self,
+        hypercube: "Hypercube",
+        input_identifier_type: Union[
+            Literal["name", "gene_id", "ensembl_id"], str
+        ] = "name",
+        output_identifier_type: Union[
+            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
+        ] = "official_name",
+        copy: bool = True,
+    ) -> Union["Hypercube", None]:
+        """
+        Convert gene identifiers in hypercube component names.
+
+        Parameters
+        ----------
+        hypercube: Hypercube
+            Hypercube whose explicitly specified components are converted.
+        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
+        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'official_name')
+            Output gene identifier type. Valid database-specific values are
+            listed in `databases`.
+        copy: bool (default: True)
+            Return a copy instead of modifying `hypercube`.
+
+        Returns
+        -------
+        Hypercube or None
+            Converted hypercube if `copy=True`; otherwise None.
+
+        Raises
+        ------
+        TypeError
+            If `hypercube` is not a Hypercube.
+        ValueError
+            If identifier conversion would merge two explicitly specified
+            hypercube components.
+        """
+
+        from ...logic.boolean_algebra import Hypercube
+
+        if not isinstance(hypercube, Hypercube):
+            raise TypeError(
+                f"unsupported argument type for 'hypercube': "
+                f"expected {Hypercube} but received {type(hypercube)}"
+            )
+
+        alias_conversion = self.__conversion_function(output_identifier_type)
+        aliases_mapping = {}
+        for component in hypercube:
+            output_alias = alias_conversion(
+                gene=component,
+                input_identifier_type=input_identifier_type,
+            )
+            aliases_mapping[component] = (
+                component if output_alias is None else output_alias
+            )
+
+        converted_hypercube = hypercube.copy() if copy else hypercube
+        converted_hypercube.relabel(aliases_mapping)
+
+        return converted_hypercube if copy else None
 
     @support_legacy_gene_synonyms_args
     def convert_interaction_list(
@@ -870,6 +949,34 @@ class GeneSynonyms:
             input_identifier_type="name",
             output_identifier_type="official_name",
             keep_if_missing=keep_if_missing,
+        )
+
+    def standardize_hypercube(
+        self,
+        hypercube: "Hypercube",
+        copy: bool = True,
+    ) -> Union["Hypercube", None]:
+        """
+        Standardize hypercube component names to official gene names.
+
+        Parameters
+        ----------
+        hypercube: Hypercube
+            Hypercube whose explicitly specified components are standardized.
+        copy: bool (default: True)
+            Return a copy instead of modifying `hypercube`.
+
+        Returns
+        -------
+        Hypercube or None
+            Standardized hypercube if `copy=True`; otherwise None.
+        """
+
+        return self.convert_hypercube(
+            hypercube=hypercube,
+            input_identifier_type="name",
+            output_identifier_type="official_name",
+            copy=copy,
         )
 
     def standardize_interaction_list(
