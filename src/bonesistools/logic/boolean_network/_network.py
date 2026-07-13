@@ -61,6 +61,7 @@ from ..influence_graph._influence_graph import (
 )
 from ..influence_graph._svg import SvgLength, scale_svg
 from ._dynamics import (
+    _reachability_with_bdd_backend,
     _reachable_attractors_with_bdd_backend,
     _reachable_attractors_with_explicit_backend,
     _reachable_attractors_with_most_permissive_backend,
@@ -1202,12 +1203,14 @@ class BooleanNetwork(Dict[str, Expression]):
         initial_state: HypercubeLike,
         target_state: HypercubeLike,
         *,
-        update: Literal["most-permissive"] = "most-permissive",
-        backend: Literal["auto", "hypercube", "asp"] = "auto",
+        update: Literal[
+            "asynchronous", "general", "most-permissive"
+        ] = "most-permissive",
+        backend: Literal["auto", "bdd", "hypercube", "asp"] = "auto",
         quantifier: Literal["exists", "robust"] = "robust",
     ) -> bool:
         """
-        Test one-step reachability between two Boolean states.
+        Test reachability between two Boolean configurations.
 
         Examples
         --------
@@ -1223,6 +1226,15 @@ class BooleanNetwork(Dict[str, Expression]):
         >>> bn.reachability({"A": 0, "B": 0}, {"A": 0, "B": 1})
         False
 
+        Asynchronous reachability uses a symbolic BDD backward closure:
+
+        >>> bn.reachability(
+        ...     {"A": 0, "B": 0},
+        ...     {"A": 1, "B": 1},
+        ...     update="asynchronous",
+        ... )
+        True
+
         Parameters
         ----------
         initial_state: HypercubeLike
@@ -1231,10 +1243,15 @@ class BooleanNetwork(Dict[str, Expression]):
         target_state: HypercubeLike
             Target Boolean state. A partial state represents all compatible
             complete configurations.
-        update: {"most-permissive"} (default: "most-permissive")
+        update: {"asynchronous", "general", "most-permissive"}
+            (default: "most-permissive")
             Update semantics.
-        backend: {"auto", "hypercube", "asp"} (default: "auto")
-            Backend used for reachability. If `"auto"`, use `"asp"`.
+        backend: {"auto", "bdd", "hypercube", "asp"} (default: "auto")
+            Backend used for reachability. If `"auto"`, use `"bdd"` for
+            asynchronous and general dynamics and `"asp"` for most-permissive
+            dynamics. The `"bdd"` backend computes the states satisfying
+            `EF(target)` through symbolic forward and backward closures of the
+            selected transition relation.
             The `"asp"` backend asks `clingo` to directly search for a
             component set `K` satisfying the most-permissive transition
             conditions. The `"hypercube"` backend uses the compact
@@ -1261,23 +1278,38 @@ class BooleanNetwork(Dict[str, Expression]):
             invalid, `backend` is invalid or `quantifier` is invalid.
         """
 
-        _as_literal(
+        update = _as_literal(
             update,
-            choices=("most-permissive",),
+            choices=("asynchronous", "general", "most-permissive"),
             name="update",
         )
-        _as_literal(
-            backend,
-            choices=("auto", "hypercube", "asp"),
-            name="backend",
-        )
-        _as_literal(
+        quantifier = _as_literal(
             quantifier,
             choices=("exists", "robust"),
             name="quantifier",
         )
 
         self.validate()
+
+        if update != "most-permissive":
+            _as_literal(
+                backend,
+                choices=("auto", "bdd"),
+                name="backend",
+            )
+            return _reachability_with_bdd_backend(
+                self,
+                initial_state,
+                target_state,
+                update=update,
+                quantifier=quantifier,
+            )
+
+        backend = _as_literal(
+            backend,
+            choices=("auto", "hypercube", "asp"),
+            name="backend",
+        )
 
         if quantifier == "robust" and backend == "hypercube":
             raise ValueError(

@@ -200,6 +200,33 @@ robdd.configurations()
 
 Use `to_networkx()` to inspect the decision graph and its 0/1 branches.
 
+## Reachability
+
+`BooleanNetwork.reachability(...)` tests whether a target configuration or
+subspace is reachable from an initial configuration or subspace.
+
+```python
+bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+bn.reachability(
+    {"A": 0, "B": 1},
+    {"A": 1, "B": 1},
+    update="asynchronous",
+)
+# True
+```
+
+For asynchronous and general dynamics, the `"bdd"` backend computes the CTL
+set `EF(target)` symbolically. It first computes the states reachable from the
+initial subspace, then restricts the backward fixed point to those states. It
+does not enumerate the state-transition graph. For most-permissive dynamics,
+the `"asp"` and `"hypercube"` backends remain available.
+
+With partial configurations, `quantifier="exists"` asks whether at least one
+compatible initial configuration reaches the target subspace.
+`quantifier="robust"` asks whether every compatible initial configuration
+reaches at least one configuration in the target subspace.
+
 ## Reachable Attractors
 
 `BooleanNetwork.reachable_attractors(...)` returns exact reachable attractors as

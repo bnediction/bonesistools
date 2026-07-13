@@ -723,7 +723,7 @@ def test_boolean_network_reachable_attractors_bdd_reports_missing_dd(
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
     def missing_dd(name: str) -> Any:
-        if name == "dd.autoref":
+        if name in {"dd.autoref", "dd.cudd"}:
             raise ImportError("missing dd")
         return __import__(name)
 
@@ -1061,6 +1061,167 @@ def test_boolean_network_reachable_attractors_most_permissive_defaults_to_free_s
     )
 
 
+def test_boolean_network_reachability_asynchronous_uses_bdd_backward_closure():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
+    initial = {"A": 0, "B": 1}
+
+    assert bn.reachability(
+        initial,
+        {"A": 0, "B": 1},
+        update="asynchronous",
+    )
+    assert bn.reachability(
+        initial,
+        {"A": 0, "B": 0},
+        update="asynchronous",
+    )
+    assert bn.reachability(
+        initial,
+        {"A": 1, "B": 1},
+        update="asynchronous",
+    )
+    assert not bn.reachability(
+        initial,
+        {"A": 1, "B": 0},
+        update="asynchronous",
+    )
+
+
+def test_boolean_network_reachability_general_updates_multiple_components():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
+    initial = {"A": 0, "B": 0}
+    target = {"A": 1, "B": 1}
+
+    assert bn.reachability(initial, target, update="general")
+    assert not bn.reachability(initial, target, update="asynchronous")
+
+
+def test_boolean_network_reachability_general_quantifies_partial_states():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
+
+    assert bn.reachability(
+        {},
+        {"A": 1, "B": 1},
+        update="general",
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        {},
+        {"A": 1, "B": 1},
+        update="general",
+        quantifier="robust",
+    )
+
+
+def test_general_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
+    original = _dynamics._bdd_general_transition_partitions
+    calls = 0
+
+    def counted_transition_partitions(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        _dynamics,
+        "_bdd_general_transition_partitions",
+        counted_transition_partitions,
+    )
+
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="general",
+    )
+
+    assert transition_system.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+        quantifier="robust",
+    )
+    assert transition_system.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 1},
+        quantifier="robust",
+    )
+    assert calls == 1
+
+
+def test_bdd_transition_system_reuses_compiled_relation(monkeypatch):
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
+    original = _dynamics._bdd_transition_relation
+    calls = 0
+
+    def counted_transition_relation(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        _dynamics,
+        "_bdd_transition_relation",
+        counted_transition_relation,
+    )
+
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="asynchronous",
+    )
+
+    assert transition_system.reachability(
+        {"A": 0, "B": 1},
+        {"A": 0, "B": 0},
+        quantifier="robust",
+    )
+    assert transition_system.reachability(
+        {"A": 0, "B": 1},
+        {"A": 1, "B": 1},
+        quantifier="robust",
+    )
+    assert calls == 1
+
+
+def test_boolean_network_reachability_asynchronous_quantifies_partial_states():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "A"})
+
+    assert bn.reachability(
+        {},
+        {"A": 1},
+        update="asynchronous",
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        {},
+        {"A": 1},
+        update="asynchronous",
+        quantifier="robust",
+    )
+
+
+def test_boolean_network_reachability_asynchronous_reports_missing_dd(monkeypatch):
+    bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
+
+    def missing_dd(name: str) -> Any:
+        if name in {"dd.autoref", "dd.cudd"}:
+            raise ImportError("missing dd")
+        return __import__(name)
+
+    monkeypatch.setattr(_dynamics, "import_module", missing_dd)
+
+    with pytest.raises(ImportError, match="backend='bdd'"):
+        bn.reachability(
+            {"A": 0},
+            {"A": 1},
+            update="asynchronous",
+        )
+
+
 def test_boolean_network_reachability_most_permissive_tracks_irreversibles():
     bn = bt.logic.bn.BooleanNetwork({"A": 1, "B": "A"})
 
@@ -1204,7 +1365,15 @@ def test_boolean_network_reachability_validate_options_and_states():
         bn.reachability(
             {"A": 0, "B": 0},
             {"A": 1, "B": 0},
-            update=cast(Any, "asynchronous"),
+            update=cast(Any, "synchronous"),
+        )
+
+    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
+        bn.reachability(
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 0},
+            update="asynchronous",
+            backend=cast(Any, "asp"),
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'backend'"):

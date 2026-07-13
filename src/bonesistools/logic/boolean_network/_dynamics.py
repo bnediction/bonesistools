@@ -21,10 +21,11 @@ from typing import (
 from ..._compat import Literal
 from ..boolean_algebra import ConfigurationSet, Hypercube
 from ..boolean_algebra._typing import HypercubeLike
-from ._most_permissive_asp import (
+from ._most_permissive import (
     _asp_string,
     _boolean_function_asp_facts,
     _boolean_function_evaluation_asp_rules,
+    _validate_hypercube,
 )
 
 if TYPE_CHECKING:
@@ -32,6 +33,288 @@ if TYPE_CHECKING:
 
 _StateBits = int
 _CompiledRule = Callable[[_StateBits], int]
+
+
+class _BDDTransitionSystem:
+    """Compiled symbolic transition system backed by binary decision diagrams."""
+
+    def __init__(
+        self,
+        network: "BooleanNetwork",
+        *,
+        update: Literal["asynchronous", "synchronous", "general"],
+    ) -> None:
+
+        bdd_module = _import_dd_backend()
+        self._bdd = bdd_module.BDD()
+        self._and_exists = getattr(bdd_module, "and_exists", None)
+        self._update = update
+        self._components = tuple(network.keys())
+        self._current_variables = tuple(
+            f"x{index}" for index in range(len(self._components))
+        )
+        self._next_variables = tuple(
+            f"y{index}" for index in range(len(self._components))
+        )
+        ordered_variables = tuple(
+            variable
+            for pair in zip(self._current_variables, self._next_variables)
+            for variable in pair
+        )
+        self._bdd.declare(*ordered_variables)
+        self._transition = None
+        self._general_updates = None
+        self._general_clusters: Tuple[Any, ...] = ()
+        self._general_forward_quantification: Tuple[Tuple[str, ...], ...] = ()
+        if update == "general":
+            (
+                self._general_updates,
+                self._general_clusters,
+                self._general_forward_quantification,
+            ) = _bdd_general_transition_partitions(
+                network,
+                bdd=self._bdd,
+                components=self._components,
+                current_vars=self._current_variables,
+                next_vars=self._next_variables,
+            )
+        else:
+            self._transition = _bdd_transition_relation(
+                network,
+                bdd=self._bdd,
+                components=self._components,
+                current_vars=self._current_variables,
+                next_vars=self._next_variables,
+                update=update,
+            )
+        self._rename_current_to_next = dict(
+            zip(self._current_variables, self._next_variables)
+        )
+        self._rename_next_to_current = dict(
+            zip(self._next_variables, self._current_variables)
+        )
+
+    @property
+    def components(self) -> Tuple[str, ...]:
+        """Return components in BDD variable order."""
+
+        return self._components
+
+    def reachability(
+        self,
+        initial_state: HypercubeLike,
+        target_state: HypercubeLike,
+        *,
+        quantifier: Literal["exists", "robust"],
+    ) -> bool:
+        """Test whether initial configurations can reach a target subspace."""
+
+        initial_hypercube = _validate_hypercube(
+            self._components,
+            initial_state,
+            name="initial_state",
+        )
+        initial = self._encode_hypercube(initial_hypercube)
+        target = self._encode_configuration(target_state, name="target_state")
+        reachable_from_initial = self._forward_reachable_states(initial)
+        reachable_target = reachable_from_initial & target
+
+        if reachable_target == self._bdd.false:
+            return False
+
+        initial_is_concrete = (
+            initial_hypercube.components == frozenset(self._components)
+            and initial_hypercube.is_fully_specified
+        )
+        if quantifier == "exists" or initial_is_concrete:
+            return True
+
+        states_reaching_target = reachable_target
+
+        while True:
+            if self._matches_reachability_quantifier(
+                initial,
+                states_reaching_target,
+                quantifier=quantifier,
+            ):
+                return True
+
+            predecessors = self._predecessors(states_reaching_target)
+            predecessors &= reachable_from_initial
+            updated = states_reaching_target | predecessors
+            if updated == states_reaching_target:
+                return False
+
+            states_reaching_target = updated
+
+    def reachable_state_bits(
+        self,
+        initial_states: ConfigurationSet,
+    ) -> Tuple[_StateBits, ...]:
+        """Return bitsets for states reachable from initial configurations."""
+
+        initial = self._encode_configurations(initial_states)
+        reachable = self._forward_reachable_states(initial)
+        return self._decode_state_bits(reachable)
+
+    def _encode_configuration(
+        self,
+        configuration: HypercubeLike,
+        *,
+        name: str,
+    ) -> Any:
+        """Encode one possibly partial Boolean configuration."""
+
+        hypercube = _validate_hypercube(
+            self._components,
+            configuration,
+            name=name,
+        )
+        return self._encode_hypercube(hypercube)
+
+    def _encode_hypercube(self, hypercube: Hypercube) -> Any:
+        """Encode one validated Boolean hypercube."""
+
+        return self._encode_configurations(
+            ConfigurationSet(self._components, [hypercube])
+        )
+
+    def _encode_configurations(self, configurations: ConfigurationSet) -> Any:
+        """Encode a ConfigurationSet as a BDD over current variables."""
+
+        states = self._bdd.false
+        for hypercube in configurations._as_hypercubes():
+            state = self._bdd.true
+            for component, current_variable in zip(
+                self._components,
+                self._current_variables,
+            ):
+                if component not in hypercube:
+                    continue
+
+                value = hypercube[component]
+                if value.is_fixed:
+                    variable = self._bdd.var(current_variable)
+                    state &= variable if value.value else ~variable
+
+            states |= state
+
+        return states
+
+    def _forward_reachable_states(self, initial: Any) -> Any:
+        """Compute the symbolic forward reachability fixed point."""
+
+        reachable = initial
+        frontier = initial
+
+        while frontier != self._bdd.false:
+            successors = self._successors(frontier)
+            new_frontier = successors & ~reachable
+            if new_frontier == self._bdd.false:
+                break
+
+            reachable |= new_frontier
+            frontier = new_frontier
+
+        return reachable
+
+    def _successors(self, configurations: Any) -> Any:
+        """Return symbolic successors of a configuration set."""
+
+        if self._update == "general":
+            successors = configurations & self._general_updates
+            for cluster, quantified_variables in zip(
+                self._general_clusters,
+                self._general_forward_quantification,
+            ):
+                if quantified_variables:
+                    successors = self._relational_product(
+                        successors,
+                        cluster,
+                        quantified_variables,
+                    )
+                else:
+                    successors &= cluster
+        else:
+            successors = self._relational_product(
+                configurations,
+                self._transition,
+                self._current_variables,
+            )
+
+        return self._bdd.let(
+            self._rename_next_to_current,
+            successors,
+        )
+
+    def _predecessors(self, configurations: Any) -> Any:
+        """Return symbolic predecessors of a configuration set."""
+
+        configurations_next = self._bdd.let(
+            self._rename_current_to_next,
+            configurations,
+        )
+        if self._update == "general":
+            predecessors = configurations_next & self._general_updates
+            for cluster, next_variable in zip(
+                self._general_clusters,
+                self._next_variables,
+            ):
+                predecessors = self._relational_product(
+                    predecessors,
+                    cluster,
+                    (next_variable,),
+                )
+            return predecessors
+
+        return self._relational_product(
+            self._transition,
+            configurations_next,
+            self._next_variables,
+        )
+
+    def _relational_product(
+        self,
+        left: Any,
+        right: Any,
+        quantified_variables: Tuple[str, ...],
+    ) -> Any:
+        """Conjoin two BDDs while existentially quantifying variables."""
+
+        if self._and_exists is not None:
+            return self._and_exists(left, right, quantified_variables)
+
+        return self._bdd.exist(quantified_variables, left & right)
+
+    def _matches_reachability_quantifier(
+        self,
+        initial: Any,
+        states_reaching_target: Any,
+        *,
+        quantifier: Literal["exists", "robust"],
+    ) -> bool:
+        """Test whether the current backward closure answers the query."""
+
+        if quantifier == "exists":
+            return initial & states_reaching_target != self._bdd.false
+
+        return initial & ~states_reaching_target == self._bdd.false
+
+    def _decode_state_bits(self, states: Any) -> Tuple[_StateBits, ...]:
+        """Decode a BDD state set into sorted bitsets."""
+
+        decoded = []
+        for assignment in self._bdd.pick_iter(
+            states,
+            care_vars=self._current_variables,
+        ):
+            state_bits = 0
+            for index, current_variable in enumerate(self._current_variables):
+                if assignment.get(current_variable, False):
+                    state_bits |= 1 << index
+            decoded.append(state_bits)
+
+        return tuple(sorted(decoded))
 
 
 def _reachable_attractors_with_bdd_backend(
@@ -42,43 +325,12 @@ def _reachable_attractors_with_bdd_backend(
 ) -> Tuple[ConfigurationSet, ...]:
     """Compute reachable attractors through a BDD reachability set."""
 
-    bdd_module = _import_dd_autoref()
-    bdd = bdd_module.BDD()
-    components = tuple(network.keys())
-    current_vars = tuple(f"x{index}" for index in range(len(components)))
-    next_vars = tuple(f"y{index}" for index in range(len(components)))
-
-    ordered_vars = tuple(
-        variable for pair in zip(current_vars, next_vars) for variable in pair
-    )
-    bdd.declare(*ordered_vars)
-
-    transition = _bdd_transition_relation(
+    transition_system = _BDDTransitionSystem(
         network,
-        bdd=bdd,
-        components=components,
-        current_vars=current_vars,
-        next_vars=next_vars,
         update=update,
     )
-    initial = _bdd_initial_states(
-        bdd=bdd,
-        components=components,
-        current_vars=current_vars,
-        initial_states=initial_states,
-    )
-    reachable = _bdd_reachable_states(
-        bdd=bdd,
-        initial=initial,
-        transition=transition,
-        current_vars=current_vars,
-        next_vars=next_vars,
-    )
-    reachable_state_bits = _bdd_state_bits(
-        bdd=bdd,
-        states=reachable,
-        current_vars=current_vars,
-    )
+    components = transition_system.components
+    reachable_state_bits = transition_system.reachable_state_bits(initial_states)
 
     compiled_rules = _compile_bitset_rules(network, components)
     successors = {
@@ -95,6 +347,27 @@ def _reachable_attractors_with_bdd_backend(
     return tuple(
         _configuration_set_from_state_bits(component, components)
         for component in sorted(terminal_components, key=lambda states: min(states))
+    )
+
+
+def _reachability_with_bdd_backend(
+    network: "BooleanNetwork",
+    initial_state: HypercubeLike,
+    target_state: HypercubeLike,
+    *,
+    update: Literal["asynchronous", "general"],
+    quantifier: Literal["exists", "robust"],
+) -> bool:
+    """Test reachability through a symbolic BDD backward closure."""
+
+    transition_system = _BDDTransitionSystem(
+        network,
+        update=update,
+    )
+    return transition_system.reachability(
+        initial_state,
+        target_state,
+        quantifier=quantifier,
     )
 
 
@@ -142,8 +415,14 @@ def _reachable_attractors_with_explicit_backend(
     )
 
 
-def _import_dd_autoref() -> Any:
-    """Import the optional BDD backend."""
+def _import_dd_backend() -> Any:
+    """Import the fastest available optional BDD backend."""
+
+    try:
+        return import_module("dd.cudd")
+
+    except (ImportError, OSError):
+        pass
 
     try:
         return import_module("dd.autoref")
@@ -162,7 +441,7 @@ def _bdd_transition_relation(
     components: Tuple[str, ...],
     current_vars: Tuple[str, ...],
     next_vars: Tuple[str, ...],
-    update: Literal["asynchronous", "synchronous", "general"],
+    update: Literal["asynchronous", "synchronous"],
 ) -> Any:
     """Build a transition relation as a BDD."""
 
@@ -181,42 +460,70 @@ def _bdd_transition_relation(
 
         return relation
 
-    if update == "asynchronous":
-        relation = bdd.false
-        unchanged_prefixes = [bdd.true]
-        for current_value, next_value in zip(current_values, next_values):
-            unchanged_prefixes.append(
-                unchanged_prefixes[-1] & _bdd_equivalence(next_value, current_value)
-            )
+    relation = bdd.false
+    unchanged_prefixes = [bdd.true]
+    for current_value, next_value in zip(current_values, next_values):
+        unchanged_prefixes.append(
+            unchanged_prefixes[-1] & _bdd_equivalence(next_value, current_value)
+        )
 
-        unchanged_suffixes = [bdd.true] * (len(components) + 1)
-        for index in range(len(components) - 1, -1, -1):
-            unchanged_suffixes[index] = unchanged_suffixes[index + 1] & (
-                _bdd_equivalence(next_values[index], current_values[index])
-            )
+    unchanged_suffixes = [bdd.true] * (len(components) + 1)
+    for index in range(len(components) - 1, -1, -1):
+        unchanged_suffixes[index] = unchanged_suffixes[index + 1] & (
+            _bdd_equivalence(next_values[index], current_values[index])
+        )
 
-        for updated_index, (current_value, next_value, rule) in enumerate(
-            zip(current_values, next_values, rules)
-        ):
-            transition = _bdd_exclusive_or(current_value, rule)
-            transition &= _bdd_equivalence(next_value, rule)
-            transition &= unchanged_prefixes[updated_index]
-            transition &= unchanged_suffixes[updated_index + 1]
+    for updated_index, (current_value, next_value, rule) in enumerate(
+        zip(current_values, next_values, rules)
+    ):
+        transition = _bdd_exclusive_or(current_value, rule)
+        transition &= _bdd_equivalence(next_value, rule)
+        transition &= unchanged_prefixes[updated_index]
+        transition &= unchanged_suffixes[updated_index + 1]
 
-            relation |= transition
+        relation |= transition
 
-        return relation
+    return relation
 
-    relation = bdd.true
+
+def _bdd_general_transition_partitions(
+    network: "BooleanNetwork",
+    *,
+    bdd: Any,
+    components: Tuple[str, ...],
+    current_vars: Tuple[str, ...],
+    next_vars: Tuple[str, ...],
+) -> Tuple[Any, Tuple[Any, ...], Tuple[Tuple[str, ...], ...]]:
+    """Build conjunctive partitions for the general transition relation."""
+
+    component_vars = dict(zip(components, current_vars))
+    rules = tuple(
+        _bdd_rule(network, network[component], bdd=bdd, variables=component_vars)
+        for component in components
+    )
+    clusters = []
     updates = bdd.false
-    for current_value, next_value, rule in zip(current_values, next_values, rules):
+    for current_var, next_var, rule in zip(current_vars, next_vars, rules):
+        current_value = bdd.var(current_var)
+        next_value = bdd.var(next_var)
         updated = _bdd_exclusive_or(current_value, rule)
         updated &= _bdd_equivalence(next_value, rule)
         unchanged = _bdd_equivalence(next_value, current_value)
-        relation &= unchanged | updated
+        clusters.append(unchanged | updated)
         updates |= updated
 
-    return relation & updates
+    current_variables = set(current_vars)
+    last_cluster = {variable: -1 for variable in current_vars}
+    for index, cluster in enumerate(clusters):
+        for variable in bdd.support(cluster) & current_variables:
+            last_cluster[variable] = index
+
+    forward_quantification = tuple(
+        tuple(variable for variable in current_vars if last_cluster[variable] == index)
+        for index in range(len(clusters))
+    )
+
+    return updates, tuple(clusters), forward_quantification
 
 
 def _bdd_equivalence(left: Any, right: Any) -> Any:
@@ -265,78 +572,6 @@ def _bdd_rule(
         return value
 
     raise TypeError(f"unsupported Boolean expression type: {type(rule)}")
-
-
-def _bdd_initial_states(
-    *,
-    bdd: Any,
-    components: Tuple[str, ...],
-    current_vars: Tuple[str, ...],
-    initial_states: ConfigurationSet,
-) -> Any:
-    """Encode an initial ConfigurationSet as a BDD."""
-
-    states = bdd.false
-    for hypercube in initial_states._as_hypercubes():
-        state = bdd.true
-        for component, current_var in zip(components, current_vars):
-            if component not in hypercube:
-                continue
-
-            value = hypercube[component]
-            if value.is_fixed:
-                variable = bdd.var(current_var)
-                state &= variable if value.value else ~variable
-
-        states |= state
-
-    return states
-
-
-def _bdd_reachable_states(
-    *,
-    bdd: Any,
-    initial: Any,
-    transition: Any,
-    current_vars: Tuple[str, ...],
-    next_vars: Tuple[str, ...],
-) -> Any:
-    """Compute the reachable-state set as a BDD fixpoint."""
-
-    reachable = initial
-    frontier = initial
-    rename_next_to_current = dict(zip(next_vars, current_vars))
-
-    while frontier != bdd.false:
-        successors = bdd.exist(current_vars, frontier & transition)
-        successors = bdd.let(rename_next_to_current, successors)
-        new_frontier = successors & ~reachable
-        if new_frontier == bdd.false:
-            break
-
-        reachable |= new_frontier
-        frontier = new_frontier
-
-    return reachable
-
-
-def _bdd_state_bits(
-    *,
-    bdd: Any,
-    states: Any,
-    current_vars: Tuple[str, ...],
-) -> Tuple[_StateBits, ...]:
-    """Decode a BDD state set into sorted bitsets."""
-
-    decoded = []
-    for assignment in bdd.pick_iter(states, care_vars=current_vars):
-        state_bits = 0
-        for index, current_var in enumerate(current_vars):
-            if assignment.get(current_var, False):
-                state_bits |= 1 << index
-        decoded.append(state_bits)
-
-    return tuple(sorted(decoded))
 
 
 def _reachable_attractors_with_most_permissive_backend(
