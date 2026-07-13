@@ -56,13 +56,11 @@ def _assert_most_permissive_stg(bn, expected_targets):
             if target == source:
                 continue
 
-            for backend in ("auto", "asp", "hypercube"):
-                assert bn.reachability(
-                    _configuration_from_bits(source),
-                    _configuration_from_bits(target),
-                    backend=cast(Any, backend),
-                    quantifier="exists",
-                ) is (target in expected_targets[source])
+            assert bn.reachability(
+                _configuration_from_bits(source),
+                _configuration_from_bits(target),
+                quantifier="exists",
+            ) is (target in expected_targets[source])
 
 
 def test_boolean_network_coerces_string_rules():
@@ -729,7 +727,7 @@ def test_boolean_network_reachable_attractors_bdd_reports_missing_dd(
 
     monkeypatch.setattr(_dynamics, "import_module", missing_dd)
 
-    with pytest.raises(ImportError, match="backend='bdd'"):
+    with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
         bn.reachable_attractors(
             {"A": 0},
             update=cast(Any, update),
@@ -1088,6 +1086,60 @@ def test_boolean_network_reachability_asynchronous_uses_bdd_backward_closure():
     )
 
 
+def test_boolean_network_reachability_synchronous_follows_unique_trajectory():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
+    initial = {"A": 0, "B": 0}
+
+    assert bn.reachability(initial, {"A": 1, "B": 0}, update="synchronous")
+    assert bn.reachability(initial, {"A": 0, "B": 1}, update="synchronous")
+    assert not bn.reachability(initial, {"A": 1, "B": 1}, update="synchronous")
+    assert bn.reachability(initial, {"A": 1, "B": 1}, update="asynchronous")
+
+
+def test_boolean_network_reachability_synchronous_quantifies_partial_states():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "A"})
+
+    assert bn.reachability(
+        {},
+        {"A": 1},
+        update="synchronous",
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        {},
+        {"A": 1},
+        update="synchronous",
+        quantifier="robust",
+    )
+
+
+def test_boolean_network_reachability_synchronous_avoids_bdd_for_concrete_state(
+    monkeypatch,
+):
+    bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
+
+    def unexpected_bdd_import():
+        raise AssertionError("the concrete synchronous trajectory should be direct")
+
+    monkeypatch.setattr(_dynamics, "_import_dd_backend", unexpected_bdd_import)
+
+    assert bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 0, "B": 1},
+        update="synchronous",
+    )
+
+    oscillator = bt.logic.bn.BooleanNetwork({"A": "~A"})
+    assert oscillator.reachability(
+        {"A": 0},
+        {},
+        update="synchronous",
+        quantifier="universal",
+    )
+
+
 def test_boolean_network_reachability_general_updates_multiple_components():
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
@@ -1151,6 +1203,41 @@ def test_general_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
     assert calls == 1
 
 
+def test_synchronous_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
+    original = _dynamics._bdd_synchronous_transition_partitions
+    calls = 0
+
+    def counted_transition_partitions(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        _dynamics,
+        "_bdd_synchronous_transition_partitions",
+        counted_transition_partitions,
+    )
+
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="synchronous",
+    )
+
+    assert transition_system.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 1},
+        quantifier="robust",
+    )
+    assert transition_system.reachability(
+        {"A": 0, "B": 0},
+        {"A": 0, "B": 0},
+        quantifier="robust",
+    )
+    assert calls == 1
+
+
 def test_bdd_transition_system_reuses_compiled_relation(monkeypatch):
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
@@ -1204,7 +1291,19 @@ def test_boolean_network_reachability_asynchronous_quantifies_partial_states():
     )
 
 
-def test_boolean_network_reachability_asynchronous_reports_missing_dd(monkeypatch):
+@pytest.mark.parametrize(
+    ("update", "initial_state"),
+    [
+        ("asynchronous", {"A": 0}),
+        ("general", {"A": 0}),
+        ("synchronous", {"A": "*"}),
+    ],
+)
+def test_boolean_network_reachability_reports_missing_dd(
+    monkeypatch,
+    update,
+    initial_state,
+):
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
     def missing_dd(name: str) -> Any:
@@ -1214,11 +1313,11 @@ def test_boolean_network_reachability_asynchronous_reports_missing_dd(monkeypatc
 
     monkeypatch.setattr(_dynamics, "import_module", missing_dd)
 
-    with pytest.raises(ImportError, match="backend='bdd'"):
+    with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
         bn.reachability(
-            {"A": 0},
+            initial_state,
             {"A": 1},
-            update="asynchronous",
+            update=cast(Any, update),
         )
 
 
@@ -1263,43 +1362,55 @@ def test_boolean_network_reachability_most_permissive_allows_reversible_space():
 def test_boolean_network_reachability_most_permissive_rejects_self_support():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    for backend in ("auto", "asp", "hypercube"):
-        assert not bn.reachability(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 1},
-            backend=cast(Any, backend),
-            quantifier="exists",
-        )
+    assert not bn.reachability(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 1},
+        quantifier="exists",
+    )
 
 
 def test_boolean_network_reachability_accepts_partial_states_existentially():
     bn = bt.logic.bn.BooleanNetwork({"A": "A"})
 
-    for backend in ("auto", "asp", "hypercube"):
-        assert bn.reachability(
-            {},
-            {"A": 1},
-            backend=cast(Any, backend),
-            quantifier="exists",
-        )
-        if backend != "hypercube":
-            assert not bn.reachability(
-                {},
-                {"A": 1},
-                backend=cast(Any, backend),
-                quantifier="robust",
-            )
+    assert bn.reachability({}, {"A": 1}, quantifier="exists")
+    assert not bn.reachability({}, {"A": 1}, quantifier="robust")
+
+
+@pytest.mark.parametrize(
+    "update",
+    ["synchronous", "asynchronous", "general", "most-permissive"],
+)
+def test_boolean_network_reachability_universal_quantification(update):
+    if update != "most-permissive":
+        pytest.importorskip("dd.autoref")
+
+    identity = bt.logic.bn.BooleanNetwork({"A": "A"})
+    assert identity.reachability(
+        {},
+        {},
+        update=cast(Any, update),
+        quantifier="robust",
+    )
+    assert not identity.reachability(
+        {},
+        {},
+        update=cast(Any, update),
+        quantifier="universal",
+    )
+
+    oscillator = bt.logic.bn.BooleanNetwork({"A": "~A"})
+    assert oscillator.reachability(
+        {},
+        {},
+        update=cast(Any, update),
+        quantifier="universal",
+    )
 
 
 def test_boolean_network_reachability_defaults_to_robust_quantification():
     bn = bt.logic.bn.BooleanNetwork({"A": 1})
 
-    for backend in ("auto", "asp"):
-        assert bn.reachability(
-            {},
-            {"A": 1},
-            backend=cast(Any, backend),
-        )
+    assert bn.reachability({}, {"A": 1})
 
 
 def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
@@ -1312,35 +1423,21 @@ def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
     )
     initial_state = {"A": 0, "always": 1, "never": 0}
 
-    for backend in ("auto", "asp", "hypercube"):
-        assert bn.reachability(
-            initial_state,
-            {"A": 1, "always": 1, "never": 0},
-            backend=cast(Any, backend),
-            quantifier="exists",
-        )
-        assert not bn.reachability(
-            initial_state,
-            {"always": 0},
-            backend=cast(Any, backend),
-            quantifier="exists",
-        )
-        assert not bn.reachability(
-            initial_state,
-            {"never": 1},
-            backend=cast(Any, backend),
-            quantifier="exists",
-        )
-
-
-def test_boolean_network_reachability_robust_rejects_hypercube_backend():
-    bn = bt.logic.bn.BooleanNetwork({"A": "A"})
-
-    with pytest.raises(
-        ValueError,
-        match="backend='hypercube' does not support quantifier='robust'",
-    ):
-        bn.reachability({}, {"A": 1}, backend="hypercube")
+    assert bn.reachability(
+        initial_state,
+        {"A": 1, "always": 1, "never": 0},
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        initial_state,
+        {"always": 0},
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        initial_state,
+        {"never": 1},
+        quantifier="exists",
+    )
 
 
 def test_boolean_network_reachability_validate_options_and_states():
@@ -1365,29 +1462,14 @@ def test_boolean_network_reachability_validate_options_and_states():
         bn.reachability(
             {"A": 0, "B": 0},
             {"A": 1, "B": 0},
-            update=cast(Any, "synchronous"),
-        )
-
-    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
-        bn.reachability(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
-            update="asynchronous",
-            backend=cast(Any, "asp"),
-        )
-
-    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
-        bn.reachability(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
-            backend=cast(Any, "explicit"),
+            update=cast(Any, "parallel"),
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'quantifier'"):
         bn.reachability(
             {"A": 0, "B": 0},
             {"A": 1, "B": 0},
-            quantifier=cast(Any, "universal"),
+            quantifier=cast(Any, "all"),
         )
 
     with pytest.raises(ValueError, match="unknown components in initial_state"):

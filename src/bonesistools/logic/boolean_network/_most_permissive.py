@@ -8,6 +8,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
+    FrozenSet,
     Iterable,
     Iterator,
     List,
@@ -21,49 +22,18 @@ from ..._compat import Literal
 from ..boolean_algebra import ConfigurationSet, Hypercube, dnf_implicants
 from ..boolean_algebra._robdd import ROBDD
 from ..boolean_algebra._typing import HypercubeLike
+from ._dynamics import _validate_hypercube
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
 
 
-def _reachability_with_most_permissive_hypercube_backend(
-    network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    target_state: HypercubeLike,
-) -> bool:
-    """Test existential MP reachability with hypercube regions."""
-
-    components = tuple(network.keys())
-    initial_hypercube = _validate_hypercube(
-        components,
-        initial_state,
-        name="initial_state",
-    )
-    target_hypercube = _validate_hypercube(
-        components,
-        target_state,
-        name="target_state",
-    )
-
-    initial_configurations = ConfigurationSet(components, [initial_hypercube])
-    rule_bdds: Dict[str, ROBDD] = {}
-    reachability = (
-        _most_permissive_transition_space(
-            network,
-            configuration,
-            rule_bdds=rule_bdds,
-        ).contains(target_hypercube)
-        for configuration in initial_configurations
-    )
-    return any(reachability)
-
-
-def _reachability_with_most_permissive_asp_backend(
+def _most_permissive_reachability(
     network: "BooleanNetwork",
     initial_state: HypercubeLike,
     target_state: HypercubeLike,
     *,
-    quantifier: Literal["exists", "robust"],
+    quantifier: Literal["exists", "robust", "universal"],
 ) -> bool:
     """Test one-step most-permissive reachability with direct ASP search."""
 
@@ -95,14 +65,53 @@ def _reachability_with_most_permissive_asp_backend(
         )
 
     initial_configurations = ConfigurationSet(components, [initial_hypercube])
+    if quantifier == "robust":
+        return all(
+            _solve_most_permissive_reachability_asp(
+                control,
+                clingo=clingo,
+                initial_state=Hypercube(configuration),
+                target_state=target_hypercube,
+            )
+            for configuration in initial_configurations
+        )
+
+    target_configurations = ConfigurationSet(components, [target_hypercube])
     return all(
         _solve_most_permissive_reachability_asp(
             control,
             clingo=clingo,
-            initial_state=Hypercube(configuration),
-            target_state=target_hypercube,
+            initial_state=Hypercube(initial_configuration),
+            target_state=Hypercube(target_configuration),
         )
-        for configuration in initial_configurations
+        for initial_configuration in initial_configurations
+        for target_configuration in target_configurations
+    )
+
+
+def _most_permissive_reachable_attractors(
+    network: "BooleanNetwork",
+    initial_state: HypercubeLike,
+) -> Tuple[ConfigurationSet, ...]:
+    """Return minimal trap spaces reachable under most-permissive semantics."""
+
+    components = tuple(network.keys())
+    initial_hypercube = _validate_initial_hypercube(components, initial_state)
+    clingo = network._import_clingo()
+    base_program = _most_permissive_asp_base_program(
+        network,
+        clingo=clingo,
+        components=components,
+        initial_state=initial_hypercube,
+    )
+    trapspaces = _solve_reachable_trapspaces_literals(
+        clingo,
+        base_program=base_program,
+    )
+
+    return tuple(
+        ConfigurationSet(components, [_hypercube_from_fixed_literals(literals)])
+        for literals in trapspaces
     )
 
 
@@ -183,7 +192,7 @@ def _state_asp_assumptions(
     return assumptions
 
 
-def _reachable_configurations_with_most_permissive_hypercube_backend(
+def _most_permissive_reachable_configurations(
     network: "BooleanNetwork",
     initial_state: HypercubeLike,
 ) -> Iterator[Dict[str, int]]:
@@ -425,20 +434,134 @@ def _most_permissive_reachability_asp_program(
     )
 
 
-def _validate_hypercube(
+def _validate_initial_hypercube(
     components: Tuple[str, ...],
-    state: HypercubeLike,
-    *,
-    name: str,
+    initial_state: HypercubeLike,
 ) -> Hypercube:
-    """Validate a possibly partial Boolean state."""
+    """Validate an initial state without enumerating compatible configurations."""
 
-    hypercube = Hypercube(state)
-    unknown_components = sorted(set(hypercube) - set(components))
-    if unknown_components:
-        raise ValueError(f"unknown components in {name}: {unknown_components}")
+    configurations = ConfigurationSet(components, [initial_state])
+    if len(configurations._hypercubes) != 1:
+        raise ValueError("invalid initial state representation")
 
-    return hypercube
+    return configurations._as_hypercubes()[0]
+
+
+def _most_permissive_asp_base_program(
+    network: "BooleanNetwork",
+    *,
+    clingo: object,
+    components: Tuple[str, ...],
+    initial_state: Hypercube,
+) -> str:
+    """Build the ASP program for reachable minimal trap spaces."""
+
+    facts = ["opposite(0,1).", "opposite(1,0)."]
+
+    for component in components:
+        facts.append(f"node({_asp_string(clingo, component)}).")
+
+    for component, value in initial_state.items():
+        if value.is_fixed:
+            facts.append(
+                "initial_fixed("
+                f"{_asp_string(clingo, component)}, {cast(int, value.value)}"
+                ")."
+            )
+
+    facts.extend(_boolean_function_asp_facts(network, clingo=clingo))
+
+    return "\n".join(
+        [
+            *facts,
+            _boolean_function_evaluation_asp_rules(),
+            """
+            timepoint(initial).
+            timepoint(final).
+
+            mp_state(initial,N,V) :- initial_fixed(N,V).
+            1 { mp_state(initial,N,0); mp_state(initial,N,1) } 1 :-
+                node(N), not initial_fixed(N,0), not initial_fixed(N,1).
+
+            1 { final_reach(N,0); final_reach(N,1) } 2 :- node(N).
+            mp_reach(final,N,V) :- final_reach(N,V).
+
+            final_reach(N,V) :- mp_eval(final,N,V).
+
+            mp_reach(initial,N,V) :- mp_state(initial,N,V).
+            mp_state(final,N,V) :- final_reach(N,V).
+
+            mp_ext(N,V) :- mp_eval(initial,N,V), mp_state(final,N,V).
+            { mp_ext(N,V) } :-
+                mp_eval(initial,N,V),
+                opposite(V,W),
+                not mp_state(final,N,V),
+                mp_state(final,N,W).
+            mp_reach(initial,N,V) :- mp_ext(N,V).
+
+            :- mp_state(final,N,V), not mp_reach(initial,N,V).
+            :- mp_state(final,N,V),
+               opposite(V,W),
+               mp_ext(N,W),
+               not mp_ext(N,V).
+
+            #show final_reach/2.
+            """,
+        ]
+    )
+
+
+def _solve_reachable_trapspaces_literals(
+    clingo: object,
+    *,
+    base_program: str,
+) -> Tuple[FrozenSet[Tuple[str, int]], ...]:
+    """Enumerate inclusion-minimal reachable trap spaces with domain recursion."""
+
+    control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
+        ["--warn=none", "--single-shot"],
+        logger=lambda _code, _message: None,
+    )
+    control.configuration.solve.models = 0
+    control.configuration.solve.project = 1
+    control.configuration.solve.enum_mode = "domRec"
+    control.configuration.solver[0].heuristic = "Domain"
+    control.configuration.solver[0].dom_mod = "5,16"
+    control.add("base", [], base_program)
+    control.ground([("base", [])])
+
+    trapspaces = set()
+    with control.solve(yield_=True) as handle:
+        for model in handle:
+            reachable_values = frozenset(
+                (atom.arguments[0].string, atom.arguments[1].number)
+                for atom in model.symbols(shown=True)
+            )
+            trapspaces.add(
+                frozenset(
+                    (component, value)
+                    for component, value in reachable_values
+                    if (component, 1 - value) not in reachable_values
+                )
+            )
+
+    return tuple(sorted(trapspaces, key=_fixed_literals_sort_key))
+
+
+def _hypercube_from_fixed_literals(
+    literals: FrozenSet[Tuple[str, int]],
+) -> Hypercube:
+    """Build a hypercube from fixed component-value literals."""
+
+    return Hypercube(dict(sorted(literals)))
+
+
+def _fixed_literals_sort_key(
+    literals: FrozenSet[Tuple[str, int]],
+) -> Tuple[int, Tuple[Tuple[str, int], ...]]:
+    """Return a deterministic sort key for fixed-literal sets."""
+
+    return len(literals), tuple(sorted(literals))
 
 
 def _validate_complete_hypercube(

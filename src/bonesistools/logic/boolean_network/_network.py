@@ -61,15 +61,15 @@ from ..influence_graph._influence_graph import (
 )
 from ..influence_graph._svg import SvgLength, scale_svg
 from ._dynamics import (
-    _reachability_with_bdd_backend,
-    _reachable_attractors_with_bdd_backend,
-    _reachable_attractors_with_explicit_backend,
-    _reachable_attractors_with_most_permissive_backend,
+    _bdd_reachability,
+    _bdd_reachable_attractors,
+    _explicit_reachable_attractors,
+    _synchronous_reachability,
 )
 from ._most_permissive import (
-    _reachability_with_most_permissive_asp_backend,
-    _reachability_with_most_permissive_hypercube_backend,
-    _reachable_configurations_with_most_permissive_hypercube_backend,
+    _most_permissive_reachability,
+    _most_permissive_reachable_attractors,
+    _most_permissive_reachable_configurations,
 )
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
@@ -1093,13 +1093,13 @@ class BooleanNetwork(Dict[str, Expression]):
             )
 
             if backend == "bdd":
-                return _reachable_attractors_with_bdd_backend(
+                return _bdd_reachable_attractors(
                     self,
                     initial_states,
                     update=update,
                 )
 
-            return _reachable_attractors_with_explicit_backend(
+            return _explicit_reachable_attractors(
                 self,
                 initial_states,
                 update=update,
@@ -1116,7 +1116,7 @@ class BooleanNetwork(Dict[str, Expression]):
             if backend is None:
                 backend = "asp"
 
-            return _reachable_attractors_with_most_permissive_backend(
+            return _most_permissive_reachable_attractors(
                 self,
                 resolved_initial_state,
             )
@@ -1129,13 +1129,13 @@ class BooleanNetwork(Dict[str, Expression]):
         )
 
         if backend == "bdd":
-            return _reachable_attractors_with_bdd_backend(
+            return _bdd_reachable_attractors(
                 self,
                 initial_states,
                 update=update,
             )
 
-        return _reachable_attractors_with_explicit_backend(
+        return _explicit_reachable_attractors(
             self,
             initial_states,
             update=update,
@@ -1193,7 +1193,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         self.validate()
 
-        return _reachable_configurations_with_most_permissive_hypercube_backend(
+        return _most_permissive_reachable_configurations(
             self,
             initial_state,
         )
@@ -1204,10 +1204,9 @@ class BooleanNetwork(Dict[str, Expression]):
         target_state: HypercubeLike,
         *,
         update: Literal[
-            "asynchronous", "general", "most-permissive"
+            "asynchronous", "synchronous", "general", "most-permissive"
         ] = "most-permissive",
-        backend: Literal["auto", "bdd", "hypercube", "asp"] = "auto",
-        quantifier: Literal["exists", "robust"] = "robust",
+        quantifier: Literal["exists", "robust", "universal"] = "robust",
     ) -> bool:
         """
         Test reachability between two Boolean configurations.
@@ -1243,27 +1242,17 @@ class BooleanNetwork(Dict[str, Expression]):
         target_state: HypercubeLike
             Target Boolean state. A partial state represents all compatible
             complete configurations.
-        update: {"asynchronous", "general", "most-permissive"}
+        update: {"asynchronous", "synchronous", "general", "most-permissive"}
             (default: "most-permissive")
             Update semantics.
-        backend: {"auto", "bdd", "hypercube", "asp"} (default: "auto")
-            Backend used for reachability. If `"auto"`, use `"bdd"` for
-            asynchronous and general dynamics and `"asp"` for most-permissive
-            dynamics. The `"bdd"` backend computes the states satisfying
-            `EF(target)` through symbolic forward and backward closures of the
-            selected transition relation.
-            The `"asp"` backend asks `clingo` to directly search for a
-            component set `K` satisfying the most-permissive transition
-            conditions. The `"hypercube"` backend uses the compact
-            most-permissive transition-space decomposition into closed
-            hypercubes and irreversible components and only supports
-            `quantifier="exists"`.
-        quantifier: {"exists", "robust"} (default: "robust")
+        quantifier: {"exists", "robust", "universal"} (default: "robust")
             Quantification used for partial states. If `"exists"`, at least one
             configuration compatible with `initial_state` must reach one
             configuration compatible with `target_state`. If `"robust"`, every
             configuration compatible with `initial_state` must reach at least
-            one configuration compatible with `target_state`.
+            one configuration compatible with `target_state`. If
+            `"universal"`, every configuration compatible with `initial_state`
+            must reach every configuration compatible with `target_state`.
 
         Returns
         -------
@@ -1273,31 +1262,42 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Raises
         ------
+        ImportError
+            If the selected dynamics require the optional dependency `dd` and
+            it is not installed.
         ValueError
             If the network is not closed, a state is invalid, `update` is
-            invalid, `backend` is invalid or `quantifier` is invalid.
+            invalid or `quantifier` is invalid.
         """
 
         update = _as_literal(
             update,
-            choices=("asynchronous", "general", "most-permissive"),
+            choices=(
+                "asynchronous",
+                "synchronous",
+                "general",
+                "most-permissive",
+            ),
             name="update",
         )
         quantifier = _as_literal(
             quantifier,
-            choices=("exists", "robust"),
+            choices=("exists", "robust", "universal"),
             name="quantifier",
         )
 
         self.validate()
 
-        if update != "most-permissive":
-            _as_literal(
-                backend,
-                choices=("auto", "bdd"),
-                name="backend",
+        if update == "synchronous":
+            return _synchronous_reachability(
+                self,
+                initial_state,
+                target_state,
+                quantifier=quantifier,
             )
-            return _reachability_with_bdd_backend(
+
+        if update == "asynchronous" or update == "general":
+            return _bdd_reachability(
                 self,
                 initial_state,
                 target_state,
@@ -1305,30 +1305,11 @@ class BooleanNetwork(Dict[str, Expression]):
                 quantifier=quantifier,
             )
 
-        backend = _as_literal(
-            backend,
-            choices=("auto", "hypercube", "asp"),
-            name="backend",
-        )
-
-        if quantifier == "robust" and backend == "hypercube":
-            raise ValueError(
-                "backend='hypercube' does not support quantifier='robust'; "
-                "use backend='asp'"
-            )
-
-        if backend in {"auto", "asp"}:
-            return _reachability_with_most_permissive_asp_backend(
-                self,
-                initial_state,
-                target_state,
-                quantifier=quantifier,
-            )
-
-        return _reachability_with_most_permissive_hypercube_backend(
+        return _most_permissive_reachability(
             self,
             initial_state,
             target_state,
+            quantifier=quantifier,
         )
 
     def equivalent(

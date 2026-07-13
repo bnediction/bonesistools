@@ -216,16 +216,28 @@ bn.reachability(
 # True
 ```
 
-For asynchronous and general dynamics, the `"bdd"` backend computes the CTL
-set `EF(target)` symbolically. It first computes the states reachable from the
-initial subspace, then restricts the backward fixed point to those states. It
-does not enumerate the state-transition graph. For most-permissive dynamics,
-the `"asp"` and `"hypercube"` backends remain available.
+For asynchronous and general dynamics, reachability computes the CTL set
+`EF(target)` symbolically with a BDD. It first computes the states reachable
+from the initial subspace, then restricts the backward fixed point to those
+states. It does not enumerate the state-transition graph.
+
+Install the optional BDD implementation with:
+
+```bash
+pip install "bonesistools[bdd]"
+```
+
+With synchronous dynamics and a complete initial configuration, reachability
+follows the unique trajectory directly and stops when it reaches the target or
+detects a cycle. Partial initial configurations use a BDD. Most-permissive
+reachability uses an ASP formulation of the transition conditions.
 
 With partial configurations, `quantifier="exists"` asks whether at least one
 compatible initial configuration reaches the target subspace.
 `quantifier="robust"` asks whether every compatible initial configuration
 reaches at least one configuration in the target subspace.
+`quantifier="universal"` asks whether every compatible initial configuration
+reaches every configuration in the target subspace.
 
 ## Reachable Attractors
 
