@@ -30,6 +30,7 @@ from ..._compat import Literal
 from ..._validation import _as_positive_integer
 
 if TYPE_CHECKING:
+    from ...logic.boolean_algebra import Hypercube
     from ...logic.boolean_network._typing import BooleanNetworkLike
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
@@ -43,7 +44,8 @@ class Orthologs:
 
     Orthologs loads HCOP mappings from human genes to one target organism and
     exposes helpers for translating common biological objects: sequences,
-    interaction lists, DataFrames, NetworkX graphs and Boolean networks.
+    interaction lists, DataFrames, hypercubes, NetworkX graphs and Boolean
+    networks.
 
     Single-gene translation may return several orthologs. Object-level
     translations use the first ortholog in the deterministic ranking built from
@@ -200,6 +202,14 @@ class Orthologs:
     @overload
     def __call__(
         self,
+        data: "Hypercube",
+        *args: Any,
+        **kwargs: Any,
+    ) -> "Hypercube": ...
+
+    @overload
+    def __call__(
+        self,
         data: "BooleanNetworkLike",
         *args: Any,
         **kwargs: Any,
@@ -214,6 +224,7 @@ class Orthologs:
             InteractionList,
             pd.DataFrame,
             Graph[Any],
+            "Hypercube",
             "BooleanNetworkLike",
         ],
         *args: Any,
@@ -228,8 +239,8 @@ class Orthologs:
 
         Parameters
         ----------
-        data: str, sequence, set, InteractionList, DataFrame, Graph or
-            BooleanNetworkLike
+        data: str, sequence, set, InteractionList, DataFrame, Graph, Hypercube
+            or BooleanNetworkLike
             Object containing human gene symbols to translate.
         *args: Any
             Positional arguments forwarded to the selected translation method.
@@ -244,6 +255,7 @@ class Orthologs:
 
         """
 
+        from ...logic.boolean_algebra import Hypercube
         from ...logic.boolean_network._typing import is_boolean_network_like
 
         if isinstance(data, str):
@@ -266,12 +278,15 @@ class Orthologs:
             return self.translate_df(data, *args, **kwargs)
         if isinstance(data, Graph):
             return self.translate_graph(data, *args, **kwargs)
+        if isinstance(data, Hypercube):
+            return self.translate_hypercube(data, *args, **kwargs)
         if is_boolean_network_like(data):
             return self.translate_bn(data, *args, **kwargs)
         raise TypeError(
             f"unsupported argument type for 'data': "
-            f"expected str, sequence, set, interaction list, {pd.DataFrame}, {Graph} "
-            f"or Boolean network-like object but received {type(data)}"
+            f"expected str, sequence, set, interaction list, {pd.DataFrame}, "
+            f"{Graph}, Hypercube or Boolean network-like object "
+            f"but received {type(data)}"
         )
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -402,6 +417,73 @@ class Orthologs:
             return sequence_constructor(translated_genes)
         except TypeError:
             return translated_genes
+
+    def translate_hypercube(
+        self,
+        hypercube: "Hypercube",
+        keep_if_missing: bool = True,
+        copy: bool = True,
+    ) -> Union["Hypercube", None]:
+        """
+        Translate hypercube component names.
+
+        Components are translated to one target symbol using the deterministic
+        HCOP ranking. Missing components are kept by default because removing
+        an explicitly specified component would broaden the represented state
+        space.
+
+        Parameters
+        ----------
+        hypercube: Hypercube
+            Hypercube whose explicitly specified components are translated.
+        keep_if_missing: bool (default: True)
+            If `True`, keep component names with no ortholog. If `False`, raise
+            an error when a component has no ortholog.
+        copy: bool (default: True)
+            Return a translated copy instead of modifying `hypercube`.
+
+        Returns
+        -------
+        Hypercube or None
+            Translated hypercube if `copy=True`; otherwise None.
+
+        Raises
+        ------
+        TypeError
+            If `hypercube` is not a Hypercube.
+        ValueError
+            If `keep_if_missing=False` and a component has no ortholog, or if
+            translation would merge explicitly specified components.
+        """
+
+        from ...logic.boolean_algebra import Hypercube
+
+        if not isinstance(hypercube, Hypercube):
+            raise TypeError(
+                f"unsupported argument type for 'hypercube': "
+                f"expected {Hypercube} but received {type(hypercube)}"
+            )
+
+        mapping = {}
+
+        for component in hypercube:
+            translated = self._translate_best(
+                component,
+                keep_if_missing=keep_if_missing,
+            )
+
+            if translated is None:
+                raise ValueError(
+                    "hypercube translation cannot remove an unmapped "
+                    f"component: {component!r}"
+                )
+
+            mapping[component] = translated
+
+        translated_hypercube = hypercube.copy() if copy else hypercube
+        translated_hypercube.relabel(mapping)
+
+        return translated_hypercube if copy else None
 
     def translate_interaction_list(
         self,

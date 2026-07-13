@@ -321,60 +321,6 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return not eq
 
-    @classmethod
-    def from_bnet(
-        cls,
-        file: Union[str, Path],
-        ba: Optional[BooleanAlgebra] = None,
-        check: bool = True,
-    ) -> "BooleanNetwork":
-        """
-        Read a Boolean network from a `.bnet` file.
-
-        Examples
-        --------
-        >>> # bn = BooleanNetwork.from_bnet("network.bnet")
-
-        Parameters
-        ----------
-        file: str or Path
-            Path to the `.bnet` file.
-        ba: BooleanAlgebra (optional, default: None)
-            Boolean algebra used to parse and store Boolean expressions. If
-            None, a new BooleanAlgebra instance is created.
-        check: bool (default: True)
-            If `True`, validate that all symbols referenced by rules are defined
-            as network components.
-
-        Returns
-        -------
-        BooleanNetwork
-            Parsed Boolean network.
-        """
-
-        file = Path(file)
-
-        rules: Dict[str, str] = {}
-
-        for line in file.read_text().splitlines():
-            line = line.strip()
-
-            if not line or line.startswith("#"):
-                continue
-
-            component, rule = line.split(",", maxsplit=1)
-            component = component.strip()
-            rule = rule.strip().replace("!", "~")
-
-            rules[component] = rule
-
-        bn = cls(rules, ba=ba, check=False)
-
-        if check:
-            bn.validate()
-
-        return bn
-
     def copy(self) -> "BooleanNetwork":
         """
         Return a shallow BooleanNetwork copy.

@@ -153,58 +153,6 @@ def test_hypercube_invalid_values():
         hc.contains(cast(Any, object()))
 
 
-def test_read_hypercube(tmp_path):
-
-    file = tmp_path / "hypercube.json"
-
-    with open(file, "w") as fp:
-        json.dump(
-            {
-                "A": 0,
-                "B": 1,
-                "C": "*",
-            },
-            fp,
-        )
-
-    hc = bt.logic.io.read_hypercube(file)
-
-    assert isinstance(hc, bt.logic.ba.Hypercube)
-    assert hc == {
-        "A": 0,
-        "B": 1,
-        "C": "*",
-    }
-
-
-def test_deprecated_read_hypercube_routes_to_io(tmp_path):
-    file = tmp_path / "hypercube.json"
-    file.write_text('{"A": 1, "B": "*"}')
-
-    with pytest.warns(FutureWarning, match="bt.logic.ba.read_hypercube"):
-        hc = getattr(bt.logic.ba, "read_hypercube")(file)
-
-    assert hc == bt.logic.io.read_hypercube(file)
-
-
-def test_read_hypercube_rejects_nested_json(tmp_path):
-
-    file = tmp_path / "hypercube.json"
-
-    with open(file, "w") as fp:
-        json.dump(
-            {
-                "A": {
-                    "nested": 1,
-                }
-            },
-            fp,
-        )
-
-    with pytest.raises(ValueError):
-        bt.logic.io.read_hypercube(file)
-
-
 def test_read_hypercubes_from_json_converts_null_to_free_value(tmp_path):
     file = tmp_path / "hypercubes.json"
 

@@ -49,24 +49,6 @@ __all__ = [
 ]
 
 
-def read_hypercube(*args: _Any, **kwargs: _Any) -> Hypercube:
-    """
-    Deprecated. Read a hypercube from a JSON file.
-
-    Use `bt.logic.io.read_hypercube(...)` instead.
-    """
-
-    _warn_deprecated(
-        "`bt.logic.ba.read_hypercube`",
-        replacement="`bt.logic.io.read_hypercube`",
-        stacklevel=2,
-    )
-
-    from ._parser import read_hypercube as _read_hypercube
-
-    return _read_hypercube(*args, **kwargs)
-
-
 def read_hypercubes(*args: _Any, **kwargs: _Any) -> _Dict[str, Hypercube]:
     """
     Deprecated. Read named hypercubes from a CSV, TSV or JSON file.
@@ -86,7 +68,7 @@ def read_hypercubes(*args: _Any, **kwargs: _Any) -> _Dict[str, Hypercube]:
 
 
 def __dir__() -> _List[str]:
-    hidden = {"read_hypercube", "read_hypercubes"}
+    hidden = {"read_hypercubes"}
     return sorted(
         name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
     )

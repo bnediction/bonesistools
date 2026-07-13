@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union, cast, overload
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData
 from scipy import sparse
 
@@ -98,7 +99,7 @@ def hvg(
     batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
     key_added: str = "highly_variable",
-    copy: Literal[False] = False,
+    inplace: Literal[True] = True,
 ) -> None: ...
 
 
@@ -117,8 +118,8 @@ def hvg(
     batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
     key_added: str = "highly_variable",
-    copy: Literal[True],
-) -> AnnData: ...
+    inplace: Literal[False],
+) -> pd.DataFrame: ...
 
 
 @overload
@@ -136,8 +137,8 @@ def hvg(
     batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
     key_added: str = "highly_variable",
-    copy: bool = False,
-) -> Optional[AnnData]: ...
+    inplace: bool = True,
+) -> Optional[pd.DataFrame]: ...
 
 
 @anndata_checker
@@ -155,8 +156,8 @@ def hvg(
     batch_selection: Literal["consensus", "rank"] = "consensus",
     batch_weighting: Literal["equal", "cell_count"] = "equal",
     key_added: str = "highly_variable",
-    copy: bool = False,
-) -> Optional[AnnData]:
+    inplace: bool = True,
+) -> Optional[pd.DataFrame]:
     """
     Select highly variable features.
 
@@ -222,17 +223,20 @@ def hvg(
         `n_features` is None, cutoffs are applied to the aggregated scores and
         means. Ignored when `batch_key` is None.
     key_added: str (default: 'highly_variable')
-        Column in `adata.var` where the selected feature mask is stored.
-    copy: bool (default: False)
-        Return a copy instead of modifying `adata`.
+        Column in `adata.var` where the selected feature mask is stored when
+        `inplace=True`.
+    inplace: bool (default: True)
+        Store highly variable feature results in `adata` instead of returning
+        them as a DataFrame.
 
     Returns
     -------
-    AnnData or None
-        If `copy=True`, returns a copy of `adata` with highly variable feature
-        results added. Otherwise, updates `adata` in place and returns None.
+    pandas.DataFrame or None
+        If `inplace=False`, returns a DataFrame indexed by `adata.var_names`
+        with `selected`, `rank`, and `score` columns, without modifying
+        `adata`. Otherwise, updates `adata` in place and returns None.
 
-        HVG results are stored in:
+        With `inplace=True`, HVG results are stored in:
 
         - `adata.var[key_added]`: selected highly variable features;
         - `adata.var[f"{key_added}_rank"]`: selected feature rank;
@@ -284,7 +288,7 @@ def hvg(
     key_added = _as_string(key_added, "key_added")
     score_cutoff = _as_optional_cutoff_interval(score, "score")
     mean_cutoff = _as_cutoff_interval(mean, "mean")
-    copy = _as_boolean(copy, "copy")
+    inplace = _as_boolean(inplace, "inplace")
 
     if n_features is not None and (
         score_cutoff is not None or mean_cutoff != (0.0125, 3.0)
@@ -295,7 +299,6 @@ def hvg(
             stacklevel=2,
         )
 
-    adata = adata.copy() if copy else adata
     expression_mtx = get_expression(
         adata,
         layer=expression,
@@ -355,6 +358,16 @@ def hvg(
         n_vars=adata.n_vars,
     )
 
+    if not inplace:
+        return pd.DataFrame(
+            {
+                "selected": selection.selected,
+                "rank": selection.ranks,
+                "score": scoring.scores,
+            },
+            index=adata.var_names.copy(),
+        )
+
     adata.var[key_added] = selection.selected
     adata.var[f"{key_added}_rank"] = selection.ranks
     adata.var[f"{key_added}_score"] = scoring.scores
@@ -375,7 +388,7 @@ def hvg(
         ),
     }
 
-    return adata if copy else None
+    return None
 
 
 def _score_hvg_features(

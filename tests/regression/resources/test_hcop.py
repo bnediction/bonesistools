@@ -202,6 +202,54 @@ def test_hcop_translate_graph_preserves_attributes_and_copy_semantics():
     assert set(graph.nodes) == {"a", "b", "missing"}
 
 
+def test_hcop_translate_hypercube_copy_dispatch_and_missing_behaviors():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["a", "b"],
+                "support": ["Ensembl,HGNC,MGI", "Ensembl,HGNC,MGI"],
+                "evidence": [3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+    hypercube = bt.logic.ba.Hypercube({"A": 1, "B": 0, "missing": 1})
+
+    copied = orthologs.translate_hypercube(hypercube)
+    dispatched = orthologs(hypercube)
+
+    assert copied == {"a": 1, "b": 0, "missing": 1}
+    assert dispatched == copied
+    assert hypercube == {"A": 1, "B": 0, "missing": 1}
+
+    assert orthologs.translate_hypercube(hypercube, copy=False) is None
+    assert hypercube == {"a": 1, "b": 0, "missing": 1}
+
+    with pytest.raises(ValueError, match="cannot remove an unmapped component"):
+        orthologs.translate_hypercube(
+            bt.logic.ba.Hypercube({"A": 1, "missing": 0}),
+            keep_if_missing=False,
+        )
+
+
+def test_hcop_translate_hypercube_rejects_component_collisions():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["shared", "shared"],
+                "support": ["Ensembl,HGNC,MGI", "Ensembl,HGNC,MGI"],
+                "evidence": [3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    with pytest.raises(ValueError, match="merge hypercube components"):
+        orthologs.translate_hypercube(bt.logic.ba.Hypercube({"A": 1, "B": 0}))
+
+
 def test_hcop_translate_boolean_network_copy_and_mapping_behaviors():
     orthologs = _hcop_orthologs.Orthologs(
         table=pd.DataFrame(
@@ -253,6 +301,9 @@ def test_hcop_translate_rejects_invalid_arguments():
 
     with pytest.raises(TypeError, match="unsupported argument type for 'df'"):
         orthologs.translate_df(cast(Any, "not a dataframe"))
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'hypercube'"):
+        orthologs.translate_hypercube(cast(Any, {"A": 1}))
 
     with pytest.raises(ValueError, match="output_organism"):
         hcop.orthologs(target_organism="frog")

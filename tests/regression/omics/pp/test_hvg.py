@@ -693,15 +693,34 @@ def test_hvg_warns_when_fewer_features_have_finite_scores_than_requested():
     assert adata.uns["highly_variable"]["n_selected"] == 0
 
 
-def test_hvg_copy_returns_modified_copy_and_preserves_original():
+def test_hvg_inplace_false_returns_results_without_modifying_adata():
     adata = _hvg_adata()
+    expected = adata.copy()
 
-    copied = bt.omics.pp.hvg(adata, n_features=4, copy=True)
+    result = bt.omics.pp.hvg(adata, n_features=4, inplace=False)
+    bt.omics.pp.hvg(expected, n_features=4)
+    expected_var = cast(pd.DataFrame, expected.var)
 
-    assert copied is not None
+    assert isinstance(result, pd.DataFrame)
+    assert list(result.columns) == ["selected", "rank", "score"]
+    assert result.index.equals(adata.var_names)
+    assert result["selected"].dtype == bool
+    assert int(result["selected"].sum()) == 4
+    np.testing.assert_array_equal(
+        result["selected"].to_numpy(),
+        expected_var["highly_variable"].to_numpy(),
+    )
+    np.testing.assert_allclose(
+        result["rank"].to_numpy(),
+        expected_var["highly_variable_rank"].to_numpy(),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result["score"].to_numpy(),
+        expected_var["highly_variable_score"].to_numpy(),
+    )
     assert "highly_variable" not in adata.var
-    assert "highly_variable" in copied.var
-    assert int(cast(pd.DataFrame, copied.var)["highly_variable"].sum()) == 4
+    assert "highly_variable" not in adata.uns
 
 
 def test_hvg_expression_layer_and_custom_key():
@@ -783,7 +802,7 @@ def test_hvg_validates_arguments(mini_adata):
         bt.omics.pp.hvg(mini_adata, key_added=cast(Any, object()))
 
     with pytest.raises(TypeError):
-        bt.omics.pp.hvg(mini_adata, copy=cast(Any, "yes"))
+        bt.omics.pp.hvg(mini_adata, inplace=cast(Any, "yes"))
 
 
 def test_hvg_loess_reports_missing_skmisc(mini_adata, monkeypatch):

@@ -420,16 +420,11 @@ def test_boolean_network_relabel_validates_mapping():
     assert bn.rules == {"A": "B", "B": "1"}
 
 
-def test_boolean_network_from_bnet_and_to_bnet_file(tmp_path):
-    infile = tmp_path / "network.bnet"
+def test_boolean_network_to_bnet_file(tmp_path):
     outfile = tmp_path / "roundtrip.bnet"
-    infile.write_text("# ignored\n\nA, B\nB, 1\n")
-
-    bn = bt.logic.bn.BooleanNetwork.from_bnet(infile)
-    read_bn = bt.logic.io.read_bnet(infile)
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
 
     assert bn.rules == {"A": "B", "B": "1"}
-    assert read_bn.rules == bn.rules
     assert bn.to_bnet(outfile) is None
     assert outfile.read_text() == "A, B\nB, 1\n"
 
