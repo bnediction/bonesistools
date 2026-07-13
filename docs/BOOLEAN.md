@@ -169,6 +169,37 @@ rule = ba.parse("A & B | A & C")
 bt.logic.ba.prime_implicants(rule)
 ```
 
+### Reduced Ordered Binary Decision Diagrams
+
+`ROBDD` represents one scalar Boolean function with a canonical reduced
+decision diagram for a fixed variable order:
+
+```python
+robdd = bt.logic.ba.ROBDD("A | B")
+
+robdd.variables
+# ("A", "B")
+
+robdd.evaluate({"A": 0, "B": 1})
+# True
+
+robdd.can_take_value({"A": 0}, 1)
+# True: B remains free and can be assigned to 1
+```
+
+Satisfying assignments can be counted without enumeration or represented as a
+compact `ConfigurationSet`:
+
+```python
+robdd.count()
+# 3
+
+robdd.configurations()
+# ConfigurationSet(components=("A", "B"), n_configurations=3)
+```
+
+Use `to_networkx()` to inspect the decision graph and its 0/1 branches.
+
 ## Reachable Attractors
 
 `BooleanNetwork.reachable_attractors(...)` returns exact reachable attractors as

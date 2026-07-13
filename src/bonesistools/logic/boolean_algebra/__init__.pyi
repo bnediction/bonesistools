@@ -18,6 +18,7 @@ from bonesistools.logic.boolean_algebra._kleene import meet as meet
 from bonesistools.logic.boolean_algebra._representation import (
     rule_to_string as rule_to_string,
 )
+from bonesistools.logic.boolean_algebra._robdd import ROBDD as ROBDD
 from bonesistools.logic.boolean_algebra._structure import (
     dnf_implicants as dnf_implicants,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "ConfigurationSet",
     "Hypercube",
     "HypercubeCollection",
+    "ROBDD",
     "diff",
     "meet",
     "join",

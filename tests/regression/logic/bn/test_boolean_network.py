@@ -61,6 +61,7 @@ def _assert_most_permissive_stg(bn, expected_targets):
                     _configuration_from_bits(source),
                     _configuration_from_bits(target),
                     backend=cast(Any, backend),
+                    quantifier="exists",
                 ) is (target in expected_targets[source])
 
 
@@ -1014,6 +1015,41 @@ def test_boolean_network_reachable_attractors_most_permissive_partial_state():
     )
 
 
+def test_boolean_network_reachable_attractors_evaluates_non_unate_rules_exactly():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "~A",
+            "B": "~B",
+            "always": "A | ~A",
+            "never": "A & ~A",
+            "xor": "(A & ~B) | (~A & B)",
+        }
+    )
+
+    attractors = bn.reachable_attractors(update="most-permissive")
+
+    assert len(attractors) == 1
+    assert attractors[0]._as_hypercubes() == (
+        bt.logic.ba.Hypercube({"always": 1, "never": 0}),
+    )
+
+
+def test_boolean_network_reachable_attractors_preserves_incomparable_minima():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "A",
+            "B": "A | ~B",
+        }
+    )
+
+    attractors = bn.reachable_attractors(update="most-permissive")
+
+    assert tuple(attractor._as_hypercubes() for attractor in attractors) == (
+        (bt.logic.ba.Hypercube({"A": 0}),),
+        (bt.logic.ba.Hypercube({"A": 1, "B": 1}),),
+    )
+
+
 def test_boolean_network_reachable_attractors_most_permissive_defaults_to_free_state():
     bn = bt.logic.bn.BooleanNetwork({"A": "A", "B": "B"})
 
@@ -1071,7 +1107,79 @@ def test_boolean_network_reachability_most_permissive_rejects_self_support():
             {"A": 0, "B": 0},
             {"A": 1, "B": 1},
             backend=cast(Any, backend),
+            quantifier="exists",
         )
+
+
+def test_boolean_network_reachability_accepts_partial_states_existentially():
+    bn = bt.logic.bn.BooleanNetwork({"A": "A"})
+
+    for backend in ("auto", "asp", "hypercube"):
+        assert bn.reachability(
+            {},
+            {"A": 1},
+            backend=cast(Any, backend),
+            quantifier="exists",
+        )
+        if backend != "hypercube":
+            assert not bn.reachability(
+                {},
+                {"A": 1},
+                backend=cast(Any, backend),
+                quantifier="robust",
+            )
+
+
+def test_boolean_network_reachability_defaults_to_robust_quantification():
+    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+
+    for backend in ("auto", "asp"):
+        assert bn.reachability(
+            {},
+            {"A": 1},
+            backend=cast(Any, backend),
+        )
+
+
+def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "~A",
+            "always": "A | ~A",
+            "never": "A & ~A",
+        }
+    )
+    initial_state = {"A": 0, "always": 1, "never": 0}
+
+    for backend in ("auto", "asp", "hypercube"):
+        assert bn.reachability(
+            initial_state,
+            {"A": 1, "always": 1, "never": 0},
+            backend=cast(Any, backend),
+            quantifier="exists",
+        )
+        assert not bn.reachability(
+            initial_state,
+            {"always": 0},
+            backend=cast(Any, backend),
+            quantifier="exists",
+        )
+        assert not bn.reachability(
+            initial_state,
+            {"never": 1},
+            backend=cast(Any, backend),
+            quantifier="exists",
+        )
+
+
+def test_boolean_network_reachability_robust_rejects_hypercube_backend():
+    bn = bt.logic.bn.BooleanNetwork({"A": "A"})
+
+    with pytest.raises(
+        ValueError,
+        match="backend='hypercube' does not support quantifier='robust'",
+    ):
+        bn.reachability({}, {"A": 1}, backend="hypercube")
 
 
 def test_boolean_network_reachability_validate_options_and_states():
@@ -1106,14 +1214,18 @@ def test_boolean_network_reachability_validate_options_and_states():
             backend=cast(Any, "explicit"),
         )
 
-    with pytest.raises(ValueError, match="initial_state must define fixed values"):
-        bn.reachability({"A": 0}, {"A": 1, "B": 0})
-
-    with pytest.raises(ValueError, match="target_state must define fixed values"):
-        bn.reachability({"A": 0, "B": 0}, {"A": 1})
+    with pytest.raises(ValueError, match="invalid argument value for 'quantifier'"):
+        bn.reachability(
+            {"A": 0, "B": 0},
+            {"A": 1, "B": 0},
+            quantifier=cast(Any, "universal"),
+        )
 
     with pytest.raises(ValueError, match="unknown components in initial_state"):
         bn.reachability({"A": 0, "B": 0, "C": 0}, {"A": 1, "B": 0})
+
+    with pytest.raises(ValueError, match="unknown components in target_state"):
+        bn.reachability({"A": 0, "B": 0}, {"A": 1, "B": 0, "C": 0})
 
 
 def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():

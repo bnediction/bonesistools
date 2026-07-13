@@ -1204,9 +1204,10 @@ class BooleanNetwork(Dict[str, Expression]):
         *,
         update: Literal["most-permissive"] = "most-permissive",
         backend: Literal["auto", "hypercube", "asp"] = "auto",
+        quantifier: Literal["exists", "robust"] = "robust",
     ) -> bool:
         """
-        Test one-step reachability between two configurations.
+        Test one-step reachability between two Boolean states.
 
         Examples
         --------
@@ -1225,9 +1226,11 @@ class BooleanNetwork(Dict[str, Expression]):
         Parameters
         ----------
         initial_state: HypercubeLike
-            Initial complete Boolean configuration.
+            Initial Boolean state. A partial state represents all compatible
+            complete configurations.
         target_state: HypercubeLike
-            Target complete Boolean configuration.
+            Target Boolean state. A partial state represents all compatible
+            complete configurations.
         update: {"most-permissive"} (default: "most-permissive")
             Update semantics.
         backend: {"auto", "hypercube", "asp"} (default: "auto")
@@ -1236,7 +1239,14 @@ class BooleanNetwork(Dict[str, Expression]):
             component set `K` satisfying the most-permissive transition
             conditions. The `"hypercube"` backend uses the compact
             most-permissive transition-space decomposition into closed
-            hypercubes and irreversible components.
+            hypercubes and irreversible components and only supports
+            `quantifier="exists"`.
+        quantifier: {"exists", "robust"} (default: "robust")
+            Quantification used for partial states. If `"exists"`, at least one
+            configuration compatible with `initial_state` must reach one
+            configuration compatible with `target_state`. If `"robust"`, every
+            configuration compatible with `initial_state` must reach at least
+            one configuration compatible with `target_state`.
 
         Returns
         -------
@@ -1248,7 +1258,7 @@ class BooleanNetwork(Dict[str, Expression]):
         ------
         ValueError
             If the network is not closed, a state is invalid, `update` is
-            invalid or `backend` is invalid.
+            invalid, `backend` is invalid or `quantifier` is invalid.
         """
 
         _as_literal(
@@ -1261,14 +1271,26 @@ class BooleanNetwork(Dict[str, Expression]):
             choices=("auto", "hypercube", "asp"),
             name="backend",
         )
+        _as_literal(
+            quantifier,
+            choices=("exists", "robust"),
+            name="quantifier",
+        )
 
         self.validate()
+
+        if quantifier == "robust" and backend == "hypercube":
+            raise ValueError(
+                "backend='hypercube' does not support quantifier='robust'; "
+                "use backend='asp'"
+            )
 
         if backend in {"auto", "asp"}:
             return _reachability_with_most_permissive_asp_backend(
                 self,
                 initial_state,
                 target_state,
+                quantifier=quantifier,
             )
 
         return _reachability_with_most_permissive_hypercube_backend(

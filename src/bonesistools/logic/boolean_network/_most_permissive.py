@@ -17,18 +17,18 @@ from typing import (
     cast,
 )
 
-from boolean import Expression
-from boolean.boolean import _FALSE, _TRUE
-
 from ..._compat import Literal
-from ..boolean_algebra import Hypercube, prime_implicants
-from ..boolean_algebra._structure import Implicants
+from ..boolean_algebra import ConfigurationSet, Hypercube
+from ..boolean_algebra._robdd import ROBDD
 from ..boolean_algebra._typing import HypercubeLike
+from ._most_permissive_asp import (
+    _asp_string,
+    _boolean_function_asp_facts,
+    _boolean_function_evaluation_asp_rules,
+)
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
-
-ImplicantsByValue = Dict[Literal[0, 1], Implicants]
 
 
 def _reachability_with_most_permissive_hypercube_backend(
@@ -36,35 +36,92 @@ def _reachability_with_most_permissive_hypercube_backend(
     initial_state: HypercubeLike,
     target_state: HypercubeLike,
 ) -> bool:
-    """Test one-step most-permissive reachability with hypercube regions."""
+    """Test existential MP reachability with hypercube regions."""
 
-    return _most_permissive_transition_space(network, initial_state).contains(
-        target_state
+    components = tuple(network.keys())
+    initial_hypercube = _validate_hypercube(
+        components,
+        initial_state,
+        name="initial_state",
     )
+    target_hypercube = _validate_hypercube(
+        components,
+        target_state,
+        name="target_state",
+    )
+
+    initial_configurations = ConfigurationSet(components, [initial_hypercube])
+    rule_bdds: Dict[str, ROBDD] = {}
+    reachability = (
+        _most_permissive_transition_space(
+            network,
+            configuration,
+            rule_bdds=rule_bdds,
+        ).contains(target_hypercube)
+        for configuration in initial_configurations
+    )
+    return any(reachability)
 
 
 def _reachability_with_most_permissive_asp_backend(
     network: "BooleanNetwork",
     initial_state: HypercubeLike,
     target_state: HypercubeLike,
+    *,
+    quantifier: Literal["exists", "robust"],
 ) -> bool:
     """Test one-step most-permissive reachability with direct ASP search."""
 
     components = tuple(network.keys())
-    initial_hypercube = _validate_complete_hypercube(
+    initial_hypercube = _validate_hypercube(
         components,
         initial_state,
         name="initial_state",
     )
-    target_hypercube = _validate_complete_hypercube(
+    target_hypercube = _validate_hypercube(
         components,
         target_state,
         name="target_state",
     )
 
     clingo = network._import_clingo()
+    control = _most_permissive_reachability_asp_control(
+        network,
+        clingo=clingo,
+        components=components,
+    )
+
+    if quantifier == "exists":
+        return _solve_most_permissive_reachability_asp(
+            control,
+            clingo=clingo,
+            initial_state=initial_hypercube,
+            target_state=target_hypercube,
+        )
+
+    initial_configurations = ConfigurationSet(components, [initial_hypercube])
+    return all(
+        _solve_most_permissive_reachability_asp(
+            control,
+            clingo=clingo,
+            initial_state=Hypercube(configuration),
+            target_state=target_hypercube,
+        )
+        for configuration in initial_configurations
+    )
+
+
+def _most_permissive_reachability_asp_control(
+    network: "BooleanNetwork",
+    *,
+    clingo: Any,
+    components: Tuple[str, ...],
+) -> Any:
+    """Compile a reusable most-permissive reachability solver."""
+
     control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
-        ["--models=1", "--warn=none"]
+        ["--models=1", "--warn=none"],
+        logger=lambda _code, _message: None,
     )
     control.add(
         "base",
@@ -73,17 +130,62 @@ def _reachability_with_most_permissive_asp_backend(
             network,
             clingo=clingo,
             components=components,
-            initial_state=initial_hypercube,
-            target_state=target_hypercube,
         ),
     )
     control.ground([("base", [])])
 
-    with control.solve(yield_=True) as handle:
-        for _ in handle:
-            return True
+    return control
 
-    return False
+
+def _solve_most_permissive_reachability_asp(
+    control: Any,
+    *,
+    clingo: Any,
+    initial_state: Hypercube,
+    target_state: Hypercube,
+) -> bool:
+    """Solve one existential query with a compiled reachability program."""
+
+    assumptions = [
+        *_state_asp_assumptions(
+            clingo,
+            state_name="initial",
+            state=initial_state,
+        ),
+        *_state_asp_assumptions(
+            clingo,
+            state_name="target",
+            state=target_state,
+        ),
+    ]
+
+    return bool(control.solve(assumptions=assumptions).satisfiable)
+
+
+def _state_asp_assumptions(
+    clingo: Any,
+    *,
+    state_name: str,
+    state: Hypercube,
+) -> List[Tuple[Any, bool]]:
+    """Return assumptions fixing one partial state in an ASP query."""
+
+    assumptions = []
+    for component, value in state.items():
+        if not value.is_fixed:
+            continue
+
+        atom = clingo.Function(
+            "mp_state",
+            [
+                clingo.Function(state_name),
+                clingo.String(component),
+                clingo.Number(cast(int, value.value)),
+            ],
+        )
+        assumptions.append((atom, True))
+
+    return assumptions
 
 
 def _reachable_configurations_with_most_permissive_hypercube_backend(
@@ -141,18 +243,21 @@ class _MPTransitionRegion:
         target_state: Hypercube,
         components: Tuple[str, ...],
     ) -> bool:
-        """Test whether a complete configuration belongs to the region."""
+        """Test whether the region intersects a target hypercube."""
 
-        for component in components:
-            if component in self.free_components:
+        for component, target_value in target_state.items():
+            if not target_value.is_fixed:
                 continue
 
-            if target_state[component].value != initial_state[component].value:
-                return False
-
-        for component in self.irreversible_components:
             initial_value = cast(int, initial_state[component].value)
-            if target_state[component].value != 1 - initial_value:
+            if component in self.irreversible_components:
+                expected_value = 1 - initial_value
+            elif component not in self.free_components:
+                expected_value = initial_value
+            else:
+                continue
+
+            if target_value.value != expected_value:
                 return False
 
         return True
@@ -183,9 +288,9 @@ class _MostPermissiveTransitionSpace:
         self,
         target_state: HypercubeLike,
     ) -> bool:
-        """Test whether a complete configuration is represented."""
+        """Test whether a target hypercube intersects the represented space."""
 
-        target_hypercube = _validate_complete_hypercube(
+        target_hypercube = _validate_hypercube(
             self._components,
             target_state,
             name="target_state",
@@ -209,6 +314,8 @@ class _MostPermissiveTransitionSpace:
 def _most_permissive_transition_space(
     network: "BooleanNetwork",
     initial_state: HypercubeLike,
+    *,
+    rule_bdds: Optional[Dict[str, ROBDD]] = None,
 ) -> _MostPermissiveTransitionSpace:
     """Return the compact one-step most-permissive transition space."""
 
@@ -218,6 +325,8 @@ def _most_permissive_transition_space(
         initial_state,
         name="initial_state",
     )
+    if rule_bdds is None:
+        rule_bdds = {}
 
     regions: List[_MPTransitionRegion] = []
     waiting: List[Tuple[str, ...]] = [components]
@@ -231,12 +340,11 @@ def _most_permissive_transition_space(
             continue
 
         processed.add(closure_components)
-        implicants: Dict[str, ImplicantsByValue] = {}
         closed_hypercube = _smallest_closed_hypercube(
             network,
             initial_hypercube,
             relaxed_components=closure_components,
-            implicants=implicants,
+            rule_bdds=rule_bdds,
         )
         free_components = _free_components(components, closed_hypercube)
         irreversible_components = _irreversible_components(
@@ -244,7 +352,7 @@ def _most_permissive_transition_space(
             initial_hypercube,
             closed_hypercube,
             free_components=free_components,
-            implicants=implicants,
+            rule_bdds=rule_bdds,
         )
 
         regions.append(
@@ -279,165 +387,63 @@ def _most_permissive_reachability_asp_program(
     *,
     clingo: Any,
     components: Tuple[str, ...],
-    initial_state: Hypercube,
-    target_state: Hypercube,
 ) -> str:
     """Build an ASP decision program for one-step MP reachability."""
 
-    facts = [
-        "opposite(0,1).",
-        "opposite(1,0).",
-        f"level_value(1..{len(components)}).",
-    ]
+    facts = ["opposite(0,1).", "opposite(1,0)."]
 
     for component in components:
         component_symbol = _asp_string(clingo, component)
-        initial_value = cast(int, initial_state[component].value)
-        target_value = cast(int, target_state[component].value)
+        facts.append(f"node({component_symbol}).")
 
-        facts.extend(
-            [
-                f"node({component_symbol}).",
-                f"initial({component_symbol},{initial_value}).",
-                f"target({component_symbol},{target_value}).",
-            ]
-        )
-
-    next_expression_id = 0
-    for target, rule in network.items():
-        target_symbol = _asp_string(clingo, target)
-        root_id, expression_facts, next_expression_id = _asp_expression_tree_facts(
-            network,
-            rule,
-            clingo=clingo,
-            next_expression_id=next_expression_id,
-        )
-        facts.append(f"root({target_symbol},{root_id}).")
-        facts.extend(expression_facts)
+    facts.extend(_boolean_function_asp_facts(network, clingo=clingo))
 
     return "\n".join(
         [
             *facts,
+            _boolean_function_evaluation_asp_rules(),
             """
-            { free(N) } :- node(N).
-            1 { level(N,L) : level_value(L) } 1 :- free(N).
+            timepoint(initial).
+            timepoint(target).
 
-            changed(N) :- target(N,V), initial(N,U), opposite(V,U).
-            :- changed(N), not free(N).
+            1 { mp_state(initial,N,0); mp_state(initial,N,1) } 1 :- node(N).
+            1 { mp_state(target,N,0); mp_state(target,N,1) } 1 :- node(N).
 
-            lower(L,N) :- level(L,A), level(N,B), A < B.
-            derivation_free_source(N,L) :- free(N), free(L), lower(L,N).
+            mp_reach(initial,N,V) :- mp_state(initial,N,V).
 
-            1 { derivation_value(N,L,0); derivation_value(N,L,1) } 1 :-
-                free(N), node(L), derivation_free_source(N,L).
-            derivation_value(N,L,V) :-
-                free(N), node(L), initial(L,V),
-                not derivation_free_source(N,L).
+            mp_ext(N,V) :- mp_eval(initial,N,V), mp_state(target,N,V).
+            { mp_ext(N,V) } :-
+                mp_eval(initial,N,V),
+                opposite(V,W),
+                not mp_state(target,N,V),
+                mp_state(target,N,W).
 
-            1 { final_value(N,L,0); final_value(N,L,1) } 1 :-
-                free(N), node(L), free(L).
-            final_value(N,L,V) :-
-                free(N), node(L), initial(L,V), not free(L).
+            mp_reach(initial,N,V) :- mp_ext(N,V).
 
-            derivation_eval(Q,E,V) :- free(Q), const_expr(E,V).
-            derivation_eval(Q,E,V) :-
-                free(Q), symbol_expr(E,N), derivation_value(Q,N,V).
-            derivation_eval(Q,E,V) :-
-                free(Q), not_expr(E,C), derivation_eval(Q,C,W), opposite(W,V).
-            derivation_eval(Q,E,0) :-
-                free(Q), and_expr(E), arg(E,C), derivation_eval(Q,C,0).
-            derivation_eval(Q,E,1) :-
-                free(Q), and_expr(E), derivation_eval(Q,C,1) : arg(E,C).
-            derivation_eval(Q,E,1) :-
-                free(Q), or_expr(E), arg(E,C), derivation_eval(Q,C,1).
-            derivation_eval(Q,E,0) :-
-                free(Q), or_expr(E), derivation_eval(Q,C,0) : arg(E,C).
-
-            final_eval(Q,E,V) :- free(Q), const_expr(E,V).
-            final_eval(Q,E,V) :- free(Q), symbol_expr(E,N), final_value(Q,N,V).
-            final_eval(Q,E,V) :-
-                free(Q), not_expr(E,C), final_eval(Q,C,W), opposite(W,V).
-            final_eval(Q,E,0) :-
-                free(Q), and_expr(E), arg(E,C), final_eval(Q,C,0).
-            final_eval(Q,E,1) :-
-                free(Q), and_expr(E), final_eval(Q,C,1) : arg(E,C).
-            final_eval(Q,E,1) :-
-                free(Q), or_expr(E), arg(E,C), final_eval(Q,C,1).
-            final_eval(Q,E,0) :-
-                free(Q), or_expr(E), final_eval(Q,C,0) : arg(E,C).
-
-            :- free(N), initial(N,V), opposite(V,W), root(N,E),
-               not derivation_eval(N,E,W).
-            :- free(N), target(N,V), root(N,E), not final_eval(N,E,V).
+            :- mp_state(target,N,V), not mp_reach(initial,N,V).
+            :- mp_state(target,N,V),
+               opposite(V,W),
+               mp_ext(N,W),
+               not mp_ext(N,V).
             """,
         ]
     )
 
 
-def _asp_expression_tree_facts(
-    network: "BooleanNetwork",
-    expr: Expression,
+def _validate_hypercube(
+    components: Tuple[str, ...],
+    state: HypercubeLike,
     *,
-    clingo: Any,
-    next_expression_id: int,
-) -> Tuple[int, Tuple[str, ...], int]:
-    """Return ASP facts encoding one Boolean expression tree."""
+    name: str,
+) -> Hypercube:
+    """Validate a possibly partial Boolean state."""
 
-    expression_id = next_expression_id
-    next_expression_id += 1
+    hypercube = Hypercube(state)
+    unknown_components = sorted(set(hypercube) - set(components))
+    if unknown_components:
+        raise ValueError(f"unknown components in {name}: {unknown_components}")
 
-    if isinstance(expr, _TRUE):
-        return expression_id, (f"const_expr({expression_id},1).",), next_expression_id
-
-    if isinstance(expr, _FALSE):
-        return expression_id, (f"const_expr({expression_id},0).",), next_expression_id
-
-    expr_any: Any = expr
-
-    if isinstance(expr_any, network.ba.NOT):
-        child_id, child_facts, next_expression_id = _asp_expression_tree_facts(
-            network,
-            expr_any.args[0],
-            clingo=clingo,
-            next_expression_id=next_expression_id,
-        )
-
-        return (
-            expression_id,
-            (f"not_expr({expression_id},{child_id}).", *child_facts),
-            next_expression_id,
-        )
-
-    if isinstance(expr_any, network.ba.AND) or isinstance(expr_any, network.ba.OR):
-        expression_facts = [
-            f"{'and' if isinstance(expr_any, network.ba.AND) else 'or'}_expr("
-            f"{expression_id})."
-        ]
-
-        for operand in expr_any.args:
-            child_id, child_facts, next_expression_id = _asp_expression_tree_facts(
-                network,
-                operand,
-                clingo=clingo,
-                next_expression_id=next_expression_id,
-            )
-            expression_facts.append(f"arg({expression_id},{child_id}).")
-            expression_facts.extend(child_facts)
-
-        return expression_id, tuple(expression_facts), next_expression_id
-
-    if expr_any.isliteral:
-        return (
-            expression_id,
-            (
-                "symbol_expr("
-                f"{expression_id},{_asp_string(clingo, str(expr_any.obj))}"
-                ").",
-            ),
-            next_expression_id,
-        )
-
-    raise ValueError(f"invalid Boolean expression for ASP reachability: {expr!r}")
+    return hypercube
 
 
 def _validate_complete_hypercube(
@@ -484,7 +490,7 @@ def _irreversible_components(
     closed_hypercube: Hypercube,
     *,
     free_components: Tuple[str, ...],
-    implicants: Dict[str, ImplicantsByValue],
+    rule_bdds: Dict[str, ROBDD],
 ) -> Tuple[str, ...]:
     """Return free components forced to leave their initial value."""
 
@@ -496,7 +502,7 @@ def _irreversible_components(
             component,
             value=initial_value,
             hypercube=closed_hypercube,
-            implicants=implicants,
+            rule_bdds=rule_bdds,
         ):
             irreversible_components.append(component)
 
@@ -525,7 +531,7 @@ def _smallest_closed_hypercube(
     *,
     relaxed_components: Iterable[str],
     depth: Optional[int] = None,
-    implicants: Optional[Dict[str, ImplicantsByValue]] = None,
+    rule_bdds: Optional[Dict[str, ROBDD]] = None,
 ) -> Hypercube:
     """Return the smallest closed hypercube obtained by relaxing components in K."""
 
@@ -535,8 +541,8 @@ def _smallest_closed_hypercube(
         for component in relaxed_components
         if component in hypercube and hypercube[component].is_fixed
     }
-    if implicants is None:
-        implicants = {}
+    if rule_bdds is None:
+        rule_bdds = {}
 
     iteration = 0
     while fixed and (depth is None or iteration < depth):
@@ -556,7 +562,7 @@ def _smallest_closed_hypercube(
                 component,
                 value=target_value,
                 hypercube=current_hypercube,
-                implicants=implicants,
+                rule_bdds=rule_bdds,
             ):
                 hypercube.pop(component, None)
                 fixed.remove(component)
@@ -576,43 +582,20 @@ def _rule_can_take_value_in_hypercube(
     *,
     value: Literal[0, 1],
     hypercube: Hypercube,
-    implicants: Dict[str, ImplicantsByValue],
+    rule_bdds: Dict[str, ROBDD],
 ) -> bool:
     """Test whether a rule can take a value inside a hypercube."""
 
-    if component not in implicants:
-        implicants[component] = {}
-
-    if value not in implicants[component]:
-        implicants[component][value] = prime_implicants(
+    if component not in rule_bdds:
+        rule_bdds[component] = ROBDD._from_rule(
             network[component],
-            value=value,
-            backend="asp",
             ba=network.ba,
         )
 
-    return any(
-        _implicant_intersects_hypercube(implicant, hypercube)
-        for implicant in implicants[component][value]
-    )
-
-
-def _implicant_intersects_hypercube(
-    implicant: Hypercube,
-    hypercube: Hypercube,
-) -> bool:
-    """Test whether an implicant has at least one state in a hypercube."""
-
-    for component, value in implicant.items():
-        if component in hypercube:
-            hypercube_value = hypercube[component]
-            if hypercube_value.is_fixed and hypercube_value != value:
-                return False
-
-    return True
-
-
-def _asp_string(clingo: Any, value: str) -> str:
-    """Return a clingo string literal."""
-
-    return str(clingo.String(value))
+    robdd = rule_bdds[component]
+    fixed_values = {
+        source: cast(int, source_value.value)
+        for source, source_value in hypercube.items()
+        if source_value.is_fixed
+    }
+    return robdd.can_take_value(fixed_values, value)

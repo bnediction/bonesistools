@@ -5,7 +5,7 @@ Utilities for Boolean algebra and partial Boolean abstractions.
 
 The `ba` sub-package provides structures and operations for Boolean algebra,
 including partial Boolean values, Kleene truth values, hypercubes,
-configuration sets, implicants and predecessor inference utilities.
+configuration sets, ROBDDs, implicants and predecessor inference utilities.
 """
 
 from typing import Any as _Any
@@ -26,6 +26,7 @@ from ._kleene import (
     meet,
 )
 from ._representation import rule_to_string
+from ._robdd import ROBDD
 from ._structure import (
     dnf_implicants,
     expressions_equivalent,
@@ -39,6 +40,7 @@ __all__ = [
     "ConfigurationSet",
     "Hypercube",
     "HypercubeCollection",
+    "ROBDD",
     "diff",
     "meet",
     "join",

@@ -19,12 +19,13 @@ from typing import (
 )
 
 from ..._compat import Literal
-from ..boolean_algebra import (
-    ConfigurationSet,
-    Hypercube,
-    dnf_implicants,
-)
+from ..boolean_algebra import ConfigurationSet, Hypercube
 from ..boolean_algebra._typing import HypercubeLike
+from ._most_permissive_asp import (
+    _asp_string,
+    _boolean_function_asp_facts,
+    _boolean_function_evaluation_asp_rules,
+)
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
@@ -356,7 +357,6 @@ def _reachable_attractors_with_most_permissive_backend(
     trapspaces = _solve_reachable_trapspaces_literals(
         clingo,
         base_program=base_program,
-        components=components,
     )
 
     return tuple(
@@ -400,29 +400,12 @@ def _most_permissive_asp_base_program(
                 ")."
             )
 
-    clause_id = 0
-    for target, rule in network.items():
-        target_symbol = _asp_string(clingo, target)
-        for implicant in dnf_implicants(rule, value=1, ba=network.ba):
-            facts.append(f"positive_clause({target_symbol}, {clause_id}).")
-            for source, source_value in implicant.items():
-                if not source_value.is_fixed:
-                    raise ValueError(
-                        "invalid DNF implicant with free component " f"{source!r}"
-                    )
-
-                facts.append(
-                    "positive_clause_literal("
-                    f"{target_symbol}, {clause_id}, "
-                    f"{_asp_string(clingo, source)}, "
-                    f"{cast(int, source_value.value)}"
-                    ")."
-                )
-            clause_id += 1
+    facts.extend(_boolean_function_asp_facts(network, clingo=clingo))
 
     return "\n".join(
         [
             *facts,
+            _boolean_function_evaluation_asp_rules(),
             """
             timepoint(initial).
             timepoint(final).
@@ -434,30 +417,7 @@ def _most_permissive_asp_base_program(
             1 { final_reach(N,0); final_reach(N,1) } 2 :- node(N).
             mp_reach(final,N,V) :- final_reach(N,V).
 
-            has_positive_clause(N) :- positive_clause(N,C).
-
-            positive_clause_satisfied(T,N,C) :-
-                timepoint(T),
-                positive_clause(N,C),
-                mp_reach(T,L,W) : positive_clause_literal(N,C,L,W).
-            positive_clause_falsified(T,N,C) :-
-                timepoint(T),
-                positive_clause_literal(N,C,L,W),
-                opposite(W,V),
-                mp_reach(T,L,V).
-
-            mp_eval(T,N,1) :- positive_clause_satisfied(T,N,C).
-            mp_eval(T,N,0) :- timepoint(T), node(N), not has_positive_clause(N).
-            mp_eval(T,N,0) :-
-                timepoint(T),
-                has_positive_clause(N),
-                positive_clause_falsified(T,N,C) : positive_clause(N,C).
-
             final_reach(N,V) :- mp_eval(final,N,V).
-            fixed(N,V) :-
-                final_reach(N,V),
-                opposite(V,W),
-                not final_reach(N,W).
 
             mp_reach(initial,N,V) :- mp_state(initial,N,V).
             mp_state(final,N,V) :- final_reach(N,V).
@@ -476,162 +436,47 @@ def _most_permissive_asp_base_program(
                mp_ext(N,W),
                not mp_ext(N,V).
 
-            #maximize { 1,N,V : fixed(N,V) }.
-            #show fixed/2.
+            #show final_reach/2.
             """,
         ]
     )
-
-
-def _solve_reachable_trapspace_literals(
-    clingo: object,
-    *,
-    base_program: str,
-    blockers: List[FrozenSet[Tuple[str, int]]],
-    components: Tuple[str, ...],
-) -> Optional[FrozenSet[Tuple[str, int]]]:
-    """Solve one reachable minimal trap-space candidate."""
-
-    control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
-        ["--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
-    )
-    control.add(
-        "base",
-        [],
-        "\n".join(
-            [
-                base_program,
-                _trapspace_blocker_program(
-                    clingo,
-                    blockers=blockers,
-                    components=components,
-                ),
-            ]
-        ),
-    )
-    control.ground([("base", [])])
-
-    optimal_literals = None
-    with control.solve(yield_=True) as handle:
-        for model in handle:
-            optimal_literals = frozenset(
-                (atom.arguments[0].string, atom.arguments[1].number)
-                for atom in model.symbols(shown=True)
-            )
-
-    return optimal_literals
 
 
 def _solve_reachable_trapspaces_literals(
     clingo: object,
     *,
     base_program: str,
-    components: Tuple[str, ...],
 ) -> Tuple[FrozenSet[Tuple[str, int]], ...]:
-    """Enumerate reachable minimal trap spaces with incremental blockers."""
+    """Enumerate inclusion-minimal reachable trap spaces with domain recursion."""
 
     control = clingo.Control(  # pyright: ignore[reportAttributeAccessIssue]
-        ["--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
+        ["--warn=none", "--single-shot"],
+        logger=lambda _code, _message: None,
     )
+    control.configuration.solve.models = 0
+    control.configuration.solve.project = 1
+    control.configuration.solve.enum_mode = "domRec"
+    control.configuration.solver[0].heuristic = "Domain"
+    control.configuration.solver[0].dom_mod = "5,16"
     control.add("base", [], base_program)
     control.ground([("base", [])])
 
-    blocker_id = 0
-    trapspaces: List[FrozenSet[Tuple[str, int]]] = []
-    seen: Set[FrozenSet[Tuple[str, int]]] = set()
-
-    while True:
-        optimal_literals = None
-        with control.solve(yield_=True) as handle:
-            for model in handle:
-                optimal_literals = frozenset(
-                    (atom.arguments[0].string, atom.arguments[1].number)
-                    for atom in model.symbols(shown=True)
+    trapspaces = set()
+    with control.solve(yield_=True) as handle:
+        for model in handle:
+            reachable_values = frozenset(
+                (atom.arguments[0].string, atom.arguments[1].number)
+                for atom in model.symbols(shown=True)
+            )
+            trapspaces.add(
+                frozenset(
+                    (component, value)
+                    for component, value in reachable_values
+                    if (component, 1 - value) not in reachable_values
                 )
-
-        if optimal_literals is None:
-            break
-
-        if optimal_literals not in seen:
-            trapspaces.append(optimal_literals)
-            seen.add(optimal_literals)
-
-        blocker_part = f"blocker_{blocker_id}"
-        control.add(
-            blocker_part,
-            [],
-            _incremental_trapspace_blocker_program(
-                clingo,
-                blocker_id=blocker_id,
-                literals=optimal_literals,
-                components=components,
-            ),
-        )
-        control.ground([(blocker_part, [])])
-        blocker_id += 1
+            )
 
     return tuple(sorted(trapspaces, key=_fixed_literals_sort_key))
-
-
-def _incremental_trapspace_blocker_program(
-    clingo: object,
-    *,
-    blocker_id: int,
-    literals: FrozenSet[Tuple[str, int]],
-    components: Tuple[str, ...],
-) -> str:
-    """Return one blocker constraint for an already enumerated trap space."""
-
-    outside = f"outside_{blocker_id}"
-    lines = []
-
-    for component in components:
-        for value in (0, 1):
-            if (component, value) not in literals:
-                lines.append(
-                    f"{outside} :- fixed({_asp_string(clingo, component)}, {value})."
-                )
-
-    lines.append(f":- not {outside}.")
-    return "\n".join(lines)
-
-
-def _trapspace_blocker_program(
-    clingo: object,
-    *,
-    blockers: List[FrozenSet[Tuple[str, int]]],
-    components: Tuple[str, ...],
-) -> str:
-    """Return ASP constraints excluding already enumerated trap spaces."""
-
-    lines = []
-    for blocker_id, literals in enumerate(blockers):
-        lines.append(f"blocker({blocker_id}).")
-
-        for component in components:
-            for value in (0, 1):
-                if (component, value) not in literals:
-                    lines.append(
-                        "outside_literal("
-                        f"{blocker_id}, {_asp_string(clingo, component)}, {value}"
-                        ")."
-                    )
-
-    if blockers:
-        lines.extend(
-            [
-                "outside(B) :- outside_literal(B,N,V), fixed(N,V).",
-                ":- blocker(B), not outside(B).",
-            ]
-        )
-
-    return "\n".join(lines)
-
-
-def _asp_string(clingo: object, value: str) -> str:
-    """Return a clingo string literal."""
-
-    return str(clingo.String(value))  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _hypercube_from_fixed_literals(
