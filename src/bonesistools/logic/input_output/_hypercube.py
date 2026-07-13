@@ -16,9 +16,9 @@ from ..boolean_algebra._hypercube import Hypercube
 
 def read_hypercubes(
     file: Union[str, Path],
+    *,
     orientation: FileOrientation = "columns",
     sep: str = ",",
-    *,
     axis: Optional[FileOrientation] = None,
 ) -> Dict[str, Hypercube]:
     """

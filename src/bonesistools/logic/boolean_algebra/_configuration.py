@@ -372,6 +372,19 @@ class ConfigurationSet:
         n = _as_positive_integer(n, "n")
         return tuple(self._sample_one(rng) for _ in range(n))
 
+    @classmethod
+    def _from_encoded_hypercubes(
+        cls,
+        components: Iterable[str],
+        hypercubes: Iterable[_EncodedHypercube],
+    ) -> "ConfigurationSet":
+        """Build a set from an exact disjoint encoded representation."""
+
+        configurations = cls(components)
+        configurations._hypercubes = list(hypercubes)
+
+        return configurations
+
     def _sample_one(self, rng: object) -> Dict[str, int]:
 
         total = self.count()
@@ -433,6 +446,18 @@ class ConfigurationSet:
             _decode_hypercube(hypercube, self._components)
             for hypercube in self._hypercubes
         )
+
+    def _iter_encoded_hypercubes(self) -> Iterator[_EncodedHypercube]:
+
+        return iter(self._hypercubes)
+
+    def _iter_state_bits(self) -> Iterator[int]:
+
+        for hypercube in self._hypercubes:
+            yield from _iter_hypercube_state_bits(
+                hypercube,
+                len(self._components),
+            )
 
     def _coerce_hypercube(self, configuration: object) -> _EncodedHypercube:
 
@@ -532,6 +557,22 @@ def _iter_hypercube_configurations(
                 configuration[component] = free_values[free_position]
                 free_position += 1
         yield configuration
+
+
+def _iter_hypercube_state_bits(
+    hypercube: _EncodedHypercube,
+    n_components: int,
+) -> Iterator[int]:
+
+    fixed_mask, value_mask = hypercube
+    free_mask = ((1 << n_components) - 1) ^ fixed_mask
+    free_values = free_mask
+
+    while True:
+        yield value_mask | free_values
+        if free_values == 0:
+            break
+        free_values = (free_values - 1) & free_mask
 
 
 def _configuration_at_index(

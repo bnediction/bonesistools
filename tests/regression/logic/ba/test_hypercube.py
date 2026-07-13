@@ -187,6 +187,14 @@ def test_read_hypercubes_from_csv_columns_and_rows(tmp_path):
     assert by_rows["B"] == {"hc1": "*", "hc2": 0}
 
 
+def test_read_hypercubes_options_are_keyword_only(tmp_path):
+    file = tmp_path / "hypercubes.csv"
+    file.write_text(",hc1\nA,1\n")
+
+    with pytest.raises(TypeError):
+        bt.logic.io.read_hypercubes(file, "rows")
+
+
 def test_read_hypercubes_from_tsv_and_rejects_invalid_inputs(tmp_path):
     tsv_file = tmp_path / "hypercubes.tsv"
     tsv_file.write_text(

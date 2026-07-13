@@ -23,6 +23,16 @@ def test_configuration_set_adds_configurations_and_iterates_complete_states():
     )
 
 
+def test_configuration_set_iterates_internal_state_bitsets():
+
+    configurations = bt.logic.ba.ConfigurationSet(
+        ["A", "B", "C"],
+        [{"A": 1, "C": 0}],
+    )
+
+    assert set(configurations._iter_state_bits()) == {0b001, 0b011}
+
+
 def test_configuration_set_adds_subspaces_without_public_hypercube_semantics():
 
     configurations = bt.logic.ba.ConfigurationSet(["A", "B"])

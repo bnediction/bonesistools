@@ -22,7 +22,8 @@ else:
 
 
 def read_influence_graph(
-    infile: Union[str, Path],
+    file: Union[str, Path],
+    *,
     genesyn: Optional[GeneSynonyms] = None,
     input_identifier_type: InputIdentifierType = "name",
     output_identifier_type: OutputIdentifierType = "official_name",
@@ -37,7 +38,7 @@ def read_influence_graph(
 
     Parameters
     ----------
-    infile: str | Path
+    file: str | Path
         Path to the tabular file containing the influence graph.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
@@ -63,7 +64,7 @@ def read_influence_graph(
     Raises
     ------
     FileNotFoundError
-        If `infile` does not exist.
+        If `file` does not exist.
     ValueError
         If the input file is missing required columns or contains unsupported
         sign values.
@@ -78,12 +79,12 @@ def read_influence_graph(
     - NaN for unsigned or unknown influence
     """
 
-    infile = Path(infile)
+    file = Path(file)
 
-    if not infile.is_file():
-        raise FileNotFoundError(f"file not found: {infile}")
+    if not file.is_file():
+        raise FileNotFoundError(f"file not found: {file}")
 
-    influence_graph = pd.read_csv(infile, sep=sep, **kwargs)
+    influence_graph = pd.read_csv(file, sep=sep, **kwargs)
 
     required_columns = {"source", "target", "sign"}
     missing_columns = required_columns - set(influence_graph.columns)

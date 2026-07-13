@@ -42,7 +42,7 @@ from ._booleanization import (
 from ._executable_model import ExecutableModel
 
 
-def read_ginml(path: Union[str, Path]) -> ExecutableModel:
+def read_ginml(file: Union[str, Path]) -> ExecutableModel:
     """
     Read a GINML logical model.
 
@@ -55,15 +55,15 @@ def read_ginml(path: Union[str, Path]) -> ExecutableModel:
     `model.metadata["boolean_component_names"]`.
     """
 
-    path = Path(path)
-    content = path.read_bytes()
+    file = Path(file)
+    content = file.read_bytes()
     return _read_ginml_bytes(
         content,
-        source=str(path),
+        source=str(file),
     )
 
 
-def read_zginml(path: Union[str, Path]) -> ExecutableModel:
+def read_zginml(file: Union[str, Path]) -> ExecutableModel:
     """
     Read a ZGINML archive.
 
@@ -72,9 +72,9 @@ def read_zginml(path: Union[str, Path]) -> ExecutableModel:
     preserved in metadata.
     """
 
-    path = Path(path)
+    file = Path(file)
 
-    with zipfile.ZipFile(path) as archive:
+    with zipfile.ZipFile(file) as archive:
         archive_files = {
             name: archive.read(name)
             for name in sorted(archive.namelist())
@@ -84,17 +84,17 @@ def read_zginml(path: Union[str, Path]) -> ExecutableModel:
     ginml_files = [name for name in archive_files if name.lower().endswith(".ginml")]
 
     if not ginml_files:
-        raise ValueError(f"invalid ZGINML archive: no '.ginml' file found in {path}")
+        raise ValueError(f"invalid ZGINML archive: no '.ginml' file found in {file}")
 
     main_ginml = _select_main_ginml_file(ginml_files)
     model = _read_ginml_bytes(
         archive_files[main_ginml],
-        source=str(path),
+        source=str(file),
     )
 
     model.metadata["format"] = "zginml"
     model.metadata["archive"] = {
-        "path": str(path),
+        "path": str(file),
         "main_ginml": main_ginml,
         "files": sorted(archive_files),
     }

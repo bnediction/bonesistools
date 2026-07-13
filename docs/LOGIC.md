@@ -308,12 +308,12 @@ sbml_model = bt.logic.io.read_sbml("model.sbml")
 
 ### Readers
 
-- `read_bnet(path)` reads a `.bnet` Boolean network.
-- `read_bnet_directory(path)` reads a directory of `.bnet` files into a
+- `read_bnet(file)` reads a `.bnet` Boolean network.
+- `read_bnet_directory(directory)` reads a directory of `.bnet` files into a
   Boolean-network ensemble.
-- `read_ginml(path)` reads a GINML logical model.
-- `read_zginml(path)` reads a ZGINML archive and preserves companion files.
-- `read_sbml(path)` reads an SBML Level 3 Qual logical model.
+- `read_ginml(file)` reads a GINML logical model.
+- `read_zginml(file)` reads a ZGINML archive and preserves companion files.
+- `read_sbml(file)` reads an SBML Level 3 Qual logical model.
 
 ### Imported Logical Models
 

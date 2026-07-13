@@ -18,7 +18,8 @@ GeneSynonyms = _influence_graph.GeneSynonyms
 
 
 def read_influence_graph(
-    infile: Union[str, Path],
+    file: Union[str, Path],
+    *,
     genesyn: Optional[Any] = None,
     input_identifier_type: InputIdentifierType = "name",
     output_identifier_type: OutputIdentifierType = "official_name",
@@ -30,7 +31,7 @@ def read_influence_graph(
 
     try:
         return _influence_graph.read_influence_graph(
-            infile,
+            file,
             genesyn=genesyn,
             input_identifier_type=input_identifier_type,
             output_identifier_type=output_identifier_type,

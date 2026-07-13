@@ -32,7 +32,7 @@ _UNSUPPORTED_SBML_DOCUMENT = (
 )
 
 
-def read_sbml(path: Union[str, Path]) -> ExecutableModel:
+def read_sbml(file: Union[str, Path]) -> ExecutableModel:
     """
     Read an SBML Level 3 Qual logical model.
 
@@ -47,7 +47,7 @@ def read_sbml(path: Union[str, Path]) -> ExecutableModel:
 
     Parameters
     ----------
-    path: str or Path
+    file: str or Path
         SBML Level 3 Qual file.
 
     Returns
@@ -62,8 +62,8 @@ def read_sbml(path: Union[str, Path]) -> ExecutableModel:
         or MathML construction.
     """
 
-    path = Path(path)
-    root = ElementTree.fromstring(path.read_bytes())
+    file = Path(file)
+    root = ElementTree.fromstring(file.read_bytes())
     qual_namespace = _validate_sbml_qual_document(root)
     model_element = _first_child(root, "model")
 
@@ -99,7 +99,7 @@ def read_sbml(path: Union[str, Path]) -> ExecutableModel:
     }
     metadata = {
         "format": "sbml",
-        "source": str(path),
+        "source": str(file),
         "sbml_level": 3,
         "sbml_version": int(root.get("version", "1")),
         "qual_namespace": qual_namespace,

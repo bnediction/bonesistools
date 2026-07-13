@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Set, Tuple
 
 from ._bdd import _bdd_equivalence, _bdd_exclusive_or, _bdd_rule
 
@@ -10,15 +10,15 @@ if TYPE_CHECKING:
     from ._network import BooleanNetwork
 
 
-def _bdd_asynchronous_transition_relation(
+def _bdd_asynchronous_transition_partitions(
     network: "BooleanNetwork",
     *,
     bdd: Any,
     components: Tuple[str, ...],
     current_vars: Tuple[str, ...],
     next_vars: Tuple[str, ...],
-) -> Any:
-    """Build the asynchronous transition relation as one BDD."""
+) -> Tuple[Any, ...]:
+    """Build disjunctive partitions of the asynchronous transition relation."""
 
     component_vars = dict(zip(components, current_vars))
     current_values = tuple(bdd.var(variable) for variable in current_vars)
@@ -39,7 +39,7 @@ def _bdd_asynchronous_transition_relation(
             _bdd_equivalence(next_values[index], current_values[index])
         )
 
-    relation = bdd.false
+    partitions = []
     for updated_index, (current_value, next_value, rule) in enumerate(
         zip(current_values, next_values, rules)
     ):
@@ -47,9 +47,9 @@ def _bdd_asynchronous_transition_relation(
         transition &= _bdd_equivalence(next_value, rule)
         transition &= unchanged_prefixes[updated_index]
         transition &= unchanged_suffixes[updated_index + 1]
-        relation |= transition
+        partitions.append(transition)
 
-    return relation
+    return tuple(partitions)
 
 
 def _asynchronous_successor_state_bits(
@@ -65,3 +65,80 @@ def _asynchronous_successor_state_bits(
         unstable_mask ^= bit
 
     return tuple(successors)
+
+
+def _tarjan_asynchronous_terminal_sccs(
+    initial_states: Iterable[int],
+    unstable_mask: Callable[[int], int],
+) -> Tuple[Tuple[int, ...], ...]:
+    """Find reachable terminal SCCs with an iterative on-the-fly Tarjan search."""
+
+    visited: Set[int] = set()
+    indices: Dict[int, int] = {}
+    lowlinks: Dict[int, int] = {}
+    component_stack: List[int] = []
+    has_external_successor: Set[int] = set()
+    terminal_components: List[Tuple[int, ...]] = []
+    next_index = 0
+
+    for initial_state in initial_states:
+        if initial_state in visited:
+            continue
+
+        visited.add(initial_state)
+        indices[initial_state] = next_index
+        lowlinks[initial_state] = next_index
+        next_index += 1
+        component_stack.append(initial_state)
+        dfs_states = [initial_state]
+        remaining_masks = [unstable_mask(initial_state)]
+
+        while dfs_states:
+            state = dfs_states[-1]
+            remaining_mask = remaining_masks[-1]
+            if remaining_mask:
+                bit = remaining_mask & -remaining_mask
+                remaining_masks[-1] ^= bit
+                successor = state ^ bit
+
+                if successor not in visited:
+                    visited.add(successor)
+                    indices[successor] = next_index
+                    lowlinks[successor] = next_index
+                    next_index += 1
+                    component_stack.append(successor)
+                    dfs_states.append(successor)
+                    remaining_masks.append(unstable_mask(successor))
+                elif successor in indices:
+                    lowlinks[state] = min(lowlinks[state], indices[successor])
+                else:
+                    has_external_successor.add(state)
+                continue
+
+            dfs_states.pop()
+            remaining_masks.pop()
+
+            if lowlinks[state] == indices[state]:
+                component = []
+                is_terminal = True
+                while True:
+                    member = component_stack.pop()
+                    component.append(member)
+                    is_terminal &= member not in has_external_successor
+                    has_external_successor.discard(member)
+                    del indices[member]
+                    del lowlinks[member]
+                    if member == state:
+                        break
+
+                if is_terminal:
+                    terminal_components.append(tuple(component))
+
+            if dfs_states:
+                parent = dfs_states[-1]
+                if state in indices:
+                    lowlinks[parent] = min(lowlinks[parent], lowlinks[state])
+                else:
+                    has_external_successor.add(parent)
+
+    return tuple(terminal_components)

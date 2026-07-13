@@ -44,6 +44,23 @@ def test_read_influence_graph_supports_custom_separator(tmp_path):
     assert list(graph.edges(data=True)) == [("A", "B", {"sign": 1.0})]
 
 
+def test_read_influence_graph_options_are_keyword_only(tmp_path):
+    file = tmp_path / "graph.csv"
+    file.write_text("source,target,sign\nA,B,1\n")
+
+    with pytest.raises(TypeError):
+        bt.logic.io.read_influence_graph(file, None)
+
+
+def test_read_influence_graph_accepts_named_file(tmp_path):
+    file = tmp_path / "graph.csv"
+    file.write_text("source,target,sign\nA,B,1\n")
+
+    graph = bt.logic.io.read_influence_graph(file=file)
+
+    assert list(graph.edges(data=True)) == [("A", "B", {"sign": 1.0})]
+
+
 def test_read_influence_graph_validates_file_columns_and_signs(tmp_path):
     missing = tmp_path / "missing.csv"
 

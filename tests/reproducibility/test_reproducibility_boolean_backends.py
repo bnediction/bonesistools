@@ -6,6 +6,7 @@ from typing import Any, Tuple, cast
 import pytest
 
 import bonesistools as bt
+from bonesistools.logic.boolean_network import _dynamics
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("BONESISTOOLS_RUN_REPRODUCIBILITY") != "1",
@@ -46,15 +47,22 @@ def test_reachable_attractors_match_between_explicit_and_bdd_backends(update):
         "D": 0,
     }
 
-    explicit = bn.reachable_attractors(
-        initial_state,
+    initial_states = bt.logic.ba.ConfigurationSet(tuple(bn.keys()), [initial_state])
+    if update == "synchronous":
+        explicit = _dynamics._synchronous_reachable_attractors(
+            bn,
+            initial_states,
+        )
+    else:
+        explicit = _dynamics._explicit_reachable_attractors(
+            bn,
+            initial_states,
+            update=cast(Any, update),
+        )
+    bdd = _dynamics._bdd_reachable_attractors(
+        bn,
+        initial_states,
         update=cast(Any, update),
-        backend="explicit",
-    )
-    bdd = bn.reachable_attractors(
-        initial_state,
-        update=cast(Any, update),
-        backend="bdd",
     )
 
     assert _canonical_attractors(bdd) == _canonical_attractors(explicit)

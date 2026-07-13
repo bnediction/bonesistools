@@ -55,7 +55,7 @@ def _toy_ginml() -> str:
 def test_read_ginml_returns_executable_model_with_boolean_network(tmp_path):
     path = _write_text(tmp_path / "toy.ginml", _toy_ginml())
 
-    model = bt.logic.io.read_ginml(path)
+    model = bt.logic.io.read_ginml(file=path)
 
     assert isinstance(model, ExecutableModel)
     assert repr(model).startswith(
@@ -645,7 +645,7 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
         )
         zf.writestr("GINsim-data/notes.txt", "preserve me")
 
-    model = bt.logic.io.read_zginml(archive)
+    model = bt.logic.io.read_zginml(file=archive)
 
     assert model.metadata["format"] == "zginml"
     assert (

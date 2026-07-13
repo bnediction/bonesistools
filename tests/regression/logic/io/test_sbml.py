@@ -95,7 +95,7 @@ def test_read_sbml_converts_boolean_terms_and_default(tmp_path):
         ),
     )
 
-    model = bt.logic.io.read_sbml(path)
+    model = bt.logic.io.read_sbml(file=path)
 
     assert model.get("boolean_network").rules == {
         "A": "A",

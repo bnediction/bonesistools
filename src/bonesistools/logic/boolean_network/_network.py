@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
 from importlib import import_module
+from importlib.util import find_spec
 from itertools import product
 from pathlib import Path
 from typing import (
@@ -65,11 +66,13 @@ from ._dynamics import (
     _bdd_reachable_attractors,
     _explicit_reachable_attractors,
     _synchronous_reachability,
+    _synchronous_reachable_attractors,
 )
 from ._most_permissive import (
     _most_permissive_reachability,
     _most_permissive_reachable_attractors,
     _most_permissive_reachable_configurations,
+    _smallest_closed_hypercube,
 )
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
@@ -984,14 +987,14 @@ class BooleanNetwork(Dict[str, Expression]):
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
         ] = "asynchronous",
-        backend: Optional[Literal["explicit", "bdd", "asp"]] = None,
     ) -> Tuple[ConfigurationSet, ...]:
         """
         Return attractors reachable from an initial configuration or subspace.
 
         Attractors are returned as exact `ConfigurationSet` objects. Iterating
         over a returned set yields complete Boolean configurations, while
-        `len(...)` returns the number of configurations in the attractor.
+        `len(...)` returns the number of configurations in the attractor. The
+        order of attractors and configurations is unspecified.
 
         Examples
         --------
@@ -1045,13 +1048,6 @@ class BooleanNetwork(Dict[str, Expression]):
             - `"general"` updates any non-empty subset of unstable components.
             - `"most-permissive"` returns reachable minimal trap spaces using
               most-permissive reachability.
-        backend: {None, "explicit", "bdd", "asp"} (default: None)
-            Backend used for attractor computation. If `None`, use
-            `"explicit"` for `"synchronous"`, `"asynchronous"` and
-            `"general"`, and `"asp"` for `"most-permissive"`. The `"bdd"`
-            backend is supported for `"synchronous"`, `"asynchronous"` and
-            `"general"` dynamics.
-
         Returns
         -------
         tuple of ConfigurationSet
@@ -1060,13 +1056,9 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Raises
         ------
-        ImportError
-            If `backend="bdd"` is requested but the optional dependency `dd`
-            is not installed.
         ValueError
             If the network is not closed, the initial state is invalid,
-            `update` is invalid, or `backend` is invalid for the requested
-            dynamics.
+            or `update` is invalid.
         """
 
         update = _as_literal(
@@ -1085,50 +1077,39 @@ class BooleanNetwork(Dict[str, Expression]):
         initial_states = ConfigurationSet(tuple(self.keys()), [resolved_initial_state])
 
         if update == "synchronous":
-            backend = _as_literal(
-                backend,
-                choices=("explicit", "bdd"),
-                name="backend",
-                allow_none=True,
+            selected_backend = _automatic_reachable_attractors_backend(
+                self,
+                resolved_initial_state,
+                initial_states,
+                update=update,
             )
 
-            if backend == "bdd":
+            if selected_backend == "bdd":
                 return _bdd_reachable_attractors(
                     self,
                     initial_states,
                     update=update,
                 )
 
-            return _explicit_reachable_attractors(
+            return _synchronous_reachable_attractors(
                 self,
                 initial_states,
-                update=update,
             )
 
         if update == "most-permissive":
-            backend = _as_literal(
-                backend,
-                choices=("asp",),
-                name="backend",
-                allow_none=True,
-            )
-
-            if backend is None:
-                backend = "asp"
-
             return _most_permissive_reachable_attractors(
                 self,
                 resolved_initial_state,
             )
 
-        backend = _as_literal(
-            backend,
-            choices=("explicit", "bdd"),
-            name="backend",
-            allow_none=True,
+        selected_backend = _automatic_reachable_attractors_backend(
+            self,
+            resolved_initial_state,
+            initial_states,
+            update=update,
         )
 
-        if backend == "bdd":
+        if selected_backend == "bdd":
             return _bdd_reachable_attractors(
                 self,
                 initial_states,
@@ -2734,3 +2715,33 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         self._check_network(bn)
         return BooleanNetwork(bn, ba=self.__ba, check=False)
+
+
+def _automatic_reachable_attractors_backend(
+    network: BooleanNetwork,
+    initial_state: HypercubeLike,
+    initial_states: ConfigurationSet,
+    *,
+    update: Literal["asynchronous", "synchronous", "general"],
+) -> Literal["explicit", "bdd"]:
+    """Select a conservative backend from bounds on the reachable state space."""
+
+    if find_spec("dd") is None:
+        return "explicit"
+
+    if update == "synchronous":
+        return "explicit" if len(initial_states) <= 1_024 else "bdd"
+
+    if update == "asynchronous" and len(initial_states) >= 2_048:
+        return "bdd"
+
+    closed_hypercube = _smallest_closed_hypercube(
+        network,
+        initial_state,
+        relaxed_components=network.keys(),
+    )
+    n_fixed = sum(value.is_fixed for value in closed_hypercube.values())
+    n_free = len(network) - n_fixed
+
+    explicit_dimension_limit = 13 if update == "asynchronous" else 10
+    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
