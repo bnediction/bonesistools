@@ -7,6 +7,7 @@ from importlib import import_module
 from importlib.util import find_spec
 from itertools import product
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -64,9 +65,14 @@ from ..influence_graph._svg import SvgLength, scale_svg
 from ._dynamics import (
     _bdd_reachability,
     _bdd_reachable_attractors,
+    _bdd_reachable_configurations,
     _explicit_reachable_attractors,
+    _explicit_reachable_configurations,
+    _finite_state_transition,
     _synchronous_reachability,
     _synchronous_reachable_attractors,
+    _synchronous_reachable_configurations,
+    _validate_complete_hypercube,
 )
 from ._most_permissive import (
     _most_permissive_reachability,
@@ -357,14 +363,16 @@ class BooleanNetwork(Dict[str, Expression]):
         Examples
         --------
         >>> bn = BooleanNetwork({"A": "~B", "B": 1})
+        >>> # lqm = bn.convert("biolqm")
         >>> # bn = bn.convert("mpbn")
-        >>> # bn = bn.convert("minibn.BooleanNetwork")
+        >>> # bn = bn.convert("minibn")
+        >>> # primes = bn.convert("pyboolnet")
 
         Parameters
         ----------
         target: str
-            Conversion target. Currently supported: `"mpbn"`, `"minibn"`,
-            and `"minibn.BooleanNetwork"`.
+            Conversion target. Currently supported: `"biolqm"`, `"minibn"`,
+            `"mpbn"`, and `"pyboolnet"`.
         **kwargs: Any
             Keyword arguments forwarded to the target constructor.
 
@@ -390,13 +398,54 @@ class BooleanNetwork(Dict[str, Expression]):
                 f"expected {str} but received {type(target)}"
             )
 
-        if target in ["minibn", "minibn.BooleanNetwork"]:
+        if target == "biolqm":
+            try:
+                biolqm = import_module("biolqm")
+
+            except ImportError as error:
+                raise ImportError(
+                    "BooleanNetwork.convert('biolqm') requires the bioLQM "
+                    "Python interface to be installed."
+                ) from error
+
+            except FileNotFoundError as error:
+                raise RuntimeError(
+                    "BooleanNetwork.convert('biolqm') requires the GINsim "
+                    "executable to be available."
+                ) from error
+
+            with TemporaryDirectory() as directory:
+                file = Path(directory) / "network.bnet"
+                self.to_bnet(file)
+                return biolqm.load(str(file), **kwargs)
+
+        if target == "pyboolnet":
+            return {
+                component: [
+                    [
+                        {
+                            source: cast(int, source_value.value)
+                            for source, source_value in implicant.items()
+                        }
+                        for implicant in prime_implicants(
+                            rule,
+                            value=value,
+                            backend="asp",
+                            ba=self.ba,
+                        )
+                    ]
+                    for value in (0, 1)
+                ]
+                for component, rule in self.items()
+            }
+
+        if target == "minibn":
             try:
                 from colomoto import minibn
 
             except ImportError as error:
                 raise ImportError(
-                    "BooleanNetwork.convert('minibn.BooleanNetwork') requires "
+                    "BooleanNetwork.convert('minibn') requires "
                     "colomoto.minibn to be installed."
                 ) from error
 
@@ -416,7 +465,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         raise ValueError(
             f"unsupported conversion target {target!r}: supported targets are "
-            "['minibn', 'minibn.BooleanNetwork', 'mpbn']"
+            "['biolqm', 'minibn', 'mpbn', 'pyboolnet']"
         )
 
     @property
@@ -867,16 +916,24 @@ class BooleanNetwork(Dict[str, Expression]):
 
         if not is_configuration_like(state):
             if is_hypercube_like(state):
-                return False
+                hypercube = Hypercube(state)
+                if not hypercube.is_fully_specified:
+                    return False
 
-            for component in self:
-                self._normalize_boolean_value(
-                    state[component],
-                    name="state",
-                    component=component,
-                )
+                state = {
+                    component: cast(int, hypercube[component].value)
+                    for component in self
+                }
 
-        state = self._normalize_state(state)
+            else:
+                for component in self:
+                    self._normalize_boolean_value(
+                        state[component],
+                        name="state",
+                        component=component,
+                    )
+
+        state = self._normalize_state(cast(ConfigurationLike, state))
 
         return self.next_configuration(state) == state
 
@@ -1126,8 +1183,9 @@ class BooleanNetwork(Dict[str, Expression]):
         self,
         initial_state: HypercubeLike,
         *,
-        update: Literal["most-permissive"] = "most-permissive",
-        backend: Literal["hypercube"] = "hypercube",
+        update: Literal[
+            "asynchronous", "synchronous", "general", "most-permissive"
+        ] = "most-permissive",
     ) -> Iterator[Dict[str, int]]:
         """
         Iterate over configurations reachable from one initial configuration.
@@ -1136,47 +1194,186 @@ class BooleanNetwork(Dict[str, Expression]):
         --------
         >>> bn = BooleanNetwork({"A": 1, "B": "A"})
         >>> list(bn.reachable_configurations({"A": 0, "B": 0}))
-        [{'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1}]
+        [{'A': 1, 'B': 0}, {'A': 1, 'B': 1}, {'A': 0, 'B': 0}]
 
         Parameters
         ----------
         initial_state: HypercubeLike
             Initial complete Boolean configuration.
-        update: {"most-permissive"} (default: "most-permissive")
-            Update semantics.
-        backend: {"hypercube"} (default: "hypercube")
-            Backend used for enumeration. The `"hypercube"` backend uses the
-            compact most-permissive transition-space decomposition into closed
-            hypercubes and irreversible components.
+        update: {"asynchronous", "synchronous", "general", "most-permissive"}
+            (default: "most-permissive")
+            Update semantics. Finite-state dynamics use an automatically
+            selected explicit or symbolic traversal. Most-permissive dynamics
+            use a compact decomposition into closed hypercubes and irreversible
+            components.
 
         Returns
         -------
         Iterator[dict[str, int]]
             Complete Boolean configurations reachable from `initial_state`.
+            Iteration order is unspecified.
 
         Raises
         ------
         ValueError
             If the network is not closed, the initial state is invalid,
-            `update` is invalid or `backend` is invalid.
+            or `update` is invalid.
         """
 
-        _as_literal(
+        update = _as_literal(
             update,
-            choices=("most-permissive",),
+            choices=("asynchronous", "synchronous", "general", "most-permissive"),
             name="update",
         )
-        _as_literal(
-            backend,
-            choices=("hypercube",),
-            name="backend",
+
+        self.validate()
+        initial_hypercube = _validate_complete_hypercube(
+            tuple(self.keys()),
+            initial_state,
+            name="initial_state",
+        )
+
+        if update == "synchronous":
+            return _synchronous_reachable_configurations(
+                self,
+                initial_hypercube,
+            )
+
+        if update == "most-permissive":
+            return _most_permissive_reachable_configurations(
+                self,
+                initial_hypercube,
+            )
+
+        selected_backend = _automatic_reachable_configurations_backend(
+            self,
+            initial_hypercube,
+            update=update,
+        )
+        if selected_backend == "bdd":
+            return _bdd_reachable_configurations(
+                self,
+                initial_hypercube,
+                update=update,
+            )
+
+        return _explicit_reachable_configurations(
+            self,
+            initial_hypercube,
+            update=update,
+        )
+
+    def transition(
+        self,
+        initial_state: HypercubeLike,
+        target_state: HypercubeLike,
+        *,
+        update: Literal[
+            "asynchronous", "synchronous", "general", "most-permissive"
+        ] = "most-permissive",
+        quantifier: Literal["exists", "robust", "universal"] = "robust",
+    ) -> bool:
+        """
+        Test a direct transition between two Boolean configurations.
+
+        For most-permissive dynamics, a transition is equivalent to
+        most-permissive reachability. Consequently, `transition(...)` and
+        `reachability(...)` return the same result when
+        `update="most-permissive"`.
+
+        Examples
+        --------
+        Asynchronous dynamics update exactly one unstable component:
+
+        >>> bn = BooleanNetwork({"A": "~A", "B": "~B"})
+        >>> bn.transition(
+        ...     {"A": 0, "B": 0},
+        ...     {"A": 1, "B": 0},
+        ...     update="asynchronous",
+        ... )
+        True
+        >>> bn.transition(
+        ...     {"A": 0, "B": 0},
+        ...     {"A": 1, "B": 1},
+        ...     update="asynchronous",
+        ... )
+        False
+
+        General dynamics may update both components at once:
+
+        >>> bn.transition(
+        ...     {"A": 0, "B": 0},
+        ...     {"A": 1, "B": 1},
+        ...     update="general",
+        ... )
+        True
+
+        Parameters
+        ----------
+        initial_state: HypercubeLike
+            Initial Boolean state. A partial state represents all compatible
+            complete configurations.
+        target_state: HypercubeLike
+            Target Boolean state. A partial state represents all compatible
+            complete configurations.
+        update: {"asynchronous", "synchronous", "general", "most-permissive"}
+            (default: "most-permissive")
+            Update semantics.
+        quantifier: {"exists", "robust", "universal"} (default: "robust")
+            Quantification used for partial states. If `"exists"`, at least
+            one initial configuration must have a transition to one target
+            configuration. If `"robust"`, every initial configuration must
+            have a transition to at least one target configuration. If
+            `"universal"`, every initial configuration must have a transition
+            to every target configuration.
+
+        Returns
+        -------
+        bool
+            Whether the direct transition satisfies the selected quantifier.
+
+        Raises
+        ------
+        ImportError
+            If partial-state dynamics require the optional dependency `dd`
+            and it is not installed.
+        ValueError
+            If the network is not closed, a state is invalid, `update` is
+            invalid or `quantifier` is invalid.
+        """
+
+        update = _as_literal(
+            update,
+            choices=(
+                "asynchronous",
+                "synchronous",
+                "general",
+                "most-permissive",
+            ),
+            name="update",
+        )
+        quantifier = _as_literal(
+            quantifier,
+            choices=("exists", "robust", "universal"),
+            name="quantifier",
         )
 
         self.validate()
 
-        return _most_permissive_reachable_configurations(
+        if update == "most-permissive":
+            return _most_permissive_reachability(
+                self,
+                initial_state,
+                target_state,
+                quantifier=quantifier,
+            )
+
+        return _finite_state_transition(
             self,
             initial_state,
+            target_state,
+            update=update,
+            quantifier=quantifier,
         )
 
     def reachability(
@@ -1813,7 +2010,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return "\n".join(lines)
 
-    def _normalize_state(self, state: HypercubeLike) -> Dict[str, int]:
+    def _normalize_state(self, state: ConfigurationLike) -> Dict[str, int]:
 
         if not isinstance(state, MappingABC):
             raise TypeError(
@@ -2168,14 +2365,16 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": "~B", "B": 1}])
+        >>> # lqms = ensemble.convert("biolqm")
         >>> # mpbns = ensemble.convert("mpbn")
-        >>> # minibns = ensemble.convert("minibn.BooleanNetwork")
+        >>> # minibns = ensemble.convert("minibn")
+        >>> # primes = ensemble.convert("pyboolnet")
 
         Parameters
         ----------
         target: str
-            Conversion target. Currently supported: `"mpbn"`, `"minibn"`,
-            and `"minibn.BooleanNetwork"`.
+            Conversion target. Currently supported: `"biolqm"`, `"minibn"`,
+            `"mpbn"`, and `"pyboolnet"`.
         **kwargs: Any
             Keyword arguments forwarded to the target constructor.
 
@@ -2201,12 +2400,12 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
                 f"expected {str} but received {type(target)}"
             )
 
-        if target in ["minibn", "minibn.BooleanNetwork", "mpbn"]:
+        if target in ["biolqm", "minibn", "mpbn", "pyboolnet"]:
             return [bn.convert(target, **kwargs) for bn in self]
 
         raise ValueError(
             f"unsupported conversion target {target!r}: supported targets are "
-            "['minibn', 'minibn.BooleanNetwork', 'mpbn']"
+            "['biolqm', 'minibn', 'mpbn', 'pyboolnet']"
         )
 
     def to_networkx(self, drop_isolates: bool = False) -> nx.MultiDiGraph[Any]:
@@ -2735,13 +2934,38 @@ def _automatic_reachable_attractors_backend(
     if update == "asynchronous" and len(initial_states) >= 2_048:
         return "bdd"
 
+    n_free = _reachable_state_dimension_upper_bound(network, initial_state)
+
+    explicit_dimension_limit = 13 if update == "asynchronous" else 10
+    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
+
+
+def _automatic_reachable_configurations_backend(
+    network: BooleanNetwork,
+    initial_state: Hypercube,
+    *,
+    update: Literal["asynchronous", "general"],
+) -> Literal["explicit", "bdd"]:
+    """Select a traversal from a conservative reachable-state upper bound."""
+
+    if find_spec("dd") is None:
+        return "explicit"
+
+    n_free = _reachable_state_dimension_upper_bound(network, initial_state)
+    explicit_dimension_limit = 12 if update == "asynchronous" else 8
+    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
+
+
+def _reachable_state_dimension_upper_bound(
+    network: BooleanNetwork,
+    initial_state: HypercubeLike,
+) -> int:
+    """Bound the reachable-state dimension by the smallest closed hypercube."""
+
     closed_hypercube = _smallest_closed_hypercube(
         network,
         initial_state,
         relaxed_components=network.keys(),
     )
     n_fixed = sum(value.is_fixed for value in closed_hypercube.values())
-    n_free = len(network) - n_fixed
-
-    explicit_dimension_limit = 13 if update == "asynchronous" else 10
-    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
+    return len(network) - n_fixed

@@ -16,8 +16,6 @@ resources
 Credits: BNeDiction; PEPR Santé Numérique 2030.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from types import ModuleType as _ModuleType
 from typing import Dict as _Dict

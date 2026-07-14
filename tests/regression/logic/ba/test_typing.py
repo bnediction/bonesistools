@@ -42,8 +42,8 @@ def test_bpy_namespace_exposes_short_aliases_only():
 
 def test_configuration_like_is_concrete_and_distinct_from_hypercube_like():
     assert _typing.is_configuration_like({"A": 0, "B": True})
-    assert _typing.is_configuration_like({"A": bt.logic.ba.PartialBoolean(1)})
 
+    assert not _typing.is_configuration_like({"A": bt.logic.ba.PartialBoolean(1)})
     assert not _typing.is_configuration_like({"A": "*"})
     assert not _typing.is_configuration_like({"A": bt.logic.ba.PartialBoolean("*")})
     assert not _typing.is_configuration_like({"A": 2})

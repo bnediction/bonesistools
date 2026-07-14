@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from itertools import combinations
 from typing import (
@@ -22,7 +23,7 @@ from ..._compat import Literal
 from ..boolean_algebra import ConfigurationSet, Hypercube, dnf_implicants
 from ..boolean_algebra._robdd import ROBDD
 from ..boolean_algebra._typing import HypercubeLike
-from ._dynamics import _validate_hypercube
+from ._dynamics import _validate_complete_hypercube, _validate_hypercube
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
@@ -198,7 +199,27 @@ def _most_permissive_reachable_configurations(
 ) -> Iterator[Dict[str, int]]:
     """Iterate over one-step most-permissive reachable configurations."""
 
-    return iter(_most_permissive_transition_space(network, initial_state))
+    components = tuple(network.keys())
+    initial_hypercube = _validate_complete_hypercube(
+        components,
+        initial_state,
+        name="initial_state",
+    )
+    rule_bdds: Dict[str, ROBDD] = {}
+
+    def iterate() -> Iterator[Dict[str, int]]:
+        for region in _iter_most_permissive_transition_regions(
+            network,
+            initial_hypercube,
+            components=components,
+            rule_bdds=rule_bdds,
+        ):
+            yield from region.iter_configurations(
+                initial_hypercube,
+                components,
+            )
+
+    return iterate()
 
 
 @dataclass(frozen=True)
@@ -210,36 +231,32 @@ class _MPTransitionRegion:
     closed_hypercube: Hypercube
     irreversible_components: Tuple[str, ...]
 
-    def enumerate(
+    def iter_configurations(
         self,
         initial_state: Hypercube,
         components: Tuple[str, ...],
-    ) -> Tuple[Dict[str, int], ...]:
-        """Return all configurations encoded by the region."""
+    ) -> Iterator[Dict[str, int]]:
+        """Iterate lazily over configurations encoded by the region."""
 
         optional_components = tuple(
             component
             for component in self.free_components
             if component not in self.irreversible_components
         )
-        configurations: List[Dict[str, int]] = []
+        initial_values = {
+            component: cast(int, initial_state[component].value)
+            for component in components
+        }
+        required_configuration = dict(initial_values)
+        for component in self.irreversible_components:
+            required_configuration[component] = 1 - initial_values[component]
 
         for length in range(len(optional_components) + 1):
             for selected_components in combinations(optional_components, length):
-                flipped_components = set(self.irreversible_components)
-                flipped_components.update(selected_components)
-
-                configuration = {}
-                for component in components:
-                    initial_value = cast(int, initial_state[component].value)
-                    if component in flipped_components:
-                        configuration[component] = 1 - initial_value
-                    else:
-                        configuration[component] = initial_value
-
-                configurations.append(configuration)
-
-        return tuple(configurations)
+                configuration = dict(required_configuration)
+                for component in selected_components:
+                    configuration[component] = 1 - initial_values[component]
+                yield configuration
 
     def contains(
         self,
@@ -286,7 +303,10 @@ class _MostPermissiveTransitionSpace:
         """Iterate over represented configurations."""
 
         for region in self._regions:
-            yield from region.enumerate(self._initial_state, self._components)
+            yield from region.iter_configurations(
+                self._initial_state,
+                self._components,
+            )
 
     def contains(
         self,
@@ -329,16 +349,36 @@ def _most_permissive_transition_space(
         initial_state,
         name="initial_state",
     )
-    if rule_bdds is None:
-        rule_bdds = {}
+    active_rule_bdds = {} if rule_bdds is None else rule_bdds
+    regions = _iter_most_permissive_transition_regions(
+        network,
+        initial_hypercube,
+        components=components,
+        rule_bdds=active_rule_bdds,
+    )
 
-    regions: List[_MPTransitionRegion] = []
-    waiting: List[Tuple[str, ...]] = [components]
+    return _MostPermissiveTransitionSpace(
+        components=components,
+        initial_state=initial_hypercube,
+        regions=regions,
+    )
+
+
+def _iter_most_permissive_transition_regions(
+    network: "BooleanNetwork",
+    initial_state: Hypercube,
+    *,
+    components: Tuple[str, ...],
+    rule_bdds: Dict[str, ROBDD],
+) -> Iterator[_MPTransitionRegion]:
+    """Yield compact most-permissive transition regions."""
+
+    waiting = deque([components])
     scheduled: Set[Tuple[str, ...]] = {components}
     processed: Set[Tuple[str, ...]] = set()
 
     while waiting:
-        closure_components = waiting.pop(0)
+        closure_components = waiting.popleft()
         scheduled.remove(closure_components)
         if closure_components in processed:
             continue
@@ -346,26 +386,24 @@ def _most_permissive_transition_space(
         processed.add(closure_components)
         closed_hypercube = _smallest_closed_hypercube(
             network,
-            initial_hypercube,
+            initial_state,
             relaxed_components=closure_components,
             rule_bdds=rule_bdds,
         )
         free_components = _free_components(components, closed_hypercube)
         irreversible_components = _irreversible_components(
             network,
-            initial_hypercube,
+            initial_state,
             closed_hypercube,
             free_components=free_components,
             rule_bdds=rule_bdds,
         )
 
-        regions.append(
-            _MPTransitionRegion(
-                closure_components=closure_components,
-                free_components=free_components,
-                closed_hypercube=closed_hypercube,
-                irreversible_components=irreversible_components,
-            )
+        yield _MPTransitionRegion(
+            closure_components=closure_components,
+            free_components=free_components,
+            closed_hypercube=closed_hypercube,
+            irreversible_components=irreversible_components,
         )
 
         for next_closure_components in _closure_components_without_irreversibles(
@@ -378,12 +416,6 @@ def _most_permissive_transition_space(
             ):
                 waiting.append(next_closure_components)
                 scheduled.add(next_closure_components)
-
-    return _MostPermissiveTransitionSpace(
-        components=components,
-        initial_state=initial_hypercube,
-        regions=regions,
-    )
 
 
 def _most_permissive_reachability_asp_program(
@@ -564,31 +596,6 @@ def _fixed_literals_sort_key(
     return len(literals), tuple(sorted(literals))
 
 
-def _validate_complete_hypercube(
-    components: Tuple[str, ...],
-    state: HypercubeLike,
-    *,
-    name: str,
-) -> Hypercube:
-    """Validate a complete Boolean configuration encoded as a hypercube."""
-
-    hypercube = Hypercube(state)
-    component_set = set(components)
-    unknown_components = sorted(set(hypercube) - component_set)
-    if unknown_components:
-        raise ValueError(f"unknown components in {name}: {unknown_components}")
-
-    invalid_components = [
-        component
-        for component in components
-        if component not in hypercube or not hypercube[component].is_fixed
-    ]
-    if invalid_components:
-        raise ValueError(f"{name} must define fixed values for all network components")
-
-    return hypercube
-
-
 def _free_components(
     components: Tuple[str, ...],
     closed_hypercube: Hypercube,
@@ -712,11 +719,11 @@ def _rule_can_take_value_in_hypercube(
 
     robdd = rule_bdds[component]
     fixed_values = {
-        source: cast(int, source_value.value)
-        for source, source_value in hypercube.items()
-        if source_value.is_fixed
+        source: cast(int, hypercube[source].value)
+        for source in robdd.variables
+        if source in hypercube and hypercube[source].is_fixed
     }
-    return robdd.can_take_value(fixed_values, value)
+    return robdd._can_reach_terminal(fixed_values, value)
 
 
 def _boolean_function_asp_facts(

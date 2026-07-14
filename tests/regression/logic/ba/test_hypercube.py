@@ -192,7 +192,7 @@ def test_read_hypercubes_options_are_keyword_only(tmp_path):
     file.write_text(",hc1\nA,1\n")
 
     with pytest.raises(TypeError):
-        bt.logic.io.read_hypercubes(file, "rows")
+        cast(Any, bt.logic.io.read_hypercubes)(file, "rows")
 
 
 def test_read_hypercubes_from_tsv_and_rejects_invalid_inputs(tmp_path):

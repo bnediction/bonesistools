@@ -200,7 +200,30 @@ robdd.configurations()
 
 Use `to_networkx()` to inspect the decision graph and its 0/1 branches.
 
-## Reachability
+## Transitions and Reachability
+
+`BooleanNetwork.transition(...)` tests whether two configurations are linked
+by one direct transition. Synchronous dynamics update all components,
+asynchronous dynamics update one unstable component, and general dynamics
+update any non-empty subset of unstable components.
+
+```python
+bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "~B"})
+
+bn.transition(
+    {"A": 0, "B": 0},
+    {"A": 1, "B": 0},
+    update="asynchronous",
+)
+# True
+```
+
+Most-permissive transition and reachability are the same relation. Therefore,
+for `update="most-permissive"`:
+
+```python
+bn.transition(x, y) == bn.reachability(x, y)
+```
 
 `BooleanNetwork.reachability(...)` tests whether a target configuration or
 subspace is reachable from an initial configuration or subspace.
@@ -233,11 +256,30 @@ detects a cycle. Partial initial configurations use a BDD. Most-permissive
 reachability uses an ASP formulation of the transition conditions.
 
 With partial configurations, `quantifier="exists"` asks whether at least one
-compatible initial configuration reaches the target subspace.
-`quantifier="robust"` asks whether every compatible initial configuration
-reaches at least one configuration in the target subspace.
+compatible initial configuration reaches or transitions to one target
+configuration. `quantifier="robust"` asks whether every compatible initial
+configuration reaches or transitions to at least one target configuration.
 `quantifier="universal"` asks whether every compatible initial configuration
-reaches every configuration in the target subspace.
+reaches or transitions to every target configuration.
+
+`BooleanNetwork.reachable_configurations(...)` iterates over every complete
+configuration reachable from one complete initial configuration:
+
+```python
+configurations = bn.reachable_configurations(
+    {"A": 0, "B": 1},
+    update="asynchronous",
+)
+
+for configuration in configurations:
+    print(configuration)
+```
+
+The `"synchronous"`, `"asynchronous"`, `"general"` and `"most-permissive"`
+update semantics are supported. Finite-state dynamics automatically select a
+direct explicit traversal or the optional symbolic BDD implementation.
+Most-permissive enumeration uses a compact decomposition into closed
+hypercubes and irreversible components. Iteration order is unspecified.
 
 ## Reachable Attractors
 
@@ -280,19 +322,17 @@ Supported update semantics are:
 - `"most-permissive"`: return reachable minimal trap spaces under
   most-permissive reachability.
 
-For `"synchronous"`, `"asynchronous"` and `"general"` dynamics, the
-`"explicit"` backend explores the reachable state space explicitly. The
-optional `"bdd"` backend computes the reachable state set symbolically using
-binary decision diagrams for these finite-state update semantics. Install it
+For `"synchronous"`, `"asynchronous"` and `"general"` dynamics, BoNesisTools
+automatically selects an explicit or symbolic traversal. The optional BDD
+implementation computes large reachable state sets symbolically. Install it
 with:
 
 ```bash
 pip install "bonesistools[bdd]"
 ```
 
-For `"most-permissive"` dynamics, the `"asp"` backend computes reachable
-minimal trap spaces. The `"bdd"` backend is not used for most-permissive
-reachability.
+For `"most-permissive"` dynamics, ASP computes reachable minimal trap spaces.
+BDD is not used for most-permissive reachability.
 
 ## Boolean Model I/O
 

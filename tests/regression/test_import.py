@@ -35,6 +35,12 @@ def test_root_namespace_exposes_short_aliases_only():
         assert name not in dir(bt)
 
 
+def test_future_annotations_are_not_exposed_publicly():
+    for module in [bt, bt.logic]:
+        assert "annotations" not in dir(module)
+        assert not hasattr(module, "annotations")
+
+
 def test_deprecated_root_aliases_remain_accessible():
     aliases = {
         "sct": bt.omics,

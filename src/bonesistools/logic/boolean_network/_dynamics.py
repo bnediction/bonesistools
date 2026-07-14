@@ -10,6 +10,7 @@ from typing import (
     Dict,
     FrozenSet,
     Iterable,
+    Iterator,
     List,
     Mapping,
     Set,
@@ -24,7 +25,7 @@ from ._asynchronous import (
     _bdd_asynchronous_transition_partitions,
     _tarjan_asynchronous_terminal_sccs,
 )
-from ._bdd import _bdd_equivalence
+from ._bdd import _bdd_equivalence, _bdd_exclusive_or
 from ._general import (
     _bdd_general_transition_partitions,
     _general_successor_state_bits,
@@ -103,12 +104,51 @@ class _BDDTransitionSystem:
         self._rename_next_to_current = dict(
             zip(self._next_variables, self._current_variables)
         )
+        self._direct_transition_relation = None
 
     @property
     def components(self) -> Tuple[str, ...]:
         """Return components in BDD variable order."""
 
         return self._components
+
+    def transition(
+        self,
+        initial_state: HypercubeLike,
+        target_state: HypercubeLike,
+        *,
+        quantifier: Literal["exists", "robust", "universal"],
+    ) -> bool:
+        """Test the one-step transition relation between two subspaces."""
+
+        initial_hypercube = _validate_hypercube(
+            self._components,
+            initial_state,
+            name="initial_state",
+        )
+        target_hypercube = _validate_hypercube(
+            self._components,
+            target_state,
+            name="target_state",
+        )
+        initial = self._encode_hypercube(initial_hypercube)
+        target = self._encode_hypercube(target_hypercube)
+
+        if quantifier == "universal":
+            target_next = self._bdd.let(
+                self._rename_current_to_next,
+                target,
+            )
+            required_transitions = initial & target_next
+            return (
+                required_transitions & ~self._transition_relation() == self._bdd.false
+            )
+
+        predecessors = self._transition_predecessors(target)
+        if quantifier == "exists":
+            return initial & predecessors != self._bdd.false
+
+        return initial & ~predecessors == self._bdd.false
 
     def reachability(
         self,
@@ -194,6 +234,30 @@ class _BDDTransitionSystem:
             self._decode_configuration_set(component)
             for component in self._terminal_sccs(reachable)
         )
+
+    def reachable_configurations(
+        self,
+        initial_state: Hypercube,
+    ) -> Iterator[Dict[str, int]]:
+        """Iterate over configurations in the symbolic reachable-state set."""
+
+        initial = self._encode_hypercube(initial_state)
+        reachable = self._forward_reachable_states(initial)
+
+        def iterate() -> Iterator[Dict[str, int]]:
+            for assignment in self._bdd.pick_iter(
+                reachable,
+                care_vars=self._current_variables,
+            ):
+                yield {
+                    component: int(assignment[variable])
+                    for component, variable in zip(
+                        self._components,
+                        self._current_variables,
+                    )
+                }
+
+        return iterate()
 
     def _encode_hypercube(self, hypercube: Hypercube) -> Any:
         """Encode one validated Boolean hypercube."""
@@ -414,6 +478,51 @@ class _BDDTransitionSystem:
             )
         return predecessors
 
+    def _transition_predecessors(self, configurations: Any) -> Any:
+        """Return sources with a direct transition into a configuration set."""
+
+        if self._update != "general":
+            return self._predecessors(configurations)
+
+        configurations_next = self._bdd.let(
+            self._rename_current_to_next,
+            configurations,
+        )
+        return self._bdd.exist(
+            self._next_variables,
+            self._transition_relation() & configurations_next,
+        )
+
+    def _transition_relation(self) -> Any:
+        """Return the exact, non-reflexive relation where required."""
+
+        if self._direct_transition_relation is not None:
+            return self._direct_transition_relation
+
+        if self._update == "asynchronous":
+            relation = self._bdd.false
+            for transition in self._disjunctive_transitions:
+                relation |= transition
+        else:
+            relation = self._bdd.true
+            for cluster in self._transition_clusters:
+                relation &= cluster
+
+            if self._update == "general":
+                changed = self._bdd.false
+                for current_variable, next_variable in zip(
+                    self._current_variables,
+                    self._next_variables,
+                ):
+                    changed |= _bdd_exclusive_or(
+                        self._bdd.var(current_variable),
+                        self._bdd.var(next_variable),
+                    )
+                relation &= changed
+
+        self._direct_transition_relation = relation
+        return relation
+
     def _relational_product(
         self,
         left: Any,
@@ -554,6 +663,253 @@ def _bdd_reachable_attractors(
         update=update,
     )
     return transition_system.reachable_attractors(initial_states)
+
+
+def _bdd_reachable_configurations(
+    network: "BooleanNetwork",
+    initial_state: Hypercube,
+    *,
+    update: Literal["asynchronous", "general"],
+) -> Iterator[Dict[str, int]]:
+    """Enumerate a symbolic reachable-state closure."""
+
+    transition_system = _BDDTransitionSystem(
+        network,
+        update=update,
+    )
+    return transition_system.reachable_configurations(initial_state)
+
+
+def _finite_state_transition(
+    network: "BooleanNetwork",
+    initial_state: HypercubeLike,
+    target_state: HypercubeLike,
+    *,
+    update: Literal["asynchronous", "synchronous", "general"],
+    quantifier: Literal["exists", "robust", "universal"],
+) -> bool:
+    """Test a finite-state transition directly or through a symbolic BDD."""
+
+    components = tuple(network.keys())
+    initial_hypercube = _validate_hypercube(
+        components,
+        initial_state,
+        name="initial_state",
+    )
+    target_hypercube = _validate_hypercube(
+        components,
+        target_state,
+        name="target_state",
+    )
+    initial_is_concrete = (
+        initial_hypercube.components == frozenset(components)
+        and initial_hypercube.is_fully_specified
+    )
+    if not initial_is_concrete:
+        return _bdd_transition(
+            network,
+            initial_hypercube,
+            target_hypercube,
+            update=update,
+            quantifier=quantifier,
+        )
+
+    initial_bits = _state_bits_from_hypercube(initial_hypercube, components)
+    if update == "synchronous":
+        return _synchronous_transition_from_state(
+            network,
+            initial_bits,
+            target_hypercube,
+            components,
+            quantifier=quantifier,
+        )
+
+    return _componentwise_transition_from_state(
+        network,
+        initial_bits,
+        target_hypercube,
+        components,
+        update=update,
+        quantifier=quantifier,
+    )
+
+
+def _synchronous_transition_from_state(
+    network: "BooleanNetwork",
+    initial_state: _StateBits,
+    target_state: Hypercube,
+    components: Tuple[str, ...],
+    *,
+    quantifier: Literal["exists", "robust", "universal"],
+) -> bool:
+    """Test a synchronous transition from one concrete source state."""
+
+    next_state = _next_state_bits(
+        _compile_bitset_rules(network, components),
+        initial_state,
+    )
+    if not _state_bits_match_hypercube(next_state, target_state, components):
+        return False
+
+    if quantifier != "universal":
+        return True
+
+    return (
+        target_state.components == frozenset(components)
+        and target_state.is_fully_specified
+    )
+
+
+def _componentwise_transition_from_state(
+    network: "BooleanNetwork",
+    initial_state: _StateBits,
+    target_state: Hypercube,
+    components: Tuple[str, ...],
+    *,
+    update: Literal["asynchronous", "general"],
+    quantifier: Literal["exists", "robust", "universal"],
+) -> bool:
+    """Test an asynchronous or general transition from one concrete state."""
+
+    fixed_mask, fixed_values = _hypercube_fixed_masks(target_state, components)
+    all_components_mask = (1 << len(components)) - 1
+    free_mask = all_components_mask ^ fixed_mask
+    required_changes = fixed_mask & (initial_state ^ fixed_values)
+
+    if update == "asynchronous":
+        if quantifier == "universal" and free_mask:
+            return False
+
+        if required_changes:
+            if required_changes & (required_changes - 1):
+                return False
+            candidates = required_changes
+        else:
+            candidates = free_mask
+
+        return _any_candidate_is_unstable(
+            network,
+            initial_state,
+            components,
+            candidates,
+        )
+
+    if quantifier == "universal":
+        if not required_changes:
+            return False
+        candidates = required_changes | free_mask
+        return _all_candidates_are_unstable(
+            network,
+            initial_state,
+            components,
+            candidates,
+        )
+
+    if required_changes:
+        return _all_candidates_are_unstable(
+            network,
+            initial_state,
+            components,
+            required_changes,
+        )
+
+    return _any_candidate_is_unstable(
+        network,
+        initial_state,
+        components,
+        free_mask,
+    )
+
+
+def _hypercube_fixed_masks(
+    hypercube: Hypercube,
+    components: Tuple[str, ...],
+) -> Tuple[_StateBits, _StateBits]:
+    """Encode the fixed dimensions and values of one hypercube."""
+
+    fixed_mask = 0
+    value_mask = 0
+    for index, component in enumerate(components):
+        if component not in hypercube or not hypercube[component].is_fixed:
+            continue
+
+        bit = 1 << index
+        fixed_mask |= bit
+        if hypercube[component].value:
+            value_mask |= bit
+
+    return fixed_mask, value_mask
+
+
+def _any_candidate_is_unstable(
+    network: "BooleanNetwork",
+    state: _StateBits,
+    components: Tuple[str, ...],
+    candidates: _StateBits,
+) -> bool:
+    """Return whether any candidate component is unstable in one state."""
+
+    component_indices = {component: index for index, component in enumerate(components)}
+    while candidates:
+        bit = candidates & -candidates
+        index = bit.bit_length() - 1
+        component = components[index]
+        rule = _compile_bitset_rule(
+            network,
+            network[component],
+            component_indices,
+        )
+        if bool(rule(state)) != bool(state & bit):
+            return True
+        candidates ^= bit
+
+    return False
+
+
+def _all_candidates_are_unstable(
+    network: "BooleanNetwork",
+    state: _StateBits,
+    components: Tuple[str, ...],
+    candidates: _StateBits,
+) -> bool:
+    """Return whether every candidate component is unstable in one state."""
+
+    component_indices = {component: index for index, component in enumerate(components)}
+    while candidates:
+        bit = candidates & -candidates
+        index = bit.bit_length() - 1
+        component = components[index]
+        rule = _compile_bitset_rule(
+            network,
+            network[component],
+            component_indices,
+        )
+        if bool(rule(state)) == bool(state & bit):
+            return False
+        candidates ^= bit
+
+    return True
+
+
+def _bdd_transition(
+    network: "BooleanNetwork",
+    initial_state: HypercubeLike,
+    target_state: HypercubeLike,
+    *,
+    update: Literal["asynchronous", "synchronous", "general"],
+    quantifier: Literal["exists", "robust", "universal"],
+) -> bool:
+    """Test a one-step transition through a symbolic BDD relation."""
+
+    transition_system = _BDDTransitionSystem(
+        network,
+        update=update,
+    )
+    return transition_system.transition(
+        initial_state,
+        target_state,
+        quantifier=quantifier,
+    )
 
 
 def _bdd_reachability(
@@ -736,6 +1092,75 @@ def _explicit_reachable_attractors(
     )
 
 
+def _synchronous_reachable_configurations(
+    network: "BooleanNetwork",
+    initial_state: Hypercube,
+) -> Iterator[Dict[str, int]]:
+    """Iterate over the unique synchronous trajectory until its first cycle."""
+
+    components = tuple(network.keys())
+    compiled_rules = _compile_bitset_rules(network, components)
+    initial_state_bits = _state_bits_from_hypercube(initial_state, components)
+
+    def iterate() -> Iterator[Dict[str, int]]:
+        state = initial_state_bits
+        visited: Set[_StateBits] = set()
+        while state not in visited:
+            visited.add(state)
+            yield {
+                component: (state >> index) & 1
+                for index, component in enumerate(components)
+            }
+            state = _next_state_bits(compiled_rules, state)
+
+    return iterate()
+
+
+def _explicit_reachable_configurations(
+    network: "BooleanNetwork",
+    initial_state: Hypercube,
+    *,
+    update: Literal["asynchronous", "general"],
+) -> Iterator[Dict[str, int]]:
+    """Traverse a finite reachable-state graph lazily with bitsets."""
+
+    components = tuple(network.keys())
+    compiled_rules = _compile_bitset_rules(network, components)
+    initial_state_bits = _state_bits_from_hypercube(initial_state, components)
+
+    def iterate() -> Iterator[Dict[str, int]]:
+        pending = [initial_state_bits]
+        scheduled = {initial_state_bits}
+
+        while pending:
+            state = pending.pop()
+            yield {
+                component: (state >> index) & 1
+                for index, component in enumerate(components)
+            }
+
+            next_state = _next_state_bits(compiled_rules, state)
+            unstable_mask = state ^ next_state
+            if update == "asynchronous":
+                while unstable_mask:
+                    bit = unstable_mask & -unstable_mask
+                    successor = state ^ bit
+                    unstable_mask ^= bit
+                    if successor not in scheduled:
+                        scheduled.add(successor)
+                        pending.append(successor)
+            else:
+                updated_mask = unstable_mask
+                while updated_mask:
+                    successor = state ^ updated_mask
+                    updated_mask = (updated_mask - 1) & unstable_mask
+                    if successor not in scheduled:
+                        scheduled.add(successor)
+                        pending.append(successor)
+
+    return iterate()
+
+
 def _import_dd_backend() -> Any:
     """Import the fastest available optional BDD backend."""
 
@@ -767,6 +1192,26 @@ def _validate_hypercube(
     unknown_components = sorted(set(hypercube) - set(components))
     if unknown_components:
         raise ValueError(f"unknown components in {name}: {unknown_components}")
+
+    return hypercube
+
+
+def _validate_complete_hypercube(
+    components: Tuple[str, ...],
+    state: HypercubeLike,
+    *,
+    name: str,
+) -> Hypercube:
+    """Validate a complete Boolean configuration encoded as a hypercube."""
+
+    hypercube = _validate_hypercube(components, state, name=name)
+    invalid_components = [
+        component
+        for component in components
+        if component not in hypercube or not hypercube[component].is_fixed
+    ]
+    if invalid_components:
+        raise ValueError(f"{name} must define fixed values for all network components")
 
     return hypercube
 
@@ -847,6 +1292,20 @@ def _state_bits_from_mapping(
     state_bits = 0
     for index, component in enumerate(components):
         if state[component]:
+            state_bits |= 1 << index
+
+    return state_bits
+
+
+def _state_bits_from_hypercube(
+    state: Hypercube,
+    components: Tuple[str, ...],
+) -> _StateBits:
+    """Encode a fully specified hypercube as an integer bitset."""
+
+    state_bits = 0
+    for index, component in enumerate(components):
+        if state[component].value:
             state_bits |= 1 << index
 
     return state_bits

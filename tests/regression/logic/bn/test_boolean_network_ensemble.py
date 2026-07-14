@@ -42,20 +42,36 @@ def test_boolean_network_ensemble_convert_to_mpbn(bnet_ensemble):
     assert all(set(bn) == {"A", "B", "C"} for bn in converted)
 
 
+def test_boolean_network_ensemble_convert_to_biolqm(bnet_ensemble):
+    biolqm = pytest.importorskip("biolqm")
+
+    converted = bnet_ensemble.convert("biolqm")
+
+    assert len(converted) == len(bnet_ensemble)
+    assert all(biolqm.is_biolqm_object(model) for model in converted)
+    assert all(
+        {str(component.getNodeID()) for component in model.getComponents()}
+        == {"A", "B", "C"}
+        for model in converted
+    )
+
+
+def test_boolean_network_ensemble_convert_to_pyboolnet(bnet_ensemble):
+    converted = bnet_ensemble.convert("pyboolnet")
+
+    assert len(converted) == len(bnet_ensemble)
+    assert all(set(primes) == {"A", "B", "C"} for primes in converted)
+
+
 def test_boolean_network_ensemble_convert_to_minibn(bnet_ensemble):
     minibn = pytest.importorskip("colomoto.minibn")
 
-    converted = bnet_ensemble.convert("minibn.BooleanNetwork")
-    converted_alias = bnet_ensemble.convert("minibn")
+    converted = bnet_ensemble.convert("minibn")
 
     assert isinstance(converted, list)
     assert len(converted) == len(bnet_ensemble)
     assert all(isinstance(bn, minibn.BooleanNetwork) for bn in converted)
     assert all(set(bn) == {"A", "B", "C"} for bn in converted)
-
-    assert isinstance(converted_alias, list)
-    assert len(converted_alias) == len(bnet_ensemble)
-    assert all(isinstance(bn, minibn.BooleanNetwork) for bn in converted_alias)
 
 
 def test_boolean_network_ensemble_convert_validates_target(bnet_ensemble):

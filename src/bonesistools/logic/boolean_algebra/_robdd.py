@@ -303,25 +303,7 @@ class ROBDD:
             if variable in subspace and subspace[variable].is_fixed
         }
 
-        waiting = [self._root]
-        visited = set()
-
-        while waiting:
-            node = waiting.pop()
-            if node == target:
-                return True
-            if node <= 1 or node in visited:
-                continue
-
-            visited.add(node)
-            variable, low, high = self._nodes[node]
-            variable_name = self._variables[variable]
-            if variable_name in fixed_values:
-                waiting.append(high if fixed_values[variable_name] else low)
-            else:
-                waiting.extend((low, high))
-
-        return False
+        return self._can_reach_terminal(fixed_values, target)
 
     def count(self, value: Union[bool, int] = 1) -> int:
         """
@@ -361,6 +343,33 @@ class ROBDD:
             target=target,
             cache=cache,
         )
+
+    def _can_reach_terminal(
+        self,
+        fixed_values: Mapping[str, int],
+        target: int,
+    ) -> bool:
+        """Test whether a terminal is reachable under fixed variable values."""
+
+        waiting = [self._root]
+        visited = set()
+
+        while waiting:
+            node = waiting.pop()
+            if node == target:
+                return True
+            if node <= 1 or node in visited:
+                continue
+
+            visited.add(node)
+            variable, low, high = self._nodes[node]
+            variable_name = self._variables[variable]
+            if variable_name in fixed_values:
+                waiting.append(high if fixed_values[variable_name] else low)
+            else:
+                waiting.extend((low, high))
+
+        return False
 
     def _initialize(
         self,

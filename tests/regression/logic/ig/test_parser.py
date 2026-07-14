@@ -49,7 +49,7 @@ def test_read_influence_graph_options_are_keyword_only(tmp_path):
     file.write_text("source,target,sign\nA,B,1\n")
 
     with pytest.raises(TypeError):
-        bt.logic.io.read_influence_graph(file, None)
+        cast(Any, bt.logic.io.read_influence_graph)(file, None)
 
 
 def test_read_influence_graph_accepts_named_file(tmp_path):

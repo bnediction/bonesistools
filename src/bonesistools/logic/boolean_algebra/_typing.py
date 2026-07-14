@@ -24,7 +24,7 @@ from ._kleene import KleeneValue, KleeneValueLike
 BooleanRule = _Union[Expression, bool, int, str]
 
 PartialBooleanLike = _Union[PartialBoolean, bool, int, float, str]
-ConfigurationLike = _Mapping[str, _Union[PartialBoolean, bool, int]]
+ConfigurationLike = _Mapping[str, _Union[bool, int]]
 HypercubeLike = _Mapping[str, PartialBooleanLike]
 
 
@@ -254,12 +254,8 @@ def is_hypercube_like(obj: _Any) -> _TypeGuard[HypercubeLike]:
 
 
 def _is_configuration_value_like(value: _Any) -> bool:
-
-    if isinstance(value, PartialBoolean):
-        value = value.value
-
     try:
-        return value in [0, 1]
+        return isinstance(value, (bool, int)) and value in [0, 1]
 
     except Exception:
         return False
