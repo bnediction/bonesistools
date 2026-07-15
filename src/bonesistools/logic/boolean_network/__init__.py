@@ -58,25 +58,8 @@ def read_bnet_directory(*args: _Any, **kwargs: _Any) -> BooleanNetworkEnsemble:
     return _read_bnet_directory(*args, **kwargs)
 
 
-def bn_to_pydot(bn: _Any, **kwargs: _Any) -> _Any:
-    """
-    Deprecated. Convert a BooleanNetworkLike object into a pydot graph.
-
-    Use `BooleanNetwork(bn).to_pydot(**kwargs)` instead.
-    """
-
-    _warn_deprecated(
-        "`bt.logic.bn.bn_to_pydot`",
-        replacement="`bt.logic.bn.BooleanNetwork(bn).to_pydot()`",
-        stacklevel=2,
-    )
-
-    return BooleanNetwork(bn).to_pydot(**kwargs)
-
-
 def __dir__() -> _List[str]:
     hidden = {
-        "bn_to_pydot",
         "read_bnet",
         "read_bnet_directory",
         "typing",

@@ -5,7 +5,6 @@ from typing import Any, cast
 import networkx as nx
 import pytest
 
-from bonesistools.logic.boolean_network import BooleanNetwork, BooleanNetworkEnsemble
 from bonesistools.logic.influence_graph import (
     AggregatedInfluenceGraph,
     InfluenceGraph,
@@ -38,14 +37,6 @@ def _collapse_graph():
     )
 
     return graph
-
-
-def _three_boolean_networks():
-    return (
-        BooleanNetwork({"A": "B", "B": 0, "C": 1}),
-        BooleanNetwork({"A": "B", "B": "C", "C": 0}),
-        BooleanNetwork({"A": "!B", "B": "C", "C": 1}),
-    )
 
 
 def test_doc_example_constructor_edge_frequency_and_autoregulations():
@@ -291,30 +282,3 @@ def test_constructor_and_mutations_validate_counts_transactionally():
 
     assert _edge_counts(graph) == [("A", "B", 1, 1)]
     assert "C" not in graph
-
-
-def test_from_boolean_networks_accepts_varargs_and_ensemble():
-    bn1, bn2, bn3 = _three_boolean_networks()
-
-    aggregated = AggregatedInfluenceGraph.from_boolean_networks(
-        bn1,
-        bn2,
-        bn3,
-    )
-
-    assert aggregated.total == 3
-    assert aggregated.edge_count("B", "A", sign=1) == 2
-    assert aggregated.edge_count("B", "A", sign=-1) == 1
-    assert aggregated.edge_count("C", "B") == 2
-    assert aggregated.nodes["A"]["function_count"] == 2
-    assert aggregated.nodes["A"]["function_stability"] == pytest.approx(2 / 3)
-
-    ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
-    from_ensemble = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
-
-    assert from_ensemble.total == 3
-    assert from_ensemble.edge_count("B", "A", sign=1) == 2
-    assert from_ensemble.edge_count("B", "A", sign=-1) == 1
-    assert from_ensemble.edge_count("C", "B") == 2
-    assert from_ensemble.nodes["A"]["function_count"] == 2
-    assert from_ensemble.nodes["A"]["function_stability"] == pytest.approx(2 / 3)

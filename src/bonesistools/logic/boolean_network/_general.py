@@ -44,8 +44,8 @@ def _bdd_general_transition_partitions(
     return tuple(clusters), forward_quantification
 
 
-def _general_successor_state_bits(
-    state: int,
+def _general_successor_configuration_bits(
+    configuration: int,
     unstable_mask: int,
 ) -> Tuple[int, ...]:
     """Return successors from non-empty subsets of unstable components."""
@@ -53,7 +53,7 @@ def _general_successor_state_bits(
     successors = []
     updated_mask = unstable_mask
     while updated_mask:
-        successors.append(state ^ updated_mask)
+        successors.append(configuration ^ updated_mask)
         updated_mask = (updated_mask - 1) & unstable_mask
 
     return tuple(successors)

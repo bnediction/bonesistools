@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 
 import bonesistools as bt
-from bonesistools.logic.boolean_network import _most_permissive, _network
+from bonesistools.logic.boolean_network import _most_permissive
 
 
 def _configuration_from_bits(bits):
@@ -50,50 +50,69 @@ def _assert_most_permissive_stg(bn, expected_targets):
             ) is (target in expected_targets[source])
 
 
-def test_boolean_network_trapspaces_minimal_fixed_points():
+def test_boolean_network_trap_spaces_minimal_fixed_points():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    assert bn.trapspaces() == (
+    assert bn.trap_spaces() == (
         bt.logic.ba.Hypercube({"A": 0, "B": 0}),
         bt.logic.ba.Hypercube({"A": 1, "B": 1}),
     )
 
 
-def test_boolean_network_trapspaces_universal_when_no_fixed_subspace():
+def test_boolean_network_trap_spaces_universal_when_no_fixed_subspace():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
-    assert bn.trapspaces() == (bt.logic.ba.Hypercube({}),)
+    assert bn.trap_spaces() == (bt.logic.ba.Hypercube({}),)
 
 
-def test_boolean_network_trapspaces_rejects_invalid_options():
+def test_boolean_network_trap_spaces_rejects_invalid_kind():
     bn = bt.logic.bn.BooleanNetwork({"A": 1})
 
     with pytest.raises(ValueError, match="invalid argument value for 'kind'"):
-        bn.trapspaces(kind=cast(Any, "maximal"))
-
-    with pytest.raises(ValueError, match="invalid argument value for 'backend'"):
-        bn.trapspaces(backend=cast(Any, "truth_table"))
+        bn.trap_spaces(kind=cast(Any, "maximal"))
 
 
-def test_boolean_network_trapspaces_rejects_open_network():
+def test_boolean_network_trap_spaces_rejects_open_network():
     bn = bt.logic.bn.BooleanNetwork({"A": "B"}, check=False)
 
     with pytest.raises(ValueError, match="undefined components"):
-        bn.trapspaces()
+        bn.trap_spaces()
 
 
-def test_boolean_network_trapspaces_asp_reports_missing_clingo(monkeypatch):
-    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+def test_boolean_network_principal_trap_space_preserves_fixed_point():
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    def missing_clingo(name: str) -> Any:
-        if name == "clingo":
-            raise ImportError("missing clingo")
-        return __import__(name)
+    assert bn.principal_trap_space({"A": 0, "B": 0}) == bt.logic.ba.Hypercube(
+        {"A": 0, "B": 0}
+    )
 
-    monkeypatch.setattr(_network, "import_module", missing_clingo)
 
-    with pytest.raises(ImportError, match="requires `clingo` to be installed"):
-        bn.trapspaces()
+def test_boolean_network_principal_trap_space_relaxes_unstable_components():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "x1": 1,
+            "x2": "x1",
+            "x3": "(~x1 & x2) | x3",
+        }
+    )
+
+    assert bn.principal_trap_space(
+        {"x1": 0, "x2": 0, "x3": 1}
+    ) == bt.logic.ba.Hypercube({"x3": 1})
+
+
+def test_boolean_network_principal_trap_space_rejects_invalid_configuration():
+    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
+
+    with pytest.raises(ValueError, match="configuration must define fixed values"):
+        bn.principal_trap_space({"A": 0})
+
+
+def test_boolean_network_principal_trap_space_rejects_open_network():
+    bn = bt.logic.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    with pytest.raises(ValueError, match="undefined components"):
+        bn.principal_trap_space({"A": 0})
 
 
 def test_boolean_network_smallest_closed_hypercube_uses_component_subset():
@@ -120,37 +139,37 @@ def test_boolean_network_smallest_closed_hypercube_matches_cmsb22_figure_2():
             "x3": "(~x1 & x2) | x3",
         }
     )
-    initial_state = {"x1": 0, "x2": 0, "x3": 1}
+    initial_configuration = {"x1": 0, "x2": 0, "x3": 1}
 
     assert _most_permissive._smallest_closed_hypercube(
         bn,
-        initial_state,
+        initial_configuration,
         relaxed_components=("x1",),
     ) == bt.logic.ba.Hypercube({"x2": 0, "x3": 1})
 
     assert _most_permissive._smallest_closed_hypercube(
         bn,
-        initial_state,
+        initial_configuration,
         relaxed_components=("x1", "x2"),
     ) == bt.logic.ba.Hypercube({"x3": 1})
 
     assert _most_permissive._smallest_closed_hypercube(
         bn,
-        initial_state,
+        initial_configuration,
         relaxed_components=("x1", "x2", "x3"),
     ) == bt.logic.ba.Hypercube({"x3": 1})
 
-    initial_state = {"x1": 0, "x2": 1, "x3": 1}
+    initial_configuration = {"x1": 0, "x2": 1, "x3": 1}
 
     assert _most_permissive._smallest_closed_hypercube(
         bn,
-        initial_state,
+        initial_configuration,
         relaxed_components=("x1", "x2", "x3"),
     ) == bt.logic.ba.Hypercube({"x3": 1})
 
     assert _most_permissive._smallest_closed_hypercube(
         bn,
-        initial_state,
+        initial_configuration,
         relaxed_components=("x2", "x3"),
     ) == bt.logic.ba.Hypercube({"x1": 0, "x3": 1})
 
@@ -163,22 +182,22 @@ def test_boolean_network_reachability_matches_cmsb22_figure_2():
             "x3": "(~x1 & x2) | x3",
         }
     )
-    initial_state = {"x1": 0, "x2": 0, "x3": 1}
+    initial_configuration = {"x1": 0, "x2": 0, "x3": 1}
 
     assert bn.reachability(
-        initial_state,
+        initial_configuration,
         {"x1": 1, "x2": 0, "x3": 1},
     )
     assert bn.reachability(
-        initial_state,
+        initial_configuration,
         {"x1": 1, "x2": 1, "x3": 1},
     )
     assert not bn.reachability(
-        initial_state,
+        initial_configuration,
         {"x1": 0, "x2": 0, "x3": 0},
     )
     assert not bn.reachability(
-        initial_state,
+        initial_configuration,
         {"x1": 0, "x2": 1, "x3": 1},
     )
 
@@ -228,11 +247,11 @@ def test_boolean_network_reachable_configurations_iterates_regions_lazily(
     monkeypatch,
 ):
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
-    initial_state = bt.logic.ba.Hypercube({"A": 0})
+    initial_configuration = bt.logic.ba.Hypercube({"A": 0})
     first_region = _most_permissive._MPTransitionRegion(
         closure_components=("A",),
         free_components=(),
-        closed_hypercube=initial_state,
+        closed_hypercube=initial_configuration,
         irreversible_components=(),
     )
 
@@ -258,8 +277,10 @@ def test_boolean_network_reachable_configurations_iterates_combinations_lazily(
     bn = bt.logic.bn.BooleanNetwork(
         {component: f"~{component}" for component in components}
     )
-    initial_state = {component: 0 for component in components}
-    space = _most_permissive._most_permissive_transition_space(bn, initial_state)
+    initial_configuration = {component: 0 for component in components}
+    space = _most_permissive._most_permissive_transition_space(
+        bn, initial_configuration
+    )
     original_combinations = _most_permissive.combinations
 
     def guarded_combinations(values, length):
@@ -273,7 +294,7 @@ def test_boolean_network_reachable_configurations_iterates_combinations_lazily(
         guarded_combinations,
     )
 
-    assert next(iter(space)) == initial_state
+    assert next(iter(space)) == initial_configuration
 
 
 def test_boolean_network_smallest_closed_hypercube_accepts_depth_limit():
@@ -294,7 +315,7 @@ def test_boolean_network_smallest_closed_hypercube_accepts_depth_limit():
     ) == bt.logic.ba.Hypercube({})
 
 
-def test_boolean_network_reachable_attractors_most_permissive():
+def test_boolean_network_attractors_most_permissive():
     bn = bt.logic.bn.BooleanNetwork(
         {
             "A": 1,
@@ -303,7 +324,7 @@ def test_boolean_network_reachable_attractors_most_permissive():
         }
     )
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {"A": 0, "B": 0, "C": 0},
         update="most-permissive",
     )
@@ -314,7 +335,7 @@ def test_boolean_network_reachable_attractors_most_permissive():
     )
 
 
-def test_boolean_network_reachable_attractors_most_permissive_partial_state():
+def test_boolean_network_attractors_most_permissive_partial_state():
     bn = bt.logic.bn.BooleanNetwork(
         {
             "AA": "AA",
@@ -323,7 +344,7 @@ def test_boolean_network_reachable_attractors_most_permissive_partial_state():
         }
     )
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {"AA": 0},
         update="most-permissive",
     )
@@ -334,7 +355,7 @@ def test_boolean_network_reachable_attractors_most_permissive_partial_state():
     )
 
 
-def test_boolean_network_reachable_attractors_evaluates_non_unate_rules_exactly():
+def test_boolean_network_attractors_evaluates_non_unate_rules_exactly():
     bn = bt.logic.bn.BooleanNetwork(
         {
             "A": "~A",
@@ -345,7 +366,7 @@ def test_boolean_network_reachable_attractors_evaluates_non_unate_rules_exactly(
         }
     )
 
-    attractors = bn.reachable_attractors(update="most-permissive")
+    attractors = bn.attractors(update="most-permissive")
 
     assert len(attractors) == 1
     assert attractors[0]._as_hypercubes() == (
@@ -353,7 +374,7 @@ def test_boolean_network_reachable_attractors_evaluates_non_unate_rules_exactly(
     )
 
 
-def test_boolean_network_reachable_attractors_preserves_incomparable_minima():
+def test_boolean_network_attractors_preserves_incomparable_minima():
     bn = bt.logic.bn.BooleanNetwork(
         {
             "A": "A",
@@ -361,7 +382,7 @@ def test_boolean_network_reachable_attractors_preserves_incomparable_minima():
         }
     )
 
-    attractors = bn.reachable_attractors(update="most-permissive")
+    attractors = bn.attractors(update="most-permissive")
 
     assert tuple(attractor._as_hypercubes() for attractor in attractors) == (
         (bt.logic.ba.Hypercube({"A": 0}),),
@@ -369,11 +390,11 @@ def test_boolean_network_reachable_attractors_preserves_incomparable_minima():
     )
 
 
-def test_boolean_network_reachable_attractors_most_permissive_defaults_to_free_state():
+def test_boolean_network_attractors_most_permissive_defaults_to_free_state():
     bn = bt.logic.bn.BooleanNetwork({"A": "A", "B": "B"})
 
-    omitted = bn.reachable_attractors(update="most-permissive")
-    explicit = bn.reachable_attractors({}, update="most-permissive")
+    omitted = bn.attractors(update="most-permissive")
+    explicit = bn.attractors({}, update="most-permissive")
 
     assert tuple(attractor.enumerate() for attractor in omitted) == tuple(
         attractor.enumerate() for attractor in explicit
@@ -449,20 +470,20 @@ def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
             "never": "A & ~A",
         }
     )
-    initial_state = {"A": 0, "always": 1, "never": 0}
+    initial_configuration = {"A": 0, "always": 1, "never": 0}
 
     assert bn.reachability(
-        initial_state,
+        initial_configuration,
         {"A": 1, "always": 1, "never": 0},
         quantifier="exists",
     )
     assert not bn.reachability(
-        initial_state,
+        initial_configuration,
         {"always": 0},
         quantifier="exists",
     )
     assert not bn.reachability(
-        initial_state,
+        initial_configuration,
         {"never": 1},
         quantifier="exists",
     )
@@ -474,20 +495,20 @@ def test_boolean_network_transition_equals_most_permissive_reachability(
 ):
     bn = bt.logic.bn.BooleanNetwork({"A": 1, "B": "A"})
 
-    for initial_state, target_state in (
+    for initial_configuration, target_configuration in (
         ({"A": 0, "B": 0}, {"A": 1, "B": 1}),
         ({"A": 0, "B": 0}, {"A": 0, "B": 1}),
         ({}, {"A": 1}),
     ):
         transition = bn.transition(
-            initial_state,
-            target_state,
+            initial_configuration,
+            target_configuration,
             update="most-permissive",
             quantifier=cast(Any, quantifier),
         )
         reachability = bn.reachability(
-            initial_state,
-            target_state,
+            initial_configuration,
+            target_configuration,
             update="most-permissive",
             quantifier=cast(Any, quantifier),
         )
@@ -504,29 +525,31 @@ def test_i3_feed_forward_loop_is_reachable_only_with_most_permissive_dynamics():
             "x3": "~x1 & x2",
         }
     )
-    initial_state = {"x1": 0, "x2": 0, "x3": 0}
-    target_state = {"x1": 1, "x2": 1, "x3": 1}
+    initial_configuration = {"x1": 0, "x2": 0, "x3": 0}
+    target_configuration = {"x1": 1, "x2": 1, "x3": 1}
 
     for update in ("asynchronous", "synchronous", "general"):
         assert not bn.transition(
-            initial_state,
-            target_state,
+            initial_configuration,
+            target_configuration,
             update=cast(Any, update),
         )
         assert not bn.reachability(
-            initial_state,
-            target_state,
+            initial_configuration,
+            target_configuration,
             update=cast(Any, update),
         )
 
     assert bn.transition(
-        initial_state,
-        target_state,
+        initial_configuration,
+        target_configuration,
         update="most-permissive",
     )
     assert bn.reachability(
-        initial_state,
-        target_state,
+        initial_configuration,
+        target_configuration,
         update="most-permissive",
     )
-    assert target_state in tuple(bn.reachable_configurations(initial_state))
+    assert target_configuration in tuple(
+        bn.reachable_configurations(initial_configuration)
+    )

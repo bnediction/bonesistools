@@ -23,22 +23,24 @@ def _canonical_configurations(configurations):
     )
 
 
-def _reachable_attractors_with_backend(bn, initial_state, *, update, backend):
-    initial_states = bt.logic.ba.ConfigurationSet(tuple(bn.keys()), [initial_state])
+def _reachable_attractors_with_backend(bn, initial_configuration, *, update, backend):
+    initial_configurations = bt.logic.ba.ConfigurationSet(
+        tuple(bn.keys()), [initial_configuration]
+    )
 
     if backend == "bdd":
         return _dynamics._bdd_reachable_attractors(
             bn,
-            initial_states,
+            initial_configurations,
             update=update,
         )
 
     if update == "synchronous":
-        return _dynamics._synchronous_reachable_attractors(bn, initial_states)
+        return _dynamics._synchronous_reachable_attractors(bn, initial_configurations)
 
     return _dynamics._explicit_reachable_attractors(
         bn,
-        initial_states,
+        initial_configurations,
         update=update,
     )
 
@@ -77,9 +79,9 @@ def _matches_hypercube(configuration, hypercube):
     )
 
 
-def _reference_reachable_configurations(bn, initial_state, update):
-    initial_key = tuple(initial_state[component] for component in bn)
-    pending = [dict(initial_state)]
+def _reference_reachable_configurations(bn, initial_configuration, update):
+    initial_key = tuple(initial_configuration[component] for component in bn)
+    pending = [dict(initial_configuration)]
     scheduled = {initial_key}
     configurations = []
 
@@ -111,11 +113,11 @@ def test_boolean_network_fixed_points_and_predicate():
     assert no_fixed_point.fixed_points() == []
 
 
-def test_boolean_network_reachable_attractors_synchronous_cycle():
+def test_boolean_network_attractors_synchronous_cycle():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
-    attractors = bn.reachable_attractors(
-        {"A": 0},
+    attractors = bn.attractors(
+        initial={"A": 0},
         update="synchronous",
     )
 
@@ -126,11 +128,11 @@ def test_boolean_network_reachable_attractors_synchronous_cycle():
     )
 
 
-def test_boolean_network_reachable_attractors_synchronous_partial_state():
+def test_boolean_network_attractors_synchronous_partial_configuration():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "B"})
 
-    attractors = bn.reachable_attractors(
-        {"A": "*"},
+    attractors = bn.attractors(
+        initial={"A": "*"},
         update="synchronous",
     )
 
@@ -148,26 +150,30 @@ def test_boolean_network_reachable_attractors_synchronous_partial_state():
     )
 
 
-def test_boolean_network_reachable_attractors_synchronous_reuses_trajectories(
+def test_boolean_network_attractors_synchronous_reuses_trajectories(
     monkeypatch,
 ):
     bn = bt.logic.bn.BooleanNetwork({"A": 1, "B": "A"})
     calls = 0
-    next_state_bits = _dynamics._next_state_bits
+    next_configuration_bits = _dynamics._next_configuration_bits
 
-    def counted_next_state_bits(*args, **kwargs):
+    def counted_next_configuration_bits(*args, **kwargs):
         nonlocal calls
         calls += 1
-        return next_state_bits(*args, **kwargs)
+        return next_configuration_bits(*args, **kwargs)
 
-    monkeypatch.setattr(_dynamics, "_next_state_bits", counted_next_state_bits)
+    monkeypatch.setattr(
+        _dynamics,
+        "_next_configuration_bits",
+        counted_next_configuration_bits,
+    )
     monkeypatch.setattr(
         _dynamics,
         "_terminal_strongly_connected_components",
         lambda _successors: pytest.fail("synchronous dynamics must not compute SCCs"),
     )
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {},
         update="synchronous",
     )
@@ -187,7 +193,7 @@ def test_attractor_states_are_compacted_without_incremental_additions(monkeypatc
     monkeypatch.setattr(bt.logic.ba.ConfigurationSet, "add", fail)
     monkeypatch.setattr(bt.logic.ba.ConfigurationSet, "compress", fail)
 
-    configurations = _dynamics._configuration_set_from_state_bits(
+    configurations = _dynamics._configuration_set_from_configuration_bits(
         {0b000, 0b001, 0b100, 0b101, 0b110},
         ("A", "B", "C"),
     )
@@ -202,7 +208,7 @@ def test_attractor_states_are_compacted_without_incremental_additions(monkeypatc
     }
 
 
-def test_boolean_network_reachable_attractors_synchronous_bdd_matches_explicit():
+def test_boolean_network_attractors_synchronous_bdd_matches_explicit():
     pytest.importorskip("dd.autoref")
 
     bn = bt.logic.bn.BooleanNetwork(
@@ -230,7 +236,7 @@ def test_boolean_network_reachable_attractors_synchronous_bdd_matches_explicit()
 
 
 @pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
-def test_boolean_network_reachable_attractors_bdd_matches_explicit(update):
+def test_boolean_network_attractors_bdd_matches_explicit(update):
     pytest.importorskip("dd.autoref")
 
     bn = bt.logic.bn.BooleanNetwork(
@@ -367,7 +373,7 @@ def test_bdd_reachable_attractors_keep_transient_states_symbolic(
 
 
 @pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
-def test_boolean_network_reachable_attractors_bdd_reports_missing_dd(
+def test_boolean_network_attractors_bdd_reports_missing_dd(
     monkeypatch,
     update,
 ):
@@ -404,7 +410,7 @@ def test_asynchronous_attractor_backend_uses_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: object())
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -416,7 +422,7 @@ def test_asynchronous_attractor_backend_uses_closed_hypercube_bound(
         lambda *_args, **_kwargs: selected.append("bdd") or (),
     )
 
-    bn.reachable_attractors(
+    bn.attractors(
         {component: 0 for component in components},
         update="asynchronous",
     )
@@ -439,7 +445,7 @@ def test_general_attractor_backend_uses_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: object())
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -451,7 +457,7 @@ def test_general_attractor_backend_uses_closed_hypercube_bound(
         lambda *_args, **_kwargs: selected.append("bdd") or (),
     )
 
-    bn.reachable_attractors(
+    bn.attractors(
         {component: 0 for component in components},
         update="general",
     )
@@ -463,7 +469,7 @@ def test_general_attractor_backend_uses_closed_hypercube_bound(
     ("n_components", "expected_backend"),
     [(10, "explicit"), (11, "bdd")],
 )
-def test_synchronous_attractor_backend_uses_initial_state_bound(
+def test_synchronous_attractor_backend_uses_initial_configuration_bound(
     monkeypatch,
     n_components,
     expected_backend,
@@ -474,7 +480,7 @@ def test_synchronous_attractor_backend_uses_initial_state_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: object())
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_synchronous_reachable_attractors",
@@ -486,17 +492,17 @@ def test_synchronous_attractor_backend_uses_initial_state_bound(
         lambda *_args, **_kwargs: selected.append("bdd") or (),
     )
 
-    bn.reachable_attractors({}, update="synchronous")
+    bn.attractors({}, update="synchronous")
 
     assert selected == [expected_backend]
 
 
-def test_asynchronous_attractor_backend_uses_initial_state_bound(monkeypatch):
+def test_asynchronous_attractor_backend_uses_initial_configuration_bound(monkeypatch):
     components = tuple(f"x{index}" for index in range(11))
     bn = bt.logic.bn.BooleanNetwork({component: component for component in components})
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: object())
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -508,7 +514,7 @@ def test_asynchronous_attractor_backend_uses_initial_state_bound(monkeypatch):
         lambda *_args, **_kwargs: selected.append("bdd") or (),
     )
 
-    bn.reachable_attractors({}, update="asynchronous")
+    bn.attractors({}, update="asynchronous")
 
     assert selected == ["bdd"]
 
@@ -521,7 +527,7 @@ def test_automatic_attractor_backend_falls_back_without_dd(monkeypatch, update):
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: None)
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: None)
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -538,7 +544,7 @@ def test_automatic_attractor_backend_falls_back_without_dd(monkeypatch, update):
         lambda *_args, **_kwargs: selected.append("bdd") or (),
     )
 
-    bn.reachable_attractors(
+    bn.attractors(
         {component: 0 for component in components},
         update=cast(Any, update),
     )
@@ -567,7 +573,7 @@ def test_reachable_configurations_select_backend_from_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: object())
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_configurations",
@@ -599,7 +605,7 @@ def test_reachable_configurations_fall_back_to_explicit_without_dd(
     )
     selected = []
 
-    monkeypatch.setattr(_network, "find_spec", lambda _name: None)
+    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: None)
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_configurations",
@@ -620,10 +626,10 @@ def test_reachable_configurations_fall_back_to_explicit_without_dd(
     assert selected == ["explicit"]
 
 
-def test_boolean_network_reachable_attractors_asynchronous_branching():
+def test_boolean_network_attractors_asynchronous_branching():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {"A": 0, "B": 1},
         update="asynchronous",
     )
@@ -636,11 +642,11 @@ def test_boolean_network_reachable_attractors_asynchronous_branching():
     )
 
 
-def test_boolean_network_reachable_attractors_asynchronous_partial_state():
+def test_boolean_network_attractors_asynchronous_partial_configuration():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    attractors = bn.reachable_attractors(
-        {"A": 0},
+    attractors = bn.attractors(
+        initial={"A": 0},
         update="asynchronous",
     )
 
@@ -653,36 +659,36 @@ def test_boolean_network_reachable_attractors_asynchronous_partial_state():
 
 
 @pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
-def test_boolean_network_reachable_attractors_defaults_to_fully_free_state(update):
+def test_boolean_network_attractors_defaults_to_free_configuration(update):
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    omitted = bn.reachable_attractors(
+    omitted = bn.attractors(
         update=cast(Any, update),
     )
-    explicit = bn.reachable_attractors(
-        {},
+    explicit = bn.attractors(
+        initial={},
         update=cast(Any, update),
     )
 
     assert _canonical_attractors(omitted) == _canonical_attractors(explicit)
 
 
-def test_boolean_network_reachable_attractors_explores_shared_paths_once(
+def test_boolean_network_attractors_explores_shared_paths_once(
     monkeypatch,
 ):
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
     calls = 0
-    next_state_bits = _dynamics._next_state_bits
+    next_configuration_bits = _dynamics._next_configuration_bits
 
-    def counted_next_state_bits(*args, **kwargs):
+    def counted_next_configuration_bits(*args, **kwargs):
         nonlocal calls
         calls += 1
-        return next_state_bits(*args, **kwargs)
+        return next_configuration_bits(*args, **kwargs)
 
     monkeypatch.setattr(
         _dynamics,
-        "_next_state_bits",
-        counted_next_state_bits,
+        "_next_configuration_bits",
+        counted_next_configuration_bits,
     )
     monkeypatch.setattr(
         _dynamics,
@@ -690,7 +696,7 @@ def test_boolean_network_reachable_attractors_explores_shared_paths_once(
         lambda _successors: pytest.fail("asynchronous dynamics must use Tarjan"),
     )
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {},
         update="asynchronous",
     )
@@ -704,10 +710,12 @@ def test_boolean_network_reachable_attractors_explores_shared_paths_once(
     assert calls == 4
 
 
-def test_explicit_reachable_attractors_consumes_initial_states_lazily(monkeypatch):
+def test_explicit_reachable_attractors_consumes_initial_configurations_lazily(
+    monkeypatch,
+):
     bn = bt.logic.bn.BooleanNetwork({"A": "A"})
     explored = False
-    next_state_bits = _dynamics._next_state_bits
+    next_configuration_bits = _dynamics._next_configuration_bits
 
     class InitialStates:
         def __iter__(self):
@@ -715,15 +723,15 @@ def test_explicit_reachable_attractors_consumes_initial_states_lazily(monkeypatc
             assert explored
             yield {"A": 1}
 
-    def counted_next_state_bits(*args, **kwargs):
+    def counted_next_configuration_bits(*args, **kwargs):
         nonlocal explored
         explored = True
-        return next_state_bits(*args, **kwargs)
+        return next_configuration_bits(*args, **kwargs)
 
     monkeypatch.setattr(
         _dynamics,
-        "_next_state_bits",
-        counted_next_state_bits,
+        "_next_configuration_bits",
+        counted_next_configuration_bits,
     )
 
     attractors = _dynamics._explicit_reachable_attractors(
@@ -736,10 +744,10 @@ def test_explicit_reachable_attractors_consumes_initial_states_lazily(monkeypatc
     assert all(len(attractor) == 1 for attractor in attractors)
 
 
-def test_boolean_network_reachable_attractors_general_uses_subsets_of_updates():
+def test_boolean_network_attractors_general_uses_subsets_of_updates():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {"A": 0, "B": 1},
         update="general",
     )
@@ -763,15 +771,15 @@ def test_boolean_network_reachable_configurations_match_reference_stg(update):
 
     for bn in networks:
         for values in product((0, 1), repeat=len(bn)):
-            initial_state = dict(zip(bn, values))
+            initial_configuration = dict(zip(bn, values))
             expected = _reference_reachable_configurations(
                 bn,
-                initial_state,
+                initial_configuration,
                 update,
             )
             observed = tuple(
                 bn.reachable_configurations(
-                    initial_state,
+                    initial_configuration,
                     update=cast(Any, update),
                 )
             )
@@ -784,16 +792,16 @@ def test_boolean_network_reachable_configurations_match_reference_stg(update):
 
 def test_boolean_network_reachable_configurations_distinguish_update_semantics():
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
-    initial_state = {"A": 0, "B": 1}
+    initial_configuration = {"A": 0, "B": 1}
 
     synchronous = _canonical_configurations(
-        bn.reachable_configurations(initial_state, update="synchronous")
+        bn.reachable_configurations(initial_configuration, update="synchronous")
     )
     asynchronous = _canonical_configurations(
-        bn.reachable_configurations(initial_state, update="asynchronous")
+        bn.reachable_configurations(initial_configuration, update="asynchronous")
     )
     general = _canonical_configurations(
-        bn.reachable_configurations(initial_state, update="general")
+        bn.reachable_configurations(initial_configuration, update="general")
     )
 
     assert synchronous == _canonical_configurations(
@@ -822,28 +830,30 @@ def test_bdd_reachable_configurations_match_explicit_traversal(update):
             "C": "~C",
         }
     )
-    initial_state = bt.logic.ba.Hypercube({"A": 0, "B": 1, "C": 0})
+    initial_configuration = bt.logic.ba.Hypercube({"A": 0, "B": 1, "C": 0})
 
     explicit = _dynamics._explicit_reachable_configurations(
         bn,
-        initial_state,
+        initial_configuration,
         update=cast(Any, update),
     )
     bdd = _dynamics._bdd_reachable_configurations(
         bn,
-        initial_state,
+        initial_configuration,
         update=cast(Any, update),
     )
 
     assert _canonical_configurations(bdd) == _canonical_configurations(explicit)
 
 
-def test_explicit_reachable_configurations_yield_initial_state_lazily(monkeypatch):
+def test_explicit_reachable_configurations_yield_initial_configuration_lazily(
+    monkeypatch,
+):
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
     monkeypatch.setattr(
         _dynamics,
-        "_next_state_bits",
+        "_next_configuration_bits",
         lambda *_args, **_kwargs: pytest.fail(
             "successors must be computed after yielding the current state"
         ),
@@ -862,7 +872,7 @@ def test_explicit_reachable_configurations_stream_successors(monkeypatch, update
 
     monkeypatch.setattr(
         _dynamics,
-        "_successor_state_bits",
+        "_successor_configuration_bits",
         lambda *_args, **_kwargs: pytest.fail(
             "reachable configurations must not materialize successor tuples"
         ),
@@ -986,35 +996,35 @@ def test_bdd_transition_quantifiers_match_explicit_relation(update):
     )
 
     for initial_hypercube, target_hypercube in product(hypercubes, repeat=2):
-        initial_states = tuple(
+        initial_configurations = tuple(
             state for state in states if _matches_hypercube(state, initial_hypercube)
         )
-        target_states = tuple(
+        target_configurations = tuple(
             state for state in states if _matches_hypercube(state, target_hypercube)
         )
         relation = {
             tuple(initial.items()): {
                 tuple(target.items()) for target in successors[tuple(initial.items())]
             }
-            for initial in initial_states
+            for initial in initial_configurations
         }
         expected = {
             "exists": any(
                 tuple(target.items()) in relation[tuple(initial.items())]
-                for initial in initial_states
-                for target in target_states
+                for initial in initial_configurations
+                for target in target_configurations
             ),
             "robust": all(
                 any(
                     tuple(target.items()) in relation[tuple(initial.items())]
-                    for target in target_states
+                    for target in target_configurations
                 )
-                for initial in initial_states
+                for initial in initial_configurations
             ),
             "universal": all(
                 tuple(target.items()) in relation[tuple(initial.items())]
-                for initial in initial_states
-                for target in target_states
+                for initial in initial_configurations
+                for target in target_configurations
             ),
         }
 
@@ -1310,7 +1320,7 @@ def test_boolean_network_reachability_asynchronous_quantifies_partial_states():
 
 
 @pytest.mark.parametrize(
-    ("update", "initial_state"),
+    ("update", "initial_configuration"),
     [
         ("asynchronous", {"A": 0}),
         ("general", {"A": 0}),
@@ -1320,7 +1330,7 @@ def test_boolean_network_reachability_asynchronous_quantifies_partial_states():
 def test_boolean_network_reachability_reports_missing_dd(
     monkeypatch,
     update,
-    initial_state,
+    initial_configuration,
 ):
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
@@ -1333,7 +1343,7 @@ def test_boolean_network_reachability_reports_missing_dd(
 
     with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
         bn.reachability(
-            initial_state,
+            initial_configuration,
             {"A": 1},
             update=cast(Any, update),
         )
@@ -1390,67 +1400,67 @@ def test_boolean_network_reachability_universal_quantification(update):
     )
 
 
-def test_boolean_network_reachability_validate_options_and_states():
+def test_boolean_network_reachability_validates_options_and_configurations():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
 
     with pytest.raises(ValueError, match="invalid argument value for 'update'"):
         bn.reachable_configurations(
-            {"A": 0, "B": 0},
+            initial={"A": 0, "B": 0},
             update=cast(Any, "parallel"),
         )
 
-    with pytest.raises(ValueError, match="initial_state must define fixed values"):
-        list(bn.reachable_configurations({"A": 0}))
+    with pytest.raises(ValueError, match="initial must define fixed values"):
+        list(bn.reachable_configurations(initial={"A": 0}))
 
     with pytest.raises(ValueError, match="invalid argument value for 'update'"):
         bn.reachability(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
+            source={"A": 0, "B": 0},
+            target={"A": 1, "B": 0},
             update=cast(Any, "parallel"),
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'quantifier'"):
         bn.reachability(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
+            source={"A": 0, "B": 0},
+            target={"A": 1, "B": 0},
             quantifier=cast(Any, "all"),
         )
 
-    with pytest.raises(ValueError, match="unknown components in initial_state"):
+    with pytest.raises(ValueError, match="unknown components in source"):
         bn.reachability({"A": 0, "B": 0, "C": 0}, {"A": 1, "B": 0})
 
-    with pytest.raises(ValueError, match="unknown components in target_state"):
+    with pytest.raises(ValueError, match="unknown components in target"):
         bn.reachability({"A": 0, "B": 0}, {"A": 1, "B": 0, "C": 0})
 
 
-def test_boolean_network_transition_validates_options_and_states():
+def test_boolean_network_transition_validates_options_and_configurations():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
 
     with pytest.raises(ValueError, match="invalid argument value for 'update'"):
         bn.transition(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
+            source={"A": 0, "B": 0},
+            target={"A": 1, "B": 0},
             update=cast(Any, "parallel"),
         )
 
     with pytest.raises(ValueError, match="invalid argument value for 'quantifier'"):
         bn.transition(
-            {"A": 0, "B": 0},
-            {"A": 1, "B": 0},
+            source={"A": 0, "B": 0},
+            target={"A": 1, "B": 0},
             quantifier=cast(Any, "all"),
         )
 
-    with pytest.raises(ValueError, match="unknown components in initial_state"):
+    with pytest.raises(ValueError, match="unknown components in source"):
         bn.transition({"A": 0, "B": 0, "C": 0}, {"A": 1, "B": 0})
 
-    with pytest.raises(ValueError, match="unknown components in target_state"):
+    with pytest.raises(ValueError, match="unknown components in target"):
         bn.transition({"A": 0, "B": 0}, {"A": 1, "B": 0, "C": 0})
 
 
-def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():
+def test_boolean_network_attractors_compresses_large_terminal_scc():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "~B"})
 
-    attractors = bn.reachable_attractors(
+    attractors = bn.attractors(
         {"A": 0, "B": 0},
         update="asynchronous",
     )
@@ -1465,23 +1475,23 @@ def test_boolean_network_reachable_attractors_compresses_large_terminal_scc():
     assert len(attractors[0]._hypercubes) == 1
 
 
-def test_boolean_network_reachable_attractors_validate_options():
+def test_boolean_network_attractors_validate_options():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 
-    assert "backend" not in signature(bn.reachable_attractors).parameters
+    assert "backend" not in signature(bn.attractors).parameters
 
     with pytest.raises(ValueError, match="invalid argument value for 'update'"):
-        bn.reachable_attractors({"A": 0}, update=cast(Any, "parallel"))
+        bn.attractors({"A": 0}, update=cast(Any, "parallel"))
 
     with pytest.raises(ValueError, match="unknown components"):
-        bn.reachable_attractors({"B": 0})
+        bn.attractors({"B": 0})
 
 
-def test_boolean_network_reachable_attractors_rejects_open_network():
+def test_boolean_network_attractors_rejects_open_network():
     bn = bt.logic.bn.BooleanNetwork({"A": "B"}, check=False)
 
     with pytest.raises(ValueError, match="undefined components"):
-        bn.reachable_attractors({"A": 0})
+        bn.attractors({"A": 0})
 
 
 def test_boolean_network_next_methods():
@@ -1546,8 +1556,10 @@ def test_boolean_network_fixed_points_validate_inputs():
 
     assert bn.is_fixed_point({"A": 1, "B": bt.logic.ba.PartialBoolean("*")}) is False
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'state'"):
-        bn.is_fixed_point(cast(Any, object()))
+    with pytest.raises(
+        TypeError, match="unsupported argument type for 'configuration'"
+    ):
+        bn.is_fixed_point(configuration=cast(Any, object()))
 
     with pytest.raises(ValueError, match="expected string component names"):
         bn.is_fixed_point(cast(Any, {"A": 1, 2: 0}))

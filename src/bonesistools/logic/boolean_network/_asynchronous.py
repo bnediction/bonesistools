@@ -52,8 +52,8 @@ def _bdd_asynchronous_transition_partitions(
     return tuple(partitions)
 
 
-def _asynchronous_successor_state_bits(
-    state: int,
+def _asynchronous_successor_configuration_bits(
+    configuration: int,
     unstable_mask: int,
 ) -> Tuple[int, ...]:
     """Return successors obtained by updating one unstable component."""
@@ -61,14 +61,14 @@ def _asynchronous_successor_state_bits(
     successors = []
     while unstable_mask:
         bit = unstable_mask & -unstable_mask
-        successors.append(state ^ bit)
+        successors.append(configuration ^ bit)
         unstable_mask ^= bit
 
     return tuple(successors)
 
 
 def _tarjan_asynchronous_terminal_sccs(
-    initial_states: Iterable[int],
+    initial_configurations: Iterable[int],
     unstable_mask: Callable[[int], int],
 ) -> Tuple[Tuple[int, ...], ...]:
     """Find reachable terminal SCCs with an iterative on-the-fly Tarjan search."""
@@ -81,25 +81,25 @@ def _tarjan_asynchronous_terminal_sccs(
     terminal_components: List[Tuple[int, ...]] = []
     next_index = 0
 
-    for initial_state in initial_states:
-        if initial_state in visited:
+    for initial_configuration in initial_configurations:
+        if initial_configuration in visited:
             continue
 
-        visited.add(initial_state)
-        indices[initial_state] = next_index
-        lowlinks[initial_state] = next_index
+        visited.add(initial_configuration)
+        indices[initial_configuration] = next_index
+        lowlinks[initial_configuration] = next_index
         next_index += 1
-        component_stack.append(initial_state)
-        dfs_states = [initial_state]
-        remaining_masks = [unstable_mask(initial_state)]
+        component_stack.append(initial_configuration)
+        dfs_configurations = [initial_configuration]
+        remaining_masks = [unstable_mask(initial_configuration)]
 
-        while dfs_states:
-            state = dfs_states[-1]
+        while dfs_configurations:
+            configuration = dfs_configurations[-1]
             remaining_mask = remaining_masks[-1]
             if remaining_mask:
                 bit = remaining_mask & -remaining_mask
                 remaining_masks[-1] ^= bit
-                successor = state ^ bit
+                successor = configuration ^ bit
 
                 if successor not in visited:
                     visited.add(successor)
@@ -107,18 +107,21 @@ def _tarjan_asynchronous_terminal_sccs(
                     lowlinks[successor] = next_index
                     next_index += 1
                     component_stack.append(successor)
-                    dfs_states.append(successor)
+                    dfs_configurations.append(successor)
                     remaining_masks.append(unstable_mask(successor))
                 elif successor in indices:
-                    lowlinks[state] = min(lowlinks[state], indices[successor])
+                    lowlinks[configuration] = min(
+                        lowlinks[configuration],
+                        indices[successor],
+                    )
                 else:
-                    has_external_successor.add(state)
+                    has_external_successor.add(configuration)
                 continue
 
-            dfs_states.pop()
+            dfs_configurations.pop()
             remaining_masks.pop()
 
-            if lowlinks[state] == indices[state]:
+            if lowlinks[configuration] == indices[configuration]:
                 component = []
                 is_terminal = True
                 while True:
@@ -128,16 +131,19 @@ def _tarjan_asynchronous_terminal_sccs(
                     has_external_successor.discard(member)
                     del indices[member]
                     del lowlinks[member]
-                    if member == state:
+                    if member == configuration:
                         break
 
                 if is_terminal:
                     terminal_components.append(tuple(component))
 
-            if dfs_states:
-                parent = dfs_states[-1]
-                if state in indices:
-                    lowlinks[parent] = min(lowlinks[parent], lowlinks[state])
+            if dfs_configurations:
+                parent = dfs_configurations[-1]
+                if configuration in indices:
+                    lowlinks[parent] = min(
+                        lowlinks[parent],
+                        lowlinks[configuration],
+                    )
                 else:
                     has_external_successor.add(parent)
 

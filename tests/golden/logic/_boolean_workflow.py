@@ -89,7 +89,7 @@ def _collect_reachable_attractors(
         for update in updates:
             case_states.append(state_name)
             case_updates.append(update)
-            attractors = network.reachable_attractors(
+            attractors = network.attractors(
                 state,
                 update=cast(Any, update),
             )

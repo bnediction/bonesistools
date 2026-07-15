@@ -68,7 +68,7 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
     datasets_module = importlib.import_module("bonesistools.omics.datasets")
     deprecated_names = {
         bt.logic.ba: ["read_hypercubes"],
-        bt.logic.bn: ["bn_to_pydot", "read_bnet", "read_bnet_directory"],
+        bt.logic.bn: ["read_bnet", "read_bnet_directory"],
         bt.logic.ig: ["read_influence_graph"],
         bt.omics.pp: [
             "regress_out",

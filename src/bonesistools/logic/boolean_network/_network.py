@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC
 from importlib import import_module
-from importlib.util import find_spec
 from itertools import product
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -27,7 +25,7 @@ from typing import (
     overload,
 )
 
-import networkx as nx
+import clingo
 from boolean.boolean import (
     _FALSE,
     _TRUE,
@@ -46,23 +44,25 @@ from ..boolean_algebra import (
     prime_implicants,
     rule_to_string,
 )
-from ..boolean_algebra._structure import _constant_expression_as_bool
+from ..boolean_algebra._structure import (
+    Implicants,
+    _constant_expression_as_bool,
+)
 from ..boolean_algebra._typing import (
     BooleanRule,
+    Configuration,
     ConfigurationLike,
     HypercubeLike,
     is_configuration_like,
     is_hypercube_like,
 )
 from ..influence_graph._influence_graph import (
-    AggregatedEdgeStyle,
     AggregatedInfluenceGraph,
-    AggregatedNodeStyle,
-    CollapseMode,
     InfluenceGraph,
 )
-from ..influence_graph._svg import SvgLength, scale_svg
 from ._dynamics import (
+    _automatic_reachable_attractors_backend,
+    _automatic_reachable_configurations_backend,
     _bdd_reachability,
     _bdd_reachable_attractors,
     _bdd_reachable_configurations,
@@ -81,9 +81,6 @@ from ._most_permissive import (
     _smallest_closed_hypercube,
 )
 from ._typing import BooleanNetworkLike, is_boolean_network_like
-
-if TYPE_CHECKING:
-    from pydot import Dot
 
 EquivalenceMethod = Literal["simplify", "truth_table", "asp"]
 NodeStyle = Literal["count", "stability"]
@@ -430,7 +427,6 @@ class BooleanNetwork(Dict[str, Expression]):
                         for implicant in prime_implicants(
                             rule,
                             value=value,
-                            backend="asp",
                             ba=self.ba,
                         )
                     ]
@@ -789,7 +785,7 @@ class BooleanNetwork(Dict[str, Expression]):
             evaluated.
         """
 
-        configuration = self._normalize_state(configuration)
+        configuration = self._normalize_configuration(configuration)
         substitutions = {
             self.ba.Symbol(name): self.ba.TRUE if value else self.ba.FALSE
             for name, value in configuration.items()
@@ -809,7 +805,7 @@ class BooleanNetwork(Dict[str, Expression]):
     def next_configuration(
         self,
         configuration: ConfigurationLike,
-    ) -> Dict[str, int]:
+    ) -> Configuration:
         """
         Return the next Boolean configuration.
 
@@ -824,12 +820,12 @@ class BooleanNetwork(Dict[str, Expression]):
         Parameters
         ----------
         configuration: ConfigurationLike
-            Complete Boolean state used to evaluate every rule.
+            Complete Boolean configuration used to evaluate every rule.
 
         Returns
         -------
-        Dict[str, int]
-            Next Boolean state.
+        Configuration
+            Next Boolean configuration.
 
         Raises
         ------
@@ -839,7 +835,7 @@ class BooleanNetwork(Dict[str, Expression]):
             evaluated.
         """
 
-        configuration = self._normalize_state(configuration)
+        configuration = self._normalize_configuration(configuration)
         substitutions = {
             self.ba.Symbol(name): self.ba.TRUE if value else self.ba.FALSE
             for name, value in configuration.items()
@@ -862,13 +858,13 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return next_configuration
 
-    def is_fixed_point(self, state: HypercubeLike) -> bool:
+    def is_fixed_point(self, configuration: HypercubeLike) -> bool:
         """
-        Test whether a state is a fixed point.
+        Test whether a configuration is a fixed point.
 
-        A fixed point is a Boolean state `x` such that `f_i(x) = x_i` for every
-        component `i`. States containing free Boolean values such as `"*"`
-        are accepted and return False.
+        A fixed point is a Boolean configuration `x` such that `f_i(x) = x_i`
+        for every component `i`. Configurations containing free Boolean values
+        such as `"*"` are accepted and return False.
 
         Examples
         --------
@@ -880,47 +876,48 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        state: HypercubeLike
-            Boolean state to test.
+        configuration: HypercubeLike
+            Boolean configuration to test.
 
         Returns
         -------
         bool
-            Whether `state` is a fixed point.
+            Whether `configuration` is a fixed point.
 
         Raises
         ------
         ValueError
-            If the network is not closed or `state` does not define exactly the
-            network components.
+            If the network is not closed or `configuration` does not define
+            exactly the network components.
         """
 
         self.validate()
-        if not isinstance(state, MappingABC):
+        if not isinstance(configuration, MappingABC):
             raise TypeError(
-                "unsupported argument type for 'state': "
-                f"expected Mapping but received {type(state)}"
+                "unsupported argument type for 'configuration': "
+                f"expected Mapping but received {type(configuration)}"
             )
 
-        if not all(isinstance(component, str) for component in state):
+        if not all(isinstance(component, str) for component in configuration):
             raise ValueError(
-                "invalid argument value for 'state': " "expected string component names"
+                "invalid argument value for 'configuration': "
+                "expected string component names"
             )
 
-        if set(state) != self.components:
+        if set(configuration) != self.components:
             raise ValueError(
-                "invalid argument value for 'state': "
+                "invalid argument value for 'configuration': "
                 f"expected components {sorted(self.components)} but received "
-                f"{sorted(state)}"
+                f"{sorted(configuration)}"
             )
 
-        if not is_configuration_like(state):
-            if is_hypercube_like(state):
-                hypercube = Hypercube(state)
+        if not is_configuration_like(configuration):
+            if is_hypercube_like(configuration):
+                hypercube = Hypercube(configuration)
                 if not hypercube.is_fully_specified:
                     return False
 
-                state = {
+                configuration = {
                     component: cast(int, hypercube[component].value)
                     for component in self
                 }
@@ -928,16 +925,18 @@ class BooleanNetwork(Dict[str, Expression]):
             else:
                 for component in self:
                     self._normalize_boolean_value(
-                        state[component],
-                        name="state",
+                        configuration[component],
+                        name="configuration",
                         component=component,
                     )
 
-        state = self._normalize_state(cast(ConfigurationLike, state))
+        configuration = self._normalize_configuration(
+            cast(ConfigurationLike, configuration)
+        )
 
-        return self.next_configuration(state) == state
+        return self.next_configuration(configuration) == configuration
 
-    def fixed_points(self, limit: int = 0) -> List[Dict[str, int]]:
+    def fixed_points(self, limit: int = 0) -> List[Configuration]:
         """
         Return fixed points of the Boolean network.
 
@@ -959,7 +958,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Returns
         -------
-        List[Dict[str, int]]
+        List[Configuration]
             Fixed points as component-value mappings.
 
         Raises
@@ -976,21 +975,20 @@ class BooleanNetwork(Dict[str, Expression]):
         fixed_points = []
 
         for values in product([0, 1], repeat=len(components)):
-            state = dict(zip(components, values))
+            configuration = dict(zip(components, values))
 
-            if self.next_configuration(state) == state:
-                fixed_points.append(state)
+            if self.next_configuration(configuration) == configuration:
+                fixed_points.append(configuration)
 
                 if limit and len(fixed_points) >= limit:
                     break
 
         return fixed_points
 
-    def trapspaces(
+    def trap_spaces(
         self,
         *,
         kind: Literal["minimal"] = "minimal",
-        backend: Literal["asp"] = "asp",
     ) -> Tuple[Hypercube, ...]:
         """
         Enumerate trap spaces of the Boolean network.
@@ -1006,15 +1004,13 @@ class BooleanNetwork(Dict[str, Expression]):
         Examples
         --------
         >>> bn = BooleanNetwork({"A": "B", "B": "A"})
-        >>> bn.trapspaces()
+        >>> bn.trap_spaces()
         (Hypercube(A=0, B=0), Hypercube(A=1, B=1))
 
         Parameters
         ----------
         kind: {"minimal"} (default: "minimal")
             Trap-space family to enumerate.
-        backend: {"asp"} (default: "asp")
-            Backend used for enumeration. The `"asp"` backend uses `clingo`.
 
         Returns
         -------
@@ -1023,30 +1019,81 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Raises
         ------
-        ImportError
-            If `clingo` cannot be imported.
         ValueError
-            If `kind` or `backend` is unsupported, or if the network is not
-            closed.
+            If `kind` is unsupported or the network is not closed.
         """
 
         _as_literal(kind, choices=("minimal",), name="kind")
-        _as_literal(backend, choices=("asp",), name="backend")
 
         self.validate()
 
-        return self._minimal_trapspaces_with_asp()
+        return self._minimal_trap_spaces_with_asp()
 
-    def reachable_attractors(
+    def principal_trap_space(
         self,
-        initial_state: Optional[HypercubeLike] = None,
+        configuration: ConfigurationLike,
+    ) -> Hypercube:
+        """
+        Return the smallest trap space containing a configuration.
+
+        The principal trap space of a configuration is the smallest closed
+        hypercube, with respect to inclusion, that contains it.
+
+        Examples
+        --------
+        A fixed point generates a fully specified principal trap space:
+
+        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
+        >>> bn.principal_trap_space({"A": 0, "B": 0})
+        Hypercube(A=0, B=0)
+
+        Components are freed when their fixed values are not preserved
+        throughout the enclosing hypercube:
+
+        >>> bn.principal_trap_space({"A": 0, "B": 1})
+        Hypercube()
+
+        Parameters
+        ----------
+        configuration: ConfigurationLike
+            Complete Boolean configuration enclosed by the returned trap
+            space.
+
+        Returns
+        -------
+        Hypercube
+            Smallest trap space containing `configuration`.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed or `configuration` is invalid or
+            incomplete.
+        """
+
+        self.validate()
+        resolved_configuration = _validate_complete_hypercube(
+            tuple(self.keys()),
+            configuration,
+            name="configuration",
+        )
+
+        return _smallest_closed_hypercube(
+            self,
+            resolved_configuration,
+            relaxed_components=self.keys(),
+        )
+
+    def attractors(
+        self,
+        initial: Optional[HypercubeLike] = None,
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
         ] = "asynchronous",
     ) -> Tuple[ConfigurationSet, ...]:
         """
-        Return attractors reachable from an initial configuration or subspace.
+        Return attractors, optionally restricted by an initial configuration.
 
         Attractors are returned as exact `ConfigurationSet` objects. Iterating
         over a returned set yields complete Boolean configurations, while
@@ -1059,7 +1106,7 @@ class BooleanNetwork(Dict[str, Expression]):
         reaches one cycle:
 
         >>> bn = BooleanNetwork({"A": "~A"})
-        >>> attractors = bn.reachable_attractors({"A": 0}, update="synchronous")
+        >>> attractors = bn.attractors({"A": 0}, update="synchronous")
         >>> attractors[0].enumerate()
         ({'A': 0}, {'A': 1})
 
@@ -1067,33 +1114,33 @@ class BooleanNetwork(Dict[str, Expression]):
         connected components:
 
         >>> bn = BooleanNetwork({"A": "B", "B": "A"})
-        >>> attractors = bn.reachable_attractors(
+        >>> attractors = bn.attractors(
         ...     {"A": 0, "B": 1},
         ...     update="asynchronous",
         ... )
         >>> [attractor.enumerate() for attractor in attractors]
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
-        A partial initial state is interpreted as the set of all compatible
-        complete configurations:
+        A partial initial configuration is interpreted as the set of all
+        compatible complete configurations:
 
         >>> bn = BooleanNetwork({"A": "B", "B": "A"})
-        >>> attractors = bn.reachable_attractors({"A": 0})
+        >>> attractors = bn.attractors({"A": 0})
         >>> [attractor.enumerate() for attractor in attractors]
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
-        If no initial state is provided, all configurations are considered
-        initial:
+        If no initial configuration is provided, all configurations are
+        considered initial:
 
-        >>> attractors = bn.reachable_attractors()
+        >>> attractors = bn.attractors()
         >>> [attractor.enumerate() for attractor in attractors]
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
         Parameters
         ----------
-        initial_state: HypercubeLike, optional
-            Initial Boolean configuration or subspace from which reachability
-            is explored. Missing or free components define multiple initial
+        initial: HypercubeLike, optional
+            Initial Boolean configuration. It may be partially specified;
+            omitted or free components define multiple compatible
             configurations. If `None`, all configurations are considered
             initial.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
@@ -1114,7 +1161,7 @@ class BooleanNetwork(Dict[str, Expression]):
         Raises
         ------
         ValueError
-            If the network is not closed, the initial state is invalid,
+            If the network is not closed, `initial` is invalid,
             or `update` is invalid.
         """
 
@@ -1125,68 +1172,56 @@ class BooleanNetwork(Dict[str, Expression]):
         )
 
         self.validate()
-        resolved_initial_state: HypercubeLike
-        if initial_state is None:
-            resolved_initial_state = {}
+        resolved_initial: HypercubeLike
+        if initial is None:
+            resolved_initial = {}
         else:
-            resolved_initial_state = initial_state
+            resolved_initial = initial
 
-        initial_states = ConfigurationSet(tuple(self.keys()), [resolved_initial_state])
-
-        if update == "synchronous":
-            selected_backend = _automatic_reachable_attractors_backend(
-                self,
-                resolved_initial_state,
-                initial_states,
-                update=update,
-            )
-
-            if selected_backend == "bdd":
-                return _bdd_reachable_attractors(
-                    self,
-                    initial_states,
-                    update=update,
-                )
-
-            return _synchronous_reachable_attractors(
-                self,
-                initial_states,
-            )
+        initial_configurations = ConfigurationSet(
+            tuple(self.keys()),
+            [resolved_initial],
+        )
 
         if update == "most-permissive":
             return _most_permissive_reachable_attractors(
                 self,
-                resolved_initial_state,
+                resolved_initial,
             )
 
         selected_backend = _automatic_reachable_attractors_backend(
             self,
-            resolved_initial_state,
-            initial_states,
+            resolved_initial,
+            initial_configurations,
             update=update,
         )
 
         if selected_backend == "bdd":
             return _bdd_reachable_attractors(
                 self,
-                initial_states,
+                initial_configurations,
+                update=update,
+            )
+        elif update == "synchronous":
+            return _synchronous_reachable_attractors(
+                self,
+                initial_configurations,
+            )
+        else:
+            return _explicit_reachable_attractors(
+                self,
+                initial_configurations,
                 update=update,
             )
 
-        return _explicit_reachable_attractors(
-            self,
-            initial_states,
-            update=update,
-        )
-
     def reachable_configurations(
         self,
-        initial_state: HypercubeLike,
+        initial: HypercubeLike,
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
         ] = "most-permissive",
-    ) -> Iterator[Dict[str, int]]:
+    ) -> Iterator[Configuration]:
         """
         Iterate over configurations reachable from one initial configuration.
 
@@ -1198,8 +1233,8 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        initial_state: HypercubeLike
-            Initial complete Boolean configuration.
+        initial: HypercubeLike
+            Initial Boolean configuration. It must be fully specified.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
             (default: "most-permissive")
             Update semantics. Finite-state dynamics use an automatically
@@ -1209,14 +1244,14 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Returns
         -------
-        Iterator[dict[str, int]]
-            Complete Boolean configurations reachable from `initial_state`.
+        Iterator[Configuration]
+            Complete Boolean configurations reachable from `initial`.
             Iteration order is unspecified.
 
         Raises
         ------
         ValueError
-            If the network is not closed, the initial state is invalid,
+            If the network is not closed, `initial` is invalid,
             or `update` is invalid.
         """
 
@@ -1229,8 +1264,8 @@ class BooleanNetwork(Dict[str, Expression]):
         self.validate()
         initial_hypercube = _validate_complete_hypercube(
             tuple(self.keys()),
-            initial_state,
-            name="initial_state",
+            initial,
+            name="initial",
         )
 
         if update == "synchronous":
@@ -1265,8 +1300,8 @@ class BooleanNetwork(Dict[str, Expression]):
 
     def transition(
         self,
-        initial_state: HypercubeLike,
-        target_state: HypercubeLike,
+        source: HypercubeLike,
+        target: HypercubeLike,
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
@@ -1310,22 +1345,24 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        initial_state: HypercubeLike
-            Initial Boolean state. A partial state represents all compatible
-            complete configurations.
-        target_state: HypercubeLike
-            Target Boolean state. A partial state represents all compatible
-            complete configurations.
+        source: HypercubeLike
+            Source Boolean configuration. It may be partially specified;
+            omitted or free components represent all compatible complete
+            configurations.
+        target: HypercubeLike
+            Target Boolean configuration. It may be partially specified;
+            omitted or free components represent all compatible complete
+            configurations.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
             (default: "most-permissive")
             Update semantics.
         quantifier: {"exists", "robust", "universal"} (default: "robust")
-            Quantification used for partial states. If `"exists"`, at least
-            one initial configuration must have a transition to one target
-            configuration. If `"robust"`, every initial configuration must
-            have a transition to at least one target configuration. If
-            `"universal"`, every initial configuration must have a transition
-            to every target configuration.
+            Quantification used for partial configurations. If `"exists"`, at
+            least one source configuration must have a transition to one target
+            configuration. If `"robust"`, every source configuration must have
+            a transition to at least one target configuration. If
+            `"universal"`, every source configuration must have a transition to
+            every target configuration.
 
         Returns
         -------
@@ -1335,11 +1372,11 @@ class BooleanNetwork(Dict[str, Expression]):
         Raises
         ------
         ImportError
-            If partial-state dynamics require the optional dependency `dd`
-            and it is not installed.
+            If partial-configuration dynamics require the optional dependency
+            `dd` and it is not installed.
         ValueError
-            If the network is not closed, a state is invalid, `update` is
-            invalid or `quantifier` is invalid.
+            If the network is not closed, `source` or `target` is invalid,
+            `update` is invalid or `quantifier` is invalid.
         """
 
         update = _as_literal(
@@ -1363,23 +1400,23 @@ class BooleanNetwork(Dict[str, Expression]):
         if update == "most-permissive":
             return _most_permissive_reachability(
                 self,
-                initial_state,
-                target_state,
+                source,
+                target,
                 quantifier=quantifier,
             )
 
         return _finite_state_transition(
             self,
-            initial_state,
-            target_state,
+            source,
+            target,
             update=update,
             quantifier=quantifier,
         )
 
     def reachability(
         self,
-        initial_state: HypercubeLike,
-        target_state: HypercubeLike,
+        source: HypercubeLike,
+        target: HypercubeLike,
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
@@ -1414,29 +1451,31 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Parameters
         ----------
-        initial_state: HypercubeLike
-            Initial Boolean state. A partial state represents all compatible
-            complete configurations.
-        target_state: HypercubeLike
-            Target Boolean state. A partial state represents all compatible
-            complete configurations.
+        source: HypercubeLike
+            Source Boolean configuration. It may be partially specified;
+            omitted or free components represent all compatible complete
+            configurations.
+        target: HypercubeLike
+            Target Boolean configuration. It may be partially specified;
+            omitted or free components represent all compatible complete
+            configurations.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
             (default: "most-permissive")
             Update semantics.
         quantifier: {"exists", "robust", "universal"} (default: "robust")
-            Quantification used for partial states. If `"exists"`, at least one
-            configuration compatible with `initial_state` must reach one
-            configuration compatible with `target_state`. If `"robust"`, every
-            configuration compatible with `initial_state` must reach at least
-            one configuration compatible with `target_state`. If
-            `"universal"`, every configuration compatible with `initial_state`
-            must reach every configuration compatible with `target_state`.
+            Quantification used for partial configurations. If `"exists"`, at
+            least one configuration compatible with `source` must reach one
+            configuration compatible with `target`. If `"robust"`, every
+            configuration compatible with `source` must reach at least one
+            configuration compatible with `target`. If `"universal"`, every
+            configuration compatible with `source` must reach every
+            configuration compatible with `target`.
 
         Returns
         -------
         bool
-            Whether `target_state` is reachable from `initial_state` under the
-            selected update semantics.
+            Whether `target` is reachable from `source` under the selected
+            update semantics.
 
         Raises
         ------
@@ -1444,8 +1483,8 @@ class BooleanNetwork(Dict[str, Expression]):
             If the selected dynamics require the optional dependency `dd` and
             it is not installed.
         ValueError
-            If the network is not closed, a state is invalid, `update` is
-            invalid or `quantifier` is invalid.
+            If the network is not closed, `source` or `target` is invalid,
+            `update` is invalid or `quantifier` is invalid.
         """
 
         update = _as_literal(
@@ -1469,24 +1508,24 @@ class BooleanNetwork(Dict[str, Expression]):
         if update == "synchronous":
             return _synchronous_reachability(
                 self,
-                initial_state,
-                target_state,
+                source,
+                target,
                 quantifier=quantifier,
             )
 
         if update == "asynchronous" or update == "general":
             return _bdd_reachability(
                 self,
-                initial_state,
-                target_state,
+                source,
+                target,
                 update=update,
                 quantifier=quantifier,
             )
 
         return _most_permissive_reachability(
             self,
-            initial_state,
-            target_state,
+            source,
+            target,
             quantifier=quantifier,
         )
 
@@ -1640,168 +1679,6 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return graph
 
-    def to_pydot(
-        self,
-        program: str = "dot",
-        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
-        **kwargs: Any,
-    ) -> "Dot":
-        """
-        Convert the influence graph to a styled pydot graph.
-
-        Positive influences are represented as green activating edges, while negative
-        influences are represented as red inhibitory edges. Edge signs are inferred
-        from the `sign` edge attribute and normalized to -1 or 1.
-
-        Examples
-        --------
-        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
-        >>> dot = bn.to_pydot(rankdir="LR")
-        >>> dot.get_rankdir()
-        'LR'
-
-        Parameters
-        ----------
-        program: str (default: "dot")
-            Graphviz layout program assigned to the resulting pydot graph.
-        edge_style: Callable, optional
-            Edge styling strategy.
-
-            A callable defines a custom edge style. Argument names are resolved
-            from edge attributes such as `sign`, and the callable must return
-            pydot edge attributes.
-        **kwargs: Any
-            Keyword arguments passed to the resulting pydot graph using
-            `dot.set(key, value)`.
-
-        Returns
-        -------
-        Dot
-            Styled pydot influence graph.
-        """
-
-        return self.to_influence_graph().to_pydot(
-            program=program, edge_style=edge_style, **kwargs
-        )
-
-    def show(
-        self,
-        program: str = "dot",
-        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
-        width: Optional[SvgLength] = None,
-        height: Optional[SvgLength] = None,
-        **kwargs: Any,
-    ) -> None:
-        """
-        Display the Boolean network in a Jupyter/IPython environment.
-
-        The influence graph induced by the Boolean network is rendered through
-        Graphviz using the `to_pydot()` method and displayed as an SVG image.
-
-        Examples
-        --------
-        >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
-        >>> bn.show(width="700px")
-
-        Parameters
-        ----------
-        program: str (default: "dot")
-            Graphviz layout program used for rendering.
-        edge_style: Callable, optional
-            Edge styling strategy.
-
-            A callable defines a custom edge style. Argument names are resolved
-            from edge attributes such as `sign`, and the callable must return
-            pydot edge attributes.
-        width: str or int or float, optional
-            Display width assigned to the rendered SVG root. Strings can include
-            CSS units, for example `"700px"` or `"80%"`.
-        height: str or int or float, optional
-            Display height assigned to the rendered SVG root. Strings can
-            include CSS units.
-        **kwargs: Any
-            Keyword arguments passed to the underlying pydot graph through
-            `dot.set(key, value)`.
-
-        Returns
-        -------
-        None
-            The SVG is displayed in the current IPython/Jupyter output cell.
-
-        Raises
-        ------
-        RuntimeError
-            If IPython is not available.
-
-        Notes
-        -----
-        `width` and `height` only affect notebook display by rewriting the root
-        SVG attributes after Graphviz rendering. They do not change the graph
-        layout computed by Graphviz.
-        """
-
-        try:
-            from IPython.display import SVG, display
-
-        except ImportError:
-            raise RuntimeError("show() requires an IPython/Jupyter environment.")
-
-        dot = cast(
-            Any,
-            self.to_pydot(
-                program=program,
-                edge_style=edge_style,
-                **kwargs,
-            ),
-        )
-        svg = scale_svg(dot.create_svg().decode(), width=width, height=height)
-
-        display(SVG(svg))
-
-    def to_graphviz(
-        self,
-        program: str = "dot",
-        edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
-        **kwargs: Any,
-    ):
-        """
-        Convert the Boolean network to a native graphviz Digraph.
-
-        Positive influences are represented as green activating edges, while
-        negative influences are represented as red inhibitory edges. This method
-        delegates signed edge extraction to `to_influence_graph()` and uses the
-        `graphviz` Python package directly.
-
-        Parameters
-        ----------
-        program: str (default: "dot")
-            Graphviz layout program assigned to the resulting graph.
-        edge_style: Callable, optional
-            Edge styling strategy.
-
-            A callable defines a custom edge style. Argument names are resolved
-            from edge attributes such as `sign`, and the callable must return
-            graphviz edge attributes.
-        **kwargs: Any
-            Graph attributes assigned to the resulting graphviz object.
-
-        Returns
-        -------
-        graphviz.Digraph
-            Native graphviz influence graph.
-
-        Raises
-        ------
-        ImportError
-            If the `graphviz` Python package is not installed.
-        """
-
-        return self.to_influence_graph().to_graphviz(
-            program=program,
-            edge_style=edge_style,
-            **kwargs,
-        )
-
     def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
         """
         Export the Boolean network in .bnet format.
@@ -1850,23 +1727,22 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return None
 
-    def _minimal_trapspaces_with_asp(self) -> Tuple[Hypercube, ...]:
+    def _minimal_trap_spaces_with_asp(self) -> Tuple[Hypercube, ...]:
 
-        clingo = self._import_clingo()
         components = tuple(sorted(self.components))
         component_indices = {
             component: index for index, component in enumerate(components)
         }
-        base_program = self._trapspace_asp_base_program(
+        base_program = self._trap_space_asp_base_program(
             components=components,
             component_indices=component_indices,
         )
 
         blockers: List[FrozenSet[Tuple[int, int]]] = []
-        trapspaces: Set[FrozenSet[Tuple[int, int]]] = set()
+        trap_spaces: Set[FrozenSet[Tuple[int, int]]] = set()
 
         while True:
-            literals = self._solve_maximal_trapspace_literals(
+            literals = self._solve_maximal_trap_space_literals(
                 clingo,
                 base_program=base_program,
                 blockers=blockers,
@@ -1876,18 +1752,18 @@ class BooleanNetwork(Dict[str, Expression]):
             if literals is None:
                 break
 
-            if literals in trapspaces:
+            if literals in trap_spaces:
                 break
 
-            trapspaces.add(literals)
+            trap_spaces.add(literals)
             blockers.append(literals)
 
         return tuple(
             Hypercube({components[index]: value for index, value in sorted(literals)})
-            for literals in sorted(trapspaces, key=self._trapspace_sort_key)
+            for literals in sorted(trap_spaces, key=self._trap_space_sort_key)
         )
 
-    def _trapspace_asp_base_program(
+    def _trap_space_asp_base_program(
         self,
         components: Tuple[str, ...],
         component_indices: Mapping[str, int],
@@ -1903,7 +1779,6 @@ class BooleanNetwork(Dict[str, Expression]):
                 for implicant in prime_implicants(
                     rule,
                     value=value,
-                    backend="asp",
                     ba=self.ba,
                 ):
                     facts.append(f"implicant({target_index}, {value}, {implicant_id}).")
@@ -1943,7 +1818,7 @@ class BooleanNetwork(Dict[str, Expression]):
             ]
         )
 
-    def _solve_maximal_trapspace_literals(
+    def _solve_maximal_trap_space_literals(
         self,
         clingo: Any,
         *,
@@ -1955,7 +1830,7 @@ class BooleanNetwork(Dict[str, Expression]):
         program = "\n".join(
             [
                 base_program,
-                self._trapspace_blocker_program(
+                self._trap_space_blocker_program(
                     blockers,
                     n_components=n_components,
                 ),
@@ -1981,7 +1856,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return optimal_literals
 
-    def _trapspace_blocker_program(
+    def _trap_space_blocker_program(
         self,
         blockers: List[FrozenSet[Tuple[int, int]]],
         *,
@@ -2010,43 +1885,47 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return "\n".join(lines)
 
-    def _normalize_state(self, state: ConfigurationLike) -> Dict[str, int]:
+    def _normalize_configuration(
+        self,
+        configuration: ConfigurationLike,
+    ) -> Configuration:
 
-        if not isinstance(state, MappingABC):
+        if not isinstance(configuration, MappingABC):
             raise TypeError(
-                "unsupported argument type for 'state': "
-                f"expected Mapping but received {type(state)}"
+                "unsupported argument type for 'configuration': "
+                f"expected Mapping but received {type(configuration)}"
             )
 
-        if not all(isinstance(component, str) for component in state):
+        if not all(isinstance(component, str) for component in configuration):
             raise ValueError(
-                "invalid argument value for 'state': " "expected string component names"
+                "invalid argument value for 'configuration': "
+                "expected string component names"
             )
 
-        if set(state) != self.components:
+        if set(configuration) != self.components:
             raise ValueError(
-                "invalid argument value for 'state': "
+                "invalid argument value for 'configuration': "
                 f"expected components {sorted(self.components)} but received "
-                f"{sorted(state)}"
+                f"{sorted(configuration)}"
             )
 
-        if not is_configuration_like(state):
+        if not is_configuration_like(configuration):
             for component in self:
                 self._normalize_boolean_value(
-                    state[component],
-                    name="state",
+                    configuration[component],
+                    name="configuration",
                     component=component,
                 )
 
             raise ValueError(
-                "invalid argument value for 'state': "
+                "invalid argument value for 'configuration': "
                 "expected a concrete Boolean configuration"
             )
 
         return {
             component: self._normalize_boolean_value(
-                state[component],
-                name="state",
+                configuration[component],
+                name="configuration",
                 component=component,
             )
             for component in self
@@ -2132,19 +2011,7 @@ class BooleanNetwork(Dict[str, Expression]):
         return int(value)
 
     @staticmethod
-    def _import_clingo() -> Any:
-
-        try:
-            return import_module("clingo")
-
-        except ImportError as error:
-            raise ImportError(
-                "`BooleanNetwork.trapspaces(..., backend='asp')` requires "
-                "`clingo` to be installed."
-            ) from error
-
-    @staticmethod
-    def _trapspace_sort_key(
+    def _trap_space_sort_key(
         literals: FrozenSet[Tuple[int, int]],
     ) -> Tuple[int, Tuple[Tuple[int, int], ...]]:
 
@@ -2408,14 +2275,17 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             "['biolqm', 'minibn', 'mpbn', 'pyboolnet']"
         )
 
-    def to_networkx(self, drop_isolates: bool = False) -> nx.MultiDiGraph[Any]:
+    def to_influence_graph(
+        self,
+        drop_isolates: bool = False,
+    ) -> AggregatedInfluenceGraph:
         """
-        Convert the Boolean network ensemble into an aggregated signed influence graph.
+        Convert the Boolean network ensemble into an aggregated influence graph.
 
-        Nodes correspond to Boolean network components. Each node stores the number
-        of distinct Boolean rule structures observed for the corresponding component
-        and the stability of the most frequent rule structure. Edges correspond to
-        signed influences aggregated across the ensemble and store their occurrence
+        Nodes correspond to Boolean network components. Each node stores the
+        number of distinct DNF implicant structures observed for the corresponding
+        component and the stability of the most frequent structure. Edges correspond
+        to signed influences aggregated across the ensemble and store their occurrence
         count.
 
         Examples
@@ -2423,10 +2293,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         >>> ensemble = BooleanNetworkEnsemble(
         ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
         ... )
-        >>> graph = ensemble.to_networkx()
-        >>> graph["B"]["A"][0]["count"]
+        >>> graph = ensemble.to_influence_graph()
+        >>> graph.edge_count("B", "A", sign=1)
         2
-        >>> graph["B"]["A"][0]["frequency"]
+        >>> graph.edge_frequency("B", "A", sign=1)
         1.0
 
         Parameters
@@ -2436,29 +2306,37 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Returns
         -------
-        nx.MultiDiGraph
+        AggregatedInfluenceGraph
             Aggregated signed influence graph.
+
+        Raises
+        ------
+        ValueError
+            If the ensemble is empty.
         """
 
-        graph: nx.MultiDiGraph[Any] = nx.MultiDiGraph()
+        if len(self) == 0:
+            raise ValueError("cannot aggregate an empty Boolean network ensemble")
 
-        rule_structures = self.rule_structures()
+        graph = AggregatedInfluenceGraph(total=len(self))
+
+        component_implicants = self.dnf_implicants()
 
         function_counts = {}
         function_stabilities = {}
 
-        for component, structures in rule_structures.items():
-            structure_counts = {}
+        for component, implicants_by_network in component_implicants.items():
+            implicant_counts = {}
 
-            for structure in structures:
-                if structure not in structure_counts:
-                    structure_counts[structure] = 0
+            for implicants in implicants_by_network:
+                if implicants not in implicant_counts:
+                    implicant_counts[implicants] = 0
 
-                structure_counts[structure] += 1
+                implicant_counts[implicants] += 1
 
-            function_counts[component] = len(structure_counts)
+            function_counts[component] = len(implicant_counts)
             function_stabilities[component] = (
-                max(structure_counts.values()) / len(self) if structure_counts else 0
+                max(implicant_counts.values()) / len(self) if implicant_counts else 0
             )
 
         influence_counts = self.influence_counts()
@@ -2476,13 +2354,12 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
                     graph.add_edge(
                         source,
                         target,
-                        sign=sign,
+                        sign=1 if sign else -1,
                         count=count,
-                        frequency=count / len(self),
                     )
 
         if drop_isolates:
-            isolated = list(nx.isolates(graph))
+            isolated = [node for node, degree in graph.degree() if degree == 0]
             graph.remove_nodes_from(isolated)
 
         return graph
@@ -2548,9 +2425,12 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         return self.__ba
 
-    def rule_structures(self) -> Dict[str, List[object]]:
+    def dnf_implicants(
+        self,
+        value: Literal[0, 1] = 1,
+    ) -> Dict[str, List[Implicants]]:
         """
-        Return Boolean rules encoded as DNF-like structures.
+        Return DNF implicants for each component across the ensemble.
 
         Examples
         --------
@@ -2560,33 +2440,105 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         ...         {"A": "B & C", "B": 1, "C": 0},
         ...     ]
         ... )
-        >>> sorted(ensemble.rule_structures())
-        ['A', 'B', 'C']
+        >>> implicants = ensemble.dnf_implicants()
+        >>> implicants == {
+        ...     "A": [(Hypercube(B=1),), (Hypercube(B=1, C=1),)],
+        ...     "B": [(Hypercube(),), (Hypercube(),)],
+        ...     "C": [(), ()],
+        ... }
+        True
+
+        Parameters
+        ----------
+        value: {0, 1} (default: 1)
+            Target value forced by the returned DNF implicants.
 
         Returns
         -------
-        Dict[str, List]
-            Dictionary mapping each component to the list of rules observed
-            across the ensemble. Constant rules are stored as Python booleans;
-            non-constant rules are converted into DNF implicants.
+        Dict[str, List[Implicants]]
+            Dictionary mapping each component to one tuple of DNF implicants per
+            Boolean network.
+
+        See Also
+        --------
+        BooleanNetworkEnsemble.prime_implicants
+            Return prime implicants across the ensemble.
         """
 
-        rule_structures: Dict[str, List[object]] = {
+        if value not in (0, 1):
+            raise ValueError(
+                "invalid argument value for 'value': "
+                f"expected 0 or 1 but received {value!r}"
+            )
+
+        component_implicants: Dict[str, List[Implicants]] = {
             component: [] for component in self._components
         }
 
         for bn in self:
             for component, rule in bn.items():
-                if isinstance(rule, _TRUE):
-                    rule_structures[component].append(True)
+                component_implicants[component].append(
+                    dnf_implicants(rule, value=value, ba=bn.ba)
+                )
 
-                elif isinstance(rule, _FALSE):
-                    rule_structures[component].append(False)
+        return component_implicants
 
-                else:
-                    rule_structures[component].append(dnf_implicants(rule, ba=bn.ba))
+    def prime_implicants(
+        self,
+        value: Literal[0, 1] = 1,
+    ) -> Dict[str, List[Implicants]]:
+        """
+        Return prime implicants for each component across the ensemble.
 
-        return rule_structures
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     bns=[
+        ...         {"A": "B | C", "B": 1, "C": 0},
+        ...         {"A": "B & C", "B": 1, "C": 0},
+        ...     ]
+        ... )
+        >>> ensemble.prime_implicants()["A"]
+        [(Hypercube(B=1), Hypercube(C=1)), (Hypercube(B=1, C=1),)]
+
+        Parameters
+        ----------
+        value: {0, 1} (default: 1)
+            Target value forced by the returned prime implicants.
+
+        Returns
+        -------
+        Dict[str, List[Implicants]]
+            Dictionary mapping each component to one tuple of prime implicants
+            per Boolean network.
+
+        See Also
+        --------
+        BooleanNetworkEnsemble.dnf_implicants
+            Return DNF implicants across the ensemble.
+        """
+
+        if value not in (0, 1):
+            raise ValueError(
+                "invalid argument value for 'value': "
+                f"expected 0 or 1 but received {value!r}"
+            )
+
+        component_implicants: Dict[str, List[Implicants]] = {
+            component: [] for component in self._components
+        }
+
+        for bn in self:
+            for component, rule in bn.items():
+                component_implicants[component].append(
+                    prime_implicants(
+                        rule,
+                        value=value,
+                        ba=bn.ba,
+                    )
+                )
+
+        return component_implicants
 
     def regulator_counts(self) -> Dict[str, Dict[str, Dict[bool, int]]]:
         """
@@ -2688,179 +2640,6 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         return influences
 
-    def to_graphviz(self, *args: Any, **kwargs: Any):
-        """
-        Direct ensemble Graphviz rendering is no longer supported.
-
-        Use `AggregatedInfluenceGraph.from_boolean_networks(ensemble)` and call
-        `to_graphviz(...)` on the resulting aggregated influence graph.
-        """
-
-        raise NotImplementedError(
-            "BooleanNetworkEnsemble.to_graphviz() no longer supports direct "
-            "ensemble rendering. Use "
-            "AggregatedInfluenceGraph.from_boolean_networks(ensemble)."
-            "to_graphviz(...) instead."
-        )
-
-    def to_pydot(self, *args: Any, **kwargs: Any) -> "Dot":
-        """
-        Direct ensemble pydot rendering is no longer supported.
-
-        Use `AggregatedInfluenceGraph.from_boolean_networks(ensemble)` and call
-        `to_pydot(...)` on the resulting aggregated influence graph.
-        """
-
-        raise NotImplementedError(
-            "BooleanNetworkEnsemble.to_pydot() no longer supports direct "
-            "ensemble rendering. Use "
-            "AggregatedInfluenceGraph.from_boolean_networks(ensemble)."
-            "to_pydot(...) instead."
-        )
-
-    def show(
-        self,
-        collapse: Optional[CollapseMode] = None,
-        *,
-        bins: Optional[Iterable[float]] = (0.0, 0.25, 0.5, 0.75, 1.0),
-        preserve_feedback: bool = True,
-        include_selfloops: bool = True,
-        min_frequency: float = 0.0,
-        drop_isolates: bool = False,
-        graph_attr: Optional[Mapping[str, Any]] = None,
-        node_attr: Optional[Mapping[str, Any]] = None,
-        node_style: AggregatedNodeStyle = "stability",
-        family_attr: Union[bool, Mapping[str, Any]] = True,
-        edge_label: Optional[str] = "count",
-        edge_attr: Optional[Mapping[str, Any]] = None,
-        edge_style: AggregatedEdgeStyle = "frequency",
-        program: str = "dot",
-        width: Optional[SvgLength] = None,
-        height: Optional[SvgLength] = None,
-    ) -> None:
-        """
-        Display the Boolean network ensemble as an aggregated influence graph.
-
-        This is a convenience wrapper around
-        `AggregatedInfluenceGraph.from_boolean_networks(self).show(...)`, with
-        `node_style="stability"` by default.
-
-        Examples
-        --------
-        >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
-        ... )
-        >>> ensemble.show(width="900px")
-
-        Parameters
-        ----------
-        collapse: {None, "family", "feedback", "both"} (default: None)
-            Graph reduction applied before rendering. If `None`, render the
-            exact aggregated graph. If `"family"`, collapse structurally
-            equivalent nodes into families. If `"feedback"`, render the
-            feedback-induced subgraph. If `"both"`, render the feedback-induced
-            subgraph with structural families collapsed.
-        bins: Iterable of float or None
-            Ordered boundaries used to classify edge frequencies in
-            family-based collapse modes, where frequency is `count / total`
-            and ranges from 0 to 1. If `None`, family collapse uses signed
-            structure only, independently of frequencies.
-        preserve_feedback: bool (default: True)
-            Preserve feedback nodes during family collapse.
-        include_selfloops: bool (default: True)
-            Include self-loops as feedback.
-        min_frequency: float (default: 0.0)
-            Minimum edge occurrence frequency required for display.
-        drop_isolates: bool (default: False)
-            Drop isolated nodes after filtering.
-        graph_attr: Mapping[str, Any], optional
-            Global graph attributes.
-        node_attr: Mapping[str, Any], optional
-            Global node attributes applied unless overridden on individual
-            nodes.
-        node_style: {"count", "stability"} or callable or None
-            Node styling strategy.
-
-            The `"count"` strategy styles nodes according to their
-            `function_count` attribute, i.e. the number of distinct Boolean
-            rule structures observed for the component across the ensemble.
-            Lower values indicate more consistent inferred functions.
-
-            The `"stability"` strategy styles nodes according to their
-            `function_stability` attribute, i.e. the frequency of the most
-            common Boolean rule structure for the component. Higher values
-            indicate more stable inferred functions.
-
-            A callable defines a custom node style. Argument names are resolved
-            from node attributes and the callable must return pydot node
-            attributes.
-
-            If `None`, no additional node styling is applied.
-        family_attr: bool or Mapping[str, Any] (default: True)
-            Family-node attributes. `True` applies compact defaults, `False`
-            disables family-specific attributes, and a mapping updates the
-            default pydot node attributes for collapsed families.
-        edge_label: str or None (default: "count")
-            Edge attribute displayed as label. If `None`, no edge label is
-            displayed. `"count"` displays the occurrence count on exact
-            aggregated graphs; on family-collapsed graphs, it displays
-            `frequency * total` because collapsed edges no longer store exact
-            counts. `"frequency"` displays the occurrence frequency
-            `count / total`, or the average edge frequency after family
-            collapse. Any other string is interpreted as an edge attribute
-            name.
-        edge_attr: Mapping[str, Any], optional
-            Global edge attributes applied unless overridden on individual
-            edges.
-        edge_style: {"frequency"} or callable or None (default: "frequency")
-            Edge styling strategy.
-
-            The `"frequency"` strategy styles edges according to their
-            `frequency` attribute, i.e. `count / total`.
-
-            A callable defines a custom edge style. Argument names are resolved
-            from edge attributes such as `frequency`, `count` and `sign`, and
-            the callable must return pydot edge attributes.
-
-            If `None`, no frequency-based edge styling is applied.
-        program: str (default: "dot")
-            Graphviz layout program used for rendering.
-        width: str or int or float, optional
-            Display width assigned to the rendered SVG root.
-        height: str or int or float, optional
-            Display height assigned to the rendered SVG root.
-
-        Returns
-        -------
-        None
-            The SVG is displayed in the current IPython/Jupyter output cell.
-
-        Raises
-        ------
-        ValueError
-            If `collapse` is invalid or `min_frequency` is outside [0, 1].
-        """
-
-        graph = AggregatedInfluenceGraph.from_boolean_networks(self)
-        graph.show(
-            collapse=collapse,
-            bins=bins,
-            preserve_feedback=preserve_feedback,
-            include_selfloops=include_selfloops,
-            min_frequency=min_frequency,
-            drop_isolates=drop_isolates,
-            node_style=node_style,
-            family_attr=family_attr,
-            edge_label=edge_label,
-            edge_style=edge_style,
-            program=program,
-            graph_attr=graph_attr,
-            node_attr=node_attr,
-            edge_attr=edge_attr,
-            width=width,
-            height=height,
-        )
-
     def _check_network(self, bn: BooleanNetworkLike) -> None:
         """
         Validate a BooleanNetworkLike object before insertion.
@@ -2887,7 +2666,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         if set(bn) != self._components:
             raise ValueError(
-                "invalid argument value for 'bn': " "missing or additional components"
+                "invalid argument value for 'bn': missing or additional components"
             )
 
     def _coerce_network(self, bn: BooleanNetworkLike) -> BooleanNetwork:
@@ -2914,58 +2693,3 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         self._check_network(bn)
         return BooleanNetwork(bn, ba=self.__ba, check=False)
-
-
-def _automatic_reachable_attractors_backend(
-    network: BooleanNetwork,
-    initial_state: HypercubeLike,
-    initial_states: ConfigurationSet,
-    *,
-    update: Literal["asynchronous", "synchronous", "general"],
-) -> Literal["explicit", "bdd"]:
-    """Select a conservative backend from bounds on the reachable state space."""
-
-    if find_spec("dd") is None:
-        return "explicit"
-
-    if update == "synchronous":
-        return "explicit" if len(initial_states) <= 1_024 else "bdd"
-
-    if update == "asynchronous" and len(initial_states) >= 2_048:
-        return "bdd"
-
-    n_free = _reachable_state_dimension_upper_bound(network, initial_state)
-
-    explicit_dimension_limit = 13 if update == "asynchronous" else 10
-    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
-
-
-def _automatic_reachable_configurations_backend(
-    network: BooleanNetwork,
-    initial_state: Hypercube,
-    *,
-    update: Literal["asynchronous", "general"],
-) -> Literal["explicit", "bdd"]:
-    """Select a traversal from a conservative reachable-state upper bound."""
-
-    if find_spec("dd") is None:
-        return "explicit"
-
-    n_free = _reachable_state_dimension_upper_bound(network, initial_state)
-    explicit_dimension_limit = 12 if update == "asynchronous" else 8
-    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
-
-
-def _reachable_state_dimension_upper_bound(
-    network: BooleanNetwork,
-    initial_state: HypercubeLike,
-) -> int:
-    """Bound the reachable-state dimension by the smallest closed hypercube."""
-
-    closed_hypercube = _smallest_closed_hypercube(
-        network,
-        initial_state,
-        relaxed_components=network.keys(),
-    )
-    n_fixed = sum(value.is_fixed for value in closed_hypercube.values())
-    return len(network) - n_fixed

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib import import_module
+from importlib.util import find_spec
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -19,27 +20,27 @@ from typing import (
 
 from ..._compat import Literal
 from ..boolean_algebra import ConfigurationSet, Hypercube
-from ..boolean_algebra._typing import HypercubeLike
+from ..boolean_algebra._typing import Configuration, HypercubeLike
 from ._asynchronous import (
-    _asynchronous_successor_state_bits,
+    _asynchronous_successor_configuration_bits,
     _bdd_asynchronous_transition_partitions,
     _tarjan_asynchronous_terminal_sccs,
 )
 from ._bdd import _bdd_equivalence, _bdd_exclusive_or
 from ._general import (
     _bdd_general_transition_partitions,
-    _general_successor_state_bits,
+    _general_successor_configuration_bits,
 )
 from ._synchronous import (
     _bdd_synchronous_transition_partitions,
-    _synchronous_successor_state_bits,
+    _synchronous_successor_configuration_bits,
 )
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
 
-_StateBits = int
-_CompiledRule = Callable[[_StateBits], int]
+_ConfigurationBits = int
+_CompiledRule = Callable[[_ConfigurationBits], int]
 _SYMBOLIC_SCC_THRESHOLD = 128
 
 
@@ -114,24 +115,24 @@ class _BDDTransitionSystem:
 
     def transition(
         self,
-        initial_state: HypercubeLike,
-        target_state: HypercubeLike,
+        source: HypercubeLike,
+        target: HypercubeLike,
         *,
         quantifier: Literal["exists", "robust", "universal"],
     ) -> bool:
         """Test the one-step transition relation between two subspaces."""
 
-        initial_hypercube = _validate_hypercube(
+        source_hypercube = _validate_hypercube(
             self._components,
-            initial_state,
-            name="initial_state",
+            source,
+            name="source",
         )
         target_hypercube = _validate_hypercube(
             self._components,
-            target_state,
-            name="target_state",
+            target,
+            name="target",
         )
-        initial = self._encode_hypercube(initial_hypercube)
+        initial = self._encode_hypercube(source_hypercube)
         target = self._encode_hypercube(target_hypercube)
 
         if quantifier == "universal":
@@ -152,24 +153,24 @@ class _BDDTransitionSystem:
 
     def reachability(
         self,
-        initial_state: HypercubeLike,
-        target_state: HypercubeLike,
+        source: HypercubeLike,
+        target: HypercubeLike,
         *,
         quantifier: Literal["exists", "robust", "universal"],
     ) -> bool:
         """Test whether initial configurations can reach a target subspace."""
 
-        initial_hypercube = _validate_hypercube(
+        source_hypercube = _validate_hypercube(
             self._components,
-            initial_state,
-            name="initial_state",
+            source,
+            name="source",
         )
         target_hypercube = _validate_hypercube(
             self._components,
-            target_state,
-            name="target_state",
+            target,
+            name="target",
         )
-        initial = self._encode_hypercube(initial_hypercube)
+        initial = self._encode_hypercube(source_hypercube)
         target = self._encode_hypercube(target_hypercube)
         reachable_from_initial = self._forward_reachable_states(initial)
         reachable_target = reachable_from_initial & target
@@ -178,17 +179,17 @@ class _BDDTransitionSystem:
             return False
 
         if quantifier == "universal":
-            return self._all_initial_states_reach_all_target_states(
+            return self._all_initial_configurations_reach_all_target_configurations(
                 initial,
                 target_hypercube,
                 reachable_from_initial,
             )
 
-        initial_is_concrete = (
-            initial_hypercube.components == frozenset(self._components)
-            and initial_hypercube.is_fully_specified
+        source_is_concrete = (
+            source_hypercube.components == frozenset(self._components)
+            and source_hypercube.is_fully_specified
         )
-        if quantifier == "exists" or initial_is_concrete:
+        if quantifier == "exists" or source_is_concrete:
             return True
 
         states_reaching_target = reachable_target
@@ -211,11 +212,11 @@ class _BDDTransitionSystem:
 
     def reachable_attractors(
         self,
-        initial_states: ConfigurationSet,
+        initial_configurations: ConfigurationSet,
     ) -> Tuple[ConfigurationSet, ...]:
         """Return reachable terminal SCCs without decoding transient states."""
 
-        initial = self._encode_configurations(initial_states)
+        initial = self._encode_configurations(initial_configurations)
         reachable = self._forward_reachable_states(initial)
         n_reachable = self._bdd.count(
             reachable,
@@ -237,14 +238,14 @@ class _BDDTransitionSystem:
 
     def reachable_configurations(
         self,
-        initial_state: Hypercube,
-    ) -> Iterator[Dict[str, int]]:
+        initial_configuration: Hypercube,
+    ) -> Iterator[Configuration]:
         """Iterate over configurations in the symbolic reachable-state set."""
 
-        initial = self._encode_hypercube(initial_state)
+        initial = self._encode_hypercube(initial_configuration)
         reachable = self._forward_reachable_states(initial)
 
-        def iterate() -> Iterator[Dict[str, int]]:
+        def iterate() -> Iterator[Configuration]:
             for assignment in self._bdd.pick_iter(
                 reachable,
                 care_vars=self._current_variables,
@@ -403,19 +404,19 @@ class _BDDTransitionSystem:
     def _explicit_terminal_sccs(self, states: Any) -> Tuple[ConfigurationSet, ...]:
         """Decode a small reachable set and compute its terminal SCCs explicitly."""
 
-        state_bits = self._decode_state_bits(states)
+        configuration_bits = self._decode_configuration_bits(states)
         compiled_rules = _compile_bitset_rules(self._network, self._components)
         successors = {
-            state: _successor_state_bits(
+            state: _successor_configuration_bits(
                 compiled_rules,
                 state,
                 update=self._update,
                 n_components=len(self._components),
             )
-            for state in state_bits
+            for state in configuration_bits
         }
         return tuple(
-            _configuration_set_from_state_bits(component, self._components)
+            _configuration_set_from_configuration_bits(component, self._components)
             for component in _terminal_strongly_connected_components(successors)
         )
 
@@ -536,7 +537,7 @@ class _BDDTransitionSystem:
 
         return self._bdd.exist(quantified_variables, left & right)
 
-    def _all_initial_states_reach_all_target_states(
+    def _all_initial_configurations_reach_all_target_configurations(
         self,
         initial: Any,
         target_hypercube: Hypercube,
@@ -551,11 +552,11 @@ class _BDDTransitionSystem:
         if undeclared_variables:
             self._bdd.declare(*undeclared_variables)
 
-        target_states = self._encode_hypercube_variables(
+        target_configurations = self._encode_hypercube_variables(
             target_hypercube,
             target_variables,
         )
-        current_matches_target = target_states
+        current_matches_target = target_configurations
         for current_variable, target_variable in zip(
             self._current_variables,
             target_variables,
@@ -565,7 +566,7 @@ class _BDDTransitionSystem:
                 self._bdd.var(target_variable),
             )
 
-        required_pairs = initial & target_states
+        required_pairs = initial & target_configurations
         states_reaching_targets = current_matches_target & reachable_from_initial
 
         while True:
@@ -574,7 +575,7 @@ class _BDDTransitionSystem:
 
             predecessors = self._predecessors(states_reaching_targets)
             predecessors &= reachable_from_initial
-            predecessors &= target_states
+            predecessors &= target_configurations
             updated = states_reaching_targets | predecessors
             if updated == states_reaching_targets:
                 return False
@@ -633,7 +634,7 @@ class _BDDTransitionSystem:
             hypercubes,
         )
 
-    def _decode_state_bits(self, states: Any) -> Tuple[_StateBits, ...]:
+    def _decode_configuration_bits(self, states: Any) -> Tuple[_ConfigurationBits, ...]:
         """Decode a symbolic state set into explicit bitsets."""
 
         decoded = []
@@ -641,18 +642,74 @@ class _BDDTransitionSystem:
             states,
             care_vars=self._current_variables,
         ):
-            state_bits = 0
+            configuration_bits = 0
             for index, variable_name in enumerate(self._current_variables):
                 if assignment[variable_name]:
-                    state_bits |= 1 << index
-            decoded.append(state_bits)
+                    configuration_bits |= 1 << index
+            decoded.append(configuration_bits)
 
         return tuple(decoded)
 
 
+def _automatic_reachable_attractors_backend(
+    network: "BooleanNetwork",
+    initial: HypercubeLike,
+    initial_configurations: ConfigurationSet,
+    *,
+    update: Literal["asynchronous", "synchronous", "general"],
+) -> Literal["explicit", "bdd"]:
+    """Select a conservative backend from bounds on the reachable state space."""
+
+    if find_spec("dd") is None:
+        return "explicit"
+
+    if update == "synchronous":
+        return "explicit" if len(initial_configurations) <= 1_024 else "bdd"
+
+    if update == "asynchronous" and len(initial_configurations) >= 2_048:
+        return "bdd"
+
+    n_free = _reachable_configuration_dimension_upper_bound(network, initial)
+    explicit_dimension_limit = 13 if update == "asynchronous" else 10
+    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
+
+
+def _automatic_reachable_configurations_backend(
+    network: "BooleanNetwork",
+    initial: Hypercube,
+    *,
+    update: Literal["asynchronous", "general"],
+) -> Literal["explicit", "bdd"]:
+    """Select a traversal from a conservative reachable-state upper bound."""
+
+    if find_spec("dd") is None:
+        return "explicit"
+
+    n_free = _reachable_configuration_dimension_upper_bound(network, initial)
+    explicit_dimension_limit = 12 if update == "asynchronous" else 8
+    return "explicit" if n_free <= explicit_dimension_limit else "bdd"
+
+
+def _reachable_configuration_dimension_upper_bound(
+    network: "BooleanNetwork",
+    initial: HypercubeLike,
+) -> int:
+    """Bound reachable configurations by the smallest closed hypercube."""
+
+    from ._most_permissive import _smallest_closed_hypercube
+
+    closed_hypercube = _smallest_closed_hypercube(
+        network,
+        initial,
+        relaxed_components=network.keys(),
+    )
+    n_fixed = sum(value.is_fixed for value in closed_hypercube.values())
+    return len(network) - n_fixed
+
+
 def _bdd_reachable_attractors(
     network: "BooleanNetwork",
-    initial_states: ConfigurationSet,
+    initial_configurations: ConfigurationSet,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
 ) -> Tuple[ConfigurationSet, ...]:
@@ -662,28 +719,28 @@ def _bdd_reachable_attractors(
         network,
         update=update,
     )
-    return transition_system.reachable_attractors(initial_states)
+    return transition_system.reachable_attractors(initial_configurations)
 
 
 def _bdd_reachable_configurations(
     network: "BooleanNetwork",
-    initial_state: Hypercube,
+    initial_configuration: Hypercube,
     *,
     update: Literal["asynchronous", "general"],
-) -> Iterator[Dict[str, int]]:
+) -> Iterator[Configuration]:
     """Enumerate a symbolic reachable-state closure."""
 
     transition_system = _BDDTransitionSystem(
         network,
         update=update,
     )
-    return transition_system.reachable_configurations(initial_state)
+    return transition_system.reachable_configurations(initial_configuration)
 
 
 def _finite_state_transition(
     network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    target_state: HypercubeLike,
+    source: HypercubeLike,
+    target: HypercubeLike,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
     quantifier: Literal["exists", "robust", "universal"],
@@ -691,42 +748,42 @@ def _finite_state_transition(
     """Test a finite-state transition directly or through a symbolic BDD."""
 
     components = tuple(network.keys())
-    initial_hypercube = _validate_hypercube(
+    source_hypercube = _validate_hypercube(
         components,
-        initial_state,
-        name="initial_state",
+        source,
+        name="source",
     )
     target_hypercube = _validate_hypercube(
         components,
-        target_state,
-        name="target_state",
+        target,
+        name="target",
     )
-    initial_is_concrete = (
-        initial_hypercube.components == frozenset(components)
-        and initial_hypercube.is_fully_specified
+    source_is_concrete = (
+        source_hypercube.components == frozenset(components)
+        and source_hypercube.is_fully_specified
     )
-    if not initial_is_concrete:
+    if not source_is_concrete:
         return _bdd_transition(
             network,
-            initial_hypercube,
+            source_hypercube,
             target_hypercube,
             update=update,
             quantifier=quantifier,
         )
 
-    initial_bits = _state_bits_from_hypercube(initial_hypercube, components)
+    source_bits = _configuration_bits_from_hypercube(source_hypercube, components)
     if update == "synchronous":
-        return _synchronous_transition_from_state(
+        return _synchronous_transition_from_configuration(
             network,
-            initial_bits,
+            source_bits,
             target_hypercube,
             components,
             quantifier=quantifier,
         )
 
-    return _componentwise_transition_from_state(
+    return _componentwise_transition_from_configuration(
         network,
-        initial_bits,
+        source_bits,
         target_hypercube,
         components,
         update=update,
@@ -734,47 +791,48 @@ def _finite_state_transition(
     )
 
 
-def _synchronous_transition_from_state(
+def _synchronous_transition_from_configuration(
     network: "BooleanNetwork",
-    initial_state: _StateBits,
-    target_state: Hypercube,
+    source: _ConfigurationBits,
+    target: Hypercube,
     components: Tuple[str, ...],
     *,
     quantifier: Literal["exists", "robust", "universal"],
 ) -> bool:
-    """Test a synchronous transition from one concrete source state."""
+    """Test a synchronous transition from one concrete configuration."""
 
-    next_state = _next_state_bits(
+    next_configuration = _next_configuration_bits(
         _compile_bitset_rules(network, components),
-        initial_state,
+        source,
     )
-    if not _state_bits_match_hypercube(next_state, target_state, components):
+    if not _configuration_bits_match_hypercube(
+        next_configuration,
+        target,
+        components,
+    ):
         return False
 
     if quantifier != "universal":
         return True
 
-    return (
-        target_state.components == frozenset(components)
-        and target_state.is_fully_specified
-    )
+    return target.components == frozenset(components) and target.is_fully_specified
 
 
-def _componentwise_transition_from_state(
+def _componentwise_transition_from_configuration(
     network: "BooleanNetwork",
-    initial_state: _StateBits,
-    target_state: Hypercube,
+    source: _ConfigurationBits,
+    target: Hypercube,
     components: Tuple[str, ...],
     *,
     update: Literal["asynchronous", "general"],
     quantifier: Literal["exists", "robust", "universal"],
 ) -> bool:
-    """Test an asynchronous or general transition from one concrete state."""
+    """Test an asynchronous or general transition from one configuration."""
 
-    fixed_mask, fixed_values = _hypercube_fixed_masks(target_state, components)
+    fixed_mask, fixed_values = _hypercube_fixed_masks(target, components)
     all_components_mask = (1 << len(components)) - 1
     free_mask = all_components_mask ^ fixed_mask
-    required_changes = fixed_mask & (initial_state ^ fixed_values)
+    required_changes = fixed_mask & (source ^ fixed_values)
 
     if update == "asynchronous":
         if quantifier == "universal" and free_mask:
@@ -789,7 +847,7 @@ def _componentwise_transition_from_state(
 
         return _any_candidate_is_unstable(
             network,
-            initial_state,
+            source,
             components,
             candidates,
         )
@@ -800,7 +858,7 @@ def _componentwise_transition_from_state(
         candidates = required_changes | free_mask
         return _all_candidates_are_unstable(
             network,
-            initial_state,
+            source,
             components,
             candidates,
         )
@@ -808,14 +866,14 @@ def _componentwise_transition_from_state(
     if required_changes:
         return _all_candidates_are_unstable(
             network,
-            initial_state,
+            source,
             components,
             required_changes,
         )
 
     return _any_candidate_is_unstable(
         network,
-        initial_state,
+        source,
         components,
         free_mask,
     )
@@ -824,7 +882,7 @@ def _componentwise_transition_from_state(
 def _hypercube_fixed_masks(
     hypercube: Hypercube,
     components: Tuple[str, ...],
-) -> Tuple[_StateBits, _StateBits]:
+) -> Tuple[_ConfigurationBits, _ConfigurationBits]:
     """Encode the fixed dimensions and values of one hypercube."""
 
     fixed_mask = 0
@@ -843,9 +901,9 @@ def _hypercube_fixed_masks(
 
 def _any_candidate_is_unstable(
     network: "BooleanNetwork",
-    state: _StateBits,
+    state: _ConfigurationBits,
     components: Tuple[str, ...],
-    candidates: _StateBits,
+    candidates: _ConfigurationBits,
 ) -> bool:
     """Return whether any candidate component is unstable in one state."""
 
@@ -868,9 +926,9 @@ def _any_candidate_is_unstable(
 
 def _all_candidates_are_unstable(
     network: "BooleanNetwork",
-    state: _StateBits,
+    state: _ConfigurationBits,
     components: Tuple[str, ...],
-    candidates: _StateBits,
+    candidates: _ConfigurationBits,
 ) -> bool:
     """Return whether every candidate component is unstable in one state."""
 
@@ -893,8 +951,8 @@ def _all_candidates_are_unstable(
 
 def _bdd_transition(
     network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    target_state: HypercubeLike,
+    source: HypercubeLike,
+    target: HypercubeLike,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
     quantifier: Literal["exists", "robust", "universal"],
@@ -906,16 +964,16 @@ def _bdd_transition(
         update=update,
     )
     return transition_system.transition(
-        initial_state,
-        target_state,
+        source,
+        target,
         quantifier=quantifier,
     )
 
 
 def _bdd_reachability(
     network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    target_state: HypercubeLike,
+    source: HypercubeLike,
+    target: HypercubeLike,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
     quantifier: Literal["exists", "robust", "universal"],
@@ -927,95 +985,95 @@ def _bdd_reachability(
         update=update,
     )
     return transition_system.reachability(
-        initial_state,
-        target_state,
+        source,
+        target,
         quantifier=quantifier,
     )
 
 
 def _synchronous_reachability(
     network: "BooleanNetwork",
-    initial_state: HypercubeLike,
-    target_state: HypercubeLike,
+    source: HypercubeLike,
+    target: HypercubeLike,
     *,
     quantifier: Literal["exists", "robust", "universal"],
 ) -> bool:
-    """Use a direct trajectory when the synchronous initial state is concrete."""
+    """Use a direct trajectory when the synchronous source is concrete."""
 
     components = tuple(network.keys())
-    initial_hypercube = _validate_hypercube(
+    source_hypercube = _validate_hypercube(
         components,
-        initial_state,
-        name="initial_state",
+        source,
+        name="source",
     )
     if (
-        initial_hypercube.components != frozenset(components)
-        or not initial_hypercube.is_fully_specified
+        source_hypercube.components != frozenset(components)
+        or not source_hypercube.is_fully_specified
     ):
         return _bdd_reachability(
             network,
-            initial_hypercube,
-            target_state,
+            source_hypercube,
+            target,
             update="synchronous",
             quantifier=quantifier,
         )
 
     target_hypercube = _validate_hypercube(
         components,
-        target_state,
-        name="target_state",
+        target,
+        name="target",
     )
     compiled_rules = _compile_bitset_rules(network, components)
     state = 0
     for index, component in enumerate(components):
-        if initial_hypercube[component].value:
+        if source_hypercube[component].value:
             state |= 1 << index
 
     visited = set()
-    reached_target_states = set()
+    reached_target_configurations = set()
     n_fixed_target_components = sum(
         component in target_hypercube and target_hypercube[component].is_fixed
         for component in components
     )
-    n_target_states = 1 << (len(components) - n_fixed_target_components)
+    n_target_configurations = 1 << (len(components) - n_fixed_target_components)
 
     while state not in visited:
-        if _state_bits_match_hypercube(state, target_hypercube, components):
+        if _configuration_bits_match_hypercube(state, target_hypercube, components):
             if quantifier != "universal":
                 return True
 
-            reached_target_states.add(state)
-            if len(reached_target_states) == n_target_states:
+            reached_target_configurations.add(state)
+            if len(reached_target_configurations) == n_target_configurations:
                 return True
 
         visited.add(state)
-        state = _next_state_bits(compiled_rules, state)
+        state = _next_configuration_bits(compiled_rules, state)
 
     return False
 
 
 def _synchronous_reachable_attractors(
     network: "BooleanNetwork",
-    initial_states: ConfigurationSet,
+    initial_configurations: ConfigurationSet,
 ) -> Tuple[ConfigurationSet, ...]:
     """Follow deterministic trajectories and return their terminal cycles."""
 
     components = tuple(network.keys())
     compiled_rules = _compile_bitset_rules(network, components)
-    attractor_by_state: Dict[_StateBits, FrozenSet[_StateBits]] = {}
-    attractors: Set[FrozenSet[_StateBits]] = set()
+    attractor_by_state: Dict[_ConfigurationBits, FrozenSet[_ConfigurationBits]] = {}
+    attractors: Set[FrozenSet[_ConfigurationBits]] = set()
 
-    for state in initial_states._iter_state_bits():
+    for state in initial_configurations._iter_configuration_bits():
         if state in attractor_by_state:
             attractors.add(attractor_by_state[state])
             continue
 
-        path: List[_StateBits] = []
-        path_positions: Dict[_StateBits, int] = {}
+        path: List[_ConfigurationBits] = []
+        path_positions: Dict[_ConfigurationBits, int] = {}
         while state not in attractor_by_state and state not in path_positions:
             path_positions[state] = len(path)
             path.append(state)
-            state = _next_state_bits(compiled_rules, state)
+            state = _next_configuration_bits(compiled_rules, state)
 
         if state in attractor_by_state:
             attractor = attractor_by_state[state]
@@ -1029,14 +1087,14 @@ def _synchronous_reachable_attractors(
         attractors.add(attractor)
 
     return tuple(
-        _configuration_set_from_state_bits(attractor, components)
+        _configuration_set_from_configuration_bits(attractor, components)
         for attractor in attractors
     )
 
 
 def _explicit_reachable_attractors(
     network: "BooleanNetwork",
-    initial_states: ConfigurationSet,
+    initial_configurations: ConfigurationSet,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
 ) -> Tuple[ConfigurationSet, ...]:
@@ -1047,37 +1105,40 @@ def _explicit_reachable_attractors(
     if update == "asynchronous":
         terminal_components = _tarjan_asynchronous_terminal_sccs(
             (
-                _state_bits_from_mapping(initial_state, components)
-                for initial_state in initial_states
+                _configuration_bits_from_mapping(initial_configuration, components)
+                for initial_configuration in initial_configurations
             ),
-            lambda state: state ^ _next_state_bits(compiled_rules, state),
+            lambda state: state ^ _next_configuration_bits(compiled_rules, state),
         )
         return tuple(
-            _configuration_set_from_state_bits(component, components)
+            _configuration_set_from_configuration_bits(component, components)
             for component in terminal_components
         )
 
-    successors: Dict[_StateBits, Tuple[_StateBits, ...]] = {}
-    for initial_state in initial_states:
-        initial_state_bits = _state_bits_from_mapping(initial_state, components)
-        if initial_state_bits in successors:
+    successors: Dict[_ConfigurationBits, Tuple[_ConfigurationBits, ...]] = {}
+    for initial_configuration in initial_configurations:
+        initial_configuration_bits = _configuration_bits_from_mapping(
+            initial_configuration,
+            components,
+        )
+        if initial_configuration_bits in successors:
             continue
 
-        pending = [initial_state_bits]
-        scheduled = {initial_state_bits}
+        pending = [initial_configuration_bits]
+        scheduled = {initial_configuration_bits}
         while pending:
-            state_bits = pending.pop()
-            scheduled.discard(state_bits)
-            if state_bits in successors:
+            configuration_bits = pending.pop()
+            scheduled.discard(configuration_bits)
+            if configuration_bits in successors:
                 continue
 
-            state_successors = _successor_state_bits(
+            state_successors = _successor_configuration_bits(
                 compiled_rules,
-                state_bits,
+                configuration_bits,
                 update=update,
                 n_components=len(components),
             )
-            successors[state_bits] = state_successors
+            successors[configuration_bits] = state_successors
 
             for successor in state_successors:
                 if successor not in successors and successor not in scheduled:
@@ -1087,50 +1148,56 @@ def _explicit_reachable_attractors(
     terminal_components = _terminal_strongly_connected_components(successors)
 
     return tuple(
-        _configuration_set_from_state_bits(component, components)
+        _configuration_set_from_configuration_bits(component, components)
         for component in terminal_components
     )
 
 
 def _synchronous_reachable_configurations(
     network: "BooleanNetwork",
-    initial_state: Hypercube,
-) -> Iterator[Dict[str, int]]:
+    initial_configuration: Hypercube,
+) -> Iterator[Configuration]:
     """Iterate over the unique synchronous trajectory until its first cycle."""
 
     components = tuple(network.keys())
     compiled_rules = _compile_bitset_rules(network, components)
-    initial_state_bits = _state_bits_from_hypercube(initial_state, components)
+    initial_configuration_bits = _configuration_bits_from_hypercube(
+        initial_configuration,
+        components,
+    )
 
-    def iterate() -> Iterator[Dict[str, int]]:
-        state = initial_state_bits
-        visited: Set[_StateBits] = set()
+    def iterate() -> Iterator[Configuration]:
+        state = initial_configuration_bits
+        visited: Set[_ConfigurationBits] = set()
         while state not in visited:
             visited.add(state)
             yield {
                 component: (state >> index) & 1
                 for index, component in enumerate(components)
             }
-            state = _next_state_bits(compiled_rules, state)
+            state = _next_configuration_bits(compiled_rules, state)
 
     return iterate()
 
 
 def _explicit_reachable_configurations(
     network: "BooleanNetwork",
-    initial_state: Hypercube,
+    initial_configuration: Hypercube,
     *,
     update: Literal["asynchronous", "general"],
-) -> Iterator[Dict[str, int]]:
+) -> Iterator[Configuration]:
     """Traverse a finite reachable-state graph lazily with bitsets."""
 
     components = tuple(network.keys())
     compiled_rules = _compile_bitset_rules(network, components)
-    initial_state_bits = _state_bits_from_hypercube(initial_state, components)
+    initial_configuration_bits = _configuration_bits_from_hypercube(
+        initial_configuration,
+        components,
+    )
 
-    def iterate() -> Iterator[Dict[str, int]]:
-        pending = [initial_state_bits]
-        scheduled = {initial_state_bits}
+    def iterate() -> Iterator[Configuration]:
+        pending = [initial_configuration_bits]
+        scheduled = {initial_configuration_bits}
 
         while pending:
             state = pending.pop()
@@ -1139,7 +1206,7 @@ def _explicit_reachable_configurations(
                 for index, component in enumerate(components)
             }
 
-            next_state = _next_state_bits(compiled_rules, state)
+            next_state = _next_configuration_bits(compiled_rules, state)
             unstable_mask = state ^ next_state
             if update == "asynchronous":
                 while unstable_mask:
@@ -1182,13 +1249,13 @@ def _import_dd_backend() -> Any:
 
 def _validate_hypercube(
     components: Tuple[str, ...],
-    state: HypercubeLike,
+    configuration: HypercubeLike,
     *,
     name: str,
 ) -> Hypercube:
-    """Validate a possibly partial Boolean state."""
+    """Validate a possibly partial Boolean configuration."""
 
-    hypercube = Hypercube(state)
+    hypercube = Hypercube(configuration)
     unknown_components = sorted(set(hypercube) - set(components))
     if unknown_components:
         raise ValueError(f"unknown components in {name}: {unknown_components}")
@@ -1198,13 +1265,13 @@ def _validate_hypercube(
 
 def _validate_complete_hypercube(
     components: Tuple[str, ...],
-    state: HypercubeLike,
+    configuration: HypercubeLike,
     *,
     name: str,
 ) -> Hypercube:
     """Validate a complete Boolean configuration encoded as a hypercube."""
 
-    hypercube = _validate_hypercube(components, state, name=name)
+    hypercube = _validate_hypercube(components, configuration, name=name)
     invalid_components = [
         component
         for component in components
@@ -1283,116 +1350,124 @@ def _bitset_rule_source(
     raise TypeError(f"unsupported Boolean expression type: {type(rule)}")
 
 
-def _state_bits_from_mapping(
-    state: Mapping[str, int],
+def _configuration_bits_from_mapping(
+    configuration: Mapping[str, int],
     components: Tuple[str, ...],
-) -> _StateBits:
-    """Encode a concrete state mapping as an integer bitset."""
+) -> _ConfigurationBits:
+    """Encode a concrete configuration as an integer bitset."""
 
-    state_bits = 0
+    configuration_bits = 0
     for index, component in enumerate(components):
-        if state[component]:
-            state_bits |= 1 << index
+        if configuration[component]:
+            configuration_bits |= 1 << index
 
-    return state_bits
+    return configuration_bits
 
 
-def _state_bits_from_hypercube(
-    state: Hypercube,
+def _configuration_bits_from_hypercube(
+    hypercube: Hypercube,
     components: Tuple[str, ...],
-) -> _StateBits:
+) -> _ConfigurationBits:
     """Encode a fully specified hypercube as an integer bitset."""
 
-    state_bits = 0
+    configuration_bits = 0
     for index, component in enumerate(components):
-        if state[component].value:
-            state_bits |= 1 << index
+        if hypercube[component].value:
+            configuration_bits |= 1 << index
 
-    return state_bits
+    return configuration_bits
 
 
-def _successor_state_bits(
+def _successor_configuration_bits(
     compiled_rules: Tuple[_CompiledRule, ...],
-    state: _StateBits,
+    configuration: _ConfigurationBits,
     *,
     update: Literal["asynchronous", "synchronous", "general"],
     n_components: int,
-) -> Tuple[_StateBits, ...]:
+) -> Tuple[_ConfigurationBits, ...]:
     """Return successor bitsets under a finite-state update semantics."""
 
-    next_state = _next_state_bits(compiled_rules, state)
+    next_configuration = _next_configuration_bits(compiled_rules, configuration)
 
     if update == "synchronous":
-        return _synchronous_successor_state_bits(state, next_state)
+        return _synchronous_successor_configuration_bits(
+            configuration,
+            next_configuration,
+        )
 
-    unstable_mask = state ^ next_state
+    unstable_mask = configuration ^ next_configuration
     if unstable_mask == 0:
         return ()
 
     if update == "asynchronous":
-        return _asynchronous_successor_state_bits(state, unstable_mask)
+        return _asynchronous_successor_configuration_bits(
+            configuration,
+            unstable_mask,
+        )
 
-    return _general_successor_state_bits(state, unstable_mask)
+    return _general_successor_configuration_bits(configuration, unstable_mask)
 
 
-def _next_state_bits(
+def _next_configuration_bits(
     compiled_rules: Tuple[_CompiledRule, ...],
-    state: _StateBits,
-) -> _StateBits:
-    """Evaluate all compiled rules on a bitset state."""
+    configuration: _ConfigurationBits,
+) -> _ConfigurationBits:
+    """Evaluate all compiled rules on a bitset configuration."""
 
-    next_state = 0
+    next_configuration = 0
     for index, rule in enumerate(compiled_rules):
-        if rule(state):
-            next_state |= 1 << index
+        if rule(configuration):
+            next_configuration |= 1 << index
 
-    return next_state
+    return next_configuration
 
 
-def _state_bits_match_hypercube(
-    state: _StateBits,
+def _configuration_bits_match_hypercube(
+    configuration: _ConfigurationBits,
     hypercube: Hypercube,
     components: Tuple[str, ...],
 ) -> bool:
-    """Return whether a state bitset belongs to a hypercube."""
+    """Return whether a configuration bitset belongs to a hypercube."""
 
     for index, component in enumerate(components):
         if component not in hypercube:
             continue
 
         value = hypercube[component]
-        if value.is_fixed and bool((state >> index) & 1) != bool(value.value):
+        if value.is_fixed and bool((configuration >> index) & 1) != bool(value.value):
             return False
 
     return True
 
 
-def _configuration_set_from_state_bits(
-    state_bits: Iterable[_StateBits],
+def _configuration_set_from_configuration_bits(
+    configuration_bits: Iterable[_ConfigurationBits],
     components: Tuple[str, ...],
 ) -> ConfigurationSet:
-    """Convert explicit state bitsets into a compact ConfigurationSet."""
+    """Convert explicit configuration bitsets into a ConfigurationSet."""
 
-    hypercubes = _encoded_hypercubes_from_state_bits(
-        frozenset(state_bits),
+    hypercubes = _encoded_hypercubes_from_configuration_bits(
+        frozenset(configuration_bits),
         n_components=len(components),
     )
     return ConfigurationSet._from_encoded_hypercubes(components, hypercubes)
 
 
-def _encoded_hypercubes_from_state_bits(
-    states: FrozenSet[_StateBits],
+def _encoded_hypercubes_from_configuration_bits(
+    configurations: FrozenSet[_ConfigurationBits],
     *,
     n_components: int,
-) -> FrozenSet[Tuple[_StateBits, _StateBits]]:
-    """Compress explicit states into exact disjoint encoded hypercubes."""
+) -> FrozenSet[Tuple[_ConfigurationBits, _ConfigurationBits]]:
+    """Compress explicit configurations into exact disjoint hypercubes."""
 
     all_mask = (1 << n_components) - 1
-    hypercubes = {(all_mask, state & all_mask) for state in states}
+    hypercubes = {
+        (all_mask, configuration & all_mask) for configuration in configurations
+    }
 
     for index in reversed(range(n_components)):
         bit = 1 << index
-        branches: Dict[Tuple[_StateBits, _StateBits], int] = {}
+        branches: Dict[Tuple[_ConfigurationBits, _ConfigurationBits], int] = {}
         for fixed_mask, value_mask in hypercubes:
             reduced = fixed_mask ^ bit, value_mask & ~bit
             branch = 2 if value_mask & bit else 1
@@ -1413,8 +1488,8 @@ def _encoded_hypercubes_from_state_bits(
 
 
 def _terminal_strongly_connected_components(
-    successors: Mapping[_StateBits, Tuple[_StateBits, ...]],
-) -> Tuple[Tuple[_StateBits, ...], ...]:
+    successors: Mapping[_ConfigurationBits, Tuple[_ConfigurationBits, ...]],
+) -> Tuple[Tuple[_ConfigurationBits, ...], ...]:
     """Return SCCs with no outgoing transition to another SCC."""
 
     components = _kosaraju_strongly_connected_components(successors)
@@ -1437,12 +1512,12 @@ def _terminal_strongly_connected_components(
 
 
 def _kosaraju_strongly_connected_components(
-    successors: Mapping[_StateBits, Tuple[_StateBits, ...]],
-) -> Tuple[Tuple[_StateBits, ...], ...]:
+    successors: Mapping[_ConfigurationBits, Tuple[_ConfigurationBits, ...]],
+) -> Tuple[Tuple[_ConfigurationBits, ...], ...]:
     """Compute SCCs from a successor mapping with Kosaraju's algorithm."""
 
-    visited: Set[_StateBits] = set()
-    finishing_order: List[_StateBits] = []
+    visited: Set[_ConfigurationBits] = set()
+    finishing_order: List[_ConfigurationBits] = []
 
     for start in successors:
         if start in visited:
@@ -1464,15 +1539,15 @@ def _kosaraju_strongly_connected_components(
                 if successor not in visited:
                     stack.append((successor, False))
 
-    predecessors: Dict[_StateBits, List[_StateBits]] = {
+    predecessors: Dict[_ConfigurationBits, List[_ConfigurationBits]] = {
         state: [] for state in successors
     }
     for state, state_successors in successors.items():
         for successor in state_successors:
             predecessors[successor].append(state)
 
-    assigned: Set[_StateBits] = set()
-    components: List[Tuple[_StateBits, ...]] = []
+    assigned: Set[_ConfigurationBits] = set()
+    components: List[Tuple[_ConfigurationBits, ...]] = []
     for start in reversed(finishing_order):
         if start in assigned:
             continue

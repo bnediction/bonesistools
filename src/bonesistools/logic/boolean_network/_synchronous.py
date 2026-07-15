@@ -42,13 +42,13 @@ def _bdd_synchronous_transition_partitions(
     return clusters, forward_quantification
 
 
-def _synchronous_successor_state_bits(
-    state: int,
-    next_state: int,
+def _synchronous_successor_configuration_bits(
+    configuration: int,
+    next_configuration: int,
 ) -> Tuple[int, ...]:
     """Return the deterministic synchronous successor when it changes."""
 
-    if next_state == state:
+    if next_configuration == configuration:
         return ()
 
-    return (next_state,)
+    return (next_configuration,)

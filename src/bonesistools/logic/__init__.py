@@ -55,7 +55,6 @@ _DEPRECATED: _Dict[str, _Tuple[str, str]] = {
     "BooleanNetworkEnsemble": ("bn", "BooleanNetworkEnsemble"),
     "Hypercube": ("ba", "Hypercube"),
     "HypercubeCollection": ("ba", "HypercubeCollection"),
-    "bn_to_pydot": ("bn", "bn_to_pydot"),
 }
 
 __all__ = [

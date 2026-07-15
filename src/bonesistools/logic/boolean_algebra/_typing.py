@@ -9,6 +9,9 @@ from typing import (
     Any as _Any,
 )
 from typing import (
+    Dict as _Dict,
+)
+from typing import (
     Mapping as _Mapping,
 )
 from typing import (
@@ -24,6 +27,7 @@ from ._kleene import KleeneValue, KleeneValueLike
 BooleanRule = _Union[Expression, bool, int, str]
 
 PartialBooleanLike = _Union[PartialBoolean, bool, int, float, str]
+Configuration = _Dict[str, int]
 ConfigurationLike = _Mapping[str, _Union[bool, int]]
 HypercubeLike = _Mapping[str, PartialBooleanLike]
 

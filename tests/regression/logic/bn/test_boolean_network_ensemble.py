@@ -162,21 +162,59 @@ def test_boolean_network_ensemble_influence_counts(bnet_ensemble):
     assert influences["C"]["A"][False] == 1
 
 
-def test_boolean_network_ensemble_rule_structures(bnet_ensemble):
-    structures = bnet_ensemble.rule_structures()
+def test_boolean_network_ensemble_dnf_implicants(bnet_ensemble):
+    implicants = bnet_ensemble.dnf_implicants()
 
-    assert set(structures) == {"A", "B", "C"}
+    assert set(implicants) == {"A", "B", "C"}
 
-    assert len(structures["A"]) == 3
-    assert structures["B"] == [True, True, True]
-    assert structures["C"] == [False, False, False]
+    assert len(implicants["A"]) == 3
+    assert implicants["B"] == [
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+    ]
+    assert implicants["C"] == [(), (), ()]
 
-    assert len(set(structures["A"])) == 3
+    assert len(set(implicants["A"])) == 3
+
+    negative_implicants = bnet_ensemble.dnf_implicants(value=0)
+    assert negative_implicants["B"] == [(), (), ()]
+    assert negative_implicants["C"] == [
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+    ]
 
 
-def test_boolean_network_ensemble_to_networkx(bnet_ensemble):
-    graph = bnet_ensemble.to_networkx()
+def test_boolean_network_ensemble_prime_implicants(bnet_ensemble):
+    implicants = bnet_ensemble.prime_implicants()
 
+    assert implicants["A"] == [
+        (bt.logic.ba.Hypercube({"B": 1}),),
+        (bt.logic.ba.Hypercube({"B": 1, "C": 1}),),
+        (bt.logic.ba.Hypercube({"B": 1, "C": 0}),),
+    ]
+    assert implicants["B"] == [
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+        (bt.logic.ba.Hypercube(),),
+    ]
+    assert implicants["C"] == [(), (), ()]
+
+
+@pytest.mark.parametrize("method", ["dnf_implicants", "prime_implicants"])
+def test_boolean_network_ensemble_implicants_validate_value(method):
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(components=("A",))
+
+    with pytest.raises(ValueError, match="expected 0 or 1"):
+        getattr(ensemble, method)(value=2)
+
+
+def test_boolean_network_ensemble_to_influence_graph(bnet_ensemble):
+    graph = bnet_ensemble.to_influence_graph()
+
+    assert isinstance(graph, bt.logic.ig.AggregatedInfluenceGraph)
+    assert graph.total == 3
     assert set(graph.nodes) == {"A", "B", "C"}
 
     assert graph.nodes["A"]["function_count"] == 3
@@ -192,97 +230,42 @@ def test_boolean_network_ensemble_to_networkx(bnet_ensemble):
 
     edge_data = list(graph.get_edge_data("B", "A").values())
     assert any(
-        data["sign"] is True
+        data["sign"] == 1
         and data["count"] == 3
-        and data["frequency"] == 1
+        and "frequency" not in data
         and "ratio" not in data
         for data in edge_data
     )
+    assert graph.edge_frequency("B", "A", sign=1) == 1
 
     edge_data = list(graph.get_edge_data("C", "A").values())
     assert any(
-        data["sign"] is True
+        data["sign"] == 1
         and data["count"] == 1
-        and data["frequency"] == pytest.approx(1 / 3)
+        and "frequency" not in data
         for data in edge_data
     )
     assert any(
-        data["sign"] is False
+        data["sign"] == -1
         and data["count"] == 1
-        and data["frequency"] == pytest.approx(1 / 3)
+        and "frequency" not in data
         for data in edge_data
     )
+    assert graph.edge_frequency("C", "A", sign=1) == pytest.approx(1 / 3)
+    assert graph.edge_frequency("C", "A", sign=-1) == pytest.approx(1 / 3)
 
 
-def test_boolean_network_ensemble_to_networkx_drop_isolates(bnet_ensemble):
-    graph = bnet_ensemble.to_networkx(drop_isolates=True)
+def test_boolean_network_ensemble_to_influence_graph_drop_isolates(bnet_ensemble):
+    graph = bnet_ensemble.to_influence_graph(drop_isolates=True)
 
     assert set(graph.nodes) == {"A", "B", "C"}
 
 
-def test_boolean_network_ensemble_to_graphviz_redirects_to_aggregated_graph(
-    bnet_ensemble,
-):
-    with pytest.raises(NotImplementedError, match="from_boolean_networks"):
-        bnet_ensemble.to_graphviz(rankdir="LR")
+def test_boolean_network_ensemble_to_influence_graph_rejects_empty_ensemble():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(components=("A",))
 
-
-def test_boolean_network_ensemble_to_pydot_redirects_to_aggregated_graph(
-    bnet_ensemble,
-):
-    with pytest.raises(NotImplementedError, match="from_boolean_networks"):
-        bnet_ensemble.to_pydot(rankdir="LR")
-
-
-def test_boolean_network_ensemble_show(monkeypatch, bnet_ensemble):
-    calls = {}
-
-    def fake_show(self, **kwargs):
-        calls["graph"] = self
-        calls["show"] = kwargs
-
-    monkeypatch.setattr(bt.logic.ig.AggregatedInfluenceGraph, "show", fake_show)
-
-    bnet_ensemble.show(
-        collapse="family",
-        bins=None,
-        preserve_feedback=False,
-        include_selfloops=False,
-        drop_isolates=True,
-        min_frequency=0.5,
-        edge_label="frequency",
-        family_attr={"shape": "oval"},
-        edge_style=None,
-        program="neato",
-        graph_attr={"rankdir": "LR"},
-        node_attr={"shape": "box"},
-        edge_attr={"fontsize": "10"},
-        width="640px",
-        height="480px",
-    )
-
-    graph = calls["graph"]
-    assert isinstance(graph, bt.logic.ig.AggregatedInfluenceGraph)
-    assert graph.total == len(bnet_ensemble)
-
-    assert calls["show"] == {
-        "collapse": "family",
-        "bins": None,
-        "preserve_feedback": False,
-        "include_selfloops": False,
-        "min_frequency": 0.5,
-        "drop_isolates": True,
-        "node_style": "stability",
-        "family_attr": {"shape": "oval"},
-        "edge_label": "frequency",
-        "edge_style": None,
-        "program": "neato",
-        "graph_attr": {"rankdir": "LR"},
-        "node_attr": {"shape": "box"},
-        "edge_attr": {"fontsize": "10"},
-        "width": "640px",
-        "height": "480px",
-    }
+    with pytest.raises(ValueError, match="empty Boolean network ensemble"):
+        ensemble.to_influence_graph()
 
 
 def test_ensemble_allows_external_regulators_unchecked():

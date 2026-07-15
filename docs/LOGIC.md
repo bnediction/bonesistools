@@ -211,8 +211,8 @@ update any non-empty subset of unstable components.
 bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "~B"})
 
 bn.transition(
-    {"A": 0, "B": 0},
-    {"A": 1, "B": 0},
+    source={"A": 0, "B": 0},
+    target={"A": 1, "B": 0},
     update="asynchronous",
 )
 # True
@@ -226,23 +226,23 @@ bn.transition(x, y) == bn.reachability(x, y)
 ```
 
 `BooleanNetwork.reachability(...)` tests whether a target configuration or
-subspace is reachable from an initial configuration or subspace.
+subspace is reachable from a source configuration or subspace.
 
 ```python
 bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
 bn.reachability(
-    {"A": 0, "B": 1},
-    {"A": 1, "B": 1},
+    source={"A": 0, "B": 1},
+    target={"A": 1, "B": 1},
     update="asynchronous",
 )
 # True
 ```
 
 For asynchronous and general dynamics, reachability computes the CTL set
-`EF(target)` symbolically with a BDD. It first computes the states reachable
-from the initial subspace, then restricts the backward fixed point to those
-states. It does not enumerate the state-transition graph.
+`EF(target)` symbolically with a BDD. It first computes configurations reachable
+from the source subspace, then restricts the backward fixed point to those
+configurations. It does not enumerate the state-transition graph.
 
 Install the optional BDD implementation with:
 
@@ -250,16 +250,16 @@ Install the optional BDD implementation with:
 pip install "bonesistools[bdd]"
 ```
 
-With synchronous dynamics and a complete initial configuration, reachability
+With synchronous dynamics and a complete source configuration, reachability
 follows the unique trajectory directly and stops when it reaches the target or
-detects a cycle. Partial initial configurations use a BDD. Most-permissive
+detects a cycle. Partial source configurations use a BDD. Most-permissive
 reachability uses an ASP formulation of the transition conditions.
 
 With partial configurations, `quantifier="exists"` asks whether at least one
-compatible initial configuration reaches or transitions to one target
-configuration. `quantifier="robust"` asks whether every compatible initial
+compatible source configuration reaches or transitions to one target
+configuration. `quantifier="robust"` asks whether every compatible source
 configuration reaches or transitions to at least one target configuration.
-`quantifier="universal"` asks whether every compatible initial configuration
+`quantifier="universal"` asks whether every compatible source configuration
 reaches or transitions to every target configuration.
 
 `BooleanNetwork.reachable_configurations(...)` iterates over every complete
@@ -267,7 +267,7 @@ configuration reachable from one complete initial configuration:
 
 ```python
 configurations = bn.reachable_configurations(
-    {"A": 0, "B": 1},
+    initial={"A": 0, "B": 1},
     update="asynchronous",
 )
 
@@ -281,16 +281,36 @@ direct explicit traversal or the optional symbolic BDD implementation.
 Most-permissive enumeration uses a compact decomposition into closed
 hypercubes and irreversible components. Iteration order is unspecified.
 
-## Reachable Attractors
+## Trap Spaces
 
-`BooleanNetwork.reachable_attractors(...)` returns exact reachable attractors as
-`ConfigurationSet` objects.
+`BooleanNetwork.trap_spaces()` enumerates the minimal trap spaces of a network:
+
+```python
+trap_spaces = bn.trap_spaces()
+```
+
+`BooleanNetwork.principal_trap_space(...)` instead computes the unique smallest
+trap space containing one complete configuration:
+
+```python
+principal = bn.principal_trap_space({"A": 0, "B": 1})
+```
+
+Both operations return trap spaces as `Hypercube` objects. Minimal trap-space
+enumeration uses ASP, while the principal trap space is computed directly by
+successively freeing values that are not preserved within the enclosing
+hypercube.
+
+## Attractors
+
+`BooleanNetwork.attractors(...)` returns exact attractors as `ConfigurationSet`
+objects, optionally restricted by an initial configuration.
 
 ```python
 bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 
-attractors = bn.reachable_attractors(
-    {"A": 0, "B": 1},
+attractors = bn.attractors(
+    initial={"A": 0, "B": 1},
     update="asynchronous",
 )
 ```
@@ -303,13 +323,13 @@ for attractor in attractors:
     print(attractor.enumerate())
 ```
 
-The initial state may be partial. Missing or free components define the set of
+The initial configuration may be partial. Missing or free components define
 all compatible initial configurations, and the explicit backend explores the
-union of reachable states only once:
+union of reachable configurations only once:
 
 ```python
-attractors = bn.reachable_attractors(
-    {"A": 0},
+attractors = bn.attractors(
+    initial={"A": 0},
     update="asynchronous",
 )
 ```
@@ -324,8 +344,8 @@ Supported update semantics are:
 
 For `"synchronous"`, `"asynchronous"` and `"general"` dynamics, BoNesisTools
 automatically selects an explicit or symbolic traversal. The optional BDD
-implementation computes large reachable state sets symbolically. Install it
-with:
+implementation computes large reachable configuration sets symbolically.
+Install it with:
 
 ```bash
 pip install "bonesistools[bdd]"

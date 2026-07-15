@@ -51,8 +51,6 @@ from ._svg import SvgLength, scale_svg
 if TYPE_CHECKING:
     from pydot import Dot
 
-    from ..boolean_network import BooleanNetwork, BooleanNetworkEnsemble
-
 CircuitSign = Literal[-1, 1]
 InfluenceSign = Literal[-1, 1, "+", "-", "positive", "negative"]
 Direction = Literal["upstream", "downstream", "both"]
@@ -3080,13 +3078,13 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Node styling strategy.
 
             The `"count"` strategy styles nodes according to their
-            `function_count` attribute, i.e. the number of distinct Boolean
-            rule structures observed for the node across the ensemble. Lower
-            values indicate more consistent inferred functions.
+            `function_count` attribute, i.e. the number of distinct DNF
+            implicant structures observed for the node across the ensemble.
+            Lower values indicate more consistent inferred functions.
 
             The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
-            common Boolean rule structure for the node. Higher values indicate
+            common DNF implicant structure for the node. Higher values indicate
             more stable inferred functions.
 
             After family collapse, family nodes use conservative member
@@ -3226,13 +3224,13 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Node styling strategy.
 
             The `"count"` strategy styles nodes according to their
-            `function_count` attribute, i.e. the number of distinct Boolean
-            rule structures observed for the node across the ensemble. Lower
-            values indicate more consistent inferred functions.
+            `function_count` attribute, i.e. the number of distinct DNF
+            implicant structures observed for the node across the ensemble.
+            Lower values indicate more consistent inferred functions.
 
             The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
-            common Boolean rule structure for the node. Higher values indicate
+            common DNF implicant structure for the node. Higher values indicate
             more stable inferred functions.
 
             After family collapse, family nodes use conservative member
@@ -3383,13 +3381,13 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             Node styling strategy.
 
             The `"count"` strategy styles nodes according to their
-            `function_count` attribute, i.e. the number of distinct Boolean
-            rule structures observed for the node across the ensemble. Lower
-            values indicate more consistent inferred functions.
+            `function_count` attribute, i.e. the number of distinct DNF
+            implicant structures observed for the node across the ensemble.
+            Lower values indicate more consistent inferred functions.
 
             The `"stability"` strategy styles nodes according to their
             `function_stability` attribute, i.e. the frequency of the most
-            common Boolean rule structure for the node. Higher values indicate
+            common DNF implicant structure for the node. Higher values indicate
             more stable inferred functions.
 
             After family collapse, family nodes use conservative member
@@ -3609,88 +3607,6 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         aggregated.validate_counts()
 
         return aggregated
-
-    @classmethod
-    def from_boolean_networks(
-        cls,
-        *networks: Union["BooleanNetwork", "BooleanNetworkEnsemble"],
-    ) -> "AggregatedInfluenceGraph":
-        """
-        Build an aggregated influence graph from Boolean networks.
-
-        Each Boolean network is converted into a signed influence graph before
-        aggregation. A single `BooleanNetworkEnsemble` argument is accepted and
-        expanded automatically. Node attributes include `function_count` and
-        `function_stability`, matching `BooleanNetworkEnsemble.to_networkx()`.
-
-        Examples
-        --------
-        >>> from bonesistools.logic.boolean_network import BooleanNetwork
-
-        >>> bn1 = BooleanNetwork({"A": "B", "B": 0, "C": 1})
-        >>> bn2 = BooleanNetwork({"A": "B", "B": "C", "C": 0})
-        >>> bn3 = BooleanNetwork({"A": "!B", "B": "C", "C": 1})
-
-        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(
-        ...     bn1,
-        ...     bn2,
-        ...     bn3,
-        ... )
-        >>> graph.edge_count("B", "A", sign=1)
-        2
-
-        >>> graph.edge_count("B", "A", sign=-1)
-        1
-
-        A Boolean network ensemble can also be passed directly:
-
-        >>> from bonesistools.logic.boolean_network import BooleanNetworkEnsemble
-        >>> ensemble = BooleanNetworkEnsemble(bns=[bn1, bn2, bn3])
-        >>> graph = AggregatedInfluenceGraph.from_boolean_networks(ensemble)
-        >>> graph.total
-        3
-
-        Parameters
-        ----------
-        *networks: BooleanNetwork
-            Boolean networks to convert and aggregate, or a single
-            `BooleanNetworkEnsemble`. At least one network is required.
-
-        Returns
-        -------
-        AggregatedInfluenceGraph
-            Aggregated influence graph built from the influence graphs inferred
-            from the input Boolean networks.
-
-        Raises
-        ------
-        AttributeError
-            If one input object does not provide `to_influence_graph()`.
-        ValueError
-            If no network is provided, or if conversion produces an influence
-            graph with invalid edge signs.
-        """
-
-        from ..boolean_network import BooleanNetworkEnsemble
-
-        if len(networks) == 0:
-            raise ValueError("expected at least one Boolean network")
-
-        if len(networks) == 1 and isinstance(networks[0], BooleanNetworkEnsemble):
-            ensemble = networks[0]
-        else:
-            boolean_networks = cast(Tuple["BooleanNetwork", ...], networks)
-            ensemble = BooleanNetworkEnsemble(bns=boolean_networks)
-
-        graph = ensemble.to_networkx(drop_isolates=False)
-
-        for _, _, data in graph.edges(data=True):
-            if data["sign"] is True:
-                data["sign"] = 1
-            elif data["sign"] is False:
-                data["sign"] = -1
-
-        return cls(graph, total=len(ensemble))
 
     def _visualization_graph(
         self,

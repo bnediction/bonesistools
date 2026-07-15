@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
 from itertools import product
-from typing import Dict, List, Optional, Sequence, Tuple, Union, overload
+from typing import List, Optional, Sequence, Tuple, Union, overload
 
 from ..._typing import RandomStateSeed
 from ..._validation import _as_positive_integer, _as_seed
 from ._hypercube import Hypercube
-from ._typing import ConfigurationLike, HypercubeLike
+from ._typing import Configuration, ConfigurationLike, HypercubeLike
 
 _EncodedHypercube = Tuple[int, int]
 
@@ -132,13 +132,13 @@ class ConfigurationSet:
 
         return self._covers(other) and other._covers(self)
 
-    def __iter__(self) -> Iterator[Dict[str, int]]:
+    def __iter__(self) -> Iterator[Configuration]:
         """
         Iterate over complete configurations.
 
         Yields
         ------
-        dict[str, int]
+        Configuration
             Complete Boolean configurations ordered by `components`.
         """
 
@@ -295,7 +295,7 @@ class ConfigurationSet:
             for hypercube in self._hypercubes
         )
 
-    def enumerate(self) -> Tuple[Dict[str, int], ...]:
+    def enumerate(self) -> Tuple[Configuration, ...]:
         """
         Return all represented configurations.
 
@@ -314,7 +314,7 @@ class ConfigurationSet:
         n: None = None,
         *,
         seed: RandomStateSeed = None,
-    ) -> Dict[str, int]: ...
+    ) -> Configuration: ...
 
     @overload
     def sample(
@@ -322,14 +322,14 @@ class ConfigurationSet:
         n: int,
         *,
         seed: RandomStateSeed = None,
-    ) -> Tuple[Dict[str, int], ...]: ...
+    ) -> Tuple[Configuration, ...]: ...
 
     def sample(
         self,
         n: Optional[int] = None,
         *,
         seed: RandomStateSeed = None,
-    ) -> Union[Dict[str, int], Tuple[Dict[str, int], ...]]:
+    ) -> Union[Configuration, Tuple[Configuration, ...]]:
         """
         Sample represented configurations with replacement.
 
@@ -351,7 +351,7 @@ class ConfigurationSet:
 
         Returns
         -------
-        dict[str, int] or tuple of dict[str, int]
+        Configuration or tuple of Configuration
             One sampled configuration when `n` is omitted, otherwise a tuple of
             sampled configurations.
 
@@ -385,7 +385,7 @@ class ConfigurationSet:
 
         return configurations
 
-    def _sample_one(self, rng: object) -> Dict[str, int]:
+    def _sample_one(self, rng: object) -> Configuration:
 
         total = self.count()
         index = int(rng.randint(total))  # pyright: ignore[reportAttributeAccessIssue]
@@ -451,10 +451,10 @@ class ConfigurationSet:
 
         return iter(self._hypercubes)
 
-    def _iter_state_bits(self) -> Iterator[int]:
+    def _iter_configuration_bits(self) -> Iterator[int]:
 
         for hypercube in self._hypercubes:
-            yield from _iter_hypercube_state_bits(
+            yield from _iter_hypercube_configuration_bits(
                 hypercube,
                 len(self._components),
             )
@@ -497,8 +497,7 @@ def _coerce_components(components: Iterable[str]) -> Tuple[str, ...]:
     )
     if duplicated:
         raise ValueError(
-            "components must be unique; duplicated components: "
-            f"{', '.join(duplicated)}"
+            f"components must be unique; duplicated components: {', '.join(duplicated)}"
         )
 
     return resolved
@@ -539,7 +538,7 @@ def _count_hypercube_configurations(
 def _iter_hypercube_configurations(
     hypercube: _EncodedHypercube,
     components: Sequence[str],
-) -> Iterator[Dict[str, int]]:
+) -> Iterator[Configuration]:
 
     fixed_mask, value_mask = hypercube
     free_indices = [
@@ -559,7 +558,7 @@ def _iter_hypercube_configurations(
         yield configuration
 
 
-def _iter_hypercube_state_bits(
+def _iter_hypercube_configuration_bits(
     hypercube: _EncodedHypercube,
     n_components: int,
 ) -> Iterator[int]:
@@ -579,7 +578,7 @@ def _configuration_at_index(
     hypercube: _EncodedHypercube,
     components: Sequence[str],
     index: int,
-) -> Dict[str, int]:
+) -> Configuration:
 
     fixed_mask, value_mask = hypercube
     configuration = {}

@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-from types import ModuleType
 from typing import Any, cast
 
 import pytest
@@ -9,14 +7,6 @@ from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
 from bonesistools.logic.boolean_network import _typing
-
-
-def _pydot_get(obj, method):
-    return getattr(cast(Any, obj), method)()
-
-
-def _pydot_get_string(obj, method):
-    return cast(str, _pydot_get(obj, method)).strip('"')
 
 
 def _edge_data(graph, source, target, key=0):
@@ -593,108 +583,3 @@ def test_boolean_network_to_influence_graph():
 
     assert _edge_data(graph, "B", "A")["sign"] == 1
     assert _edge_data(graph, "C", "A")["sign"] == -1
-
-
-def test_boolean_network_to_graphviz(fake_graphviz):
-    bn = bt.logic.bn.BooleanNetwork(
-        {
-            "A": "B & ~C",
-            "B": 0,
-            "C": 1,
-        }
-    )
-
-    graph = bn.to_graphviz(rankdir="LR")
-
-    edges = {(source, target): attrs for source, target, attrs in graph.edges}
-
-    assert isinstance(graph, fake_graphviz)
-    assert graph.graph_attr["rankdir"] == "LR"
-    assert ("B", "A") in edges
-    assert ("C", "A") in edges
-    assert edges[("B", "A")]["color"] == "green4"
-    assert edges[("B", "A")]["arrowhead"] == "normal"
-    assert edges[("C", "A")]["color"] == "red2"
-    assert edges[("C", "A")]["arrowhead"] == "tee"
-
-
-def test_boolean_network_to_pydot():
-
-    pytest.importorskip("pydot")
-
-    bn = bt.logic.bn.BooleanNetwork(
-        {
-            "A": "B & ~C",
-            "B": 0,
-            "C": 1,
-        }
-    )
-
-    dot = bn.to_pydot(rankdir="LR")
-
-    assert cast(Any, dot).get_rankdir() == "LR"
-
-    edges = {
-        (
-            _pydot_get_string(edge, "get_source"),
-            _pydot_get_string(edge, "get_destination"),
-        ): edge
-        for edge in dot.get_edges()
-    }
-
-    assert ("B", "A") in edges
-    assert ("C", "A") in edges
-
-    assert _pydot_get(edges[("B", "A")], "get_color") == "green4"
-    assert _pydot_get(edges[("B", "A")], "get_arrowhead") == "normal"
-
-    assert _pydot_get(edges[("C", "A")], "get_color") == "red2"
-    assert _pydot_get(edges[("C", "A")], "get_arrowhead") == "tee"
-
-
-def test_deprecated_bn_to_pydot_is_not_promoted_from_bn_namespace():
-    assert "bn_to_pydot" not in dir(bt.logic.bn)
-    assert hasattr(bt.logic.bn, "bn_to_pydot")
-
-
-def test_boolean_network_show(monkeypatch):
-    calls = {}
-
-    class FakeDot:
-        def create_svg(self):
-            return b'<svg width="100pt" height="200pt"></svg>'
-
-    def fake_to_pydot(self, program="dot", edge_style=None, **kwargs):
-        calls["to_pydot"] = {
-            "program": program,
-            "edge_style": edge_style,
-            "kwargs": kwargs,
-        }
-        return FakeDot()
-
-    class FakeSVG:
-        def __init__(self, svg):
-            self.svg = svg
-
-    def fake_display(svg):
-        calls["display"] = svg
-
-    display_module = ModuleType("IPython.display")
-    setattr(display_module, "SVG", FakeSVG)
-    setattr(display_module, "display", fake_display)
-    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
-    monkeypatch.setattr(bt.logic.bn.BooleanNetwork, "to_pydot", fake_to_pydot)
-
-    bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
-
-    bn.show(
-        program="neato",
-        edge_style=lambda sign: {"label": sign},
-        width=600,
-        rankdir="LR",
-    )
-
-    assert calls["to_pydot"]["program"] == "neato"
-    assert calls["to_pydot"]["kwargs"] == {"rankdir": "LR"}
-    assert isinstance(calls["display"], FakeSVG)
-    assert calls["display"].svg == '<svg width="600"></svg>'

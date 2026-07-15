@@ -41,19 +41,18 @@ def frequency_edge_style(frequency: float) -> Dict[str, str]:
 
 def count_node_style(function_count: int) -> Dict[str, str]:
     """
-    Return pydot node attributes from the number of distinct rule structures.
+    Return pydot node attributes from the number of DNF implicant structures.
 
-    `function_count` counts how many distinct Boolean rule structures were
+    `function_count` counts how many distinct DNF implicant structures were
     observed for a node across an ensemble. A value of 1 means all Boolean
-    networks assign the same rule structure to the node. Larger values indicate
-    more alternative inferred functions. The visual style therefore highlights
-    low counts with stronger fill colors and high counts with lighter or dotted
-    styles.
+    networks assign the same structure to the node. Larger values indicate more
+    alternative inferred functions. The visual style therefore highlights low
+    counts with stronger fill colors and high counts with lighter or dotted styles.
 
     Parameters
     ----------
     function_count: int
-        Number of distinct Boolean rule structures observed for the node.
+        Number of distinct DNF implicant structures observed for the node.
 
     Returns
     -------
@@ -90,19 +89,19 @@ def count_node_style(function_count: int) -> Dict[str, str]:
 
 def stability_node_style(function_stability: float) -> Dict[str, str]:
     """
-    Return pydot node attributes from rule-structure stability.
+    Return pydot node attributes from DNF implicant stability.
 
-    `function_stability` is the frequency of the most common Boolean rule
+    `function_stability` is the frequency of the most common DNF implicant
     structure for a node across an ensemble. A value of 1 means all Boolean
-    networks assign the same rule structure to the node. Lower values indicate
-    that the node has several competing inferred functions. The visual style
-    therefore highlights stable nodes with stronger fill colors and unstable
-    nodes with lighter or dotted styles.
+    networks assign the same structure to the node. Lower values indicate that
+    the node has several competing inferred functions. The visual style therefore
+    highlights stable nodes with stronger fill colors and unstable nodes with
+    lighter or dotted styles.
 
     Parameters
     ----------
     function_stability: float
-        Frequency of the most common Boolean rule structure for the node.
+        Frequency of the most common DNF implicant structure for the node.
 
     Returns
     -------

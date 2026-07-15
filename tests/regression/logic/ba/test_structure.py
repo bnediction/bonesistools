@@ -31,26 +31,6 @@ def test_expressions_equivalent_asp_detects_nonequivalence():
     )
 
 
-def test_expressions_equivalent_asp_reports_missing_clingo(monkeypatch):
-    ba = BooleanAlgebra()
-
-    def missing_clingo(name: str) -> Any:
-        if name == "clingo":
-            raise ImportError("missing clingo")
-
-        return __import__(name)
-
-    monkeypatch.setattr(_structure, "import_module", missing_clingo)
-
-    with pytest.raises(ImportError, match="requires `clingo` to be installed"):
-        bt.logic.ba.expressions_equivalent(
-            ba.parse("A"),
-            ba.parse("A"),
-            method="asp",
-            ba=ba,
-        )
-
-
 def test_dnf_implicants_conjunction():
     assert bt.logic.ba.dnf_implicants("x & ~y") == (
         bt.logic.ba.Hypercube({"x": 1, "y": 0}),
@@ -144,34 +124,33 @@ def test_prime_implicants_rejects_invalid_value():
         bt.logic.ba.prime_implicants("A", value=cast(Any, 2))
 
 
-def test_prime_implicants_rejects_invalid_backend():
-    with pytest.raises(ValueError, match="expected one of"):
-        bt.logic.ba.prime_implicants("A", backend=cast(Any, "unknown"))
+def test_prime_implicants_uses_truth_table_for_small_rules(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("small rules must not use ASP")
 
-
-def test_prime_implicants_asp_backend_matches_truth_table():
-    rule = "(A & B) | (A & !C) | (!A & B & C)"
-
-    assert bt.logic.ba.prime_implicants(rule, backend="asp") == (
-        bt.logic.ba.Hypercube({"A": 1, "B": 1}),
-        bt.logic.ba.Hypercube({"A": 1, "C": 0}),
-        bt.logic.ba.Hypercube({"B": 1, "C": 1}),
+    monkeypatch.setattr(
+        _structure,
+        "_compute_prime_cubes_with_clingo",
+        fail_if_called,
     )
+
+    assert bt.logic.ba.prime_implicants("A | B") == (
+        bt.logic.ba.Hypercube({"A": 1}),
+        bt.logic.ba.Hypercube({"B": 1}),
+    )
+
+
+def test_prime_implicants_uses_asp_for_large_rules(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("large rules must not enumerate minterms")
+
+    monkeypatch.setattr(_structure, "_matching_minterms", fail_if_called)
+
     assert bt.logic.ba.prime_implicants(
-        rule,
-        value=0,
-        backend="asp",
-    ) == bt.logic.ba.prime_implicants(rule, value=0)
-
-
-def test_prime_implicants_asp_backend_reports_missing_clingo(monkeypatch):
-    def missing_clingo(name: str) -> Any:
-        if name == "clingo":
-            raise ImportError("missing clingo")
-
-        return __import__(name)
-
-    monkeypatch.setattr(_structure, "import_module", missing_clingo)
-
-    with pytest.raises(ImportError, match="requires `clingo` to be installed"):
-        bt.logic.ba.prime_implicants("A", backend="asp")
+        "(A & B) | (!A & C) | (D & E)",
+    ) == (
+        bt.logic.ba.Hypercube({"A": 0, "C": 1}),
+        bt.logic.ba.Hypercube({"A": 1, "B": 1}),
+        bt.logic.ba.Hypercube({"B": 1, "C": 1}),
+        bt.logic.ba.Hypercube({"D": 1, "E": 1}),
+    )

@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from itertools import product
-from typing import Any, FrozenSet, Mapping, Optional, Set, Tuple, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+)
 
+import clingo
 from boolean import (
     BooleanAlgebra,
     Expression,
@@ -16,6 +26,9 @@ from ..._compat import Literal
 from ..._validation import _as_literal
 from ._hypercube import Hypercube
 from ._typing import BooleanRule
+
+if TYPE_CHECKING:
+    from ._robdd import ROBDD
 
 EquivalenceMethod = Literal["simplify", "truth_table", "asp"]
 
@@ -150,13 +163,22 @@ def dnf_implicants(
 
     Examples
     --------
-    >>> dnf_implicants("(A & B) | (A & !B)")
+    DNF implicants preserve clauses that prime implicants can merge:
+
+    >>> rule = "(A & B) | (A & !B)"
+    >>> dnf_implicants(rule)
     (Hypercube(A=1, B=0), Hypercube(A=1, B=1))
-
-    Unlike `prime_implicants`, no absorption minimization is performed:
-
-    >>> prime_implicants("(A & B) | (A & !B)")
+    >>> prime_implicants(rule)
     (Hypercube(A=1),)
+
+    Prime implicants can also expose a consensus condition that is absent from
+    the supplied DNF:
+
+    >>> rule = "(A & B) | (!A & C)"
+    >>> dnf_implicants(rule)
+    (Hypercube(A=0, C=1), Hypercube(A=1, B=1))
+    >>> prime_implicants(rule)
+    (Hypercube(A=0, C=1), Hypercube(A=1, B=1), Hypercube(B=1, C=1))
 
     DNF implicants can also be computed for the false value:
 
@@ -207,7 +229,6 @@ def prime_implicants(
     rule: BooleanRule,
     value: Literal[0, 1] = 1,
     *,
-    backend: Literal["truth_table", "asp"] = "truth_table",
     ba: BooleanAlgebra = BA,
 ) -> Implicants:
     """
@@ -219,16 +240,27 @@ def prime_implicants(
 
     Examples
     --------
-    >>> prime_implicants("B | C")
-    (Hypercube(B=1), Hypercube(C=1))
+    DNF implicants preserve clauses that prime implicants can merge:
 
-    >>> prime_implicants("B & !C")
-    (Hypercube(B=1, C=0),)
+    >>> rule = "(A & B) | (A & !B)"
+    >>> dnf_implicants(rule)
+    (Hypercube(A=1, B=0), Hypercube(A=1, B=1))
+    >>> prime_implicants(rule)
+    (Hypercube(A=1),)
+
+    Prime implicants can also expose a consensus condition that is absent from
+    the supplied DNF:
+
+    >>> rule = "(A & B) | (!A & C)"
+    >>> dnf_implicants(rule)
+    (Hypercube(A=0, C=1), Hypercube(A=1, B=1))
+    >>> prime_implicants(rule)
+    (Hypercube(A=0, C=1), Hypercube(A=1, B=1), Hypercube(B=1, C=1))
 
     Prime implicants can also be computed for the false value:
 
-    >>> prime_implicants("B & !C", value=0)
-    (Hypercube(B=0), Hypercube(C=1))
+    >>> prime_implicants("A & !B", value=0)
+    (Hypercube(A=0), Hypercube(B=1))
 
     Parameters
     ----------
@@ -236,10 +268,6 @@ def prime_implicants(
         Boolean rule to analyze.
     value: {0, 1} (default: 1)
         Target value forced by the returned prime implicants.
-    backend: {"truth_table", "asp"} (default: "truth_table")
-        Backend used to enumerate minimal implicants. The `"truth_table"`
-        backend uses an exact truth-table minimization. The `"asp"` backend
-        uses ASP through `clingo` to enumerate minimal cubes.
     ba: BooleanAlgebra (default: module-level BooleanAlgebra)
         Boolean algebra used to parse string rules and evaluate expressions.
 
@@ -263,25 +291,26 @@ def prime_implicants(
             f"expected 0 or 1 but received {value!r}"
         )
 
-    backend = _as_literal(
-        backend,
-        choices=("truth_table", "asp"),
-        name="backend",
-    )
-
     expr = _coerce_boolean_rule(ba, rule).simplify()
-    symbols, minterms = _matching_minterms(ba, expr, target=bool(value))
+    constant = _constant_expression_as_bool(ba, expr)
+    if constant is not None:
+        return (Hypercube({}),) if constant == bool(value) else ()
 
-    if not minterms:
-        return ()
+    symbols = tuple(sorted(expr.symbols, key=str))
 
-    if backend == "truth_table":
+    if len(symbols) <= 4:
+        _, minterms = _matching_minterms(ba, expr, target=bool(value))
+        if not minterms:
+            return ()
+
         prime_cubes = _compute_prime_cubes(tuple(minterms))
 
     else:
         prime_cubes = _compute_prime_cubes_with_clingo(
-            tuple(minterms),
-            n_variables=len(symbols),
+            ba,
+            expr,
+            variables=tuple(str(symbol) for symbol in symbols),
+            target=value,
         )
 
     prime_cubes = sorted(prime_cubes, key=_boolean_cube_sort_key)
@@ -359,7 +388,6 @@ def _expressions_equivalent_with_asp(
     expr2: Expression,
 ) -> bool:
 
-    clingo = _import_clingo()
     expr1 = expr1.simplify()
     expr2 = expr2.simplify()
     symbols = tuple(sorted(expr1.symbols | expr2.symbols, key=str))
@@ -533,84 +561,85 @@ def _compute_prime_cubes(
     while current:
         combined: Set[_BooleanCube] = set()
         used: Set[_BooleanCube] = set()
-        current_cubes = sorted(current, key=_boolean_cube_sort_key)
-
-        for index, cube1 in enumerate(current_cubes):
-            for cube2 in current_cubes[index + 1 :]:
-                cube = _combine_boolean_cubes(cube1, cube2)
-
-                if cube is None:
+        for cube in current:
+            for index, value in enumerate(cube):
+                if value != 0:
                     continue
 
-                used.add(cube1)
-                used.add(cube2)
-                combined.add(cube)
+                neighbor = cube[:index] + (1,) + cube[index + 1 :]
+                if neighbor not in current:
+                    continue
+
+                used.add(cube)
+                used.add(neighbor)
+                combined.add(cube[:index] + (None,) + cube[index + 1 :])
 
         prime_cubes.update(cube for cube in current if cube not in used)
         current = combined
 
-    return frozenset(
-        cube
-        for cube in prime_cubes
-        if not any(
-            cube != other and _boolean_cube_covers(other, cube) for other in prime_cubes
-        )
-    )
+    return frozenset(prime_cubes)
 
 
 def _compute_prime_cubes_with_clingo(
-    minterms: Tuple[Tuple[int, ...], ...],
-    n_variables: int,
+    ba: BooleanAlgebra,
+    expr: Expression,
+    *,
+    variables: Tuple[str, ...],
+    target: Literal[0, 1],
 ) -> FrozenSet[_BooleanCube]:
 
-    clingo = _import_clingo()
-    target_minterms = frozenset(minterms)
-    opposite_minterms = tuple(
-        minterm
-        for minterm in product((0, 1), repeat=n_variables)
-        if minterm not in target_minterms
+    from ._robdd import ROBDD
+
+    robdd = ROBDD._from_rule(
+        expr,
+        order=variables,
+        ba=ba,
     )
+    opposite = 1 - target
 
     program = "\n".join(
         [
-            *_clingo_truth_table_facts(
-                minterms,
-                opposite_minterms,
-                n_variables=n_variables,
-            ),
-            """
-            { fixed(I, 0); fixed(I, 1) } :- var(I).
-            :- fixed(I, 0), fixed(I, 1).
+            *_clingo_robdd_facts(robdd, variables=variables),
+            f"""
+            {{ fixed(V, 0); fixed(V, 1) }} :- variable(V).
+            :- fixed(V, 0), fixed(V, 1).
 
-            mismatch(M) :- fixed(I, V), bit(M, I, W), V != W.
-            covered_target(M) :- target(M), not mismatch(M).
-            covered_opposite(M) :- opposite(M), not mismatch(M).
+            reachable(R) :- root(R).
+            reachable(L) :-
+                reachable(N), decision(N, V, L, H), not fixed(V, 1).
+            reachable(H) :-
+                reachable(N), decision(N, V, L, H), not fixed(V, 0).
 
-            :- not 1 { covered_target(M) : target(M) }.
-            :- covered_opposite(M).
+            :- not reachable({target}).
+            :- reachable({opposite}).
 
-            other_mismatch(M, I) :-
-                var(I), fixed(J, V), bit(M, J, W), I != J, V != W.
-            drop_witness(I) :-
-                fixed(I, V), opposite(M), bit(M, I, W), V != W,
-                not other_mismatch(M, I).
-            :- fixed(I, V), not drop_witness(I).
+            drop_reachable(V, R) :- fixed(V, _), root(R).
+            drop_reachable(V, L) :-
+                drop_reachable(V, N), decision(N, V, L, H).
+            drop_reachable(V, H) :-
+                drop_reachable(V, N), decision(N, V, L, H).
+            drop_reachable(V, L) :-
+                drop_reachable(V, N), decision(N, W, L, H), V != W,
+                not fixed(W, 1).
+            drop_reachable(V, H) :-
+                drop_reachable(V, N), decision(N, W, L, H), V != W,
+                not fixed(W, 0).
+
+            :- fixed(V, _), not drop_reachable(V, {opposite}).
 
             #show fixed/2.
             """,
         ]
     )
 
-    control = clingo.Control(
-        ["--models=0", "--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
-    )
+    control = clingo.Control(["--models=0", "--warn=none"])
     control.add("base", [], program)
     control.ground([("base", [])])
 
     cubes: Set[_BooleanCube] = set()
     with control.solve(yield_=True) as handle:
         for model in handle:
-            cube = [None] * n_variables
+            cube: List[Optional[int]] = [None] * len(variables)
 
             for atom in model.symbols(shown=True):
                 variable, fixed_value = atom.arguments
@@ -621,75 +650,27 @@ def _compute_prime_cubes_with_clingo(
     return frozenset(cubes)
 
 
-def _import_clingo() -> Any:
-
-    try:
-        return import_module("clingo")
-
-    except ImportError as error:
-        raise ImportError(
-            "The ASP backend requires `clingo` to be installed."
-        ) from error
-
-
-def _clingo_truth_table_facts(
-    minterms: Tuple[Tuple[int, ...], ...],
-    opposite_minterms: Tuple[Tuple[int, ...], ...],
-    n_variables: int,
+def _clingo_robdd_facts(
+    robdd: "ROBDD",
+    *,
+    variables: Tuple[str, ...],
 ) -> Tuple[str, ...]:
 
-    facts = [f"var({index})." for index in range(n_variables)]
-
-    for minterm_id, minterm in enumerate(minterms):
-        facts.append(f"target({minterm_id}).")
-        facts.extend(_clingo_minterm_facts(minterm_id, minterm))
-
-    offset = len(minterms)
-    for index, minterm in enumerate(opposite_minterms, start=offset):
-        facts.append(f"opposite({index}).")
-        facts.extend(_clingo_minterm_facts(index, minterm))
+    variable_indices = {
+        variable: index for index, variable in enumerate(variables)
+    }
+    facts = [
+        *(f"variable({index})." for index in range(len(variables))),
+        f"root({robdd._root_id}).",
+    ]
+    facts.extend(
+        "decision("
+        f"{node}, {variable_indices[variable]}, {low}, {high}"
+        ")."
+        for node, variable, low, high in robdd._iter_nodes()
+    )
 
     return tuple(facts)
-
-
-def _clingo_minterm_facts(minterm_id: int, minterm: Tuple[int, ...]) -> Tuple[str, ...]:
-
-    return tuple(
-        f"bit({minterm_id}, {variable}, {value})."
-        for variable, value in enumerate(minterm)
-    )
-
-
-def _combine_boolean_cubes(
-    cube1: _BooleanCube,
-    cube2: _BooleanCube,
-) -> Optional[_BooleanCube]:
-
-    differing_index = None
-
-    for index, (value1, value2) in enumerate(zip(cube1, cube2)):
-        if value1 == value2:
-            continue
-
-        if value1 is None or value2 is None or differing_index is not None:
-            return None
-
-        differing_index = index
-
-    if differing_index is None:
-        return None
-
-    combined = list(cube1)
-    combined[differing_index] = None
-
-    return tuple(combined)
-
-
-def _boolean_cube_covers(cube1: _BooleanCube, cube2: _BooleanCube) -> bool:
-
-    return all(
-        value1 is None or value1 == value2 for value1, value2 in zip(cube1, cube2)
-    )
 
 
 def _boolean_cube_sort_key(cube: _BooleanCube) -> Tuple[int, Tuple[int, ...]]:
