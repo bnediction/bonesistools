@@ -22,8 +22,9 @@ from typing import (
 import clingo
 
 from ..._compat import Literal
-from ..boolean_algebra import ConfigurationSet, Hypercube, dnf_implicants
+from ..boolean_algebra import ConfigurationSet, Hypercube
 from ..boolean_algebra._robdd import ROBDD
+from ..boolean_algebra._structure import _dnf_clauses
 from ..boolean_algebra._typing import Configuration, HypercubeLike
 from ._dynamics import _validate_complete_hypercube, _validate_hypercube
 
@@ -98,21 +99,62 @@ def _most_permissive_reachable_attractors(
     """Return minimal trap spaces reachable under most-permissive semantics."""
 
     components = tuple(network.keys())
-    initial_hypercube = _validate_initial_hypercube(components, initial)
-    base_program = _most_permissive_asp_base_program(
-        network,
-        clingo=clingo,
-        components=components,
-        initial_configuration=initial_hypercube,
-    )
-    trap_spaces = _solve_reachable_trap_spaces_literals(
-        clingo,
-        base_program=base_program,
-    )
+    component_indices = {component: index for index, component in enumerate(components)}
+    trap_spaces = _most_permissive_reachable_trap_space_literals(network, initial)
 
     return tuple(
-        ConfigurationSet(components, [_hypercube_from_fixed_literals(literals)])
-        for literals in trap_spaces
+        _configuration_set_from_fixed_literals(
+            components,
+            component_indices,
+            trap_space,
+        )
+        for trap_space in trap_spaces
+    )
+
+
+def _most_permissive_reachable_trap_spaces(
+    network: "BooleanNetwork",
+    initial: HypercubeLike,
+) -> Tuple[Hypercube, ...]:
+    """Return reachable minimal trap spaces using domain recursion."""
+
+    return tuple(
+        _hypercube_from_fixed_literals(literals)
+        for literals in _most_permissive_reachable_trap_space_literals(
+            network,
+            initial,
+        )
+    )
+
+
+def _most_permissive_reachable_trap_space_literals(
+    network: "BooleanNetwork",
+    initial: HypercubeLike,
+) -> Tuple[FrozenSet[Tuple[str, int]], ...]:
+    """Return fixed literals of reachable minimal trap spaces."""
+
+    components = tuple(network.keys())
+    initial_hypercube = _validate_initial_hypercube(components, initial)
+    if initial_hypercube:
+        base_program = _reachable_trap_spaces_asp_program(
+            network,
+            clingo=clingo,
+            components=components,
+            initial_configuration=initial_hypercube,
+        )
+    else:
+        base_program = _trap_spaces_asp_program(
+            network,
+            clingo=clingo,
+            components=components,
+        )
+    project_models = bool(initial_hypercube) and len(initial_hypercube) < len(
+        components
+    )
+    return _solve_minimal_trap_space_literals(
+        clingo,
+        base_program=base_program,
+        project=project_models,
     )
 
 
@@ -426,12 +468,17 @@ def _most_permissive_reachability_asp_program(
     """Build an ASP decision program for one-step MP reachability."""
 
     facts = ["opposite(0,1).", "opposite(1,0)."]
+    component_symbols = _asp_component_symbols(clingo, components)
 
     for component in components:
-        component_symbol = _asp_string(clingo, component)
-        facts.append(f"node({component_symbol}).")
+        facts.append(f"node({component_symbols[component]}).")
 
-    facts.extend(_boolean_function_asp_facts(network, clingo=clingo))
+    facts.extend(
+        _boolean_function_asp_facts(
+            network,
+            component_symbols=component_symbols,
+        )
+    )
 
     return "\n".join(
         [
@@ -478,7 +525,34 @@ def _validate_initial_hypercube(
     return configurations._as_hypercubes()[0]
 
 
-def _most_permissive_asp_base_program(
+def _trap_spaces_asp_program(
+    network: "BooleanNetwork",
+    *,
+    clingo: object,
+    components: Tuple[str, ...],
+) -> str:
+    """Build the ASP program for unrestricted minimal trap spaces."""
+
+    facts = ["opposite(0,1).", "opposite(1,0)."]
+    component_symbols = _asp_component_symbols(clingo, components)
+    facts.extend(f"node({component_symbols[component]})." for component in components)
+    facts.extend(
+        _boolean_function_asp_facts(
+            network,
+            component_symbols=component_symbols,
+        )
+    )
+
+    return "\n".join(
+        [
+            *facts,
+            _boolean_function_evaluation_asp_rules(),
+            _trap_space_asp_rules(),
+        ]
+    )
+
+
+def _reachable_trap_spaces_asp_program(
     network: "BooleanNetwork",
     *,
     clingo: object,
@@ -488,19 +562,25 @@ def _most_permissive_asp_base_program(
     """Build the ASP program for reachable minimal trap spaces."""
 
     facts = ["opposite(0,1).", "opposite(1,0)."]
+    component_symbols = _asp_component_symbols(clingo, components)
 
     for component in components:
-        facts.append(f"node({_asp_string(clingo, component)}).")
+        facts.append(f"node({component_symbols[component]}).")
 
     for component, value in initial_configuration.items():
         if value.is_fixed:
             facts.append(
                 "initial_fixed("
-                f"{_asp_string(clingo, component)}, {cast(int, value.value)}"
+                f"{component_symbols[component]}, {cast(int, value.value)}"
                 ")."
             )
 
-    facts.extend(_boolean_function_asp_facts(network, clingo=clingo))
+    facts.extend(
+        _boolean_function_asp_facts(
+            network,
+            component_symbols=component_symbols,
+        )
+    )
 
     return "\n".join(
         [
@@ -508,16 +588,10 @@ def _most_permissive_asp_base_program(
             _boolean_function_evaluation_asp_rules(),
             """
             timepoint(initial).
-            timepoint(final).
 
             mp_state(initial,N,V) :- initial_fixed(N,V).
             1 { mp_state(initial,N,0); mp_state(initial,N,1) } 1 :-
                 node(N), not initial_fixed(N,0), not initial_fixed(N,1).
-
-            1 { final_reach(N,0); final_reach(N,1) } 2 :- node(N).
-            mp_reach(final,N,V) :- final_reach(N,V).
-
-            final_reach(N,V) :- mp_eval(final,N,V).
 
             mp_reach(initial,N,V) :- mp_state(initial,N,V).
             mp_state(final,N,V) :- final_reach(N,V).
@@ -535,17 +609,31 @@ def _most_permissive_asp_base_program(
                opposite(V,W),
                mp_ext(N,W),
                not mp_ext(N,V).
-
-            #show final_reach/2.
             """,
+            _trap_space_asp_rules(),
         ]
     )
 
 
-def _solve_reachable_trap_spaces_literals(
+def _trap_space_asp_rules() -> str:
+    """Return closure rules shared by unrestricted and reachable trap spaces."""
+
+    return """
+        timepoint(final).
+
+        1 { final_reach(N,0); final_reach(N,1) } 2 :- node(N).
+        mp_reach(final,N,V) :- final_reach(N,V).
+        final_reach(N,V) :- mp_eval(final,N,V).
+
+        #show final_reach/2.
+    """
+
+
+def _solve_minimal_trap_space_literals(
     clingo: object,
     *,
     base_program: str,
+    project: bool,
 ) -> Tuple[FrozenSet[Tuple[str, int]], ...]:
     """Enumerate inclusion-minimal reachable trap spaces with domain recursion."""
 
@@ -554,25 +642,31 @@ def _solve_reachable_trap_spaces_literals(
         logger=lambda _code, _message: None,
     )
     control.configuration.solve.models = 0
-    control.configuration.solve.project = 1
     control.configuration.solve.enum_mode = "domRec"
     control.configuration.solver[0].heuristic = "Domain"
-    control.configuration.solver[0].dom_mod = "5,16"
+    control.configuration.solver[0].dom_mod = f"5,{16 if project else 0}"
+    if project:
+        control.configuration.solve.project = 1
     control.add("base", [], base_program)
     control.ground([("base", [])])
 
     trap_spaces = set()
     with control.solve(yield_=True) as handle:
         for model in handle:
-            reachable_values = frozenset(
-                (atom.arguments[0].string, atom.arguments[1].number)
-                for atom in model.symbols(shown=True)
-            )
+            fixed_values: Dict[str, Optional[int]] = {}
+            for atom in model.symbols(shown=True):
+                component_symbol, value_symbol = atom.arguments
+                component = component_symbol.string
+                if component in fixed_values:
+                    fixed_values[component] = None
+                else:
+                    fixed_values[component] = value_symbol.number
+
             trap_spaces.add(
                 frozenset(
                     (component, value)
-                    for component, value in reachable_values
-                    if (component, 1 - value) not in reachable_values
+                    for component, value in fixed_values.items()
+                    if value is not None
                 )
             )
 
@@ -585,6 +679,27 @@ def _hypercube_from_fixed_literals(
     """Build a hypercube from fixed component-value literals."""
 
     return Hypercube(dict(sorted(literals)))
+
+
+def _configuration_set_from_fixed_literals(
+    components: Tuple[str, ...],
+    component_indices: Dict[str, int],
+    literals: FrozenSet[Tuple[str, int]],
+) -> ConfigurationSet:
+    """Build a configuration set directly from fixed-literal bitsets."""
+
+    fixed_mask = 0
+    value_mask = 0
+    for component, value in literals:
+        bit = 1 << component_indices[component]
+        fixed_mask |= bit
+        if value == 1:
+            value_mask |= bit
+
+    return ConfigurationSet._from_encoded_hypercubes(
+        components,
+        [(fixed_mask, value_mask)],
+    )
 
 
 def _fixed_literals_sort_key(
@@ -728,21 +843,21 @@ def _rule_can_take_value_in_hypercube(
 def _boolean_function_asp_facts(
     network: "BooleanNetwork",
     *,
-    clingo: object,
+    component_symbols: Dict[str, str],
 ) -> List[str]:
     """Encode unate rules as DNF and non-unate rules as exact ROBDDs."""
 
     facts = []
 
     for target, rule in network.items():
-        target_symbol = _asp_string(clingo, target)
+        target_symbol = component_symbols[target]
         if _expression_is_unate(network, rule):
             facts.append(f"unate({target_symbol}).")
             facts.extend(
                 _positive_dnf_asp_facts(
                     network,
                     target=target,
-                    clingo=clingo,
+                    component_symbols=component_symbols,
                 )
             )
         else:
@@ -750,7 +865,7 @@ def _boolean_function_asp_facts(
                 _non_unate_bdd_asp_facts(
                     network,
                     target=target,
-                    clingo=clingo,
+                    component_symbols=component_symbols,
                 )
             )
 
@@ -805,6 +920,15 @@ def _asp_string(clingo: object, value: str) -> str:
     return str(clingo.String(value))  # pyright: ignore[reportAttributeAccessIssue]
 
 
+def _asp_component_symbols(
+    clingo: object,
+    components: Tuple[str, ...],
+) -> Dict[str, str]:
+    """Encode component names once for reuse across ASP facts."""
+
+    return {component: _asp_string(clingo, component) for component in components}
+
+
 def _expression_is_unate(network: "BooleanNetwork", rule: Any) -> bool:
     """Return whether every symbol occurs with only one polarity."""
 
@@ -827,28 +951,31 @@ def _positive_dnf_asp_facts(
     network: "BooleanNetwork",
     *,
     target: str,
-    clingo: object,
+    component_symbols: Dict[str, str],
 ) -> List[str]:
     """Encode positive DNF clauses for one unate function."""
 
-    target_symbol = _asp_string(clingo, target)
+    target_symbol = component_symbols[target]
     facts = []
+    clauses = sorted(
+        (
+            tuple(sorted(clause))
+            for clause in _dnf_clauses(
+                network.ba,
+                network[target].literalize(),
+            )
+        ),
+        key=lambda clause: (len(clause), clause),
+    )
 
-    for clause_id, implicant in enumerate(
-        dnf_implicants(network[target], value=1, ba=network.ba)
-    ):
+    for clause_id, clause in enumerate(clauses):
         facts.append(f"positive_clause({target_symbol}, {clause_id}).")
-        for source, source_value in implicant.items():
-            if not source_value.is_fixed:
-                raise ValueError(
-                    f"invalid DNF implicant with free component {source!r}"
-                )
-
+        for source, source_value in clause:
             facts.append(
                 "positive_clause_literal("
                 f"{target_symbol}, {clause_id}, "
-                f"{_asp_string(clingo, source)}, "
-                f"{cast(int, source_value.value)}"
+                f"{component_symbols[source]}, "
+                f"{source_value}"
                 ")."
             )
 
@@ -859,13 +986,13 @@ def _non_unate_bdd_asp_facts(
     network: "BooleanNetwork",
     *,
     target: str,
-    clingo: object,
+    component_symbols: Dict[str, str],
 ) -> List[str]:
     """Encode one non-unate Boolean function as a reduced ordered BDD."""
 
     rule = network[target]
     robdd = ROBDD._from_rule(rule, ba=network.ba)
-    target_symbol = _asp_string(clingo, target)
+    target_symbol = component_symbols[target]
     facts = [
         f"non_unate({target_symbol}).",
         f"bdd_root({target_symbol}, {robdd._root_id}).",
@@ -874,7 +1001,7 @@ def _non_unate_bdd_asp_facts(
     for node, source, low, high in robdd._iter_nodes():
         facts.append(
             "bdd_node("
-            f"{target_symbol}, {node}, {_asp_string(clingo, source)}, "
+            f"{target_symbol}, {node}, {component_symbols[source]}, "
             f"{low}, {high}"
             ")."
         )

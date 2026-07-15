@@ -25,7 +25,6 @@ from typing import (
     overload,
 )
 
-import clingo
 from boolean.boolean import (
     _FALSE,
     _TRUE,
@@ -78,6 +77,7 @@ from ._most_permissive import (
     _most_permissive_reachability,
     _most_permissive_reachable_attractors,
     _most_permissive_reachable_configurations,
+    _most_permissive_reachable_trap_spaces,
     _smallest_closed_hypercube,
 )
 from ._symbolic import SymbolicTransitionSystem
@@ -1140,7 +1140,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         self.validate()
 
-        return self._minimal_trap_spaces_with_asp()
+        return _most_permissive_reachable_trap_spaces(self, {})
 
     def principal_trap_space(
         self,
@@ -1826,164 +1826,6 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return "\n".join(lines) + "\n"
 
-    def _minimal_trap_spaces_with_asp(self) -> Tuple[Hypercube, ...]:
-
-        components = tuple(sorted(self.components))
-        component_indices = {
-            component: index for index, component in enumerate(components)
-        }
-        base_program = self._trap_space_asp_base_program(
-            components=components,
-            component_indices=component_indices,
-        )
-
-        blockers: List[FrozenSet[Tuple[int, int]]] = []
-        trap_spaces: Set[FrozenSet[Tuple[int, int]]] = set()
-
-        while True:
-            literals = self._solve_maximal_trap_space_literals(
-                clingo,
-                base_program=base_program,
-                blockers=blockers,
-                n_components=len(components),
-            )
-
-            if literals is None:
-                break
-
-            if literals in trap_spaces:
-                break
-
-            trap_spaces.add(literals)
-            blockers.append(literals)
-
-        return tuple(
-            Hypercube({components[index]: value for index, value in sorted(literals)})
-            for literals in sorted(trap_spaces, key=self._trap_space_sort_key)
-        )
-
-    def _trap_space_asp_base_program(
-        self,
-        components: Tuple[str, ...],
-        component_indices: Mapping[str, int],
-    ) -> str:
-
-        facts = [f"component({index})." for index in range(len(components))]
-        implicant_id = 0
-
-        for target, rule in self.items():
-            target_index = component_indices[target]
-
-            for value in (0, 1):
-                for implicant in prime_implicants(
-                    rule,
-                    value=value,
-                    ba=self.ba,
-                ):
-                    facts.append(f"implicant({target_index}, {value}, {implicant_id}).")
-
-                    for source, source_value in implicant.items():
-                        if not source_value.is_fixed:
-                            raise ValueError(
-                                "invalid prime implicant with free component "
-                                f"{source!r}"
-                            )
-
-                        facts.append(
-                            "implicant_literal("
-                            f"{target_index}, {value}, {implicant_id}, "
-                            f"{component_indices[source]}, {source_value.value}"
-                            ")."
-                        )
-
-                    implicant_id += 1
-
-        return "\n".join(
-            [
-                *facts,
-                """
-                { fixed(I, 0); fixed(I, 1) } :- component(I).
-                :- fixed(I, 0), fixed(I, 1).
-
-                missing_literal(I, V, P) :-
-                    implicant_literal(I, V, P, J, W), not fixed(J, W).
-                supported(I, V) :-
-                    implicant(I, V, P), not missing_literal(I, V, P).
-                :- fixed(I, V), not supported(I, V).
-
-                #maximize { 1,I,V : fixed(I, V) }.
-                #show fixed/2.
-                """,
-            ]
-        )
-
-    def _solve_maximal_trap_space_literals(
-        self,
-        clingo: Any,
-        *,
-        base_program: str,
-        blockers: List[FrozenSet[Tuple[int, int]]],
-        n_components: int,
-    ) -> Optional[FrozenSet[Tuple[int, int]]]:
-
-        program = "\n".join(
-            [
-                base_program,
-                self._trap_space_blocker_program(
-                    blockers,
-                    n_components=n_components,
-                ),
-            ]
-        )
-
-        control = clingo.Control(
-            ["--opt-mode=opt", "--opt-strategy=usc", "--warn=none"]
-        )
-        control.add("base", [], program)
-        control.ground([("base", [])])
-
-        optimal_literals = None
-        with control.solve(yield_=True) as handle:
-            for model in handle:
-                optimal_literals = frozenset(
-                    (atom.arguments[0].number, atom.arguments[1].number)
-                    for atom in model.symbols(shown=True)
-                )
-
-        if optimal_literals is None:
-            return None
-
-        return optimal_literals
-
-    def _trap_space_blocker_program(
-        self,
-        blockers: List[FrozenSet[Tuple[int, int]]],
-        *,
-        n_components: int,
-    ) -> str:
-
-        lines = []
-
-        for blocker_id, literals in enumerate(blockers):
-            lines.append(f"blocker({blocker_id}).")
-
-            for component in range(n_components):
-                for value in (0, 1):
-                    if (component, value) not in literals:
-                        lines.append(
-                            f"outside_literal({blocker_id}, {component}, {value})."
-                        )
-
-        if blockers:
-            lines.extend(
-                [
-                    "outside(B) :- outside_literal(B, I, V), fixed(I, V).",
-                    ":- blocker(B), not outside(B).",
-                ]
-            )
-
-        return "\n".join(lines)
-
     def _normalize_configuration(
         self,
         configuration: ConfigurationLike,
@@ -2108,13 +1950,6 @@ class BooleanNetwork(Dict[str, Expression]):
             )
 
         return int(value)
-
-    @staticmethod
-    def _trap_space_sort_key(
-        literals: FrozenSet[Tuple[int, int]],
-    ) -> Tuple[int, Tuple[Tuple[int, int], ...]]:
-
-        return len(literals), tuple(sorted(literals))
 
 
 class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):

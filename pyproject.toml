@@ -53,7 +53,8 @@ dependencies = [
     "anndata>=0.8",
     "boolean.py>=4.0",
     "clingo>=5.6",
-    "dd>=0.5.7,<0.6; python_version < '3.11'",
+    "dd>=0.5.7,<0.6; python_version < '3.11' and python_version != '3.9'",
+    "dd==0.5.6; python_version == '3.9'",
     "dd>=0.6; python_version >= '3.11'",
 ]
 keywords = [

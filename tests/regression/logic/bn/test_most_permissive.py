@@ -67,6 +67,22 @@ def test_boolean_network_trap_spaces_universal_when_no_fixed_subspace():
     assert bn.trap_spaces() == (bt.logic.ba.Hypercube({}),)
 
 
+def test_boolean_network_trap_spaces_match_unrestricted_mp_attractors():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "A",
+            "B": "A | ~B",
+        }
+    )
+
+    trap_space_attractors = tuple(
+        bt.logic.ba.ConfigurationSet(tuple(bn), [trap_space])
+        for trap_space in bn.trap_spaces()
+    )
+
+    assert trap_space_attractors == bn.attractors(update="most-permissive")
+
+
 def test_boolean_network_trap_spaces_rejects_invalid_kind():
     bn = bt.logic.bn.BooleanNetwork({"A": 1})
 

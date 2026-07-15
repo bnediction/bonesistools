@@ -378,9 +378,14 @@ class ConfigurationSet:
         components: Iterable[str],
         hypercubes: Iterable[_EncodedHypercube],
     ) -> "ConfigurationSet":
-        """Build a set from an exact disjoint encoded representation."""
+        """Build a set from a trusted exact disjoint encoded representation."""
 
-        configurations = cls(components)
+        resolved_components = tuple(components)
+        configurations = cls.__new__(cls)
+        configurations._components = resolved_components
+        configurations._component_to_index = {
+            component: index for index, component in enumerate(resolved_components)
+        }
         configurations._hypercubes = list(hypercubes)
 
         return configurations
