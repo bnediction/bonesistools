@@ -169,6 +169,32 @@ rule = ba.parse("A & B | A & C")
 bt.logic.ba.prime_implicants(rule)
 ```
 
+### Equivalence and Simplification
+
+`equivalence(...)` tests exact logical equivalence between two Boolean
+expressions. Boolean-network equality applies the same comparison to every
+component rule:
+
+```python
+bn1 = bt.logic.bn.BooleanNetwork({"A": "B | (B & C)", "B": 0, "C": 1})
+bn2 = bt.logic.bn.BooleanNetwork({"A": "B", "B": 0, "C": 1})
+
+bn1 == bn2
+# True
+```
+
+Rules retain their supplied structure on construction. Use `simplify()` to
+simplify them explicitly in place, either on one network or across an ensemble:
+
+```python
+bn1.simplify()
+bn1.rules
+# {"A": "B", "B": "0", "C": "1"}
+
+ensemble = bt.logic.bn.BooleanNetworkEnsemble(bn1, bn2)
+ensemble.simplify()
+```
+
 ### Reduced Ordered Binary Decision Diagrams
 
 `ROBDD` represents one scalar Boolean function with a canonical reduced

@@ -225,20 +225,7 @@ def test_boolean_network_typing_namespace_is_not_exposed_publicly():
         getattr(bt.logic.bn, "typing")
 
 
-def test_boolean_network_to_bnet_returns_string():
-
-    bn = bt.logic.bn.BooleanNetwork(
-        {
-            "A": "B & ~C",
-            "B": 0,
-            "C": 1,
-        }
-    )
-
-    assert bn.to_bnet() == "A, B&!C\nB, 0\nC, 1\n"
-
-
-def test_boolean_network_convert_to_mpbn():
+def test_boolean_network_to_mpbn():
     mpbn = pytest.importorskip("mpbn")
 
     bn = bt.logic.bn.BooleanNetwork(
@@ -249,13 +236,13 @@ def test_boolean_network_convert_to_mpbn():
         }
     )
 
-    converted = bn.convert("mpbn")
+    converted = bn.to_mpbn()
 
     assert isinstance(converted, mpbn.MPBooleanNetwork)
     assert set(converted) == {"A", "B", "C"}
 
 
-def test_boolean_network_convert_to_biolqm_supports_model_analysis():
+def test_boolean_network_to_biolqm_supports_model_analysis():
     biolqm = pytest.importorskip("biolqm")
 
     bn = bt.logic.bn.BooleanNetwork(
@@ -266,14 +253,14 @@ def test_boolean_network_convert_to_biolqm_supports_model_analysis():
         }
     )
 
-    converted = bn.convert("biolqm")
+    converted = bn.to_biolqm()
     fixpoints = biolqm.fixpoints(converted)
 
     assert len(fixpoints) == 1
     assert dict(fixpoints[0]) == {"A": 0, "B": 0, "C": 1}
 
 
-def test_boolean_network_convert_to_pyboolnet_uses_prime_implicants():
+def test_boolean_network_to_pyboolnet_uses_prime_implicants():
     bn = bt.logic.bn.BooleanNetwork(
         {
             "A": "B & ~C",
@@ -282,7 +269,7 @@ def test_boolean_network_convert_to_pyboolnet_uses_prime_implicants():
         }
     )
 
-    assert bn.convert("pyboolnet") == {
+    assert bn.to_pyboolnet() == {
         "A": [
             [{"B": 0}, {"C": 1}],
             [{"B": 1, "C": 0}],
@@ -292,7 +279,7 @@ def test_boolean_network_convert_to_pyboolnet_uses_prime_implicants():
     }
 
 
-def test_boolean_network_convert_to_pyboolnet_matches_pyboolnet_primes():
+def test_boolean_network_to_pyboolnet_matches_pyboolnet_primes(tmp_path):
     file_exchange = pytest.importorskip("pyboolnet.file_exchange")
     pyboolnet_primes = pytest.importorskip("pyboolnet.prime_implicants")
     bn = bt.logic.bn.BooleanNetwork(
@@ -304,13 +291,16 @@ def test_boolean_network_convert_to_pyboolnet_matches_pyboolnet_primes():
         }
     )
 
-    converted = bn.convert("pyboolnet")
-    expected = file_exchange.bnet2primes(cast(str, bn.to_bnet()))
+    file = tmp_path / "network.bnet"
+    bn.save(file)
+
+    converted = bn.to_pyboolnet()
+    expected = file_exchange.bnet2primes(file.read_text())
 
     assert pyboolnet_primes.primes_are_equal(converted, expected)
 
 
-def test_boolean_network_convert_to_minibn():
+def test_boolean_network_to_minibn():
     minibn = pytest.importorskip("colomoto.minibn")
 
     bn = bt.logic.bn.BooleanNetwork(
@@ -321,23 +311,23 @@ def test_boolean_network_convert_to_minibn():
         }
     )
 
-    converted = bn.convert("minibn")
+    converted = bn.to_minibn()
 
     assert isinstance(converted, minibn.BooleanNetwork)
     assert set(converted) == {"A", "B", "C"}
 
 
-def test_boolean_network_convert_validates_target():
-    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+def test_boolean_network_simplify_reduces_rules_in_place():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "B | (B & C)",
+            "B": "C & 1",
+            "C": "~~C",
+        }
+    )
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'target'"):
-        bn.convert(cast(Any, 1))
-
-    with pytest.raises(ValueError, match="unsupported conversion target"):
-        bn.convert(cast(Any, "unknown"))
-
-    with pytest.raises(ValueError, match="unsupported conversion target"):
-        bn.convert("minibn.BooleanNetwork")
+    assert bn.simplify() is None
+    assert bn.rules == {"A": "B", "B": "C", "C": "C"}
 
 
 def test_boolean_network_rename_validates_inputs_and_collisions():
@@ -424,13 +414,32 @@ def test_boolean_network_relabel_validates_mapping():
     assert bn.rules == {"A": "B", "B": "1"}
 
 
-def test_boolean_network_to_bnet_file(tmp_path):
+def test_boolean_network_save_bnet(tmp_path):
     outfile = tmp_path / "roundtrip.bnet"
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
 
     assert bn.rules == {"A": "B", "B": "1"}
-    assert bn.to_bnet(outfile) is None
+    assert bn.save(outfile) is None
     assert outfile.read_text() == "A, B\nB, 1\n"
+
+
+def test_boolean_network_save_supports_explicit_bnet_format(tmp_path):
+    outfile = tmp_path / "network.txt"
+    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+
+    bn.save(outfile, format="bnet")
+
+    assert outfile.read_text() == "A, 1\n"
+
+
+def test_boolean_network_save_validates_format(tmp_path):
+    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+
+    with pytest.raises(ValueError, match="cannot infer Boolean network format"):
+        bn.save(tmp_path / "network.txt")
+
+    with pytest.raises(ValueError, match="invalid argument value for 'format'"):
+        bn.save(tmp_path / "network.bnet", format=cast(Any, "unknown"))
 
 
 def test_deprecated_read_bnet_routes_to_io(tmp_path):
@@ -443,7 +452,7 @@ def test_deprecated_read_bnet_routes_to_io(tmp_path):
     assert bn.rules == bt.logic.io.read_bnet(infile).rules
 
 
-def test_boolean_network_structural_equality():
+def test_boolean_network_exact_logical_equality():
 
     bn1 = bt.logic.bn.BooleanNetwork(
         {
@@ -464,7 +473,7 @@ def test_boolean_network_structural_equality():
     assert bn1 == bn2
 
 
-def test_boolean_network_structural_inequality():
+def test_boolean_network_inequality_requires_same_components():
 
     bn1 = bt.logic.bn.BooleanNetwork(
         {
@@ -486,7 +495,7 @@ def test_boolean_network_structural_inequality():
     assert bn1.__ne__(object()) is NotImplemented
 
 
-def test_boolean_network_equivalence_truth_table_only():
+def test_boolean_network_detects_semantic_equivalence():
 
     bn1 = bt.logic.bn.BooleanNetwork(
         {
@@ -506,11 +515,10 @@ def test_boolean_network_equivalence_truth_table_only():
         }
     )
 
-    assert not bn1.equivalent(bn2, method="simplify")
-    assert bn1.equivalent(bn2, method="truth_table")
+    assert bn1 == bn2
 
 
-def test_boolean_network_not_equivalent_truth_table():
+def test_boolean_network_detects_nonequivalence():
 
     bn1 = bt.logic.bn.BooleanNetwork(
         {
@@ -528,7 +536,7 @@ def test_boolean_network_not_equivalent_truth_table():
         }
     )
 
-    assert not bn1.equivalent(bn2, method="truth_table")
+    assert bn1 != bn2
 
 
 def test_boolean_network_equivalence_requires_same_components():
@@ -536,16 +544,7 @@ def test_boolean_network_equivalence_requires_same_components():
     bn1 = bt.logic.bn.BooleanNetwork({"A": 1})
     bn2 = bt.logic.bn.BooleanNetwork({"A": 1, "B": 0})
 
-    assert not bn1.equivalent(bn2)
-    assert bn1.equivalent(object()) is NotImplemented
-
-
-def test_boolean_network_equivalence_rejects_unknown_method():
-
-    bn = bt.logic.bn.BooleanNetwork({"A": 1})
-
-    with pytest.raises(ValueError):
-        bn.equivalent(bn, method=cast(Any, "unknown"))
+    assert bn1 != bn2
 
 
 def test_boolean_network_influences():

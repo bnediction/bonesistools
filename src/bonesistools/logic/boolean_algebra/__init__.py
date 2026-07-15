@@ -29,7 +29,7 @@ from ._representation import rule_to_string
 from ._robdd import ROBDD
 from ._structure import (
     dnf_implicants,
-    expressions_equivalent,
+    equivalence,
     prime_implicants,
 )
 
@@ -44,7 +44,7 @@ __all__ = [
     "diff",
     "meet",
     "join",
-    "expressions_equivalent",
+    "equivalence",
     "dnf_implicants",
     "prime_implicants",
     "rule_to_string",

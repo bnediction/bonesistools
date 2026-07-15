@@ -263,6 +263,72 @@ def test_boolean_network_attractors_bdd_matches_explicit(update):
     assert _canonical_attractors(bdd) == _canonical_attractors(explicit)
 
 
+def test_asynchronous_transition_guided_reduction_removes_transient_states():
+    pytest.importorskip("dd.autoref")
+    components = tuple(f"x{index}" for index in range(8))
+    bn = bt.logic.bn.BooleanNetwork({component: 0 for component in components})
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="asynchronous",
+    )
+    all_states = transition_system._encode_hypercube(bt.logic.ba.Hypercube())
+
+    candidates = transition_system._transition_guided_reduction(all_states)
+
+    assert transition_system._bdd.count(candidates, nvars=len(components)) == 1
+    assert transition_system._decode_configuration_set(candidates).enumerate() == (
+        {component: 0 for component in components},
+    )
+
+
+def test_xie_beerel_rejects_terminal_component_of_non_closed_candidate_set():
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork({"A": 1})
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="asynchronous",
+    )
+    transient_candidate = transition_system._encode_hypercube(
+        bt.logic.ba.Hypercube({"A": 0})
+    )
+
+    components = transition_system._xie_beerel_terminal_sccs(transient_candidate)
+
+    assert components == ()
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        {"A": "B", "B": "A", "C": "~C", "D": "A | C"},
+        {"A": 1, "B": "A", "C": "B", "D": "C"},
+        {"A": "~B", "B": "~A", "C": "A & B", "D": "C | D"},
+    ],
+)
+def test_transition_guided_asynchronous_attractors_match_explicit(rules):
+    pytest.importorskip("dd.autoref")
+    bn = bt.logic.bn.BooleanNetwork(rules)
+    components = tuple(bn.keys())
+    initial_configurations = bt.logic.ba.ConfigurationSet(components, [{}])
+    transition_system = _dynamics._BDDTransitionSystem(
+        bn,
+        update="asynchronous",
+    )
+    all_states = transition_system._encode_configurations(initial_configurations)
+    candidates = transition_system._transition_guided_reduction(all_states)
+    symbolic = tuple(
+        transition_system._decode_configuration_set(component)
+        for component in transition_system._xie_beerel_terminal_sccs(candidates)
+    )
+    explicit = _dynamics._explicit_reachable_attractors(
+        bn,
+        initial_configurations,
+        update="asynchronous",
+    )
+
+    assert _canonical_attractors(symbolic) == _canonical_attractors(explicit)
+
+
 def test_synchronous_explicit_attractors_consume_encoded_states(monkeypatch):
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
 

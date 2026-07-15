@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib import import_module
 from importlib.util import find_spec
 from typing import (
@@ -16,6 +17,7 @@ from typing import (
     Mapping,
     Set,
     Tuple,
+    Union,
 )
 
 from ..._compat import Literal
@@ -231,6 +233,13 @@ class _BDDTransitionSystem:
                 for cycle in self._synchronous_terminal_cycles(reachable)
             )
 
+        if self._update == "asynchronous":
+            candidates = self._transition_guided_reduction(reachable)
+            return tuple(
+                self._decode_configuration_set(component)
+                for component in self._xie_beerel_terminal_sccs(candidates)
+            )
+
         return tuple(
             self._decode_configuration_set(component)
             for component in self._terminal_sccs(reachable)
@@ -370,6 +379,271 @@ class _BDDTransitionSystem:
             if updated == recurrent:
                 return recurrent
             recurrent = updated
+
+    def _transition_guided_reduction(self, states: Any) -> Any:
+        """
+        Remove states that cannot belong to asynchronous terminal SCCs.
+
+        This implements interleaved transition-guided reduction [1]. Each
+        asynchronous component update is treated as one transition label.
+
+        References
+        ----------
+        [1] Benes et al. (2021). Computing bottom SCCs symbolically using
+        transition guided reduction. CAV 2021, 505-528.
+        """
+
+        remaining = states
+        reductions: List[_TransitionGuidedReduction] = []
+        for transition_index, transition in enumerate(self._disjunctive_transitions):
+            forward = self._transition_sources(transition, remaining)
+            if forward != self._bdd.false:
+                reductions.append(
+                    _ForwardReduction(
+                        transition_index=transition_index,
+                        forward=forward,
+                    )
+                )
+
+        to_discard = self._bdd.false
+        while reductions:
+            if to_discard != self._bdd.false:
+                remaining &= ~to_discard
+                for reduction in reductions:
+                    _restrict_transition_guided_reduction(reduction, remaining)
+                to_discard = self._bdd.false
+
+            if not isinstance(
+                reductions[-1],
+                (_ForwardBasinReduction, _BottomBasinReduction),
+            ):
+                reductions.sort(
+                    key=_transition_guided_reduction_size,
+                    reverse=True,
+                )
+
+            reduction = reductions[-1]
+            if isinstance(reduction, _ForwardReduction):
+                successors = self._saturation_successors(
+                    reduction.forward,
+                    within=remaining,
+                )
+                if successors != self._bdd.false:
+                    reduction.forward |= successors
+                    continue
+
+                reductions.pop()
+                transition = self._disjunctive_transitions[reduction.transition_index]
+                reductions.append(
+                    _ExtendedComponentReduction(
+                        transition_index=reduction.transition_index,
+                        forward=reduction.forward,
+                        extended_component=self._transition_sources(
+                            transition,
+                            remaining,
+                        ),
+                    )
+                )
+                if remaining & ~reduction.forward != self._bdd.false:
+                    reductions.append(
+                        _ForwardBasinReduction(
+                            forward=reduction.forward,
+                            basin=reduction.forward,
+                        )
+                    )
+                continue
+
+            if isinstance(reduction, _ExtendedComponentReduction):
+                predecessors = self._saturation_predecessors(
+                    reduction.extended_component,
+                    within=reduction.forward,
+                )
+                if predecessors != self._bdd.false:
+                    reduction.extended_component |= predecessors
+                    continue
+
+                reductions.pop()
+                bottom = reduction.forward & ~reduction.extended_component
+                transition = self._disjunctive_transitions[reduction.transition_index]
+                escaping = self._transition_sources_outside(
+                    transition,
+                    remaining,
+                )
+                if bottom != self._bdd.false or escaping != self._bdd.false:
+                    reductions.append(
+                        _BottomBasinReduction(
+                            bottom=bottom,
+                            basin=bottom | escaping,
+                        )
+                    )
+                continue
+
+            if isinstance(reduction, _ForwardBasinReduction):
+                predecessors = self._saturation_predecessors(
+                    reduction.basin,
+                    within=remaining,
+                )
+                if predecessors != self._bdd.false:
+                    reduction.basin |= predecessors
+                    continue
+
+                reductions.pop()
+                to_discard = reduction.basin & ~reduction.forward
+                continue
+
+            predecessors = self._saturation_predecessors(
+                reduction.basin,
+                within=remaining,
+            )
+            if predecessors != self._bdd.false:
+                reduction.basin |= predecessors
+                continue
+
+            reductions.pop()
+            to_discard = reduction.basin & ~reduction.bottom
+
+        if to_discard != self._bdd.false:
+            remaining &= ~to_discard
+
+        return remaining
+
+    def _xie_beerel_terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+        """
+        Extract global terminal SCCs from a reduced candidate state set.
+
+        The search follows the symbolic bottom-SCC procedure of Xie and Beerel
+        [1]. Successors are evaluated against the original transition relation
+        because transition-guided reduction does not return a closed set.
+
+        References
+        ----------
+        [1] Xie and Beerel (2000). Implicit enumeration of strongly connected
+        components and an application to formal verification. IEEE
+        Transactions on Computer-Aided Design of Integrated Circuits and
+        Systems, 19(10), 1225-1230.
+        """
+
+        remaining = states
+        pivot_hint = self._bdd.false
+        terminal_components = []
+
+        while remaining != self._bdd.false:
+            hinted_states = pivot_hint & remaining
+            pivot_hint = self._bdd.false
+            pivot = self._pick_state(
+                hinted_states if hinted_states != self._bdd.false else remaining
+            )
+            basin = self._saturated_backward_reachable_states(
+                pivot,
+                within=remaining,
+            )
+            component = pivot
+
+            while True:
+                successors = self._saturation_successors(component)
+                if successors == self._bdd.false:
+                    terminal_components.append(component)
+                    break
+
+                component |= successors
+                escaped = successors & ~basin
+                if escaped != self._bdd.false:
+                    pivot_hint = escaped
+                    break
+
+            remaining &= ~basin
+
+        return tuple(terminal_components)
+
+    def _saturated_backward_reachable_states(
+        self,
+        initial: Any,
+        *,
+        within: Any,
+    ) -> Any:
+        """Compute backward reachability one transition label at a time."""
+
+        reachable = initial
+        while True:
+            predecessors = self._saturation_predecessors(
+                reachable,
+                within=within,
+            )
+            if predecessors == self._bdd.false:
+                return reachable
+            reachable |= predecessors
+
+    def _saturation_successors(self, states: Any, within: Any = None) -> Any:
+        """Return new successors for the first productive transition label."""
+
+        for transition in reversed(self._disjunctive_transitions):
+            successors = self._partition_successors(states, transition)
+            if within is not None:
+                successors &= within
+            successors &= ~states
+            if successors != self._bdd.false:
+                return successors
+
+        return self._bdd.false
+
+    def _saturation_predecessors(self, states: Any, *, within: Any) -> Any:
+        """Return new predecessors for the first productive transition label."""
+
+        for transition in reversed(self._disjunctive_transitions):
+            predecessors = self._partition_predecessors(states, transition)
+            predecessors &= within & ~states
+            if predecessors != self._bdd.false:
+                return predecessors
+
+        return self._bdd.false
+
+    def _transition_sources(self, transition: Any, states: Any) -> Any:
+        """Return states enabling one labelled asynchronous transition."""
+
+        return self._relational_product(
+            states,
+            transition,
+            self._next_variables,
+        )
+
+    def _transition_sources_outside(self, transition: Any, states: Any) -> Any:
+        """Return sources whose labelled transition leaves a state set."""
+
+        states_next = self._bdd.let(
+            self._rename_current_to_next,
+            states,
+        )
+        return self._relational_product(
+            transition & states,
+            ~states_next,
+            self._next_variables,
+        )
+
+    def _partition_successors(self, states: Any, transition: Any) -> Any:
+        """Return successors through one asynchronous transition partition."""
+
+        successors = self._relational_product(
+            states,
+            transition,
+            self._current_variables,
+        )
+        return self._bdd.let(
+            self._rename_next_to_current,
+            successors,
+        )
+
+    def _partition_predecessors(self, states: Any, transition: Any) -> Any:
+        """Return predecessors through one asynchronous transition partition."""
+
+        states_next = self._bdd.let(
+            self._rename_current_to_next,
+            states,
+        )
+        return self._relational_product(
+            transition,
+            states_next,
+            self._next_variables,
+        )
 
     def _terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
         """Extract terminal SCCs while keeping state regions symbolic."""
@@ -649,6 +923,78 @@ class _BDDTransitionSystem:
             decoded.append(configuration_bits)
 
         return tuple(decoded)
+
+
+@dataclass
+class _ForwardReduction:
+    """Forward reachability task for one transition label."""
+
+    transition_index: int
+    forward: Any
+
+
+@dataclass
+class _ExtendedComponentReduction:
+    """Backward extended-component task within a forward set."""
+
+    transition_index: int
+    forward: Any
+    extended_component: Any
+
+
+@dataclass
+class _ForwardBasinReduction:
+    """Backward basin task used to discard states before a forward set."""
+
+    forward: Any
+    basin: Any
+
+
+@dataclass
+class _BottomBasinReduction:
+    """Backward basin task used to discard states outside a bottom set."""
+
+    bottom: Any
+    basin: Any
+
+
+_TransitionGuidedReduction = Union[
+    _ForwardReduction,
+    _ExtendedComponentReduction,
+    _ForwardBasinReduction,
+    _BottomBasinReduction,
+]
+
+
+def _transition_guided_reduction_size(
+    reduction: _TransitionGuidedReduction,
+) -> int:
+    """Return the BDD size currently driving one reduction task."""
+
+    if isinstance(reduction, _ForwardReduction):
+        return len(reduction.forward)
+    if isinstance(reduction, _ExtendedComponentReduction):
+        return len(reduction.extended_component)
+    return len(reduction.basin)
+
+
+def _restrict_transition_guided_reduction(
+    reduction: _TransitionGuidedReduction,
+    states: Any,
+) -> None:
+    """Restrict all state sets held by a reduction task in place."""
+
+    if isinstance(reduction, _ForwardReduction):
+        reduction.forward &= states
+    elif isinstance(reduction, _ExtendedComponentReduction):
+        reduction.forward &= states
+        reduction.extended_component &= states
+    elif isinstance(reduction, _ForwardBasinReduction):
+        reduction.forward &= states
+        reduction.basin &= states
+    else:
+        reduction.bottom &= states
+        reduction.basin &= states
 
 
 def _automatic_reachable_attractors_backend(

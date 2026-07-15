@@ -118,4 +118,4 @@ def read_bnet_directory(
 
     bns = [read_bnet(file, ba=ba, check=check) for file in files]
 
-    return BooleanNetworkEnsemble(bns=bns)
+    return BooleanNetworkEnsemble(*bns)

@@ -9,26 +9,83 @@ import bonesistools as bt
 from bonesistools.logic.boolean_algebra import _structure
 
 
-def test_expressions_equivalent_asp_detects_equivalence():
+def test_equivalence_detects_equivalence():
     ba = BooleanAlgebra()
 
-    assert bt.logic.ba.expressions_equivalent(
+    assert bt.logic.ba.equivalence(
         ba.parse("(B & C) | (~B & D) | (C & D)"),
         ba.parse("(B & C) | (~B & D)"),
-        method="asp",
         ba=ba,
     )
 
 
-def test_expressions_equivalent_asp_detects_nonequivalence():
+def test_equivalence_detects_nonequivalence():
     ba = BooleanAlgebra()
 
-    assert not bt.logic.ba.expressions_equivalent(
+    assert not bt.logic.ba.equivalence(
         ba.parse("B & C"),
         ba.parse("B | C"),
-        method="asp",
         ba=ba,
     )
+
+
+def test_equivalence_uses_bitsets_for_small_rules(monkeypatch):
+    ba = BooleanAlgebra()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("truth-table equivalence must not substitute assignments")
+
+    monkeypatch.setattr(_structure, "_eval_as_bool", fail_if_called)
+
+    assert bt.logic.ba.equivalence(
+        ba.parse("(B & C) | (!B & D) | (C & D)"),
+        ba.parse("(B & C) | (!B & D)"),
+        ba=ba,
+    )
+
+
+def test_equivalence_skips_exact_check_for_structural_equality(
+    monkeypatch,
+):
+    ba = BooleanAlgebra()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("structural equality must not invoke ASP")
+
+    monkeypatch.setattr(
+        _structure,
+        "_equivalence_with_bitsets",
+        fail_if_called,
+    )
+    monkeypatch.setattr(
+        _structure,
+        "_equivalence_with_asp",
+        fail_if_called,
+    )
+
+    assert bt.logic.ba.equivalence(
+        ba.parse("A & B"),
+        ba.parse("B & A"),
+        ba=ba,
+    )
+
+
+def test_equivalence_uses_asp_for_large_rules(monkeypatch):
+    ba = BooleanAlgebra()
+    extra = " & ".join(f"X{index}" for index in range(13))
+    expr1 = ba.parse(f"((A & B) | (!A & C) | (B & C)) & ({extra})")
+    expr2 = ba.parse(f"((A & B) | (!A & C)) & ({extra})")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("large equivalence checks must not use bitsets")
+
+    monkeypatch.setattr(
+        _structure,
+        "_equivalence_with_bitsets",
+        fail_if_called,
+    )
+
+    assert bt.logic.ba.equivalence(expr1, expr2, ba=ba)
 
 
 def test_dnf_implicants_conjunction():

@@ -23,7 +23,7 @@ from bonesistools.logic.boolean_algebra._structure import (
     dnf_implicants as dnf_implicants,
 )
 from bonesistools.logic.boolean_algebra._structure import (
-    expressions_equivalent as expressions_equivalent,
+    equivalence as equivalence,
 )
 from bonesistools.logic.boolean_algebra._structure import (
     prime_implicants as prime_implicants,
@@ -40,7 +40,7 @@ __all__ = [
     "diff",
     "meet",
     "join",
-    "expressions_equivalent",
+    "equivalence",
     "dnf_implicants",
     "prime_implicants",
     "rule_to_string",

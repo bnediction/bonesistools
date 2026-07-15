@@ -40,7 +40,7 @@ from ..boolean_algebra import (
     Hypercube,
     PartialBoolean,
     dnf_implicants,
-    expressions_equivalent,
+    equivalence,
     prime_implicants,
     rule_to_string,
 )
@@ -82,8 +82,8 @@ from ._most_permissive import (
 )
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
-EquivalenceMethod = Literal["simplify", "truth_table", "asp"]
 NodeStyle = Literal["count", "stability"]
+_PyBoolNetPrimes = Dict[str, List[List[Dict[str, int]]]]
 
 
 class BooleanNetwork(Dict[str, Expression]):
@@ -265,20 +265,15 @@ class BooleanNetwork(Dict[str, Expression]):
 
     def __eq__(self, other: object) -> bool:
         """
-        Test structural equality between Boolean networks.
+        Test exact logical equivalence between Boolean networks.
 
         Two Boolean networks are equal when they have the same components
-        and each associated rule has the same `boolean.py` expression
-        structure.
-
-        This does not test logical equivalence. For example, `x` and
-        `x | (y & ~y)` may be logically equivalent but not structurally equal.
-        Use `equivalent()` for simplified logical comparison.
+        and each associated Boolean rule is logically equivalent.
 
         Examples
         --------
-        >>> bn1 = BooleanNetwork({"A": "B | C", "B": 0, "C": 1})
-        >>> bn2 = BooleanNetwork({"A": "C | B", "B": 0, "C": 1})
+        >>> bn1 = BooleanNetwork({"A": "B | (B & C)", "B": 0, "C": 1})
+        >>> bn2 = BooleanNetwork({"A": "B", "B": 0, "C": 1})
         >>> bn1 == bn2
         True
 
@@ -290,8 +285,8 @@ class BooleanNetwork(Dict[str, Expression]):
         Returns
         -------
         bool or NotImplemented
-            True if both networks have the same components and structurally
-            equal rules. Returns NotImplemented for unsupported objects.
+            True if both networks have the same components and logically
+            equivalent rules. Returns NotImplemented for unsupported objects.
         """
 
         if not is_boolean_network_like(other):
@@ -300,11 +295,22 @@ class BooleanNetwork(Dict[str, Expression]):
         if set(self.keys()) != set(other.keys()):
             return False
 
-        return all(self[component] == other[component] for component in self)
+        for component in self:
+            rule1 = self._coerce_rule(self[component])
+            rule2 = self._coerce_rule(other[component])
+
+            if not equivalence(
+                rule1,
+                rule2,
+                ba=self.ba,
+            ):
+                return False
+
+        return True
 
     def __ne__(self, other: object) -> bool:
         """
-        Test structural inequality between Boolean networks.
+        Test logical inequality between Boolean networks.
 
         This is the logical negation of `__eq__` when the other object can be
         interpreted as a BooleanNetworkLike object.
@@ -317,7 +323,7 @@ class BooleanNetwork(Dict[str, Expression]):
         Returns
         -------
         bool or NotImplemented
-            True if the networks are structurally different. Returns
+            True if the networks are not logically equivalent. Returns
             NotImplemented for unsupported objects.
         """
 
@@ -353,116 +359,157 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return type(self)(self, ba=self.ba, check=False)
 
-    def convert(self, target: str, **kwargs: Any) -> Any:
+    def to_biolqm(self, **kwargs: Any) -> Any:
         """
-        Convert the Boolean network to another Boolean-network representation.
+        Convert the Boolean network to a bioLQM logical model.
+
+        Parameters
+        ----------
+        **kwargs: Any
+            Keyword arguments forwarded to `biolqm.load`.
 
         Examples
         --------
         >>> bn = BooleanNetwork({"A": "~B", "B": 1})
-        >>> # lqm = bn.convert("biolqm")
-        >>> # bn = bn.convert("mpbn")
-        >>> # bn = bn.convert("minibn")
-        >>> # primes = bn.convert("pyboolnet")
-
-        Parameters
-        ----------
-        target: str
-            Conversion target. Currently supported: `"biolqm"`, `"minibn"`,
-            `"mpbn"`, and `"pyboolnet"`.
-        **kwargs: Any
-            Keyword arguments forwarded to the target constructor.
+        >>> # model = bn.to_biolqm()
 
         Returns
         -------
         Any
-            Converted Boolean network object.
+            bioLQM logical model.
 
         Raises
         ------
-        TypeError
-            If `target` is not a string.
-        ValueError
-            If `target` is unsupported.
         ImportError
-            If the selected conversion requires an optional dependency that is
-            not installed.
+            If the bioLQM Python interface is not installed.
+        RuntimeError
+            If the GINsim executable is unavailable.
         """
 
-        if not isinstance(target, str):
-            raise TypeError(
-                f"unsupported argument type for 'target': "
-                f"expected {str} but received {type(target)}"
-            )
+        try:
+            biolqm = import_module("biolqm")
 
-        if target == "biolqm":
-            try:
-                biolqm = import_module("biolqm")
+        except ImportError as error:
+            raise ImportError(
+                "BooleanNetwork.to_biolqm() requires the bioLQM Python "
+                "interface to be installed."
+            ) from error
 
-            except ImportError as error:
-                raise ImportError(
-                    "BooleanNetwork.convert('biolqm') requires the bioLQM "
-                    "Python interface to be installed."
-                ) from error
+        except FileNotFoundError as error:
+            raise RuntimeError(
+                "BooleanNetwork.to_biolqm() requires the GINsim executable "
+                "to be available."
+            ) from error
 
-            except FileNotFoundError as error:
-                raise RuntimeError(
-                    "BooleanNetwork.convert('biolqm') requires the GINsim "
-                    "executable to be available."
-                ) from error
+        with TemporaryDirectory() as directory:
+            file = Path(directory) / "network.bnet"
+            self.save(file)
+            return biolqm.load(str(file), **kwargs)
 
-            with TemporaryDirectory() as directory:
-                file = Path(directory) / "network.bnet"
-                self.to_bnet(file)
-                return biolqm.load(str(file), **kwargs)
+    def to_minibn(self, **kwargs: Any) -> Any:
+        """
+        Convert the Boolean network to a colomoto MiniBN network.
 
-        if target == "pyboolnet":
-            return {
-                component: [
-                    [
-                        {
-                            source: cast(int, source_value.value)
-                            for source, source_value in implicant.items()
-                        }
-                        for implicant in prime_implicants(
-                            rule,
-                            value=value,
-                            ba=self.ba,
-                        )
-                    ]
-                    for value in (0, 1)
+        Parameters
+        ----------
+        **kwargs: Any
+            Keyword arguments forwarded to `minibn.BooleanNetwork`.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "~B", "B": 1})
+        >>> # network = bn.to_minibn()
+
+        Returns
+        -------
+        Any
+            MiniBN Boolean network.
+
+        Raises
+        ------
+        ImportError
+            If `colomoto.minibn` is not installed.
+        """
+
+        try:
+            from colomoto import minibn
+
+        except ImportError as error:
+            raise ImportError(
+                "BooleanNetwork.to_minibn() requires colomoto.minibn to be installed."
+            ) from error
+
+        return minibn.BooleanNetwork(self._bnet_string(), **kwargs)
+
+    def to_mpbn(self, **kwargs: Any) -> Any:
+        """
+        Convert the Boolean network to an mpbn network.
+
+        Parameters
+        ----------
+        **kwargs: Any
+            Keyword arguments forwarded to `mpbn.MPBooleanNetwork`.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "~B", "B": 1})
+        >>> # network = bn.to_mpbn()
+
+        Returns
+        -------
+        Any
+            mpbn Boolean network.
+
+        Raises
+        ------
+        ImportError
+            If `mpbn` is not installed.
+        """
+
+        try:
+            import mpbn
+
+        except ImportError as error:
+            raise ImportError(
+                "BooleanNetwork.to_mpbn() requires mpbn to be installed."
+            ) from error
+
+        mpbn_constructor = cast(Callable[..., Any], mpbn.MPBooleanNetwork)
+        return mpbn_constructor(self._bnet_string(), **kwargs)
+
+    def to_pyboolnet(self) -> _PyBoolNetPrimes:
+        """
+        Convert the Boolean network to PyBoolNet prime implicants.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B", "B": 1})
+        >>> bn.to_pyboolnet()
+        {'A': [[{'B': 0}], [{'B': 1}]], 'B': [[], [{}]]}
+
+        Returns
+        -------
+        dict
+            PyBoolNet prime-implicant representation.
+        """
+
+        return {
+            component: [
+                [
+                    {
+                        source: cast(int, source_value.value)
+                        for source, source_value in implicant.items()
+                    }
+                    for implicant in prime_implicants(
+                        rule,
+                        value=value,
+                        ba=self.ba,
+                    )
                 ]
-                for component, rule in self.items()
-            }
-
-        if target == "minibn":
-            try:
-                from colomoto import minibn
-
-            except ImportError as error:
-                raise ImportError(
-                    "BooleanNetwork.convert('minibn') requires "
-                    "colomoto.minibn to be installed."
-                ) from error
-
-            return minibn.BooleanNetwork(cast(str, self.to_bnet()), **kwargs)
-
-        if target == "mpbn":
-            try:
-                import mpbn
-
-            except ImportError as error:
-                raise ImportError(
-                    "BooleanNetwork.convert('mpbn') requires mpbn to be installed."
-                ) from error
-
-            mpbn_constructor = cast(Callable[..., Any], mpbn.MPBooleanNetwork)
-            return mpbn_constructor(cast(str, self.to_bnet()), **kwargs)
-
-        raise ValueError(
-            f"unsupported conversion target {target!r}: supported targets are "
-            "['biolqm', 'minibn', 'mpbn', 'pyboolnet']"
-        )
+                for value in (0, 1)
+            ]
+            for component, rule in self.items()
+        }
 
     @property
     def components(self) -> Set[str]:
@@ -609,6 +656,26 @@ class BooleanNetwork(Dict[str, Expression]):
         """
 
         return rule_to_string(self[component])
+
+    def simplify(self) -> None:
+        """
+        Simplify every Boolean rule in place.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "B | (B & C)", "B": 0, "C": 1})
+        >>> bn.simplify()
+        >>> bn.rules
+        {'A': 'B', 'B': '0', 'C': '1'}
+
+        Returns
+        -------
+        None
+            Simplifies the Boolean network in place.
+        """
+
+        for component, rule in self.items():
+            super().__setitem__(component, rule.simplify())
 
     def rename(self, old: str, new: str) -> None:
         """
@@ -1148,10 +1215,13 @@ class BooleanNetwork(Dict[str, Expression]):
             Update semantics.
 
             - `"synchronous"` updates every unstable component at once.
-            - `"asynchronous"` updates one unstable component at a time.
+            - `"asynchronous"` updates one unstable component at a time and
+              uses transition-guided reduction for symbolic attractor
+              detection [1, 2].
             - `"general"` updates any non-empty subset of unstable components.
             - `"most-permissive"` returns reachable minimal trap spaces using
-              most-permissive reachability.
+              most-permissive reachability [3].
+
         Returns
         -------
         tuple of ConfigurationSet
@@ -1163,6 +1233,21 @@ class BooleanNetwork(Dict[str, Expression]):
         ValueError
             If the network is not closed, `initial` is invalid,
             or `update` is invalid.
+
+        References
+        ----------
+        [1] Benes et al. (2021). Computing bottom SCCs symbolically using
+        transition guided reduction. International Conference on Computer
+        Aided Verification, 505-528.
+
+        [2] Xie and Beerel (2000). Implicit enumeration of strongly connected
+        components and an application to formal verification. IEEE
+        Transactions on Computer-Aided Design of Integrated Circuits and
+        Systems, 19(10), 1225-1230.
+
+        [3] Pauleve et al. (2020). Reconciling qualitative, abstract, and
+        scalable modeling of biological networks. Nature Communications,
+        11(1), 4256.
         """
 
         update = _as_literal(
@@ -1240,7 +1325,7 @@ class BooleanNetwork(Dict[str, Expression]):
             Update semantics. Finite-state dynamics use an automatically
             selected explicit or symbolic traversal. Most-permissive dynamics
             use a compact decomposition into closed hypercubes and irreversible
-            components.
+            components [1].
 
         Returns
         -------
@@ -1253,6 +1338,12 @@ class BooleanNetwork(Dict[str, Expression]):
         ValueError
             If the network is not closed, `initial` is invalid,
             or `update` is invalid.
+
+        References
+        ----------
+        [1] Pauleve et al. (2020). Reconciling qualitative, abstract, and
+        scalable modeling of biological networks. Nature Communications,
+        11(1), 4256.
         """
 
         update = _as_literal(
@@ -1311,7 +1402,7 @@ class BooleanNetwork(Dict[str, Expression]):
         """
         Test a direct transition between two Boolean configurations.
 
-        For most-permissive dynamics, a transition is equivalent to
+        For most-permissive dynamics [1], a transition is equivalent to
         most-permissive reachability. Consequently, `transition(...)` and
         `reachability(...)` return the same result when
         `update="most-permissive"`.
@@ -1377,6 +1468,12 @@ class BooleanNetwork(Dict[str, Expression]):
         ValueError
             If the network is not closed, `source` or `target` is invalid,
             `update` is invalid or `quantifier` is invalid.
+
+        References
+        ----------
+        [1] Pauleve et al. (2020). Reconciling qualitative, abstract, and
+        scalable modeling of biological networks. Nature Communications,
+        11(1), 4256.
         """
 
         update = _as_literal(
@@ -1425,6 +1522,8 @@ class BooleanNetwork(Dict[str, Expression]):
     ) -> bool:
         """
         Test reachability between two Boolean configurations.
+
+        Most-permissive reachability follows Pauleve et al. [1].
 
         Examples
         --------
@@ -1485,6 +1584,12 @@ class BooleanNetwork(Dict[str, Expression]):
         ValueError
             If the network is not closed, `source` or `target` is invalid,
             `update` is invalid or `quantifier` is invalid.
+
+        References
+        ----------
+        [1] Pauleve et al. (2020). Reconciling qualitative, abstract, and
+        scalable modeling of biological networks. Nature Communications,
+        11(1), 4256.
         """
 
         update = _as_literal(
@@ -1528,78 +1633,6 @@ class BooleanNetwork(Dict[str, Expression]):
             target,
             quantifier=quantifier,
         )
-
-    def equivalent(
-        self,
-        other: object,
-        method: EquivalenceMethod = "simplify",
-    ) -> bool:
-        """
-        Test logical equivalence between Boolean networks.
-
-        Two Boolean networks are equivalent when they have the same components
-        and each component has an equivalent Boolean rule.
-
-        Examples
-        --------
-        >>> bn1 = BooleanNetwork({
-        ...     "A": "(B & C) | (~B & D) | (C & D)",
-        ...     "B": 0,
-        ...     "C": 1,
-        ...     "D": 0,
-        ... })
-        >>> bn2 = BooleanNetwork({"A": "(B & C) | (~B & D)", "B": 0, "C": 1, "D": 0})
-        >>> bn1.equivalent(bn2, method="simplify")
-        False
-        >>> bn1.equivalent(bn2, method="truth_table")
-        True
-
-        Parameters
-        ----------
-        other: object
-            BooleanNetworkLike object to compare with.
-        method: {"simplify", "truth_table", "asp"} (default: "simplify")
-            Equivalence strategy used to compare component rules.
-
-            - `"simplify"` compares rules after `boolean.py` simplification.
-              This is fast, but not guaranteed to detect all logical
-              equivalences.
-            - `"truth_table"` exhaustively evaluates each pair of rules on all
-              assignments of their symbols. This is exact, but exponential in
-              the number of symbols per rule.
-            - `"asp"` uses ASP to search for a counterexample assignment.
-
-        Returns
-        -------
-        bool or NotImplemented
-            Whether both Boolean networks are equivalent according to the
-            selected method. Returns NotImplemented for unsupported objects.
-
-        Raises
-        ------
-        ValueError
-            If `method` is not `"simplify"`, `"truth_table"` or `"asp"`.
-        """
-
-        if not is_boolean_network_like(other):
-            return NotImplemented
-
-        if set(self.keys()) != set(other.keys()):
-            return False
-
-        for component in self:
-            rule1 = self._coerce_rule(self[component])
-            rule2 = self._coerce_rule(other[component])
-
-            if not expressions_equivalent(
-                rule1,
-                rule2,
-                method=method,
-                ba=self.ba,
-            ):
-                return False
-
-        return True
 
     def influences(self) -> Set[Tuple[str, str, int]]:
         """
@@ -1679,31 +1712,61 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return graph
 
-    def to_bnet(self, file: Optional[Union[str, Path]] = None) -> Optional[str]:
+    def save(
+        self,
+        file: Union[str, Path],
+        *,
+        format: Literal["auto", "bnet"] = "auto",
+    ) -> None:
         """
-        Export the Boolean network in .bnet format.
+        Save the Boolean network to a file.
 
-        The `.bnet` format stores one rule per line as `component, rule`.
-        Negations are exported with `!`, while Boolean constants are exported as
-        `0` and `1`.
+        The output format is inferred from the file extension by default.
+        Currently, `.bnet` is supported. Its text representation stores one
+        rule per line as `component, rule`, using `!` for negation and `0` or
+        `1` for Boolean constants.
+
+        Parameters
+        ----------
+        file: str or Path
+            Output file path.
+        format: {"auto", "bnet"} (default: "auto")
+            Output format. If `"auto"`, infer it from the file extension.
 
         Examples
         --------
         >>> bn = BooleanNetwork({"A": "B & ~C", "B": 0, "C": 1})
-        >>> bn.to_bnet()
-        'A, B&!C\\nB, 0\\nC, 1\\n'
-
-        Parameters
-        ----------
-        file: str or Path (optional, default: None)
-            Output file path. If `None`, return the `.bnet` content as a string.
+        >>> bn.save("network.bnet")
 
         Returns
         -------
-        str or None
-            `.bnet` content if `file` is None. Otherwise, write the file and
-            return None.
+        None
+            Writes the Boolean network to `file`.
+
+        Raises
+        ------
+        ValueError
+            If `format` is unsupported or cannot be inferred from the file
+            extension.
         """
+
+        format = _as_literal(
+            format,
+            choices=("auto", "bnet"),
+            name="format",
+        )
+        file = Path(file)
+
+        if format == "auto" and file.suffix.lower() != ".bnet":
+            raise ValueError(
+                "cannot infer Boolean network format from file extension "
+                f"{file.suffix!r}; specify 'format' explicitly"
+            )
+
+        file.write_text(self._bnet_string())
+
+    def _bnet_string(self) -> str:
+        """Serialize the Boolean network in `.bnet` format."""
 
         lines = []
 
@@ -1717,15 +1780,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
             lines.append(f"{component}, {rule}")
 
-        content = "\n".join(lines) + "\n"
-
-        if file is None:
-            return content
-
-        file = Path(file)
-        file.write_text(content)
-
-        return None
+        return "\n".join(lines) + "\n"
 
     def _minimal_trap_spaces_with_asp(self) -> Tuple[Hypercube, ...]:
 
@@ -2028,10 +2083,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
     Examples
     --------
     >>> ensemble = BooleanNetworkEnsemble(
-    ...     bns=[
-    ...         {"A": "B", "B": 1},
-    ...         {"A": 0, "B": "A"},
-    ...     ]
+    ...     {"A": "B", "B": 1},
+    ...     {"A": 0, "B": "A"},
     ... )
     >>> len(ensemble)
     2
@@ -2040,12 +2093,12 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
     Parameters
     ----------
+    *networks: BooleanNetworkLike
+        Boolean networks used to initialise the ensemble. All networks must
+        contain exactly the same components.
     components: Iterable[str] (optional, default: None)
         Components expected in each Boolean network. If specified without
-        `bns`, initialise an empty ensemble with this component set.
-    bns: Iterable[BooleanNetworkLike] (optional, default: None)
-        BooleanNetworkLike objects used to initialise the ensemble. All
-        networks must contain exactly the same components.
+        `networks`, initialise an empty ensemble with this component set.
 
     Notes
     -----
@@ -2059,27 +2112,26 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         If initialisation arguments are inconsistent or if provided networks
         are not BooleanNetworkLike objects.
     ValueError
-        If `bns` is empty or if a network has missing or additional
-        components.
+        If a network has missing or additional components.
     """
 
     def __init__(
         self,
+        *networks: BooleanNetworkLike,
         components: Optional[Iterable[str]] = None,
-        bns: Optional[Iterable[BooleanNetworkLike]] = None,
         ba: Optional[BooleanAlgebra] = None,
     ) -> None:
 
-        if components is None and bns is None:
+        if components is None and not networks:
             raise TypeError(
                 "cannot instantiate BooleanNetworkEnsemble: "
-                "either 'components' or 'bns' must be provided"
+                "either 'components' or at least one network must be provided"
             )
 
-        if components is not None and bns is not None:
+        if components is not None and networks:
             raise TypeError(
                 "cannot instantiate BooleanNetworkEnsemble: "
-                "'components' and 'bns' are mutually exclusive"
+                "'components' and positional networks are mutually exclusive"
             )
 
         self.__ba = BooleanAlgebra() if ba is None else ba
@@ -2089,24 +2141,16 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
             self._components: Set[str] = set(components)
             return
 
-        assert bns is not None
-        bns = list(bns)
-
-        if len(bns) == 0:
-            raise ValueError(
-                "cannot infer components from an empty Boolean network collection"
-            )
-
-        if not all(is_boolean_network_like(bn) for bn in bns):
+        if not all(is_boolean_network_like(network) for network in networks):
             raise TypeError(
-                "unsupported argument type for 'bns': "
-                "expected iterable of Boolean network-like objects"
+                "unsupported positional argument type: "
+                "expected Boolean network-like objects"
             )
 
-        self._components = set(bns[0])
+        self._components = set(networks[0])
 
-        for bn in bns:
-            self._networks.append(self._coerce_network(bn))
+        for network in networks:
+            self._networks.append(self._coerce_network(network))
 
     def __len__(self) -> int:
         """
@@ -2114,7 +2158,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Examples
         --------
-        >>> len(BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}]))
+        >>> len(BooleanNetworkEnsemble({"A": 1}, {"A": 0}))
         2
 
         Returns
@@ -2140,7 +2184,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Examples
         --------
-        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> ensemble = BooleanNetworkEnsemble({"A": 1}, {"A": 0})
         >>> ensemble[0].rules
         {'A': '1'}
 
@@ -2177,7 +2221,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Examples
         --------
-        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> ensemble = BooleanNetworkEnsemble({"A": 1}, {"A": 0})
         >>> ensemble[0] = {"A": "0"}
         >>> ensemble[0].rules
         {'A': '0'}
@@ -2212,7 +2256,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Examples
         --------
-        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1}, {"A": 0}])
+        >>> ensemble = BooleanNetworkEnsemble({"A": 1}, {"A": 0})
         >>> del ensemble[0]
         >>> len(ensemble)
         1
@@ -2225,55 +2269,89 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         del self._networks[index]
 
-    def convert(self, target: str, **kwargs: Any) -> List[Any]:
+    def to_biolqm(self, **kwargs: Any) -> List[Any]:
         """
-        Convert all Boolean networks to another representation.
-
-        Examples
-        --------
-        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": "~B", "B": 1}])
-        >>> # lqms = ensemble.convert("biolqm")
-        >>> # mpbns = ensemble.convert("mpbn")
-        >>> # minibns = ensemble.convert("minibn")
-        >>> # primes = ensemble.convert("pyboolnet")
+        Convert all Boolean networks to bioLQM logical models.
 
         Parameters
         ----------
-        target: str
-            Conversion target. Currently supported: `"biolqm"`, `"minibn"`,
-            `"mpbn"`, and `"pyboolnet"`.
         **kwargs: Any
-            Keyword arguments forwarded to the target constructor.
+            Keyword arguments forwarded to `BooleanNetwork.to_biolqm`.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble({"A": "~B", "B": 1})
+        >>> # models = ensemble.to_biolqm()
 
         Returns
         -------
         list
-            Converted Boolean network objects.
-
-        Raises
-        ------
-        TypeError
-            If `target` is not a string.
-        ValueError
-            If `target` is unsupported.
-        ImportError
-            If the selected conversion requires an optional dependency that is
-            not installed.
+            bioLQM logical models.
         """
 
-        if not isinstance(target, str):
-            raise TypeError(
-                f"unsupported argument type for 'target': "
-                f"expected {str} but received {type(target)}"
-            )
+        return [network.to_biolqm(**kwargs) for network in self]
 
-        if target in ["biolqm", "minibn", "mpbn", "pyboolnet"]:
-            return [bn.convert(target, **kwargs) for bn in self]
+    def to_minibn(self, **kwargs: Any) -> List[Any]:
+        """
+        Convert all Boolean networks to colomoto MiniBN networks.
 
-        raise ValueError(
-            f"unsupported conversion target {target!r}: supported targets are "
-            "['biolqm', 'minibn', 'mpbn', 'pyboolnet']"
-        )
+        Parameters
+        ----------
+        **kwargs: Any
+            Keyword arguments forwarded to `BooleanNetwork.to_minibn`.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble({"A": "~B", "B": 1})
+        >>> # networks = ensemble.to_minibn()
+
+        Returns
+        -------
+        list
+            MiniBN Boolean networks.
+        """
+
+        return [network.to_minibn(**kwargs) for network in self]
+
+    def to_mpbn(self, **kwargs: Any) -> List[Any]:
+        """
+        Convert all Boolean networks to mpbn networks.
+
+        Parameters
+        ----------
+        **kwargs: Any
+            Keyword arguments forwarded to `BooleanNetwork.to_mpbn`.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble({"A": "~B", "B": 1})
+        >>> # networks = ensemble.to_mpbn()
+
+        Returns
+        -------
+        list
+            mpbn Boolean networks.
+        """
+
+        return [network.to_mpbn(**kwargs) for network in self]
+
+    def to_pyboolnet(self) -> List[_PyBoolNetPrimes]:
+        """
+        Convert all Boolean networks to PyBoolNet prime implicants.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble({"A": "B", "B": 1})
+        >>> ensemble.to_pyboolnet()
+        [{'A': [[{'B': 0}], [{'B': 1}]], 'B': [[], [{}]]}]
+
+        Returns
+        -------
+        list
+            PyBoolNet prime-implicant representations.
+        """
+
+        return [network.to_pyboolnet() for network in self]
 
     def to_influence_graph(
         self,
@@ -2291,7 +2369,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[{"A": "B", "B": 1}, {"A": "B", "B": 1}]
+        ...     {"A": "B", "B": 1},
+        ...     {"A": "B", "B": 1},
         ... )
         >>> graph = ensemble.to_influence_graph()
         >>> graph.edge_count("B", "A", sign=1)
@@ -2393,6 +2472,29 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         self._check_network(value)
         self._networks.insert(index, self._coerce_network(value))
 
+    def simplify(self) -> None:
+        """
+        Simplify every Boolean rule in every network in place.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     {"A": "B | (B & C)", "B": 0, "C": 1},
+        ...     {"A": "B & 1", "B": 1, "C": 0},
+        ... )
+        >>> ensemble.simplify()
+        >>> [bn.rule("A") for bn in ensemble]
+        ['B', 'B']
+
+        Returns
+        -------
+        None
+            Simplifies all Boolean networks in place.
+        """
+
+        for network in self:
+            network.simplify()
+
     @property
     def components(self) -> FrozenSet[str]:
         """
@@ -2400,7 +2502,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         Examples
         --------
-        >>> ensemble = BooleanNetworkEnsemble(bns=[{"A": 1, "B": 0}])
+        >>> ensemble = BooleanNetworkEnsemble({"A": 1, "B": 0})
         >>> sorted(ensemble.components)
         ['A', 'B']
 
@@ -2435,10 +2537,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[
-        ...         {"A": "B", "B": 1, "C": 0},
-        ...         {"A": "B & C", "B": 1, "C": 0},
-        ...     ]
+        ...     {"A": "B", "B": 1, "C": 0},
+        ...     {"A": "B & C", "B": 1, "C": 0},
         ... )
         >>> implicants = ensemble.dnf_implicants()
         >>> implicants == {
@@ -2493,10 +2593,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[
-        ...         {"A": "B | C", "B": 1, "C": 0},
-        ...         {"A": "B & C", "B": 1, "C": 0},
-        ...     ]
+        ...     {"A": "B | C", "B": 1, "C": 0},
+        ...     {"A": "B & C", "B": 1, "C": 0},
         ... )
         >>> ensemble.prime_implicants()["A"]
         [(Hypercube(B=1), Hypercube(C=1)), (Hypercube(B=1, C=1),)]
@@ -2550,10 +2648,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[
-        ...         {"A": "B", "B": 1, "C": 0},
-        ...         {"A": "B & ~C", "B": 1, "C": 0},
-        ...     ]
+        ...     {"A": "B", "B": 1, "C": 0},
+        ...     {"A": "B & ~C", "B": 1, "C": 0},
         ... )
         >>> ensemble.regulator_counts()["A"]["B"][True]
         2
@@ -2610,10 +2706,8 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         Examples
         --------
         >>> ensemble = BooleanNetworkEnsemble(
-        ...     bns=[
-        ...         {"A": "B", "B": 1, "C": 0},
-        ...         {"A": "B & ~C", "B": 1, "C": 0},
-        ...     ]
+        ...     {"A": "B", "B": 1, "C": 0},
+        ...     {"A": "B & ~C", "B": 1, "C": 0},
         ... )
         >>> ensemble.influence_counts()["B"]["A"][True]
         2

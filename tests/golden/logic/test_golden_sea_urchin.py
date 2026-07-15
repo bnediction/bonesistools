@@ -77,10 +77,9 @@ def test_golden_sea_urchin_rules_match_biolqm_reference(sea_urchin_model):
 
     for component in sorted(expected.components):
         expected_rule = network.ba.parse(expected.rule(component))
-        assert bt.logic.ba.expressions_equivalent(
+        assert bt.logic.ba.equivalence(
             network[component],
             expected_rule,
-            method="asp",
             ba=network.ba,
         ), component
 

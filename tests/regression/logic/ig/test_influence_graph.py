@@ -431,6 +431,12 @@ def test_signed_path_string_formats_signed_edges():
     with pytest.raises(KeyError, match="no edge found"):
         ig.signed_path_string("A", "C")
 
+    with pytest.raises(TypeError, match="separate strings"):
+        ig.signed_path_string("A", cast(Any, ["B", "C"]))
+
+    with pytest.raises(TypeError, match="list or tuple of strings"):
+        ig.signed_path_string(cast(Any, ["A", 1]))
+
 
 def test_marker_paths_from_docstring():
     ig = bt.logic.ig.InfluenceGraph()

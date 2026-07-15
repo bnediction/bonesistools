@@ -1198,7 +1198,7 @@ class InfluenceGraph(_MultiDiGraphBase):
     @overload
     def signed_path_string(
         self,
-        *nodes: Union[str, List[str], Tuple[str, ...]],
+        __nodes: Union[List[str], Tuple[str, ...]],
     ) -> str: ...
 
     def signed_path_string(
@@ -1224,8 +1224,9 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        *nodes: str
-            Nodes describing a directed path in traversal order.
+        *nodes: str or one list or tuple of str
+            Nodes describing a directed path in traversal order. Provide either
+            separate node names or one list or tuple containing the path.
 
         Returns
         -------
@@ -1240,12 +1241,23 @@ class InfluenceGraph(_MultiDiGraphBase):
             If one traversed edge does not exist.
         """
 
-        path = nodes
-
         if len(nodes) == 1 and isinstance(nodes[0], (list, tuple)):
             path = cast(Tuple[str, ...], tuple(nodes[0]))
-        else:
+
+        elif all(isinstance(node, str) for node in nodes):
             path = cast(Tuple[str, ...], nodes)
+
+        else:
+            raise TypeError(
+                "'nodes' must be provided as separate strings or as one "
+                "list or tuple of strings"
+            )
+
+        if not all(isinstance(node, str) for node in path):
+            raise TypeError(
+                "'nodes' must be provided as separate strings or as one "
+                "list or tuple of strings"
+            )
 
         if len(path) < 2:
             raise ValueError("path must contain at least two nodes")

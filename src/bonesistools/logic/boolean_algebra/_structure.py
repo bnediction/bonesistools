@@ -6,6 +6,7 @@ from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
+    Dict,
     FrozenSet,
     List,
     Mapping,
@@ -23,14 +24,11 @@ from boolean import (
 from boolean.boolean import _FALSE, _TRUE
 
 from ..._compat import Literal
-from ..._validation import _as_literal
 from ._hypercube import Hypercube
 from ._typing import BooleanRule
 
 if TYPE_CHECKING:
     from ._robdd import ROBDD
-
-EquivalenceMethod = Literal["simplify", "truth_table", "asp"]
 
 _DNFLiteral = Tuple[str, int]
 _DNFClause = FrozenSet[_DNFLiteral]
@@ -40,20 +38,13 @@ Implicants = Tuple[Hypercube, ...]
 BA = BooleanAlgebra()
 
 
-def expressions_equivalent(
+def equivalence(
     expr1: Expression,
     expr2: Expression,
-    method: EquivalenceMethod = "simplify",
     ba: BooleanAlgebra = BA,
 ) -> bool:
     """
     Test whether two Boolean expressions are logically equivalent.
-
-    The `"simplify"` method is a fast structural comparison after
-    `boolean.py` simplification. It can miss logical equivalences that require
-    a full semantic check. The `"truth_table"` method evaluates both
-    expressions on every assignment of their symbols. The `"asp"` method asks
-    an ASP solver whether a counterexample assignment exists.
 
     Examples
     --------
@@ -62,23 +53,14 @@ def expressions_equivalent(
     >>> expr1 = ba.parse("(B & C) | (~B & D) | (C & D)")
     >>> expr2 = ba.parse("(B & C) | (~B & D)")
 
-    The simplification method compares simplified expression structure and may
-    miss this equivalence:
-
-    >>> expressions_equivalent(expr1, expr2, method="simplify", ba=ba)
-    False
-
-    Exhaustive truth-table comparison detects the logical equivalence:
-
-    >>> expressions_equivalent(expr1, expr2, method="truth_table", ba=ba)
+    >>> equivalence(expr1, expr2, ba=ba)
     True
 
-    Non-equivalent expressions return False with exact comparison:
+    Non-equivalent expressions return False:
 
-    >>> expressions_equivalent(
+    >>> equivalence(
     ...     ba.parse("B & C"),
     ...     ba.parse("B | C"),
-    ...     method="asp",
     ...     ba=ba,
     ... )
     False
@@ -89,63 +71,37 @@ def expressions_equivalent(
         First Boolean expression.
     expr2: boolean.Expression
         Second Boolean expression.
-    method: {"simplify", "truth_table", "asp"} (default: "simplify")
-        Equivalence strategy.
-
-        - `"simplify"` compares both expressions after `boolean.py`
-          simplification. This is fast, but not guaranteed to detect all
-          logical equivalences.
-        - `"truth_table"` exhaustively evaluates both expressions on all
-          assignments of their symbols. This is an exact logical equivalence
-          check, but has exponential complexity in the number of symbols.
-        - `"asp"` uses ASP through `clingo` to search for a counterexample
-          assignment. It is exact.
     ba: boolean.BooleanAlgebra (default: module-level BooleanAlgebra)
-        Boolean algebra used to evaluate truth-table assignments. It should be
-        compatible with the algebra used to build `expr1` and `expr2`.
+        Boolean algebra compatible with the one used to build `expr1` and
+        `expr2`.
 
     Returns
     -------
     bool
-        Whether the two expressions are considered equivalent according to
-        the selected method.
-
-    Raises
-    ------
-    ValueError
-        If `method` is not one of `"simplify"`, `"truth_table"` or `"asp"`,
-        or if an expression cannot be evaluated to a Boolean constant during
-        exact comparison.
+        Whether the two expressions are logically equivalent.
     """
 
-    method = _as_literal(
-        method,
-        choices=("simplify", "truth_table", "asp"),
-        name="method",
-    )
-
-    if method == "simplify":
-        return expr1.simplify() == expr2.simplify()
-
-    if method == "truth_table":
-        expr1 = expr1.simplify()
-        expr2 = expr2.simplify()
-
-        symbols = sorted(expr1.symbols | expr2.symbols, key=str)
-
-        for values in product([False, True], repeat=len(symbols)):
-            assignment = dict(zip(symbols, values))
-
-            value1 = _eval_as_bool(ba, expr1, assignment)
-            value2 = _eval_as_bool(ba, expr2, assignment)
-
-            if value1 != value2:
-                return False
-
+    expr1 = expr1.simplify()
+    expr2 = expr2.simplify()
+    if expr1 == expr2:
         return True
 
-    else:
-        return _expressions_equivalent_with_asp(ba, expr1, expr2)
+    symbols = tuple(sorted(expr1.symbols | expr2.symbols, key=str))
+
+    if len(symbols) <= 15:
+        return _equivalence_with_bitsets(
+            ba,
+            expr1,
+            expr2,
+            symbols=symbols,
+        )
+
+    return _equivalence_with_asp(
+        ba,
+        expr1,
+        expr2,
+        symbols=symbols,
+    )
 
 
 def dnf_implicants(
@@ -382,27 +338,136 @@ def _constant_expression_as_bool(
     return None
 
 
-def _expressions_equivalent_with_asp(
+def _equivalence_with_bitsets(
     ba: BooleanAlgebra,
     expr1: Expression,
     expr2: Expression,
+    *,
+    symbols: Tuple[Expression, ...],
 ) -> bool:
 
-    expr1 = expr1.simplify()
-    expr2 = expr2.simplify()
-    symbols = tuple(sorted(expr1.symbols | expr2.symbols, key=str))
+    full_mask, symbol_bits = _boolean_symbol_bitsets(symbols)
+    cache: Dict[Expression, int] = {}
+
+    return _expression_truth_bits(
+        ba,
+        expr1,
+        symbol_bits=symbol_bits,
+        full_mask=full_mask,
+        cache=cache,
+    ) == _expression_truth_bits(
+        ba,
+        expr2,
+        symbol_bits=symbol_bits,
+        full_mask=full_mask,
+        cache=cache,
+    )
+
+
+def _boolean_symbol_bitsets(
+    symbols: Tuple[Expression, ...],
+) -> Tuple[int, Dict[str, int]]:
+
+    n_symbols = len(symbols)
+    n_assignments = 1 << n_symbols
+    full_mask = (1 << n_assignments) - 1
+    symbol_bits = {}
+
+    for index, symbol in enumerate(symbols):
+        block_size = 1 << (n_symbols - index - 1)
+        period = 2 * block_size
+        unit = ((1 << block_size) - 1) << block_size
+        repetitions = full_mask // ((1 << period) - 1)
+        symbol_bits[str(symbol)] = unit * repetitions
+
+    return full_mask, symbol_bits
+
+
+def _expression_truth_bits(
+    ba: BooleanAlgebra,
+    expr: Expression,
+    *,
+    symbol_bits: Mapping[str, int],
+    full_mask: int,
+    cache: Dict[Expression, int],
+) -> int:
+
+    if expr in cache:
+        return cache[expr]
+
+    if isinstance(expr, _TRUE):
+        bits = full_mask
+
+    elif isinstance(expr, _FALSE):
+        bits = 0
+
+    else:
+        expr_any: Any = expr
+
+        if isinstance(expr_any, ba.NOT):
+            bits = full_mask ^ _expression_truth_bits(
+                ba,
+                expr_any.args[0],
+                symbol_bits=symbol_bits,
+                full_mask=full_mask,
+                cache=cache,
+            )
+
+        elif isinstance(expr_any, ba.AND):
+            bits = full_mask
+            for operand in expr_any.args:
+                bits &= _expression_truth_bits(
+                    ba,
+                    operand,
+                    symbol_bits=symbol_bits,
+                    full_mask=full_mask,
+                    cache=cache,
+                )
+
+        elif isinstance(expr_any, ba.OR):
+            bits = 0
+            for operand in expr_any.args:
+                bits |= _expression_truth_bits(
+                    ba,
+                    operand,
+                    symbol_bits=symbol_bits,
+                    full_mask=full_mask,
+                    cache=cache,
+                )
+
+        elif expr_any.isliteral:
+            bits = symbol_bits[str(expr_any.obj)]
+
+        else:
+            raise ValueError(f"invalid Boolean expression: {expr!r}")
+
+    cache[expr] = bits
+    return bits
+
+
+def _equivalence_with_asp(
+    ba: BooleanAlgebra,
+    expr1: Expression,
+    expr2: Expression,
+    *,
+    symbols: Tuple[Expression, ...],
+) -> bool:
+
     symbol_ids = {str(symbol): index for index, symbol in enumerate(symbols)}
+    expression_ids: Dict[Expression, int] = {}
 
     root1, facts1, next_expression_id = _clingo_expression_tree_facts(
         ba,
         expr1,
         symbol_ids=symbol_ids,
+        expression_ids=expression_ids,
         next_expression_id=0,
     )
     root2, facts2, _ = _clingo_expression_tree_facts(
         ba,
         expr2,
         symbol_ids=symbol_ids,
+        expression_ids=expression_ids,
         next_expression_id=next_expression_id,
     )
 
@@ -428,7 +493,6 @@ def _expressions_equivalent_with_asp(
         different :- root(1, E1), root(2, E2), value(E1, V1), value(E2, V2),
                      V1 != V2.
         :- not different.
-        #show assign/2.
         """,
         ]
     )
@@ -437,8 +501,7 @@ def _expressions_equivalent_with_asp(
     control.add("base", [], program)
     control.ground([("base", [])])
 
-    with control.solve(yield_=True) as handle:
-        return next(iter(handle), None) is None
+    return bool(control.solve().unsatisfiable)
 
 
 def _clingo_expression_tree_facts(
@@ -446,10 +509,15 @@ def _clingo_expression_tree_facts(
     expr: Expression,
     *,
     symbol_ids: Mapping[str, int],
+    expression_ids: Dict[Expression, int],
     next_expression_id: int,
 ) -> Tuple[int, Tuple[str, ...], int]:
 
+    if expr in expression_ids:
+        return expression_ids[expr], (), next_expression_id
+
     expression_id = next_expression_id
+    expression_ids[expr] = expression_id
     next_expression_id += 1
 
     if isinstance(expr, _TRUE):
@@ -465,6 +533,7 @@ def _clingo_expression_tree_facts(
             ba,
             expr_any.args[0],
             symbol_ids=symbol_ids,
+            expression_ids=expression_ids,
             next_expression_id=next_expression_id,
         )
         return (
@@ -483,6 +552,7 @@ def _clingo_expression_tree_facts(
                 ba,
                 operand,
                 symbol_ids=symbol_ids,
+                expression_ids=expression_ids,
                 next_expression_id=next_expression_id,
             )
             expression_facts.append(f"arg({expression_id}, {child_id}).")

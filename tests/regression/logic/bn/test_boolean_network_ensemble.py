@@ -31,10 +31,10 @@ def test_read_bnet_directory_and_ensemble(bnet_ensemble):
     assert bnet_ensemble.components == frozenset({"A", "B", "C"})
 
 
-def test_boolean_network_ensemble_convert_to_mpbn(bnet_ensemble):
+def test_boolean_network_ensemble_to_mpbn(bnet_ensemble):
     mpbn = pytest.importorskip("mpbn")
 
-    converted = bnet_ensemble.convert("mpbn")
+    converted = bnet_ensemble.to_mpbn()
 
     assert isinstance(converted, list)
     assert len(converted) == len(bnet_ensemble)
@@ -42,10 +42,10 @@ def test_boolean_network_ensemble_convert_to_mpbn(bnet_ensemble):
     assert all(set(bn) == {"A", "B", "C"} for bn in converted)
 
 
-def test_boolean_network_ensemble_convert_to_biolqm(bnet_ensemble):
+def test_boolean_network_ensemble_to_biolqm(bnet_ensemble):
     biolqm = pytest.importorskip("biolqm")
 
-    converted = bnet_ensemble.convert("biolqm")
+    converted = bnet_ensemble.to_biolqm()
 
     assert len(converted) == len(bnet_ensemble)
     assert all(biolqm.is_biolqm_object(model) for model in converted)
@@ -56,30 +56,22 @@ def test_boolean_network_ensemble_convert_to_biolqm(bnet_ensemble):
     )
 
 
-def test_boolean_network_ensemble_convert_to_pyboolnet(bnet_ensemble):
-    converted = bnet_ensemble.convert("pyboolnet")
+def test_boolean_network_ensemble_to_pyboolnet(bnet_ensemble):
+    converted = bnet_ensemble.to_pyboolnet()
 
     assert len(converted) == len(bnet_ensemble)
     assert all(set(primes) == {"A", "B", "C"} for primes in converted)
 
 
-def test_boolean_network_ensemble_convert_to_minibn(bnet_ensemble):
+def test_boolean_network_ensemble_to_minibn(bnet_ensemble):
     minibn = pytest.importorskip("colomoto.minibn")
 
-    converted = bnet_ensemble.convert("minibn")
+    converted = bnet_ensemble.to_minibn()
 
     assert isinstance(converted, list)
     assert len(converted) == len(bnet_ensemble)
     assert all(isinstance(bn, minibn.BooleanNetwork) for bn in converted)
     assert all(set(bn) == {"A", "B", "C"} for bn in converted)
-
-
-def test_boolean_network_ensemble_convert_validates_target(bnet_ensemble):
-    with pytest.raises(TypeError, match="unsupported argument type for 'target'"):
-        bnet_ensemble.convert(cast(Any, 1))
-
-    with pytest.raises(ValueError, match="unsupported conversion target"):
-        bnet_ensemble.convert(cast(Any, "unknown"))
 
 
 def test_read_bnet_directory_validation_and_recursive_loading(tmp_path):
@@ -115,17 +107,14 @@ def test_deprecated_read_bnet_directory_routes_to_io(bnet_directory):
 
 
 def test_boolean_network_ensemble_initialization_and_slice_mutation_errors():
-    with pytest.raises(TypeError, match="either 'components' or 'bns'"):
+    with pytest.raises(TypeError, match="either 'components' or at least one network"):
         bt.logic.bn.BooleanNetworkEnsemble()
 
     with pytest.raises(TypeError, match="mutually exclusive"):
-        bt.logic.bn.BooleanNetworkEnsemble(components=["A"], bns=[{"A": 1}])
-
-    with pytest.raises(ValueError, match="empty Boolean network collection"):
-        bt.logic.bn.BooleanNetworkEnsemble(bns=[])
+        bt.logic.bn.BooleanNetworkEnsemble({"A": 1}, components=["A"])
 
     with pytest.raises(TypeError, match="Boolean network-like"):
-        bt.logic.bn.BooleanNetworkEnsemble(bns=[cast(Any, object())])
+        bt.logic.bn.BooleanNetworkEnsemble(cast(Any, object()))
 
     ensemble = bt.logic.bn.BooleanNetworkEnsemble(components=["A", "B"])
     assert len(ensemble) == 0
@@ -144,6 +133,16 @@ def test_boolean_network_ensemble_initialization_and_slice_mutation_errors():
 
     del ensemble[0]
     assert len(ensemble) == 0
+
+
+def test_boolean_network_ensemble_simplify_reduces_all_rules_in_place():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(
+        {"A": "B | (B & C)", "B": 0, "C": 1},
+        {"A": "B & 1", "B": 1, "C": 0},
+    )
+
+    assert ensemble.simplify() is None
+    assert [bn.rule("A") for bn in ensemble] == ["B", "B"]
 
 
 def test_boolean_network_ensemble_regulator_counts(bnet_ensemble):
@@ -270,7 +269,7 @@ def test_boolean_network_ensemble_to_influence_graph_rejects_empty_ensemble():
 
 def test_ensemble_allows_external_regulators_unchecked():
     bn = bt.logic.bn.BooleanNetwork({"A": "X"}, check=False)
-    ensemble = bt.logic.bn.BooleanNetworkEnsemble(bns=[bn])
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(bn)
 
     assert ensemble.influence_counts()["X"]["A"][True] == 1
 
