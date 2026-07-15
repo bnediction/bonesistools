@@ -54,7 +54,7 @@ _SYMBOLIC_SCC_THRESHOLD = 128
 
 class SymbolicTransitionSystem:
     """
-    Compile finite-state dynamics for composable symbolic analyses.
+    Represent finite-state Boolean dynamics for composable symbolic analyses.
 
     All symbolic configuration sets created by one transition system share its
     compiled dynamics. Sets from distinct systems are intentionally
@@ -64,14 +64,44 @@ class SymbolicTransitionSystem:
     The network is captured when the system is compiled. Later modifications
     to the original `BooleanNetwork` do not alter this transition system.
 
+    Typical workflow
+    ----------------
+    ::
+
+        BooleanNetwork
+              |
+              v
+          symbolic()
+              |
+              v
+        SymbolicTransitionSystem
+              |
+              | configurations(...)
+              v
+        SymbolicConfigurationSet
+              |
+              | post() / pre() / reachable() / ...
+              |
+              | configurations()
+              v
+        ConfigurationSet
+
     Examples
     --------
+    The following asynchronous cascade reaches `00`, then `10`, then its
+    unique fixed point `11`:
+
     >>> from bonesistools.logic.bn import BooleanNetwork
-    >>> bn = BooleanNetwork({"A": "~A", "B": "A"})
+    >>> bn = BooleanNetwork({"A": 1, "B": "A"})
     >>> system = bn.symbolic(update="asynchronous")
     >>> initial = system.configurations({"A": 0, "B": 0})
-    >>> initial.reachable().count()
-    4
+    >>> reachable = initial.reachable()
+    >>> attractors = reachable.terminal_sccs()
+    >>> attractors[0].enumerate()
+    ({'A': 1, 'B': 1},)
+    >>> explicit = reachable.configurations()
+    >>> explicit.enumerate()
+    ({'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1})
 
     Parameters
     ----------
@@ -140,25 +170,25 @@ class SymbolicTransitionSystem:
         ],
     ) -> "SymbolicConfigurationSet":
         """
-        Encode one or more explicit configurations as a symbolic
-        configuration set.
+        Create a symbolic configuration set from one or more configurations.
 
-        A mapping is interpreted as one possibly partial configuration. A
-        `ConfigurationSet` is encoded directly from its internal disjoint
-        hypercubes. Any other iterable is interpreted as a union of possibly
-        partial configurations.
+        Partial configurations represent all compatible complete
+        configurations. A mapping is interpreted as one possibly partial
+        configuration. A `ConfigurationSet` is encoded directly from its
+        internal disjoint hypercubes. Any other iterable is interpreted as a
+        union of possibly partial configurations.
 
         Examples
         --------
         >>> from bonesistools.logic.bn import BooleanNetwork
         >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
-        >>> system.configurations({"A": 0}).count()
-        2
+        >>> system.configurations({"A": 0}).enumerate()
+        ({'A': 0, 'B': 0}, {'A': 0, 'B': 1})
         >>> states = system.configurations(
         ...     [{"A": 0, "B": 0}, {"A": 1, "B": 1}]
         ... )
-        >>> states.count()
-        2
+        >>> states.enumerate()
+        ({'A': 0, 'B': 0}, {'A': 1, 'B': 1})
 
         Parameters
         ----------
@@ -215,6 +245,13 @@ class SymbolicTransitionSystem:
         """
         Return the empty symbolic configuration set.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A"}).symbolic()
+        >>> system.empty().is_empty()
+        True
+
         Returns
         -------
         SymbolicConfigurationSet
@@ -227,6 +264,13 @@ class SymbolicTransitionSystem:
         """
         Return all Boolean configurations over `components`.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> system.universe().enumerate()
+        ({'A': 0, 'B': 0}, {'A': 0, 'B': 1}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1})
+
         Returns
         -------
         SymbolicConfigurationSet
@@ -238,6 +282,16 @@ class SymbolicTransitionSystem:
     def to_boolean_network(self) -> "BooleanNetwork":
         """
         Return the Boolean network captured at compilation.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> original = BooleanNetwork({"A": "~A"})
+        >>> restored = original.symbolic().to_boolean_network()
+        >>> restored == original
+        True
+        >>> restored is original
+        False
 
         Returns
         -------
@@ -280,8 +334,8 @@ class SymbolicTransitionSystem:
         >>> synchronous = BooleanNetwork({"A": "A"}).symbolic(
         ...     update="synchronous"
         ... )
-        >>> synchronous.configurations({"A": 1}).post().count()
-        1
+        >>> synchronous.configurations({"A": 1}).post().enumerate()
+        ({'A': 1},)
 
         Parameters
         ----------
@@ -309,10 +363,18 @@ class SymbolicTransitionSystem:
         configurations: "SymbolicConfigurationSet",
     ) -> "SymbolicConfigurationSet":
         """
-        Return predecessors connected by exactly one transition.
+        Return predecessors after exactly one transition.
 
         Asynchronous and general transitions are non-reflexive. Synchronous
         dynamics retain the transition from a fixed point to itself.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic()
+        >>> target = system.configurations({"A": 1})
+        >>> system.pre(target).enumerate()
+        ({'A': 0},)
 
         Parameters
         ----------
@@ -342,10 +404,26 @@ class SymbolicTransitionSystem:
         within: Optional["SymbolicConfigurationSet"] = None,
     ) -> "SymbolicConfigurationSet":
         """
-        Return the forward reachability closure, optionally in a region.
+        Return all configurations reachable from the initial set.
 
-        The result includes initial configurations contained in `within`.
-        Transitions leaving `within` are excluded from the closure.
+        This forward reachability closure includes the initial configurations
+        and therefore uses paths of zero or more transitions. If `within` is
+        supplied, initial configurations outside that region and transitions
+        leaving it are excluded.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": 1, "B": "A"}).symbolic()
+        >>> initial = system.configurations({"A": 0, "B": 0})
+        >>> system.reachable(initial).enumerate()
+        ({'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1})
+
+        Keeping `B = 0` excludes the final configuration:
+
+        >>> region = system.configurations({"B": 0})
+        >>> system.reachable(initial, within=region).enumerate()
+        ({'A': 0, 'B': 0}, {'A': 1, 'B': 0})
 
         Parameters
         ----------
@@ -383,10 +461,22 @@ class SymbolicTransitionSystem:
         within: Optional["SymbolicConfigurationSet"] = None,
     ) -> "SymbolicConfigurationSet":
         """
-        Return configurations reaching a target, optionally in a region.
+        Return all configurations from which the target set is reachable.
 
-        The result includes target configurations contained in `within`.
-        Transitions leaving `within` are excluded from the backward closure.
+        This backward reachability closure includes the target configurations
+        and therefore uses paths of zero or more transitions. If `within` is
+        supplied, target configurations outside that region and transitions
+        leaving it are excluded.
+
+        Examples
+        --------
+        Both configurations of the Boolean switch can reach `A = 1`:
+
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic()
+        >>> target = system.configurations({"A": 1})
+        >>> system.coreachable(target).enumerate()
+        ({'A': 0}, {'A': 1})
 
         Parameters
         ----------
@@ -422,18 +512,14 @@ class SymbolicTransitionSystem:
         configurations: Optional["SymbolicConfigurationSet"] = None,
     ) -> Tuple["SymbolicConfigurationSet", ...]:
         """
-        Return terminal strongly connected components of a symbolic region.
+        Return strongly connected components with no outgoing transition in a region.
 
-        If `configurations` is omitted, analyze the complete state space.
-        Otherwise, terminality is evaluated in the subgraph induced by the
-        supplied region. Small regions are handled explicitly. Larger regions
-        use the same semantics-specific symbolic selection as
-        `BooleanNetwork.attractors()`.
+        When no region is supplied, terminality is evaluated in the complete
+        transition graph. Otherwise, it is evaluated in the subgraph induced
+        by the supplied configurations.
 
-        For transition-closed asynchronous regions, candidates are reduced
-        with interleaved transition-guided reduction [1], then terminal
-        components are extracted with the Xie-Beerel procedure [2]. Arbitrary
-        non-closed regions retain generic induced-subgraph SCC semantics.
+        For a transition-closed region, these terminal components correspond
+        to the attractors contained in that region.
 
         Examples
         --------
@@ -441,8 +527,19 @@ class SymbolicTransitionSystem:
         >>> system = BooleanNetwork({"A": "~A"}).symbolic(
         ...     update="asynchronous"
         ... )
-        >>> tuple(component.count() for component in system.terminal_sccs())
-        (2,)
+        >>> system.terminal_sccs()[0].enumerate()
+        ({'A': 0}, {'A': 1})
+
+        Notes
+        -----
+        Small regions are handled explicitly. Larger regions use the same
+        semantics-specific symbolic selection as
+        `BooleanNetwork.attractors()`.
+
+        For transition-closed asynchronous regions, candidates are reduced
+        with interleaved transition-guided reduction [1], then terminal
+        components are extracted with the Xie-Beerel procedure [2]. Arbitrary
+        non-closed regions retain generic induced-subgraph SCC semantics.
 
         Parameters
         ----------
@@ -1570,24 +1667,52 @@ class SymbolicConfigurationSet:
     Instances are created by `SymbolicTransitionSystem.configurations()`,
     `SymbolicTransitionSystem.empty()` and `SymbolicTransitionSystem.universe()`.
     Set operations remain symbolic and never materialize concrete
-    configurations implicitly.
+    configurations implicitly. Symbolic configuration sets behave like
+    immutable mathematical sets.
 
     Examples
     --------
+    Here, `left` represents `A = 0` and `right` represents `B = 1`:
+
     >>> from bonesistools.logic.bn import BooleanNetwork
     >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
     >>> left = system.configurations({"A": 0})
     >>> right = system.configurations({"B": 1})
     >>> (left & right).enumerate()
     ({'A': 0, 'B': 1},)
-    >>> (left | right).count()
-    3
+    >>> (left | right).enumerate()
+    ({'A': 0, 'B': 0}, {'A': 0, 'B': 1}, {'A': 1, 'B': 1})
+    >>> (~left).enumerate()
+    ({'A': 1, 'B': 0}, {'A': 1, 'B': 1})
+    >>> {"A": 0} in left
+    True
+
+    For a partial configuration, membership means that every compatible
+    complete configuration belongs to the symbolic set.
+
+    Supported operators
+    -------------------
+    =========================  ==========================================
+    Expression                 Meaning
+    =========================  ==========================================
+    `left | right`             Union
+    `left & right`             Intersection
+    `left - right`             Difference
+    `left ^ right`             Symmetric difference
+    `~left`                    Complement
+    `left == right`            Equality
+    `left <= right`            Inclusion
+    `left < right`             Strict inclusion
+    `left >= right`            Reverse inclusion
+    `left > right`             Strict reverse inclusion
+    `configuration in left`    Full configuration or subspace containment
+    =========================  ==========================================
 
     Notes
     -----
     Iteration and `enumerate()` may require exponentially many configurations.
-    Use symbolic operations and `count()` whenever materialization is not
-    required.
+    Whenever possible, prefer symbolic operations and `count()` over explicit
+    materialization.
     """
 
     __slots__ = ("_node", "_system")
@@ -1718,8 +1843,7 @@ class SymbolicConfigurationSet:
 
     def configurations(self) -> ConfigurationSet:
         """
-        Materialize this symbolic configuration set as an explicit
-        ConfigurationSet.
+        Materialize this symbolic set as an explicit ConfigurationSet.
 
         Examples
         --------
@@ -1734,6 +1858,11 @@ class SymbolicConfigurationSet:
         -------
         ConfigurationSet
             Exact materialized configuration set.
+
+        Notes
+        -----
+        The conversion preserves compact hypercubes when possible, but some
+        symbolic sets may require many hypercubes to materialize.
         """
 
         return self._system._decode_configuration_set(self._node)
@@ -1754,6 +1883,13 @@ class SymbolicConfigurationSet:
         """
         Test whether no configuration is represented.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A"}).symbolic()
+        >>> system.empty().is_empty()
+        True
+
         Returns
         -------
         bool
@@ -1766,6 +1902,13 @@ class SymbolicConfigurationSet:
         """
         Test whether every configuration is represented.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A"}).symbolic()
+        >>> system.universe().is_universe()
+        True
+
         Returns
         -------
         bool
@@ -1777,6 +1920,13 @@ class SymbolicConfigurationSet:
     def count(self) -> int:
         """
         Return the exact number of represented configurations.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> system.configurations({"A": 0}).count()
+        2
 
         Returns
         -------
@@ -1793,10 +1943,22 @@ class SymbolicConfigurationSet:
 
     def contains(self, configuration: HypercubeLike) -> bool:
         """
-        Test whether a configuration or complete subspace is represented.
+        Test whether a configuration or Boolean subspace is fully represented.
 
-        A partial configuration is contained only when every compatible
-        complete configuration belongs to this set.
+        For a partial configuration, this returns `True` only if every
+        compatible complete configuration belongs to the set. Use
+        `intersects()` to test whether at least one compatible configuration is
+        shared instead.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> states = system.configurations({"A": 0})
+        >>> states.contains({"A": 0, "B": 1})
+        True
+        >>> states.contains({"B": 1})
+        False
 
         Parameters
         ----------
@@ -1806,7 +1968,7 @@ class SymbolicConfigurationSet:
         Returns
         -------
         bool
-            Whether the complete subspace is included in this set.
+            Whether the represented subspace is fully included in this set.
 
         Raises
         ------
@@ -1829,7 +1991,20 @@ class SymbolicConfigurationSet:
         configurations: Union[HypercubeLike, "SymbolicConfigurationSet"],
     ) -> bool:
         """
-        Test whether another subspace or compatible set intersects this set.
+        Test whether at least one configuration is shared with another set or subspace.
+
+        Unlike `contains()`, this requires only one common complete
+        configuration.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> states = system.configurations({"A": 0})
+        >>> states.intersects({"B": 1})
+        True
+        >>> states.intersects({"A": 1})
+        False
 
         Parameters
         ----------
@@ -1865,6 +2040,13 @@ class SymbolicConfigurationSet:
         """
         Return all represented complete configurations.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> system.configurations({"A": 0}).enumerate()
+        ({'A': 0, 'B': 0}, {'A': 0, 'B': 1})
+
         Returns
         -------
         tuple of Configuration
@@ -1880,6 +2062,14 @@ class SymbolicConfigurationSet:
     def pick(self) -> Configuration:
         """
         Return one represented configuration without uniformity guarantees.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> states = system.configurations({"A": 0})
+        >>> states.pick() in states
+        True
 
         Returns
         -------
@@ -1917,6 +2107,13 @@ class SymbolicConfigurationSet:
         Asynchronous and general transitions are non-reflexive. Synchronous
         dynamics retain the transition from a fixed point to itself.
 
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic()
+        >>> system.configurations({"A": 0}).post().enumerate()
+        ({'A': 1},)
+
         Returns
         -------
         SymbolicConfigurationSet
@@ -1927,10 +2124,17 @@ class SymbolicConfigurationSet:
 
     def pre(self) -> "SymbolicConfigurationSet":
         """
-        Return predecessors connected by exactly one transition.
+        Return predecessors after exactly one transition.
 
         Asynchronous and general transitions are non-reflexive. Synchronous
         dynamics retain the transition from a fixed point to itself.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic()
+        >>> system.configurations({"A": 1}).pre().enumerate()
+        ({'A': 0},)
 
         Returns
         -------
@@ -1946,7 +2150,20 @@ class SymbolicConfigurationSet:
         within: Optional["SymbolicConfigurationSet"] = None,
     ) -> "SymbolicConfigurationSet":
         """
-        Return the forward reachability closure.
+        Return all configurations reachable from this set.
+
+        This forward reachability closure includes this set and therefore uses
+        paths of zero or more transitions. If `within` is supplied,
+        configurations outside that region and transitions leaving it are
+        excluded.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": 1, "B": "A"}).symbolic()
+        >>> initial = system.configurations({"A": 0, "B": 0})
+        >>> initial.reachable().enumerate()
+        ({'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1})
 
         Parameters
         ----------
@@ -1976,7 +2193,22 @@ class SymbolicConfigurationSet:
         within: Optional["SymbolicConfigurationSet"] = None,
     ) -> "SymbolicConfigurationSet":
         """
-        Return the backward reachability closure.
+        Return all configurations from which this set is reachable.
+
+        This backward reachability closure includes this set and therefore
+        uses paths of zero or more transitions. If `within` is supplied,
+        configurations outside that region and transitions leaving it are
+        excluded.
+
+        Examples
+        --------
+        Both configurations of this switch can reach `A = 1`:
+
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic()
+        >>> target = system.configurations({"A": 1})
+        >>> target.coreachable().enumerate()
+        ({'A': 0}, {'A': 1})
 
         Parameters
         ----------
@@ -2001,11 +2233,30 @@ class SymbolicConfigurationSet:
 
     def terminal_sccs(self) -> Tuple["SymbolicConfigurationSet", ...]:
         """
-        Return terminal SCCs in the subgraph induced by this set.
+        Return strongly connected components with no outgoing transition in this set.
 
-        The returned SCCs are terminal relative to this induced subgraph; they
-        need not be terminal in the complete transition graph.
+        Terminality is evaluated in the subgraph induced by this symbolic set.
+        The returned components therefore need not be terminal in the complete
+        transition graph.
 
+        If this region is transition-closed, these terminal components
+        correspond to the attractors contained in it.
+
+        Examples
+        --------
+        The global terminal SCC is `11`. In the subgraph induced by `A = 0`,
+        `00` is terminal instead:
+
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": 1, "B": "A"}).symbolic()
+        >>> system.universe().terminal_sccs()[0].enumerate()
+        ({'A': 1, 'B': 1},)
+        >>> region = system.configurations({"A": 0})
+        >>> region.terminal_sccs()[0].enumerate()
+        ({'A': 0, 'B': 0},)
+
+        Notes
+        -----
         Small regions are handled explicitly. Larger transition-closed
         asynchronous regions use interleaved transition-guided reduction [1]
         followed by the Xie-Beerel terminal-SCC procedure [2].
