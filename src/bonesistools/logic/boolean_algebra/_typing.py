@@ -15,6 +15,9 @@ from typing import (
     Mapping as _Mapping,
 )
 from typing import (
+    TypeVar as _TypeVar,
+)
+from typing import (
     Union as _Union,
 )
 
@@ -29,7 +32,8 @@ BooleanRule = _Union[Expression, bool, int, str]
 PartialBooleanLike = _Union[PartialBoolean, bool, int, float, str]
 Configuration = _Dict[str, int]
 ConfigurationLike = _Mapping[str, _Union[bool, int]]
-HypercubeLike = _Mapping[str, PartialBooleanLike]
+_ComponentT = _TypeVar("_ComponentT", bound=str)
+HypercubeLike = _Mapping[_ComponentT, PartialBooleanLike]
 
 
 def is_boolean_expression_available() -> bool:

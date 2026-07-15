@@ -80,6 +80,7 @@ from ._most_permissive import (
     _most_permissive_reachable_configurations,
     _smallest_closed_hypercube,
 )
+from ._symbolic import SymbolicTransitionSystem
 from ._typing import BooleanNetworkLike, is_boolean_network_like
 
 NodeStyle = Literal["count", "stability"]
@@ -358,6 +359,51 @@ class BooleanNetwork(Dict[str, Expression]):
         """
 
         return type(self)(self, ba=self.ba, check=False)
+
+    def symbolic(
+        self,
+        *,
+        update: Literal[
+            "asynchronous",
+            "synchronous",
+            "general",
+        ] = "asynchronous",
+    ) -> SymbolicTransitionSystem:
+        """
+        Compile finite-state dynamics for composable symbolic analyses.
+
+        The returned transition system captures the current network rules and
+        reuses their compiled representation across symbolic operations.
+        Modifying this Boolean network after compilation does not alter the
+        compiled system. Most-permissive dynamics are not supported by this
+        finite-state API.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": "~A", "B": "A"})
+        >>> system = bn.symbolic(update="asynchronous")
+        >>> initial = system.configurations({"A": 0, "B": 0})
+        >>> initial.reachable().count()
+        4
+
+        Parameters
+        ----------
+        update: {"asynchronous", "synchronous", "general"}
+            (default: "asynchronous")
+            Finite-state update semantics.
+
+        Returns
+        -------
+        SymbolicTransitionSystem
+            Compiled symbolic transition system.
+
+        Raises
+        ------
+        ValueError
+            If the network is not closed or `update` is invalid.
+        """
+
+        return SymbolicTransitionSystem(self, update=update)
 
     def to_biolqm(self, **kwargs: Any) -> Any:
         """
@@ -1157,7 +1203,7 @@ class BooleanNetwork(Dict[str, Expression]):
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
-        ] = "asynchronous",
+        ] = "general",
     ) -> Tuple[ConfigurationSet, ...]:
         """
         Return attractors, optionally restricted by an initial configuration.
@@ -1185,7 +1231,7 @@ class BooleanNetwork(Dict[str, Expression]):
         ...     {"A": 0, "B": 1},
         ...     update="asynchronous",
         ... )
-        >>> [attractor.enumerate() for attractor in attractors]
+        >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
         A partial initial configuration is interpreted as the set of all
@@ -1193,14 +1239,14 @@ class BooleanNetwork(Dict[str, Expression]):
 
         >>> bn = BooleanNetwork({"A": "B", "B": "A"})
         >>> attractors = bn.attractors({"A": 0})
-        >>> [attractor.enumerate() for attractor in attractors]
+        >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
         If no initial configuration is provided, all configurations are
         considered initial:
 
         >>> attractors = bn.attractors()
-        >>> [attractor.enumerate() for attractor in attractors]
+        >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
         Parameters
@@ -1211,7 +1257,7 @@ class BooleanNetwork(Dict[str, Expression]):
             configurations. If `None`, all configurations are considered
             initial.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
-            (default: "asynchronous")
+            (default: "general")
             Update semantics.
 
             - `"synchronous"` updates every unstable component at once.
@@ -1305,7 +1351,7 @@ class BooleanNetwork(Dict[str, Expression]):
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
-        ] = "most-permissive",
+        ] = "general",
     ) -> Iterator[Configuration]:
         """
         Iterate over configurations reachable from one initial configuration.
@@ -1314,14 +1360,14 @@ class BooleanNetwork(Dict[str, Expression]):
         --------
         >>> bn = BooleanNetwork({"A": 1, "B": "A"})
         >>> list(bn.reachable_configurations({"A": 0, "B": 0}))
-        [{'A': 1, 'B': 0}, {'A': 1, 'B': 1}, {'A': 0, 'B': 0}]
+        [{'A': 0, 'B': 0}, {'A': 1, 'B': 0}, {'A': 1, 'B': 1}]
 
         Parameters
         ----------
         initial: HypercubeLike
             Initial Boolean configuration. It must be fully specified.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
-            (default: "most-permissive")
+            (default: "general")
             Update semantics. Finite-state dynamics use an automatically
             selected explicit or symbolic traversal. Most-permissive dynamics
             use a compact decomposition into closed hypercubes and irreversible
@@ -1396,7 +1442,7 @@ class BooleanNetwork(Dict[str, Expression]):
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
-        ] = "most-permissive",
+        ] = "general",
         quantifier: Literal["exists", "robust", "universal"] = "robust",
     ) -> bool:
         """
@@ -1445,7 +1491,7 @@ class BooleanNetwork(Dict[str, Expression]):
             omitted or free components represent all compatible complete
             configurations.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
-            (default: "most-permissive")
+            (default: "general")
             Update semantics.
         quantifier: {"exists", "robust", "universal"} (default: "robust")
             Quantification used for partial configurations. If `"exists"`, at
@@ -1517,7 +1563,7 @@ class BooleanNetwork(Dict[str, Expression]):
         *,
         update: Literal[
             "asynchronous", "synchronous", "general", "most-permissive"
-        ] = "most-permissive",
+        ] = "general",
         quantifier: Literal["exists", "robust", "universal"] = "robust",
     ) -> bool:
         """
@@ -1527,7 +1573,8 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Examples
         --------
-        Most-permissive reachability keeps irreversible components explicit.
+        General reachability allows any non-empty subset of unstable
+        components to be updated simultaneously.
         In this example, `A` can irreversibly become 1 from the initial
         configuration, but `B` cannot become 1 while `A` remains 0:
 
@@ -1559,7 +1606,7 @@ class BooleanNetwork(Dict[str, Expression]):
             omitted or free components represent all compatible complete
             configurations.
         update: {"asynchronous", "synchronous", "general", "most-permissive"}
-            (default: "most-permissive")
+            (default: "general")
             Update semantics.
         quantifier: {"exists", "robust", "universal"} (default: "robust")
             Quantification used for partial configurations. If `"exists"`, at
@@ -1578,9 +1625,6 @@ class BooleanNetwork(Dict[str, Expression]):
 
         Raises
         ------
-        ImportError
-            If the selected dynamics require the optional dependency `dd` and
-            it is not installed.
         ValueError
             If the network is not closed, `source` or `target` is invalid,
             `update` is invalid or `quantifier` is invalid.
@@ -2542,7 +2586,10 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         ... )
         >>> implicants = ensemble.dnf_implicants()
         >>> implicants == {
-        ...     "A": [(Hypercube(B=1),), (Hypercube(B=1, C=1),)],
+        ...     "A": [
+        ...         (Hypercube({"B": 1}),),
+        ...         (Hypercube({"B": 1, "C": 1}),),
+        ...     ],
         ...     "B": [(Hypercube(),), (Hypercube(),)],
         ...     "C": [(), ()],
         ... }

@@ -1,0 +1,2052 @@
+#!/usr/bin/env python
+
+from __future__ import annotations
+
+from collections.abc import Mapping as MappingABC
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
+
+from ..._compat import Literal
+from ..._validation import _as_literal
+from ..boolean_algebra import ConfigurationSet, Hypercube
+from ..boolean_algebra._typing import Configuration, HypercubeLike
+from ._asynchronous import _bdd_asynchronous_transition_partitions
+from ._bdd import (
+    _bdd_equivalence,
+    _bdd_exclusive_or,
+    _bdd_forward_quantification,
+)
+from ._dynamics import (
+    _BottomBasinReduction,
+    _compile_bitset_rules,
+    _configuration_set_from_configuration_bits,
+    _ConfigurationBits,
+    _ExtendedComponentReduction,
+    _ForwardBasinReduction,
+    _ForwardReduction,
+    _import_dd_backend,
+    _restrict_transition_guided_reduction,
+    _successor_configuration_bits,
+    _terminal_strongly_connected_components,
+    _transition_guided_reduction_size,
+    _TransitionGuidedReduction,
+    _validate_hypercube,
+)
+from ._general import _bdd_general_transition_partitions
+from ._synchronous import _bdd_synchronous_transition_partitions
+
+if TYPE_CHECKING:
+    from ._network import BooleanNetwork
+
+_SYNCHRONOUS_LARGE_NETWORK_SIZE = 90
+_SYNCHRONOUS_UNATENESS_DAG_SIZE = 256
+_SYMBOLIC_SCC_THRESHOLD = 128
+
+
+class SymbolicTransitionSystem:
+    """
+    Compile finite-state dynamics for composable symbolic analyses.
+
+    All symbolic configuration sets created by one transition system share its
+    compiled dynamics. Sets from distinct systems are intentionally
+    incompatible, even when both systems originate from the same Boolean
+    network.
+
+    The network is captured when the system is compiled. Later modifications
+    to the original `BooleanNetwork` do not alter this transition system.
+
+    Examples
+    --------
+    >>> from bonesistools.logic.bn import BooleanNetwork
+    >>> bn = BooleanNetwork({"A": "~A", "B": "A"})
+    >>> system = bn.symbolic(update="asynchronous")
+    >>> initial = system.configurations({"A": 0, "B": 0})
+    >>> initial.reachable().count()
+    4
+
+    Parameters
+    ----------
+    network: BooleanNetwork
+        Closed Boolean network to compile.
+    update: {"asynchronous", "synchronous", "general"} (default: "asynchronous")
+        Finite-state update semantics.
+
+    Raises
+    ------
+    ValueError
+        If the network is not closed or `update` is invalid.
+    """
+
+    __slots__ = (
+        "_and_exists",
+        "_bdd",
+        "_components",
+        "_current_variables",
+        "_direct_forward_quantification",
+        "_direct_transition_clusters",
+        "_direct_transition_relation",
+        "_disjunctive_transitions",
+        "_forward_quantification",
+        "_network",
+        "_next_variables",
+        "_rename_current_to_next",
+        "_rename_next_to_current",
+        "_transition_clusters",
+        "_update",
+    )
+
+    def __init__(
+        self,
+        network: "BooleanNetwork",
+        *,
+        update: Literal[
+            "asynchronous",
+            "synchronous",
+            "general",
+        ] = "asynchronous",
+    ) -> None:
+
+        resolved_update = _as_literal(
+            update,
+            choices=("asynchronous", "synchronous", "general"),
+            name="update",
+        )
+        network.validate()
+        self._initialize(network.copy(), update=resolved_update)
+
+    def __repr__(self) -> str:
+        """Return a compact description of the compiled transition system."""
+
+        return (
+            f"SymbolicTransitionSystem(components={len(self._components)}, "
+            f"update={self._update!r})"
+        )
+
+    def configurations(
+        self,
+        configurations: Union[
+            HypercubeLike,
+            ConfigurationSet,
+            Iterable[HypercubeLike],
+        ],
+    ) -> "SymbolicConfigurationSet":
+        """
+        Encode one or more explicit configurations as a symbolic
+        configuration set.
+
+        A mapping is interpreted as one possibly partial configuration. A
+        `ConfigurationSet` is encoded directly from its internal disjoint
+        hypercubes. Any other iterable is interpreted as a union of possibly
+        partial configurations.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> system.configurations({"A": 0}).count()
+        2
+        >>> states = system.configurations(
+        ...     [{"A": 0, "B": 0}, {"A": 1, "B": 1}]
+        ... )
+        >>> states.count()
+        2
+
+        Parameters
+        ----------
+        configurations: HypercubeLike, ConfigurationSet or iterable
+            Configuration, configuration set or union of Boolean subspaces.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Exact symbolic union of the supplied configurations.
+
+        Raises
+        ------
+        TypeError
+            If `configurations` is a symbolic set or cannot be interpreted as
+            explicit configurations.
+        ValueError
+            If a configuration contains unknown components or a
+            `ConfigurationSet` uses different components.
+        """
+
+        if isinstance(configurations, SymbolicConfigurationSet):
+            raise TypeError(
+                "symbolic configuration sets cannot be implicitly converted "
+                "between transition systems"
+            )
+        if isinstance(configurations, ConfigurationSet):
+            if set(configurations.components) != set(self._components):
+                raise ValueError(
+                    "configuration set components do not match transition "
+                    "system components"
+                )
+            node = self._encode_configurations(configurations)
+        elif isinstance(configurations, MappingABC):
+            hypercube = _validate_hypercube(
+                self._components,
+                cast(HypercubeLike, configurations),
+                name="configurations",
+            )
+            node = self._encode_hypercube(hypercube)
+        else:
+            node = self._bdd.false
+            for configuration in configurations:
+                hypercube = _validate_hypercube(
+                    self._components,
+                    configuration,
+                    name="configurations",
+                )
+                node |= self._encode_hypercube(hypercube)
+
+        return self._wrap(node)
+
+    def empty(self) -> "SymbolicConfigurationSet":
+        """
+        Return the empty symbolic configuration set.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Empty set owned by this transition system.
+        """
+
+        return self._wrap(self._bdd.false)
+
+    def universe(self) -> "SymbolicConfigurationSet":
+        """
+        Return all Boolean configurations over `components`.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Complete Boolean configuration space.
+        """
+
+        return self._wrap(self._bdd.true)
+
+    def to_boolean_network(self) -> "BooleanNetwork":
+        """
+        Return the Boolean network captured at compilation.
+
+        Returns
+        -------
+        BooleanNetwork
+            New Boolean network instance that can be modified independently.
+        """
+
+        return self._network.copy()
+
+    @property
+    def update(self) -> Literal["asynchronous", "synchronous", "general"]:
+        """Return the compiled update semantics."""
+
+        return self._update
+
+    @property
+    def components(self) -> Tuple[str, ...]:
+        """Return components in symbolic variable order."""
+
+        return self._components
+
+    def post(
+        self,
+        configurations: "SymbolicConfigurationSet",
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return successors after exactly one transition.
+
+        Asynchronous and general transitions are non-reflexive, so a stable
+        configuration has no successor. Synchronous dynamics return `f(x)`;
+        consequently, a synchronous fixed point is its own successor.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A"}).symbolic()
+        >>> fixed = system.configurations({"A": 1})
+        >>> fixed.post().is_empty()
+        True
+        >>> synchronous = BooleanNetwork({"A": "A"}).symbolic(
+        ...     update="synchronous"
+        ... )
+        >>> synchronous.configurations({"A": 1}).post().count()
+        1
+
+        Parameters
+        ----------
+        configurations: SymbolicConfigurationSet
+            Source configurations owned by this transition system.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Exact union of one-step successors.
+
+        Raises
+        ------
+        TypeError
+            If `configurations` is not a `SymbolicConfigurationSet`.
+        ValueError
+            If `configurations` belongs to another transition system.
+        """
+
+        node = self._configuration_node(configurations)
+        return self._wrap(self._direct_successors(node))
+
+    def pre(
+        self,
+        configurations: "SymbolicConfigurationSet",
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return predecessors connected by exactly one transition.
+
+        Asynchronous and general transitions are non-reflexive. Synchronous
+        dynamics retain the transition from a fixed point to itself.
+
+        Parameters
+        ----------
+        configurations: SymbolicConfigurationSet
+            Target configurations owned by this transition system.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Exact union of one-step predecessors.
+
+        Raises
+        ------
+        TypeError
+            If `configurations` is not a `SymbolicConfigurationSet`.
+        ValueError
+            If `configurations` belongs to another transition system.
+        """
+
+        node = self._configuration_node(configurations)
+        return self._wrap(self._direct_predecessors(node))
+
+    def reachable(
+        self,
+        initial: "SymbolicConfigurationSet",
+        *,
+        within: Optional["SymbolicConfigurationSet"] = None,
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return the forward reachability closure, optionally in a region.
+
+        The result includes initial configurations contained in `within`.
+        Transitions leaving `within` are excluded from the closure.
+
+        Parameters
+        ----------
+        initial: SymbolicConfigurationSet
+            Initial configurations owned by this transition system.
+        within: SymbolicConfigurationSet, optional
+            Region in which paths must remain. If `None`, use the complete
+            configuration space.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Configurations reachable through zero or more transitions.
+
+        Raises
+        ------
+        TypeError
+            If an argument is not a `SymbolicConfigurationSet`.
+        ValueError
+            If an argument belongs to another transition system.
+        """
+
+        initial_node = self._configuration_node(initial)
+        within_node = self._optional_configuration_node(within)
+        if within_node is not None:
+            initial_node &= within_node
+        return self._wrap(
+            self._forward_reachable_states(initial_node, within=within_node)
+        )
+
+    def coreachable(
+        self,
+        target: "SymbolicConfigurationSet",
+        *,
+        within: Optional["SymbolicConfigurationSet"] = None,
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return configurations reaching a target, optionally in a region.
+
+        The result includes target configurations contained in `within`.
+        Transitions leaving `within` are excluded from the backward closure.
+
+        Parameters
+        ----------
+        target: SymbolicConfigurationSet
+            Target configurations owned by this transition system.
+        within: SymbolicConfigurationSet, optional
+            Region in which paths must remain. If `None`, use the complete
+            configuration space.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Configurations from which a target is reachable.
+
+        Raises
+        ------
+        TypeError
+            If an argument is not a `SymbolicConfigurationSet`.
+        ValueError
+            If an argument belongs to another transition system.
+        """
+
+        target_node = self._configuration_node(target)
+        within_node = self._optional_configuration_node(within)
+        if within_node is None:
+            within_node = self._bdd.true
+        else:
+            target_node &= within_node
+        return self._wrap(self._backward_reachable_states(target_node, within_node))
+
+    def terminal_sccs(
+        self,
+        configurations: Optional["SymbolicConfigurationSet"] = None,
+    ) -> Tuple["SymbolicConfigurationSet", ...]:
+        """
+        Return terminal strongly connected components of a symbolic region.
+
+        If `configurations` is omitted, analyze the complete state space.
+        Otherwise, terminality is evaluated in the subgraph induced by the
+        supplied region. Small regions are handled explicitly. Larger regions
+        use the same semantics-specific symbolic selection as
+        `BooleanNetwork.attractors()`.
+
+        For transition-closed asynchronous regions, candidates are reduced
+        with interleaved transition-guided reduction [1], then terminal
+        components are extracted with the Xie-Beerel procedure [2]. Arbitrary
+        non-closed regions retain generic induced-subgraph SCC semantics.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "~A"}).symbolic(
+        ...     update="asynchronous"
+        ... )
+        >>> tuple(component.count() for component in system.terminal_sccs())
+        (2,)
+
+        Parameters
+        ----------
+        configurations: SymbolicConfigurationSet, optional
+            Region whose induced transition graph is analyzed. If `None`, use
+            the complete configuration space.
+
+        Returns
+        -------
+        tuple of SymbolicConfigurationSet
+            Exact terminal strongly connected components.
+
+        Raises
+        ------
+        TypeError
+            If `configurations` is not a `SymbolicConfigurationSet`.
+        ValueError
+            If `configurations` belongs to another transition system.
+
+        References
+        ----------
+        [1] Benes et al. (2021). Computing bottom SCCs symbolically using
+        transition guided reduction. International Conference on Computer
+        Aided Verification, 505-528.
+
+        [2] Xie and Beerel (2000). Implicit enumeration of strongly connected
+        components and an application to formal verification. IEEE
+        Transactions on Computer-Aided Design of Integrated Circuits and
+        Systems, 19(10), 1225-1230.
+        """
+
+        if configurations is None:
+            states = self._bdd.true
+        else:
+            states = self._configuration_node(configurations)
+
+        components = self._terminal_sccs_for_region(
+            states,
+            transition_closed=True if states == self._bdd.true else None,
+        )
+
+        return tuple(self._wrap(component) for component in components)
+
+    def _transition(
+        self,
+        source: HypercubeLike,
+        target: HypercubeLike,
+        *,
+        quantifier: Literal["exists", "robust", "universal"],
+    ) -> bool:
+        """Test the one-step transition relation between two subspaces."""
+
+        source_hypercube = _validate_hypercube(
+            self._components,
+            source,
+            name="source",
+        )
+        target_hypercube = _validate_hypercube(
+            self._components,
+            target,
+            name="target",
+        )
+        initial = self._encode_hypercube(source_hypercube)
+        target = self._encode_hypercube(target_hypercube)
+
+        if quantifier == "universal":
+            target_next = self._bdd.let(
+                self._rename_current_to_next,
+                target,
+            )
+            required_transitions = initial & target_next
+            return (
+                required_transitions & ~self._transition_relation() == self._bdd.false
+            )
+
+        predecessors = self._transition_predecessors(target)
+        if quantifier == "exists":
+            return initial & predecessors != self._bdd.false
+
+        return initial & ~predecessors == self._bdd.false
+
+    def _reachability(
+        self,
+        source: HypercubeLike,
+        target: HypercubeLike,
+        *,
+        quantifier: Literal["exists", "robust", "universal"],
+    ) -> bool:
+        """Test whether initial configurations can reach a target subspace."""
+
+        source_hypercube = _validate_hypercube(
+            self._components,
+            source,
+            name="source",
+        )
+        target_hypercube = _validate_hypercube(
+            self._components,
+            target,
+            name="target",
+        )
+        initial = self._encode_hypercube(source_hypercube)
+        target = self._encode_hypercube(target_hypercube)
+        reachable_from_initial = self._forward_reachable_states(initial)
+        reachable_target = reachable_from_initial & target
+
+        if reachable_target == self._bdd.false:
+            return False
+
+        if quantifier == "universal":
+            return self._all_initial_configurations_reach_all_target_configurations(
+                initial,
+                target_hypercube,
+                reachable_from_initial,
+            )
+
+        source_is_concrete = (
+            source_hypercube.components == frozenset(self._components)
+            and source_hypercube.is_fully_specified
+        )
+        if quantifier == "exists" or source_is_concrete:
+            return True
+
+        states_reaching_target = reachable_target
+
+        while True:
+            if self._matches_reachability_quantifier(
+                initial,
+                states_reaching_target,
+                quantifier=quantifier,
+            ):
+                return True
+
+            predecessors = self._predecessors(states_reaching_target)
+            predecessors &= reachable_from_initial
+            updated = states_reaching_target | predecessors
+            if updated == states_reaching_target:
+                return False
+
+            states_reaching_target = updated
+
+    def _reachable_attractors(
+        self,
+        initial_configurations: ConfigurationSet,
+    ) -> Tuple[ConfigurationSet, ...]:
+        """Return reachable terminal SCCs without decoding transient states."""
+
+        initial = self._encode_configurations(initial_configurations)
+        reachable = self._forward_reachable_states(initial)
+        return tuple(
+            self._decode_configuration_set(component)
+            for component in self._terminal_sccs_for_region(
+                reachable,
+                transition_closed=True,
+            )
+        )
+
+    def _terminal_sccs_for_region(
+        self,
+        states: Any,
+        *,
+        transition_closed: Optional[bool] = None,
+    ) -> Tuple[Any, ...]:
+        """Select one shared terminal-SCC algorithm for a symbolic region."""
+
+        if states == self._bdd.false:
+            return ()
+
+        n_states = self._bdd.count(
+            states,
+            nvars=len(self._components),
+        )
+        if n_states <= _SYMBOLIC_SCC_THRESHOLD:
+            return self._explicit_terminal_scc_nodes(states)
+
+        if self._update == "general":
+            return self._terminal_sccs(states)
+
+        if transition_closed is None:
+            transition_closed = self._is_transition_closed(states)
+        if not transition_closed:
+            return self._terminal_sccs(states)
+
+        if self._update == "synchronous":
+            return self._synchronous_terminal_sccs(states)
+
+        candidates = self._transition_guided_reduction(states)
+        return self._xie_beerel_terminal_sccs(candidates)
+
+    def _is_transition_closed(self, states: Any) -> bool:
+        """Return whether every successor of a region remains in that region."""
+
+        return self._successors(states) & ~states == self._bdd.false
+
+    def _reachable_configurations(
+        self,
+        initial_configuration: Hypercube,
+    ) -> Iterator[Configuration]:
+        """Iterate over configurations in the symbolic reachable-state set."""
+
+        initial = self._encode_hypercube(initial_configuration)
+        reachable = self._forward_reachable_states(initial)
+
+        def iterate() -> Iterator[Configuration]:
+            for assignment in self._bdd.pick_iter(
+                reachable,
+                care_vars=self._current_variables,
+            ):
+                yield {
+                    component: int(assignment[variable])
+                    for component, variable in zip(
+                        self._components,
+                        self._current_variables,
+                    )
+                }
+
+        return iterate()
+
+    def _initialize(
+        self,
+        network: "BooleanNetwork",
+        *,
+        update: Literal["asynchronous", "synchronous", "general"],
+    ) -> None:
+        """Compile a validated network into the selected BDD backend."""
+
+        bdd_module = _import_dd_backend()
+        self._network = network
+        self._bdd = bdd_module.BDD()
+        self._and_exists = getattr(bdd_module, "and_exists", None)
+        self._update: Literal["asynchronous", "synchronous", "general"] = update
+        self._components = tuple(network.keys())
+        self._current_variables = tuple(
+            f"x{index}" for index in range(len(self._components))
+        )
+        self._next_variables = tuple(
+            f"y{index}" for index in range(len(self._components))
+        )
+        ordered_variables = tuple(
+            variable
+            for pair in zip(self._current_variables, self._next_variables)
+            for variable in pair
+        )
+        self._bdd.declare(*ordered_variables)
+        self._disjunctive_transitions: Tuple[Any, ...] = ()
+        self._transition_clusters: Tuple[Any, ...] = ()
+        self._forward_quantification: Tuple[Tuple[str, ...], ...] = ()
+        if update in {"synchronous", "general"}:
+            transition_partitions = (
+                _bdd_synchronous_transition_partitions
+                if update == "synchronous"
+                else _bdd_general_transition_partitions
+            )
+            (
+                self._transition_clusters,
+                self._forward_quantification,
+            ) = transition_partitions(
+                network,
+                bdd=self._bdd,
+                components=self._components,
+                current_vars=self._current_variables,
+                next_vars=self._next_variables,
+            )
+        else:
+            self._disjunctive_transitions = _bdd_asynchronous_transition_partitions(
+                network,
+                bdd=self._bdd,
+                components=self._components,
+                current_vars=self._current_variables,
+                next_vars=self._next_variables,
+            )
+        self._rename_current_to_next = dict(
+            zip(self._current_variables, self._next_variables)
+        )
+        self._rename_next_to_current = dict(
+            zip(self._next_variables, self._current_variables)
+        )
+        self._direct_transition_clusters = None
+        self._direct_forward_quantification = None
+        self._direct_transition_relation = None
+
+    def _wrap(self, node: Any) -> "SymbolicConfigurationSet":
+        """Wrap a BDD node without copying or validating it."""
+
+        return SymbolicConfigurationSet._from_node(self, node)
+
+    def _configuration_node(
+        self,
+        configurations: "SymbolicConfigurationSet",
+    ) -> Any:
+        """Return the BDD node of a compatible symbolic configuration set."""
+
+        if not isinstance(configurations, SymbolicConfigurationSet):
+            raise TypeError(
+                "expected a SymbolicConfigurationSet belonging to this "
+                "transition system"
+            )
+        if configurations.system is not self:
+            raise ValueError(
+                "symbolic configuration sets belong to different transition systems"
+            )
+        return configurations._node
+
+    def _optional_configuration_node(
+        self,
+        configurations: Optional["SymbolicConfigurationSet"],
+    ) -> Any:
+        """Return a compatible node or None for an omitted symbolic set."""
+
+        if configurations is None:
+            return None
+        return self._configuration_node(configurations)
+
+    def _direct_successors(self, configurations: Any) -> Any:
+        """Return exact one-step successors without a monolithic relation."""
+
+        if self._update != "general":
+            return self._successors(configurations)
+
+        clusters, forward_quantification = self._general_direct_partitions()
+        successors = configurations
+        for cluster, quantified_variables in zip(
+            clusters,
+            forward_quantification,
+        ):
+            if quantified_variables:
+                successors = self._relational_product(
+                    successors,
+                    cluster,
+                    quantified_variables,
+                )
+            else:
+                successors &= cluster
+        return self._bdd.let(
+            self._rename_next_to_current,
+            successors,
+        )
+
+    def _direct_predecessors(self, configurations: Any) -> Any:
+        """Return exact one-step predecessors without a monolithic relation."""
+
+        if self._update != "general":
+            return self._predecessors(configurations)
+
+        configurations_next = self._bdd.let(
+            self._rename_current_to_next,
+            configurations,
+        )
+        changed = self._general_direct_partitions()[0][-1]
+        predecessors = configurations_next & changed
+        for cluster, next_variable in zip(
+            self._transition_clusters,
+            self._next_variables,
+        ):
+            predecessors = self._relational_product(
+                predecessors,
+                cluster,
+                (next_variable,),
+            )
+        return predecessors
+
+    def _general_direct_partitions(
+        self,
+    ) -> Tuple[Tuple[Any, ...], Tuple[Tuple[str, ...], ...]]:
+        """Return lazily compiled partitions for non-reflexive general steps."""
+
+        if (
+            self._direct_transition_clusters is None
+            or self._direct_forward_quantification is None
+        ):
+            clusters = self._transition_clusters + (self._general_changed_partition(),)
+            self._direct_transition_clusters = clusters
+            self._direct_forward_quantification = _bdd_forward_quantification(
+                self._bdd,
+                clusters,
+                self._current_variables,
+            )
+
+        return (
+            self._direct_transition_clusters,
+            self._direct_forward_quantification,
+        )
+
+    def _general_changed_partition(self) -> Any:
+        """Return the lazy BDD constraint requiring one changed component."""
+
+        if self._direct_transition_clusters is not None:
+            return self._direct_transition_clusters[-1]
+
+        changed = self._bdd.false
+        for current_variable, next_variable in zip(
+            self._current_variables,
+            self._next_variables,
+        ):
+            changed |= _bdd_exclusive_or(
+                self._bdd.var(current_variable),
+                self._bdd.var(next_variable),
+            )
+        return changed
+
+    def _encode_hypercube(self, hypercube: Hypercube) -> Any:
+        """Encode one validated Boolean hypercube."""
+
+        return self._encode_hypercube_variables(
+            hypercube,
+            self._current_variables,
+        )
+
+    def _encode_hypercube_variables(
+        self,
+        hypercube: Hypercube,
+        variables: Tuple[str, ...],
+    ) -> Any:
+        """Encode one hypercube over a selected BDD variable family."""
+
+        encoded = self._bdd.true
+        for component, variable_name in zip(self._components, variables):
+            if component not in hypercube:
+                continue
+
+            value = hypercube[component]
+            if value.is_fixed:
+                variable = self._bdd.var(variable_name)
+                encoded &= variable if value.value else ~variable
+
+        return encoded
+
+    def _encode_configurations(self, configurations: ConfigurationSet) -> Any:
+        """Encode a ConfigurationSet as a BDD over current variables."""
+
+        source_indices = {
+            component: index
+            for index, component in enumerate(configurations.components)
+        }
+        states = self._bdd.false
+        for fixed_mask, value_mask in configurations._iter_encoded_hypercubes():
+            encoded = self._bdd.true
+            for component, variable_name in zip(
+                self._components,
+                self._current_variables,
+            ):
+                bit = 1 << source_indices[component]
+                if not fixed_mask & bit:
+                    continue
+
+                variable = self._bdd.var(variable_name)
+                encoded &= variable if value_mask & bit else ~variable
+            states |= encoded
+
+        return states
+
+    def _forward_reachable_states(self, initial: Any, within: Any = None) -> Any:
+        """Compute the symbolic forward reachability fixed point."""
+
+        reachable = initial
+        frontier = initial
+
+        while frontier != self._bdd.false:
+            successors = self._successors(frontier)
+            if within is not None:
+                successors &= within
+            new_frontier = successors & ~reachable
+            if new_frontier == self._bdd.false:
+                break
+
+            reachable |= new_frontier
+            frontier = new_frontier
+
+        return reachable
+
+    def _backward_reachable_states(self, initial: Any, within: Any) -> Any:
+        """Compute a symbolic backward reachability fixed point within a region."""
+
+        reachable = initial
+        frontier = initial
+
+        while frontier != self._bdd.false:
+            predecessors = self._predecessors(frontier) & within
+            new_frontier = predecessors & ~reachable
+            if new_frontier == self._bdd.false:
+                break
+
+            reachable |= new_frontier
+            frontier = new_frontier
+
+        return reachable
+
+    def _synchronous_terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+        """Select a conservative synchronous terminal-SCC algorithm."""
+
+        if len(self._components) >= _SYNCHRONOUS_LARGE_NETWORK_SIZE:
+            return self._terminal_sccs(states)
+
+        transition_dag_size = sum(
+            transition.dag_size for transition in self._transition_clusters
+        )
+        if (
+            transition_dag_size > _SYNCHRONOUS_UNATENESS_DAG_SIZE
+            and self._has_many_non_unate_synchronous_influences()
+        ):
+            return self._terminal_sccs(states)
+        return self._synchronous_terminal_cycles(states)
+
+    def _has_many_non_unate_synchronous_influences(self) -> bool:
+        """Test whether over one third of rule influences are non-unate."""
+
+        n_influences = 0
+        n_non_unate = 0
+        for transition, next_variable in zip(
+            self._transition_clusters,
+            self._next_variables,
+        ):
+            rule = self._bdd.let({next_variable: True}, transition)
+            for current_variable in self._bdd.support(rule):
+                low = self._bdd.let({current_variable: False}, rule)
+                high = self._bdd.let({current_variable: True}, rule)
+                positive = high & ~low != self._bdd.false
+                negative = low & ~high != self._bdd.false
+                n_influences += 1
+                n_non_unate += positive and negative
+
+        return 3 * n_non_unate > n_influences
+
+    def _synchronous_terminal_cycles(self, states: Any) -> Tuple[Any, ...]:
+        """Extract cycles from a deterministic synchronous transition system."""
+
+        remaining = self._synchronous_recurrent_states(states)
+        cycles = []
+
+        while remaining != self._bdd.false:
+            seed = self._pick_state(remaining)
+            cycle = seed
+            successor = self._successors(seed)
+
+            while successor & cycle == self._bdd.false:
+                cycle |= successor
+                successor = self._successors(successor)
+
+            cycles.append(cycle)
+            remaining &= ~cycle
+
+        return tuple(cycles)
+
+    def _synchronous_recurrent_states(self, states: Any) -> Any:
+        """Remove transient states until only synchronous cycles remain."""
+
+        recurrent = states
+
+        while True:
+            updated = recurrent & self._successors(recurrent)
+            if updated == recurrent:
+                return recurrent
+            recurrent = updated
+
+    def _transition_guided_reduction(self, states: Any) -> Any:
+        """
+        Remove states that cannot belong to asynchronous terminal SCCs.
+
+        This implements interleaved transition-guided reduction [1]. Each
+        asynchronous component update is treated as one transition label.
+
+        References
+        ----------
+        [1] Benes et al. (2021). Computing bottom SCCs symbolically using
+        transition guided reduction. CAV 2021, 505-528.
+        """
+
+        remaining = states
+        reductions: List[_TransitionGuidedReduction] = []
+        for transition_index, transition in enumerate(self._disjunctive_transitions):
+            forward = self._transition_sources(transition, remaining)
+            if forward != self._bdd.false:
+                reductions.append(
+                    _ForwardReduction(
+                        transition_index=transition_index,
+                        forward=forward,
+                    )
+                )
+
+        to_discard = self._bdd.false
+        while reductions:
+            if to_discard != self._bdd.false:
+                remaining &= ~to_discard
+                for reduction in reductions:
+                    _restrict_transition_guided_reduction(reduction, remaining)
+                to_discard = self._bdd.false
+
+            if not isinstance(
+                reductions[-1],
+                (_ForwardBasinReduction, _BottomBasinReduction),
+            ):
+                reductions.sort(
+                    key=_transition_guided_reduction_size,
+                    reverse=True,
+                )
+
+            reduction = reductions[-1]
+            if isinstance(reduction, _ForwardReduction):
+                successors = self._saturation_successors(
+                    reduction.forward,
+                    within=remaining,
+                )
+                if successors != self._bdd.false:
+                    reduction.forward |= successors
+                    continue
+
+                reductions.pop()
+                transition = self._disjunctive_transitions[reduction.transition_index]
+                reductions.append(
+                    _ExtendedComponentReduction(
+                        transition_index=reduction.transition_index,
+                        forward=reduction.forward,
+                        extended_component=self._transition_sources(
+                            transition,
+                            remaining,
+                        ),
+                    )
+                )
+                if remaining & ~reduction.forward != self._bdd.false:
+                    reductions.append(
+                        _ForwardBasinReduction(
+                            forward=reduction.forward,
+                            basin=reduction.forward,
+                        )
+                    )
+                continue
+
+            if isinstance(reduction, _ExtendedComponentReduction):
+                predecessors = self._saturation_predecessors(
+                    reduction.extended_component,
+                    within=reduction.forward,
+                )
+                if predecessors != self._bdd.false:
+                    reduction.extended_component |= predecessors
+                    continue
+
+                reductions.pop()
+                bottom = reduction.forward & ~reduction.extended_component
+                transition = self._disjunctive_transitions[reduction.transition_index]
+                escaping = self._transition_sources_outside(
+                    transition,
+                    remaining,
+                )
+                if bottom != self._bdd.false or escaping != self._bdd.false:
+                    reductions.append(
+                        _BottomBasinReduction(
+                            bottom=bottom,
+                            basin=bottom | escaping,
+                        )
+                    )
+                continue
+
+            if isinstance(reduction, _ForwardBasinReduction):
+                predecessors = self._saturation_predecessors(
+                    reduction.basin,
+                    within=remaining,
+                )
+                if predecessors != self._bdd.false:
+                    reduction.basin |= predecessors
+                    continue
+
+                reductions.pop()
+                to_discard = reduction.basin & ~reduction.forward
+                continue
+
+            predecessors = self._saturation_predecessors(
+                reduction.basin,
+                within=remaining,
+            )
+            if predecessors != self._bdd.false:
+                reduction.basin |= predecessors
+                continue
+
+            reductions.pop()
+            to_discard = reduction.basin & ~reduction.bottom
+
+        if to_discard != self._bdd.false:
+            remaining &= ~to_discard
+
+        return remaining
+
+    def _xie_beerel_terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+        """
+        Extract global terminal SCCs from a reduced candidate state set.
+
+        The search follows the symbolic bottom-SCC procedure of Xie and Beerel
+        [1]. Successors are evaluated against the original transition relation
+        because transition-guided reduction does not return a closed set.
+
+        References
+        ----------
+        [1] Xie and Beerel (2000). Implicit enumeration of strongly connected
+        components and an application to formal verification. IEEE
+        Transactions on Computer-Aided Design of Integrated Circuits and
+        Systems, 19(10), 1225-1230.
+        """
+
+        remaining = states
+        pivot_hint = self._bdd.false
+        terminal_components = []
+
+        while remaining != self._bdd.false:
+            hinted_states = pivot_hint & remaining
+            pivot_hint = self._bdd.false
+            pivot = self._pick_state(
+                hinted_states if hinted_states != self._bdd.false else remaining
+            )
+            basin = self._saturated_backward_reachable_states(
+                pivot,
+                within=remaining,
+            )
+            component = pivot
+
+            while True:
+                successors = self._saturation_successors(component)
+                if successors == self._bdd.false:
+                    terminal_components.append(component)
+                    break
+
+                component |= successors
+                escaped = successors & ~basin
+                if escaped != self._bdd.false:
+                    pivot_hint = escaped
+                    break
+
+            remaining &= ~basin
+
+        return tuple(terminal_components)
+
+    def _saturated_backward_reachable_states(
+        self,
+        initial: Any,
+        *,
+        within: Any,
+    ) -> Any:
+        """Compute backward reachability one transition label at a time."""
+
+        reachable = initial
+        while True:
+            predecessors = self._saturation_predecessors(
+                reachable,
+                within=within,
+            )
+            if predecessors == self._bdd.false:
+                return reachable
+            reachable |= predecessors
+
+    def _saturation_successors(self, states: Any, within: Any = None) -> Any:
+        """Return new successors for the first productive transition label."""
+
+        for transition in reversed(self._disjunctive_transitions):
+            successors = self._partition_successors(states, transition)
+            if within is not None:
+                successors &= within
+            successors &= ~states
+            if successors != self._bdd.false:
+                return successors
+
+        return self._bdd.false
+
+    def _saturation_predecessors(self, states: Any, *, within: Any) -> Any:
+        """Return new predecessors for the first productive transition label."""
+
+        for transition in reversed(self._disjunctive_transitions):
+            predecessors = self._partition_predecessors(states, transition)
+            predecessors &= within & ~states
+            if predecessors != self._bdd.false:
+                return predecessors
+
+        return self._bdd.false
+
+    def _transition_sources(self, transition: Any, states: Any) -> Any:
+        """Return states enabling one labelled asynchronous transition."""
+
+        return self._relational_product(
+            states,
+            transition,
+            self._next_variables,
+        )
+
+    def _transition_sources_outside(self, transition: Any, states: Any) -> Any:
+        """Return sources whose labelled transition leaves a state set."""
+
+        states_next = self._bdd.let(
+            self._rename_current_to_next,
+            states,
+        )
+        return self._relational_product(
+            transition & states,
+            ~states_next,
+            self._next_variables,
+        )
+
+    def _partition_successors(self, states: Any, transition: Any) -> Any:
+        """Return successors through one asynchronous transition partition."""
+
+        successors = self._relational_product(
+            states,
+            transition,
+            self._current_variables,
+        )
+        return self._bdd.let(
+            self._rename_next_to_current,
+            successors,
+        )
+
+    def _partition_predecessors(self, states: Any, transition: Any) -> Any:
+        """Return predecessors through one asynchronous transition partition."""
+
+        states_next = self._bdd.let(
+            self._rename_current_to_next,
+            states,
+        )
+        return self._relational_product(
+            transition,
+            states_next,
+            self._next_variables,
+        )
+
+    def _terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+        """Extract terminal SCCs while keeping state regions symbolic."""
+
+        remaining = states
+        terminal_components = []
+        while remaining != self._bdd.false:
+            component = self._terminal_scc(remaining)
+            terminal_components.append(component)
+            basin = self._backward_reachable_states(component, remaining)
+            remaining &= ~basin
+
+        return tuple(terminal_components)
+
+    def _terminal_scc(self, states: Any) -> Any:
+        """Follow the symbolic SCC graph until reaching one terminal SCC."""
+
+        region = states
+        seed = self._pick_state(region)
+
+        while True:
+            forward = self._forward_reachable_states(seed, within=region)
+            backward = self._backward_reachable_states(seed, forward)
+            component = forward & backward
+            successors = self._successors(component) & region & ~component
+            if successors == self._bdd.false:
+                return component
+
+            region = forward & ~backward
+            seed = self._pick_state(successors)
+
+    def _explicit_terminal_scc_nodes(self, states: Any) -> Tuple[Any, ...]:
+        """Compute terminal SCCs of a small symbolic region explicitly."""
+
+        configuration_bits = frozenset(self._decode_configuration_bits(states))
+        compiled_rules = _compile_bitset_rules(self._network, self._components)
+        successors = {
+            state: tuple(
+                successor
+                for successor in _successor_configuration_bits(
+                    compiled_rules,
+                    state,
+                    update=self._update,
+                    n_components=len(self._components),
+                )
+                if successor in configuration_bits
+            )
+            for state in configuration_bits
+        }
+        return tuple(
+            self._encode_configurations(
+                _configuration_set_from_configuration_bits(
+                    component,
+                    self._components,
+                )
+            )
+            for component in _terminal_strongly_connected_components(successors)
+        )
+
+    def _successors(self, configurations: Any) -> Any:
+        """Return symbolic successors of a configuration set."""
+
+        if self._update == "asynchronous":
+            successors = self._bdd.false
+            for transition in self._disjunctive_transitions:
+                successors |= self._relational_product(
+                    configurations,
+                    transition,
+                    self._current_variables,
+                )
+        else:
+            successors = configurations
+            for cluster, quantified_variables in zip(
+                self._transition_clusters,
+                self._forward_quantification,
+            ):
+                if quantified_variables:
+                    successors = self._relational_product(
+                        successors,
+                        cluster,
+                        quantified_variables,
+                    )
+                else:
+                    successors &= cluster
+        return self._bdd.let(
+            self._rename_next_to_current,
+            successors,
+        )
+
+    def _predecessors(self, configurations: Any) -> Any:
+        """Return symbolic predecessors of a configuration set."""
+
+        configurations_next = self._bdd.let(
+            self._rename_current_to_next,
+            configurations,
+        )
+        if self._update == "asynchronous":
+            predecessors = self._bdd.false
+            for transition in self._disjunctive_transitions:
+                predecessors |= self._relational_product(
+                    transition,
+                    configurations_next,
+                    self._next_variables,
+                )
+            return predecessors
+
+        predecessors = configurations_next
+        for cluster, next_variable in zip(
+            self._transition_clusters,
+            self._next_variables,
+        ):
+            predecessors = self._relational_product(
+                predecessors,
+                cluster,
+                (next_variable,),
+            )
+        return predecessors
+
+    def _transition_predecessors(self, configurations: Any) -> Any:
+        """Return sources with a direct transition into a configuration set."""
+
+        if self._update != "general":
+            return self._predecessors(configurations)
+
+        configurations_next = self._bdd.let(
+            self._rename_current_to_next,
+            configurations,
+        )
+        return self._bdd.exist(
+            self._next_variables,
+            self._transition_relation() & configurations_next,
+        )
+
+    def _transition_relation(self) -> Any:
+        """Return the exact, non-reflexive relation where required."""
+
+        if self._direct_transition_relation is not None:
+            return self._direct_transition_relation
+
+        if self._update == "asynchronous":
+            relation = self._bdd.false
+            for transition in self._disjunctive_transitions:
+                relation |= transition
+        else:
+            relation = self._bdd.true
+            for cluster in self._transition_clusters:
+                relation &= cluster
+
+            if self._update == "general":
+                changed = self._bdd.false
+                for current_variable, next_variable in zip(
+                    self._current_variables,
+                    self._next_variables,
+                ):
+                    changed |= _bdd_exclusive_or(
+                        self._bdd.var(current_variable),
+                        self._bdd.var(next_variable),
+                    )
+                relation &= changed
+
+        self._direct_transition_relation = relation
+        return relation
+
+    def _relational_product(
+        self,
+        left: Any,
+        right: Any,
+        quantified_variables: Tuple[str, ...],
+    ) -> Any:
+        """Conjoin two BDDs while existentially quantifying variables."""
+
+        if self._and_exists is not None:
+            return self._and_exists(left, right, quantified_variables)
+
+        return self._bdd.exist(quantified_variables, left & right)
+
+    def _all_initial_configurations_reach_all_target_configurations(
+        self,
+        initial: Any,
+        target_hypercube: Hypercube,
+        reachable_from_initial: Any,
+    ) -> bool:
+        """Test universal reachability without enumerating target states."""
+
+        target_variables = tuple(f"z{index}" for index in range(len(self._components)))
+        undeclared_variables = tuple(
+            variable for variable in target_variables if variable not in self._bdd.vars
+        )
+        if undeclared_variables:
+            self._bdd.declare(*undeclared_variables)
+
+        target_configurations = self._encode_hypercube_variables(
+            target_hypercube,
+            target_variables,
+        )
+        current_matches_target = target_configurations
+        for current_variable, target_variable in zip(
+            self._current_variables,
+            target_variables,
+        ):
+            current_matches_target &= _bdd_equivalence(
+                self._bdd.var(current_variable),
+                self._bdd.var(target_variable),
+            )
+
+        required_pairs = initial & target_configurations
+        states_reaching_targets = current_matches_target & reachable_from_initial
+
+        while True:
+            if required_pairs & ~states_reaching_targets == self._bdd.false:
+                return True
+
+            predecessors = self._predecessors(states_reaching_targets)
+            predecessors &= reachable_from_initial
+            predecessors &= target_configurations
+            updated = states_reaching_targets | predecessors
+            if updated == states_reaching_targets:
+                return False
+
+            states_reaching_targets = updated
+
+    def _matches_reachability_quantifier(
+        self,
+        initial: Any,
+        states_reaching_target: Any,
+        *,
+        quantifier: Literal["exists", "robust"],
+    ) -> bool:
+        """Test whether the current backward closure answers the query."""
+
+        if quantifier == "exists":
+            return initial & states_reaching_target != self._bdd.false
+
+        return initial & ~states_reaching_target == self._bdd.false
+
+    def _pick_state(self, states: Any) -> Any:
+        """Select one concrete state from a non-empty symbolic state set."""
+
+        assignment = next(
+            self._bdd.pick_iter(
+                states,
+                care_vars=self._current_variables,
+            )
+        )
+        selected = self._bdd.true
+        for variable_name in self._current_variables:
+            variable = self._bdd.var(variable_name)
+            selected &= variable if assignment[variable_name] else ~variable
+
+        return selected
+
+    def _decode_configuration_set(self, states: Any) -> ConfigurationSet:
+        """Decode a symbolic state set into exact disjoint hypercubes."""
+
+        hypercubes = []
+        for assignment in self._bdd.pick_iter(states):
+            fixed_mask = 0
+            value_mask = 0
+            for index, variable_name in enumerate(self._current_variables):
+                if variable_name not in assignment:
+                    continue
+
+                bit = 1 << index
+                fixed_mask |= bit
+                if assignment[variable_name]:
+                    value_mask |= bit
+            hypercubes.append((fixed_mask, value_mask))
+
+        return ConfigurationSet._from_encoded_hypercubes(
+            self._components,
+            hypercubes,
+        )
+
+    def _decode_configuration_bits(self, states: Any) -> Tuple[_ConfigurationBits, ...]:
+        """Decode a symbolic state set into explicit bitsets."""
+
+        decoded = []
+        for assignment in self._bdd.pick_iter(
+            states,
+            care_vars=self._current_variables,
+        ):
+            configuration_bits = 0
+            for index, variable_name in enumerate(self._current_variables):
+                if assignment[variable_name]:
+                    configuration_bits |= 1 << index
+            decoded.append(configuration_bits)
+
+        return tuple(decoded)
+
+    @classmethod
+    def _from_validated_network(
+        cls,
+        network: "BooleanNetwork",
+        *,
+        update: Literal["asynchronous", "synchronous", "general"],
+    ) -> "SymbolicTransitionSystem":
+        """Compile a validated network without copying it."""
+
+        transition_system = cls.__new__(cls)
+        transition_system._initialize(network, update=update)
+        return transition_system
+
+
+class SymbolicConfigurationSet:
+    """
+    Immutable symbolic set of configurations tied to one transition system.
+
+    Instances are created by `SymbolicTransitionSystem.configurations()`,
+    `SymbolicTransitionSystem.empty()` and `SymbolicTransitionSystem.universe()`.
+    Set operations remain symbolic and never materialize concrete
+    configurations implicitly.
+
+    Examples
+    --------
+    >>> from bonesistools.logic.bn import BooleanNetwork
+    >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+    >>> left = system.configurations({"A": 0})
+    >>> right = system.configurations({"B": 1})
+    >>> (left & right).enumerate()
+    ({'A': 0, 'B': 1},)
+    >>> (left | right).count()
+    3
+
+    Notes
+    -----
+    Iteration and `enumerate()` may require exponentially many configurations.
+    Use symbolic operations and `count()` whenever materialization is not
+    required.
+    """
+
+    __slots__ = ("_node", "_system")
+
+    def __init__(self) -> None:
+        raise TypeError(
+            "SymbolicConfigurationSet objects must be created by a "
+            "SymbolicTransitionSystem"
+        )
+
+    def __contains__(self, configuration: object) -> bool:
+        """
+        Test whether a configuration or subspace is fully represented.
+
+        Invalid or unsupported objects are treated as absent.
+        """
+
+        try:
+            return self.contains(cast(HypercubeLike, configuration))
+        except (TypeError, ValueError):
+            return False
+
+    def __repr__(self) -> str:
+        """Return a compact representation without counting configurations."""
+
+        return (
+            "SymbolicConfigurationSet("
+            f"components={len(self._system.components)}, "
+            f"update={self._system.update!r})"
+        )
+
+    def __iter__(self) -> Iterator[Configuration]:
+        """Iterate lazily over complete configurations."""
+
+        for assignment in self._system._bdd.pick_iter(
+            self._node,
+            care_vars=self._system._current_variables,
+        ):
+            yield {
+                component: int(assignment[variable])
+                for component, variable in zip(
+                    self._system.components,
+                    self._system._current_variables,
+                )
+            }
+
+    def __or__(self, other: object) -> "SymbolicConfigurationSet":
+        """Return the symbolic union with a compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        return self._system._wrap(self._node | self._compatible_node(other))
+
+    def __and__(self, other: object) -> "SymbolicConfigurationSet":
+        """Return the symbolic intersection with a compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        return self._system._wrap(self._node & self._compatible_node(other))
+
+    def __sub__(self, other: object) -> "SymbolicConfigurationSet":
+        """Return the symbolic set difference with a compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        return self._system._wrap(self._node & ~self._compatible_node(other))
+
+    def __xor__(self, other: object) -> "SymbolicConfigurationSet":
+        """Return the symmetric difference with a compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        other_node = self._compatible_node(other)
+        return self._system._wrap(
+            (self._node & ~other_node) | (~self._node & other_node)
+        )
+
+    def __invert__(self) -> "SymbolicConfigurationSet":
+        """Return the complement in the transition-system universe."""
+
+        return self._system._wrap(~self._node)
+
+    def __eq__(self, other: object) -> bool:
+        """Test equality within the same symbolic transition system."""
+
+        return (
+            isinstance(other, SymbolicConfigurationSet)
+            and self._system is other._system
+            and self._node == other._node
+        )
+
+    def __le__(self, other: object) -> bool:
+        """Test whether this set is included in another compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        return self._node & ~self._compatible_node(other) == self._system._bdd.false
+
+    def __lt__(self, other: object) -> bool:
+        """Test strict inclusion in another compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        other_node = self._compatible_node(other)
+        return (
+            self._node != other_node
+            and self._node & ~other_node == self._system._bdd.false
+        )
+
+    def __ge__(self, other: object) -> bool:
+        """Test whether this set includes another compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        other_node = self._compatible_node(other)
+        return other_node & ~self._node == self._system._bdd.false
+
+    def __gt__(self, other: object) -> bool:
+        """Test whether this set strictly includes another compatible set."""
+
+        if not isinstance(other, SymbolicConfigurationSet):
+            return NotImplemented
+        other_node = self._compatible_node(other)
+        return (
+            self._node != other_node
+            and other_node & ~self._node == self._system._bdd.false
+        )
+
+    def configurations(self) -> ConfigurationSet:
+        """
+        Materialize this symbolic configuration set as an explicit
+        ConfigurationSet.
+
+        Examples
+        --------
+        >>> from bonesistools.logic.bn import BooleanNetwork
+        >>> system = BooleanNetwork({"A": "A", "B": "B"}).symbolic()
+        >>> symbolic = system.configurations({"A": 0})
+        >>> explicit = symbolic.configurations()
+        >>> explicit.enumerate()
+        ({'A': 0, 'B': 0}, {'A': 0, 'B': 1})
+
+        Returns
+        -------
+        ConfigurationSet
+            Exact materialized configuration set.
+        """
+
+        return self._system._decode_configuration_set(self._node)
+
+    @property
+    def system(self) -> SymbolicTransitionSystem:
+        """Return the transition system owning this symbolic set."""
+
+        return self._system
+
+    @property
+    def components(self) -> Tuple[str, ...]:
+        """Return ordered Boolean components."""
+
+        return self._system.components
+
+    def is_empty(self) -> bool:
+        """
+        Test whether no configuration is represented.
+
+        Returns
+        -------
+        bool
+            Whether this set is empty.
+        """
+
+        return self._node == self._system._bdd.false
+
+    def is_universe(self) -> bool:
+        """
+        Test whether every configuration is represented.
+
+        Returns
+        -------
+        bool
+            Whether this set is the complete configuration space.
+        """
+
+        return self._node == self._system._bdd.true
+
+    def count(self) -> int:
+        """
+        Return the exact number of represented configurations.
+
+        Returns
+        -------
+        int
+            Number of complete configurations in this set.
+        """
+
+        return int(
+            self._system._bdd.count(
+                self._node,
+                nvars=len(self._system.components),
+            )
+        )
+
+    def contains(self, configuration: HypercubeLike) -> bool:
+        """
+        Test whether a configuration or complete subspace is represented.
+
+        A partial configuration is contained only when every compatible
+        complete configuration belongs to this set.
+
+        Parameters
+        ----------
+        configuration: HypercubeLike
+            Complete or partially defined configuration to test.
+
+        Returns
+        -------
+        bool
+            Whether the complete subspace is included in this set.
+
+        Raises
+        ------
+        TypeError
+            If `configuration` cannot be interpreted as a Boolean subspace.
+        ValueError
+            If `configuration` contains an unknown component or invalid value.
+        """
+
+        hypercube = _validate_hypercube(
+            self._system.components,
+            configuration,
+            name="configuration",
+        )
+        encoded = self._system._encode_hypercube(hypercube)
+        return encoded & ~self._node == self._system._bdd.false
+
+    def intersects(
+        self,
+        configurations: Union[HypercubeLike, "SymbolicConfigurationSet"],
+    ) -> bool:
+        """
+        Test whether another subspace or compatible set intersects this set.
+
+        Parameters
+        ----------
+        configurations: HypercubeLike or SymbolicConfigurationSet
+            Boolean subspace or symbolic set to compare.
+
+        Returns
+        -------
+        bool
+            Whether the intersection is non-empty.
+
+        Raises
+        ------
+        TypeError
+            If `configurations` cannot be interpreted as a Boolean subspace.
+        ValueError
+            If a subspace is invalid or a symbolic set belongs to another
+            transition system.
+        """
+
+        if isinstance(configurations, SymbolicConfigurationSet):
+            node = self._compatible_node(configurations)
+        else:
+            hypercube = _validate_hypercube(
+                self._system.components,
+                configurations,
+                name="configurations",
+            )
+            node = self._system._encode_hypercube(hypercube)
+        return self._node & node != self._system._bdd.false
+
+    def enumerate(self) -> Tuple[Configuration, ...]:
+        """
+        Return all represented complete configurations.
+
+        Returns
+        -------
+        tuple of Configuration
+            Materialized complete configurations.
+
+        Notes
+        -----
+        The result size may be exponential in the number of components.
+        """
+
+        return tuple(self)
+
+    def pick(self) -> Configuration:
+        """
+        Return one represented configuration without uniformity guarantees.
+
+        Returns
+        -------
+        Configuration
+            One complete configuration contained in this set.
+
+        Raises
+        ------
+        ValueError
+            If the symbolic set is empty.
+        """
+
+        try:
+            assignment = next(
+                self._system._bdd.pick_iter(
+                    self._node,
+                    care_vars=self._system._current_variables,
+                )
+            )
+        except StopIteration as error:
+            raise ValueError("cannot pick from an empty symbolic set") from error
+
+        return {
+            component: int(assignment[variable])
+            for component, variable in zip(
+                self._system.components,
+                self._system._current_variables,
+            )
+        }
+
+    def post(self) -> "SymbolicConfigurationSet":
+        """
+        Return successors after exactly one transition.
+
+        Asynchronous and general transitions are non-reflexive. Synchronous
+        dynamics retain the transition from a fixed point to itself.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Exact union of one-step successors.
+        """
+
+        return self._system.post(self)
+
+    def pre(self) -> "SymbolicConfigurationSet":
+        """
+        Return predecessors connected by exactly one transition.
+
+        Asynchronous and general transitions are non-reflexive. Synchronous
+        dynamics retain the transition from a fixed point to itself.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Exact union of one-step predecessors.
+        """
+
+        return self._system.pre(self)
+
+    def reachable(
+        self,
+        *,
+        within: Optional["SymbolicConfigurationSet"] = None,
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return the forward reachability closure.
+
+        Parameters
+        ----------
+        within: SymbolicConfigurationSet, optional
+            Region in which paths must remain. If `None`, use the complete
+            configuration space.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Configurations reachable from this set through zero or more
+            transitions.
+
+        Raises
+        ------
+        TypeError
+            If `within` is not a `SymbolicConfigurationSet`.
+        ValueError
+            If `within` belongs to another transition system.
+        """
+
+        return self._system.reachable(self, within=within)
+
+    def coreachable(
+        self,
+        *,
+        within: Optional["SymbolicConfigurationSet"] = None,
+    ) -> "SymbolicConfigurationSet":
+        """
+        Return the backward reachability closure.
+
+        Parameters
+        ----------
+        within: SymbolicConfigurationSet, optional
+            Region in which paths must remain. If `None`, use the complete
+            configuration space.
+
+        Returns
+        -------
+        SymbolicConfigurationSet
+            Configurations from which this set is reachable.
+
+        Raises
+        ------
+        TypeError
+            If `within` is not a `SymbolicConfigurationSet`.
+        ValueError
+            If `within` belongs to another transition system.
+        """
+
+        return self._system.coreachable(self, within=within)
+
+    def terminal_sccs(self) -> Tuple["SymbolicConfigurationSet", ...]:
+        """
+        Return terminal SCCs in the subgraph induced by this set.
+
+        The returned SCCs are terminal relative to this induced subgraph; they
+        need not be terminal in the complete transition graph.
+
+        Small regions are handled explicitly. Larger transition-closed
+        asynchronous regions use interleaved transition-guided reduction [1]
+        followed by the Xie-Beerel terminal-SCC procedure [2].
+
+        Returns
+        -------
+        tuple of SymbolicConfigurationSet
+            Exact terminal strongly connected components.
+
+        References
+        ----------
+        [1] Benes et al. (2021). Computing bottom SCCs symbolically using
+        transition guided reduction. International Conference on Computer
+        Aided Verification, 505-528.
+
+        [2] Xie and Beerel (2000). Implicit enumeration of strongly connected
+        components and an application to formal verification. IEEE
+        Transactions on Computer-Aided Design of Integrated Circuits and
+        Systems, 19(10), 1225-1230.
+        """
+
+        return self._system.terminal_sccs(self)
+
+    def _compatible_node(self, other: "SymbolicConfigurationSet") -> Any:
+        """Return another set node after checking manager identity."""
+
+        if other._system is not self._system:
+            raise ValueError(
+                "symbolic configuration sets belong to different transition systems"
+            )
+        return other._node
+
+    @classmethod
+    def _from_node(
+        cls,
+        system: SymbolicTransitionSystem,
+        node: Any,
+    ) -> "SymbolicConfigurationSet":
+        """Wrap one BDD node without validation, copying or counting."""
+
+        configurations = cls.__new__(cls)
+        configurations._system = system
+        configurations._node = node
+        return configurations

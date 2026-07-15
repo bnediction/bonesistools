@@ -30,7 +30,8 @@ def _assert_most_permissive_stg(bn, expected_targets):
         enumerated = [
             _configuration_bits(configuration)
             for configuration in bn.reachable_configurations(
-                _configuration_from_bits(source)
+                _configuration_from_bits(source),
+                update="most-permissive",
             )
         ]
         enumerated_targets = {target for target in enumerated if target != source}
@@ -46,6 +47,7 @@ def _assert_most_permissive_stg(bn, expected_targets):
             assert bn.reachability(
                 _configuration_from_bits(source),
                 _configuration_from_bits(target),
+                update="most-permissive",
                 quantifier="exists",
             ) is (target in expected_targets[source])
 
@@ -187,18 +189,22 @@ def test_boolean_network_reachability_matches_cmsb22_figure_2():
     assert bn.reachability(
         initial_configuration,
         {"x1": 1, "x2": 0, "x3": 1},
+        update="most-permissive",
     )
     assert bn.reachability(
         initial_configuration,
         {"x1": 1, "x2": 1, "x3": 1},
+        update="most-permissive",
     )
     assert not bn.reachability(
         initial_configuration,
         {"x1": 0, "x2": 0, "x3": 0},
+        update="most-permissive",
     )
     assert not bn.reachability(
         initial_configuration,
         {"x1": 0, "x2": 1, "x3": 1},
+        update="most-permissive",
     )
 
 
@@ -265,7 +271,10 @@ def test_boolean_network_reachable_configurations_iterates_regions_lazily(
         guarded_regions,
     )
 
-    configurations = bn.reachable_configurations({"A": 0})
+    configurations = bn.reachable_configurations(
+        {"A": 0},
+        update="most-permissive",
+    )
 
     assert next(configurations) == {"A": 0}
 
@@ -407,18 +416,22 @@ def test_boolean_network_reachability_most_permissive_tracks_irreversibles():
     assert bn.reachability(
         {"A": 0, "B": 0},
         {"A": 0, "B": 0},
+        update="most-permissive",
     )
     assert bn.reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 0},
+        update="most-permissive",
     )
     assert bn.reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 1},
+        update="most-permissive",
     )
     assert not bn.reachability(
         {"A": 0, "B": 0},
         {"A": 0, "B": 1},
+        update="most-permissive",
     )
 
 
@@ -428,14 +441,17 @@ def test_boolean_network_reachability_most_permissive_allows_reversible_space():
     assert bn.reachability(
         {"A": 0, "B": 1},
         {"A": 0, "B": 0},
+        update="most-permissive",
     )
     assert bn.reachability(
         {"A": 0, "B": 1},
         {"A": 1, "B": 1},
+        update="most-permissive",
     )
     assert bn.reachability(
         {"A": 0, "B": 1},
         {"A": 1, "B": 0},
+        update="most-permissive",
     )
 
 
@@ -445,6 +461,7 @@ def test_boolean_network_reachability_most_permissive_rejects_self_support():
     assert not bn.reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 1},
+        update="most-permissive",
         quantifier="exists",
     )
 
@@ -452,14 +469,24 @@ def test_boolean_network_reachability_most_permissive_rejects_self_support():
 def test_boolean_network_reachability_accepts_partial_states_existentially():
     bn = bt.logic.bn.BooleanNetwork({"A": "A"})
 
-    assert bn.reachability({}, {"A": 1}, quantifier="exists")
-    assert not bn.reachability({}, {"A": 1}, quantifier="robust")
+    assert bn.reachability(
+        {},
+        {"A": 1},
+        update="most-permissive",
+        quantifier="exists",
+    )
+    assert not bn.reachability(
+        {},
+        {"A": 1},
+        update="most-permissive",
+        quantifier="robust",
+    )
 
 
 def test_boolean_network_reachability_defaults_to_robust_quantification():
     bn = bt.logic.bn.BooleanNetwork({"A": 1})
 
-    assert bn.reachability({}, {"A": 1})
+    assert bn.reachability({}, {"A": 1}, update="most-permissive")
 
 
 def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
@@ -475,16 +502,19 @@ def test_boolean_network_reachability_evaluates_non_unate_rules_exactly():
     assert bn.reachability(
         initial_configuration,
         {"A": 1, "always": 1, "never": 0},
+        update="most-permissive",
         quantifier="exists",
     )
     assert not bn.reachability(
         initial_configuration,
         {"always": 0},
+        update="most-permissive",
         quantifier="exists",
     )
     assert not bn.reachability(
         initial_configuration,
         {"never": 1},
+        update="most-permissive",
         quantifier="exists",
     )
 
@@ -551,5 +581,8 @@ def test_i3_feed_forward_loop_is_reachable_only_with_most_permissive_dynamics():
         update="most-permissive",
     )
     assert target_configuration in tuple(
-        bn.reachable_configurations(initial_configuration)
+        bn.reachable_configurations(
+            initial_configuration,
+            update="most-permissive",
+        )
     )

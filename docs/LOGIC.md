@@ -1,485 +1,416 @@
-# Boolean Modelling
+# Logic Implementation
 
-Boolean modelling utilities are exposed through `bt.logic`.
+This document describes the internal representations and algorithms used by
+`bonesistools.logic`. It is intended for developers changing the logic engine.
+Public call signatures and usage examples belong in docstrings, not here.
 
-```python
-import bonesistools as bt
-```
+When an implementation strategy changes, update this document together with
+the relevant regression and golden tests.
 
-## Boolean Algebra
+## Boolean Rules
 
-Boolean-algebra utilities are exposed through `bt.logic.ba`.
+`BooleanNetwork` stores rules as `boolean.py` expressions associated with one
+shared `BooleanAlgebra`. Construction validates closure but deliberately keeps
+the supplied expression structure. Simplification is explicit so importing or
+copying a model does not silently rewrite its rules.
 
-### Partial Boolean Values
+### Equivalence
 
-`PartialBoolean` represents a set-theoretic partial Boolean value:
+Logical equivalence uses progressively more expensive exact checks:
 
-```python
-bt.logic.ba.PartialBoolean(0)    # admissible values: {0}
-bt.logic.ba.PartialBoolean(1)    # admissible values: {1}
-bt.logic.ba.PartialBoolean("*")  # admissible values: {0, 1}
-```
+1. simplify both expressions and compare their structures;
+2. evaluate all assignments simultaneously with integer bitsets when the union
+   of symbols contains at most 15 variables;
+3. ask Clingo for a counterexample for larger expressions.
 
-`"*"` means an unspecified or free Boolean value. It is not a Kleene truth
-value.
+The ASP path encodes expression trees directly. It avoids constructing an
+exponential truth table while preserving exact semantics.
+
+### Prime Implicants
+
+Prime-implicant computation also selects its strategy from the rule size:
+
+- constant rules are handled directly;
+- rules with at most four symbols use truth-table minterms followed by exact
+  cube merging;
+- larger rules are compiled to an ROBDD, then Clingo enumerates minimal partial
+  assignments that force the selected value.
+
+`dnf_implicants` has a different contract: it extracts clauses from a DNF-like
+expression and does not complete them with consensus implicants. Dynamics code
+must request prime implicants only when that minimality and completeness are
+required.
+
+## Boolean Subspaces
 
 ### Hypercubes
 
-`Hypercube` represents a partial Boolean configuration.
-
-```python
-cube = bt.logic.ba.Hypercube({"A": 0, "B": "*"})
-
-cube.contains({"A": 0, "B": 1})
-# True
-```
-
-Missing components are interpreted as free:
-
-```python
-bt.logic.ba.Hypercube({"A": 0}) == bt.logic.ba.Hypercube({"A": 0, "B": "*"})
-# True
-```
+A `Hypercube` is the public mapping representation of a partial Boolean
+configuration. Missing components and `PartialBoolean("*")` denote free
+dimensions. It is convenient at API boundaries but expensive for large sets of
+configurations.
 
 ### Configuration Sets
 
-`ConfigurationSet` represents an exact finite set of complete Boolean
-configurations over a fixed list of components.
-
-The implementation is compact and hidden. Users interact with configurations,
-not with the internal representation.
-
-```python
-states = bt.logic.ba.ConfigurationSet(["A", "B"])
-states.add({"A": 0, "B": 0})
-states.add({"A": "*", "B": 0})
-```
-
-`len(...)` returns the number of represented complete configurations:
-
-```python
-len(states)
-# 2
-```
-
-Membership accepts complete or partial configurations:
-
-```python
-{"A": 0, "B": 0} in states
-# True
-
-{"A": 1, "B": 0} in states
-# True
-
-{"B": 0} in states
-# True
-
-{"A": 1, "B": 1} in states
-# False
-```
-
-Iteration yields complete configurations:
-
-```python
-list(states)
-# [
-#     {"A": 0, "B": 0},
-#     {"A": 1, "B": 0},
-# ]
-```
-
-Use `enumerate()` to materialize all configurations:
-
-```python
-states.enumerate()
-# (
-#     {"A": 0, "B": 0},
-#     {"A": 1, "B": 0},
-# )
-```
-
-Use `sample()` when the represented set is too large to enumerate:
-
-```python
-states.sample(seed=0)
-# {"A": 0, "B": 0}
-
-states.sample(3, seed=0)
-# (
-#     {"A": 0, "B": 0},
-#     {"A": 1, "B": 0},
-#     {"A": 0, "B": 0},
-# )
-```
-
-### Redundancy Policy
-
-`ConfigurationSet` keeps an exact, non-redundant internal representation, but
-does not guarantee a globally minimal representation.
-
-Equality is semantic: `a == b` compares the complete configurations
-represented by each object, not the internal hypercubes used to store them.
-
-For example:
-
-```python
-states = bt.logic.ba.ConfigurationSet(["A", "B"])
-states.add({"A": 0, "B": 0})
-states.add({"A": "*", "B": 0})
-```
-
-The first configuration is covered by the second addition, so it does not stay
-stored as a separate redundant subspace. The public result is:
-
-```python
-states.enumerate()
-# (
-#     {"A": 0, "B": 0},
-#     {"A": 1, "B": 0},
-# )
-```
-
-`compress()` can be called to opportunistically reduce the internal
-representation without changing the represented configurations:
-
-```python
-states = bt.logic.ba.ConfigurationSet(["A", "B"])
-states.add({"A": 0, "B": 0})
-states.add({"A": 1, "B": 0})
-states.compress()
-
-states.enumerate()
-# (
-#     {"A": 0, "B": 0},
-#     {"A": 1, "B": 0},
-# )
-```
-
-### Boolean Implicants
-
-`dnf_implicants(...)` extracts implicants from an expression already written in
-DNF-like form. `prime_implicants(...)` computes prime implicants.
-
-```python
-from boolean import BooleanAlgebra
-
-ba = BooleanAlgebra()
-rule = ba.parse("A & B | A & C")
-
-bt.logic.ba.prime_implicants(rule)
-```
-
-### Equivalence and Simplification
-
-`equivalence(...)` tests exact logical equivalence between two Boolean
-expressions. Boolean-network equality applies the same comparison to every
-component rule:
-
-```python
-bn1 = bt.logic.bn.BooleanNetwork({"A": "B | (B & C)", "B": 0, "C": 1})
-bn2 = bt.logic.bn.BooleanNetwork({"A": "B", "B": 0, "C": 1})
-
-bn1 == bn2
-# True
-```
-
-Rules retain their supplied structure on construction. Use `simplify()` to
-simplify them explicitly in place, either on one network or across an ensemble:
-
-```python
-bn1.simplify()
-bn1.rules
-# {"A": "B", "B": "0", "C": "1"}
-
-ensemble = bt.logic.bn.BooleanNetworkEnsemble(bn1, bn2)
-ensemble.simplify()
-```
-
-### Reduced Ordered Binary Decision Diagrams
-
-`ROBDD` represents one scalar Boolean function with a canonical reduced
-decision diagram for a fixed variable order:
-
-```python
-robdd = bt.logic.ba.ROBDD("A | B")
-
-robdd.variables
-# ("A", "B")
-
-robdd.evaluate({"A": 0, "B": 1})
-# True
-
-robdd.can_take_value({"A": 0}, 1)
-# True: B remains free and can be assigned to 1
-```
-
-Satisfying assignments can be counted without enumeration or represented as a
-compact `ConfigurationSet`:
-
-```python
-robdd.count()
-# 3
-
-robdd.configurations()
-# ConfigurationSet(components=("A", "B"), n_configurations=3)
-```
-
-Use `to_networkx()` to inspect the decision graph and its 0/1 branches.
-
-## Transitions and Reachability
-
-`BooleanNetwork.transition(...)` tests whether two configurations are linked
-by one direct transition. Synchronous dynamics update all components,
-asynchronous dynamics update one unstable component, and general dynamics
-update any non-empty subset of unstable components.
-
-```python
-bn = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "~B"})
-
-bn.transition(
-    source={"A": 0, "B": 0},
-    target={"A": 1, "B": 0},
-    update="asynchronous",
-)
-# True
-```
-
-Most-permissive transition and reachability are the same relation. Therefore,
-for `update="most-permissive"`:
-
-```python
-bn.transition(x, y) == bn.reachability(x, y)
-```
-
-`BooleanNetwork.reachability(...)` tests whether a target configuration or
-subspace is reachable from a source configuration or subspace.
-
-```python
-bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
-
-bn.reachability(
-    source={"A": 0, "B": 1},
-    target={"A": 1, "B": 1},
-    update="asynchronous",
-)
-# True
-```
-
-For asynchronous and general dynamics, reachability computes the CTL set
-`EF(target)` symbolically with a BDD. It first computes configurations reachable
-from the source subspace, then restricts the backward fixed point to those
-configurations. It does not enumerate the state-transition graph.
-
-Install the optional BDD implementation with:
-
-```bash
-pip install "bonesistools[bdd]"
-```
-
-With synchronous dynamics and a complete source configuration, reachability
-follows the unique trajectory directly and stops when it reaches the target or
-detects a cycle. Partial source configurations use a BDD. Most-permissive
-reachability uses an ASP formulation of the transition conditions.
-
-With partial configurations, `quantifier="exists"` asks whether at least one
-compatible source configuration reaches or transitions to one target
-configuration. `quantifier="robust"` asks whether every compatible source
-configuration reaches or transitions to at least one target configuration.
-`quantifier="universal"` asks whether every compatible source configuration
-reaches or transitions to every target configuration.
-
-`BooleanNetwork.reachable_configurations(...)` iterates over every complete
-configuration reachable from one complete initial configuration:
-
-```python
-configurations = bn.reachable_configurations(
-    initial={"A": 0, "B": 1},
-    update="asynchronous",
-)
-
-for configuration in configurations:
-    print(configuration)
-```
-
-The `"synchronous"`, `"asynchronous"`, `"general"` and `"most-permissive"`
-update semantics are supported. Finite-state dynamics automatically select a
-direct explicit traversal or the optional symbolic BDD implementation.
-Most-permissive enumeration uses a compact decomposition into closed
-hypercubes and irreversible components. Iteration order is unspecified.
-
-## Trap Spaces
-
-`BooleanNetwork.trap_spaces()` enumerates the minimal trap spaces of a network:
-
-```python
-trap_spaces = bn.trap_spaces()
-```
-
-`BooleanNetwork.principal_trap_space(...)` instead computes the unique smallest
-trap space containing one complete configuration:
-
-```python
-principal = bn.principal_trap_space({"A": 0, "B": 1})
-```
-
-Both operations return trap spaces as `Hypercube` objects. Minimal trap-space
-enumeration uses ASP, while the principal trap space is computed directly by
-successively freeing values that are not preserved within the enclosing
-hypercube.
-
-## Attractors
-
-`BooleanNetwork.attractors(...)` returns exact attractors as `ConfigurationSet`
-objects, optionally restricted by an initial configuration.
-
-```python
-bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
-
-attractors = bn.attractors(
-    initial={"A": 0, "B": 1},
-    update="asynchronous",
-)
-```
-
-Each attractor behaves as an exact set of complete configurations:
-
-```python
-for attractor in attractors:
-    print(len(attractor))
-    print(attractor.enumerate())
-```
-
-The initial configuration may be partial. Missing or free components define
-all compatible initial configurations, and the explicit backend explores the
-union of reachable configurations only once:
-
-```python
-attractors = bn.attractors(
-    initial={"A": 0},
-    update="asynchronous",
-)
-```
-
-Supported update semantics are:
-
-- `"synchronous"`: update every unstable component at once;
-- `"asynchronous"`: update one unstable component at a time;
-- `"general"`: update any non-empty subset of unstable components;
-- `"most-permissive"`: return reachable minimal trap spaces under
-  most-permissive reachability.
-
-For `"synchronous"`, `"asynchronous"` and `"general"` dynamics, BoNesisTools
-automatically selects an explicit or symbolic traversal. The optional BDD
-implementation computes large reachable configuration sets symbolically.
-Install it with:
-
-```bash
-pip install "bonesistools[bdd]"
-```
-
-For `"most-permissive"` dynamics, ASP computes reachable minimal trap spaces.
-BDD is not used for most-permissive reachability.
-
-## Boolean Model I/O
-
-Boolean-model readers are exposed through `bt.logic.io`.
-
-```python
-model = bt.logic.io.read_zginml("model.zginml")
-graph = model.get("influence_graph")
-bn = model.get("boolean_network")
-
-sbml_model = bt.logic.io.read_sbml("model.sbml")
-```
-
-### Readers
-
-- `read_bnet(file)` reads a `.bnet` Boolean network.
-- `read_bnet_directory(directory)` reads a directory of `.bnet` files into a
-  Boolean-network ensemble.
-- `read_ginml(file)` reads a GINML logical model.
-- `read_zginml(file)` reads a ZGINML archive and preserves companion files.
-- `read_sbml(file)` reads an SBML Level 3 Qual logical model.
-
-### Imported Logical Models
-
-GINML and ZGINML files may contain more than a Boolean network. They can also
-store an influence graph, initial states, perturbations, simulation settings,
-layout data, annotations and other GINsim-specific sections.
-
-`read_ginml(...)` and `read_zginml(...)` therefore return a model container
-with:
-
-- `boolean_network`: a `BooleanNetwork` when rules can be safely converted;
-- `influence_graph`: an `InfluenceGraph` aligned with the converted Boolean
-  network when available, or with signed GINML interactions otherwise;
-- `initial_states`: named `Hypercube` objects, with multi-valued levels encoded
-  through the same Boolean threshold variables as the network;
-- `perturbations`: parsed perturbation records when recognized;
-- `metadata`: supported and unsupported model metadata.
-
-Use:
-
-```python
-model.get("boolean_network")
-model.get("influence_graph")
-```
-
-to request a required object explicitly. `get(...)` raises `ValueError` with a
-clear reason when the requested object is unavailable.
-
-### GINML/ZGINML Policy
-
-GINML/ZGINML import is conservative. BoNesisTools does not try to fully
-reimplement GINsim.
-
-Logical rules are converted to a `BooleanNetwork` only when they are directly
-representable or when a multi-valued component can be safely encoded with
-monotone Boolean threshold variables:
+`ConfigurationSet` stores each internal hypercube as two Python integers:
 
 ```text
-RA with maxvalue=2
-    -> RA_b1
-    -> RA_b2
+(fixed_mask, value_mask)
 ```
 
-For example, `RA:2` is converted to `RA_b1 & RA_b2`.
+For component `i`, bit `i` in `fixed_mask` indicates whether the component is
+fixed. The corresponding bit in `value_mask` stores its value. Bits outside
+`fixed_mask` are ignored.
 
-When this conversion succeeds, the `InfluenceGraph` uses the same Boolean
-components and rule dependencies. Attributes of a multi-valued GINML component
-are copied to each threshold node, while `ginml_component` and
-`ginml_threshold` record its origin:
+The representation maintains these invariants:
+
+- it represents an exact finite set of complete configurations;
+- stored hypercubes do not overlap;
+- no stored hypercube is covered by another stored hypercube;
+- component order is fixed for the lifetime of the object;
+- the number of stored hypercubes is not guaranteed to be globally minimal.
+
+Insertion subtracts the new hypercube from overlapping stored hypercubes, then
+adds the new region. This makes counting, sampling and semantic equality exact
+without materializing every configuration. `compress()` opportunistically
+merges compatible adjacent regions but does not solve a global minimization
+problem.
+
+Dynamics code uses complete configurations as integer bitsets. Conversions to
+mapping objects should remain at public boundaries or final result decoding.
+
+### Symbolic Configuration Sets
+
+`SymbolicConfigurationSet` stores one private BDD node and a strong reference
+to its `SymbolicTransitionSystem`. It is an immutable working value for
+composable symbolic operations, not a replacement for `ConfigurationSet`.
+
+All symbolic sets produced by one transition system share the same manager,
+state-variable order and transition partitions. Sets from different systems
+must never be combined or converted implicitly, including systems compiled
+from the same network. This identity constraint prevents cross-manager BDD
+operations and gives the manager a clear lifetime.
+
+Set algebra, inclusion, counting, containment and dynamic navigation operate
+directly on BDD nodes. Iteration is lazy but can still enumerate exponentially
+many configurations. Materialization is therefore explicit through
+`configurations()`.
+
+The materialization path calls `pick_iter` without care variables to obtain an
+exact disjoint cube cover, translates those cubes directly to
+`(fixed_mask, value_mask)` pairs, then calls
+`ConfigurationSet._from_encoded_hypercubes(...)`. It must not use repeated
+`add()`, decode intermediate `Hypercube` objects or call `compress()`.
+
+### ROBDD
+
+The internal ROBDD implementation represents one scalar Boolean function with
+a fixed variable order, terminal nodes `0` and `1`, a unique-node table and
+memoized Boolean operations. Reduction merges identical decision nodes and
+eliminates nodes whose low and high branches are equal.
+
+It is used where an exact compact representation of one rule is needed,
+notably for large prime-implicant computations and non-unate most-permissive
+rules. Finite-state symbolic dynamics instead use the required `dd` package,
+which provides efficient relational operations over state sets.
+
+## Finite-State Dynamics
+
+Let `x` be a complete configuration, `f(x)` its synchronous image and
+`U(x) = {i | f_i(x) != x_i}` its unstable components.
+
+- synchronous semantics has the single successor `f(x)`;
+- asynchronous semantics updates exactly one component in `U(x)`;
+- general semantics updates any non-empty subset of `U(x)`.
+
+Identity transitions are omitted when they do not change reachability or
+terminal strongly connected components.
+
+### Explicit Representation
+
+Rules are compiled once into callables operating directly on integer bitsets.
+For a configuration `x`, `x XOR f(x)` is the unstable-component mask.
+
+- asynchronous successors are generated by repeatedly extracting the least
+  significant set bit;
+- general successors are generated by enumerating non-empty submasks;
+- synchronous trajectories repeatedly apply the compiled image function until
+  a configuration repeats.
+
+Explicit asynchronous attractors use an iterative, on-the-fly Tarjan search.
+The algorithm discovers terminal SCCs without first materializing the complete
+reachable graph. General dynamics currently materialize the reachable
+successor mapping and extract terminal SCCs with iterative Kosaraju. The
+synchronous implementation memoizes the terminal cycle reached by each visited
+configuration so trajectories with a shared suffix are traversed once.
+
+### Symbolic BDD Representation
+
+`SymbolicTransitionSystem` is the public name of the BDD transition engine. It
+uses `dd.cudd` when available and falls back to `dd.autoref`. Current-state and
+next-state variables are interleaved:
 
 ```text
-RA -> RA_b1, RA_b2
+x0, y0, x1, y1, ...
 ```
 
-If Boolean conversion is unavailable, signed interactions from the original
-GINML graph are retained instead.
+The transition relation is partitioned to avoid constructing one large BDD:
 
-Unsupported GINsim logical parameters or companion files are not silently
-discarded: they are reported in `metadata`. In that case, `boolean_network`
-may be `None` while `influence_graph`, initial states and metadata remain
-available.
+- synchronous and general semantics use conjunctive per-component clusters;
+- asynchronous semantics use one disjunctive partition per updated component;
+- current variables are existentially quantified after the last partition that
+  depends on them;
+- `and_exists` is used when the selected `dd` backend provides it.
 
-### SBML Level 3 Qual
+General clusters encode either an unchanged component or its updated rule
+value. The direct general transition relation additionally requires at least
+one changed component. Asynchronous partitions use precomputed unchanged
+prefixes and suffixes around the updated component.
 
-`read_sbml(...)` supports logical models using the SBML Level 3 Qual package.
-Qualitative species, function terms, default terms and supported MathML
-conditions are converted through the same threshold Booleanization used for
-GINML models. Explicit `initialLevel` values are exposed as the named
-`initial_states["default"]` hypercube.
+Public symbolic `post()` and `pre()` preserve this non-reflexive general
+relation without constructing a monolithic BDD. A lazily built changed-state
+partition is composed with the existing per-component clusters;
+`and_exists` and early quantification remain active. Forward and backward
+closures may use the reflexive cluster relation because identity edges do not
+change a fixed point.
 
-SBML layout positions and dimensions, model annotations, species attributes
-and transition metadata are preserved when available. The returned influence
-graph is aligned with `boolean_network.to_influence_graph()` modulo these
-source-format attributes.
+Forward and backward reachability are frontier fixed points over BDD state
+sets. The implementation never materializes an STG unless it intentionally
+switches to the explicit path for a small symbolic result.
 
-Other SBML documents are rejected with:
+`BooleanNetwork.symbolic()` captures a network copy and compiles one reusable
+transition system. Subsequent changes to the source network do not alter the
+compiled dynamics. The public system exposes no manager, BDD node, variable
+name, renaming map or transition partition. Most-permissive dynamics remain in
+their ASP/hypercube implementation and are deliberately excluded from this
+finite-state symbolic API.
+
+For asynchronous attractor detection, interleaved transition-guided reduction
+(ITGR) treats each component update as a transition label and removes states
+that cannot belong to a terminal SCC [1]. The reduced set is only guaranteed to
+contain every attractor; it need not be forward-closed. Terminal SCC extraction
+therefore uses the Xie-Beerel procedure against the original transition
+relation rather than treating the reduced set as an induced closed graph [2].
+
+### Reachability Quantifiers
+
+For partial source and target hypercubes, the three exact contracts are:
+
+- `exists`: at least one source configuration reaches at least one target
+  configuration;
+- `robust`: every source configuration reaches at least one target
+  configuration;
+- `universal`: every source configuration reaches every target configuration.
+
+The universal implementation keeps source-target pairs symbolic by introducing
+a third BDD variable family. It must not be replaced by independent set-level
+reachability tests, which would lose the pairing information.
+
+Concrete synchronous sources bypass BDD construction and follow their unique
+trajectory directly. Partial synchronous sources and asynchronous/general
+subspace queries use the symbolic relation.
+
+### Attractors
+
+Finite-state attractors are terminal SCCs of the reachable transition system.
+All BDD terminal-SCC requests enter one strategy selector in
+`SymbolicTransitionSystem`, whether they originate from
+`BooleanNetwork.attractors()` or the composable symbolic API. If the analyzed
+region contains at most 128 configurations, it is decoded and its induced SCCs
+are computed explicitly. Larger regions remain symbolic:
+
+- synchronous terminal components use either recurrent-state cycle extraction
+  or the general symbolic SCC search;
+- asynchronous candidates are reduced with ITGR and then enumerated with
+  Xie-Beerel [1, 2];
+- general terminal SCCs are isolated with alternating symbolic forward and
+  backward closures;
+- the backward basin of each terminal SCC is removed before searching for the
+  next one.
+
+The complete state space and every forward-reachability closure are transition
+closed. This permits the asynchronous ITGR and synchronous cycle
+specializations. For an arbitrary symbolic region that is not transition
+closed, the selector retains the general induced-subgraph SCC algorithm; an
+edge leaving the supplied region must not affect terminality inside that
+region.
+
+The synchronous choice is deliberately conservative. Networks with at least
+90 components use the general symbolic SCC search. For smaller networks, the
+same search is selected only when the conjunctive transition partitions have
+an aggregate DAG size above 256 and BDD cofactor tests show that more than one
+third of regulatory influences are non-unate. Other cases use deterministic
+cycle extraction. These thresholds were selected from isolated benchmarks on
+the 36 local ZGINML models and the golden models; changing them requires the
+same time, peak-memory and result-equivalence checks.
+
+Final state sets are decoded directly into exact disjoint bitset hypercubes and
+used to construct `ConfigurationSet` objects in one operation. Avoid rebuilding
+large results through repeated public `add()` and `compress()` calls.
+
+The historical dynamics API and the composable symbolic API converge on the
+same engine but not on each other's public wrappers:
 
 ```text
-ValueError: unsupported SBML document (expected an SBML Level 3 document using the Qual package)
+BooleanNetwork.transition/reachability/... ----┐
+                                               ├─ SymbolicTransitionSystem
+BooleanNetwork.symbolic() + symbolic sets -----┘
 ```
 
-Unsupported Qual or MathML constructions raise a `ValueError`; the reader does
-not guess their logical meaning.
+`BooleanNetwork.attractors()` selects only between the explicit and BDD engines
+for finite-state semantics; most-permissive dynamics remain a separate
+dispatch. Each engine owns its internal optimizations. Once the BDD path is
+selected, every terminal-SCC choice belongs to `SymbolicTransitionSystem` and
+is therefore shared with the symbolic API. Do not route historical calls
+through `SymbolicConfigurationSet`; wrapper allocation would weaken their
+specialized performance contracts.
+
+### Automatic Strategy Selection
+
+The public API does not expose finite-state backends. Selection is based on a
+conservative upper bound: the number of free dimensions in the smallest closed
+hypercube containing the initial subspace.
+
+Current attractor selection is:
+
+| Semantics | Explicit path | BDD path |
+| --- | --- | --- |
+| synchronous | at most 1,024 initial configurations | larger initial sets |
+| asynchronous | at least 2,048 initial configurations always select BDD; otherwise at most 13 bounded free dimensions select explicit | remaining cases |
+| general | at most 10 bounded free dimensions | remaining cases |
+
+For reachable-configuration enumeration, asynchronous dynamics use the
+explicit traversal up to 12 bounded free dimensions and general dynamics up to
+8.
+
+These values are conservative engineering heuristics, not semantic constants.
+Any change requires benchmarks on small, medium and pathological models, plus
+result-equivalence checks between explicit and symbolic implementations.
+
+## Most-Permissive Dynamics
+
+Most-permissive transition and reachability use the same relation. They are not
+implemented by constructing a finite STG. The semantics and its reachability
+characterization follow Pauleve et al. [3].
+
+### Direct Reachability
+
+One reachability query is encoded as an ASP decision problem. The network
+program is grounded once and source/target values are supplied as assumptions,
+which allows repeated robust or universal checks to reuse the compiled solver.
+
+Unate rules are encoded through DNF implicants. Non-unate rules are encoded as
+exact ROBDD decision facts so mixed positive and negative dependencies are not
+approximated by an influence-graph monotonicity assumption.
+
+### Reachable Configuration Enumeration
+
+Enumeration uses a compact decomposition into transition regions. Each region
+records:
+
+- the components allowed to relax;
+- the smallest hypercube closed by their Boolean functions;
+- the free components in that hypercube;
+- components whose change is irreversible within the region.
+
+Regions are refined by removing irreversible components from subsequent
+closure sets. ROBDD rule queries determine whether a component function can
+take a value inside a partial hypercube. This representation avoids storing all
+reachable configurations before iteration.
+
+The smallest closed hypercube is also used as an inexpensive upper bound for
+finite-state backend selection. It is a closure bound, not by itself the exact
+set of most-permissive reachable configurations: irreversible-component
+conditions are required for exact reachability.
+
+### Trap Spaces and Attractors
+
+Minimal trap spaces are enumerated with Clingo. Reachable most-permissive
+attractors combine the trap-space and reachability constraints in one ASP
+program and enumerate inclusion-minimal solutions with domain recursion
+(`domRec`) and domain heuristics.
+
+The principal trap space containing one configuration is computed directly by
+iteratively relaxing values that are not preserved in the current hypercube;
+it does not require global trap-space enumeration.
+
+## Logical-Model Import
+
+GINML and SBML Level 3 Qual parsers share `_LogicalModel`, an intermediate
+representation containing maximum levels, inputs, desired threshold rules and
+normalized component names. Format-specific parsing should end at this
+boundary; threshold Booleanization belongs in `_booleanization.py`.
+
+### Threshold Booleanization
+
+A component `C` with maximum level `m > 1` is represented by:
+
+```text
+C_b1, C_b2, ..., C_bm
+```
+
+`C_bk = 1` means `C >= k`. Consequently, admissible encodings satisfy:
+
+```text
+C_b(k+1) -> C_bk
+```
+
+Desired threshold rules are regularized so lower thresholds are established
+before a higher threshold can activate and existing higher activity remains
+consistent while decreasing. Exact levels and level intervals are translated
+to conjunctions/disjunctions over these monotone threshold variables.
+
+Initial states use the same encoding: a source value `v` sets `C_bk` to
+`int(v >= k)`. Component names are normalized for Boolean expressions;
+normalization collisions are rejected rather than silently merged.
+
+### Influence-Graph Consistency
+
+When Booleanization succeeds, the imported influence graph is built from the
+actual Boolean rules so its nodes and dependencies match
+`BooleanNetwork.to_influence_graph()`. Source layout, style and annotation
+attributes are then attached to the corresponding Boolean nodes and edges.
+Attributes of a multi-valued component are copied to every threshold node, with
+origin and threshold metadata retained.
+
+If Booleanization cannot be justified, the Boolean network remains unavailable
+and the parser falls back to signed source interactions when possible. It must
+not invent logical rules from edge signs alone.
+
+### Conservative Parsing
+
+Unsupported GINsim companion sections, logical parameters and SBML Qual/MathML
+constructs must not be interpreted heuristically. Recognized information is
+stored in the structured fields of `ExecutableModel`; unsupported information
+and failure reasons are retained in metadata whenever practical.
+
+Only SBML Level 3 documents using the Qual package enter the SBML logical-model
+pipeline. Other SBML documents fail before Booleanization.
+
+## Validation
+
+Algorithm changes should be validated at three levels:
+
+1. regression tests for local invariants and edge cases;
+2. cross-strategy checks that explicit, BDD and ASP formulations agree where
+   their semantics overlap;
+3. golden tests on fixed real models for end-to-end stability.
+
+Performance changes should report both elapsed time and peak memory. A faster
+implementation is accepted only after exact result comparison; output ordering
+is not a correctness requirement unless a public contract explicitly says so.
+
+## References
+
+[1] Benes, N., Brim, L., Pastva, S., and Safranek, D. (2021). Computing bottom
+SCCs symbolically using transition guided reduction. International Conference
+on Computer Aided Verification, 505-528.
+
+[2] Xie, A., and Beerel, P. A. (2000). Implicit enumeration of strongly
+connected components and an application to formal verification. IEEE
+Transactions on Computer-Aided Design of Integrated Circuits and Systems,
+19(10), 1225-1230.
+
+[3] Pauleve, L., Kolcak, J., Chatain, T., and Haar, S. (2020). Reconciling
+qualitative, abstract, and scalable modeling of biological networks. Nature
+Communications, 11(1), 4256.

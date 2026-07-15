@@ -192,6 +192,30 @@ Example:
 
 ---
 
+## Conversion and serialization
+
+Use explicit `to_<target>()` methods for conversions that create and return a
+new in-memory Python object:
+
+```python
+mpbn_network = network.to_mpbn()
+influence_graph = network.to_influence_graph()
+```
+
+Use `save(file, ...)` for filesystem serialization. A `save()` method writes
+to disk and returns `None`:
+
+```python
+network.save("network.bnet")
+```
+
+Do not combine text generation and file writing in the same public method.
+Avoid string-dispatched APIs such as `convert("mpbn")`; explicit conversion
+methods make available targets visible in signatures, documentation and editor
+completion.
+
+---
+
 ## Public parameter order
 
 Public functions should use a consistent parameter hierarchy when it naturally

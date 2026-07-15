@@ -15,10 +15,13 @@ from ._network import (
     BooleanNetwork,
     BooleanNetworkEnsemble,
 )
+from ._symbolic import SymbolicConfigurationSet, SymbolicTransitionSystem
 
 __all__ = [
     "BooleanNetwork",
     "BooleanNetworkEnsemble",
+    "SymbolicTransitionSystem",
+    "SymbolicConfigurationSet",
 ]
 
 

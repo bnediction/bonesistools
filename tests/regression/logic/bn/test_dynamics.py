@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 
 import bonesistools as bt
-from bonesistools.logic.boolean_network import _dynamics, _network
+from bonesistools.logic.boolean_network import _dynamics, _network, _symbolic
 
 
 def _canonical_attractors(attractors):
@@ -267,7 +267,7 @@ def test_asynchronous_transition_guided_reduction_removes_transient_states():
     pytest.importorskip("dd.autoref")
     components = tuple(f"x{index}" for index in range(8))
     bn = bt.logic.bn.BooleanNetwork({component: 0 for component in components})
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="asynchronous",
     )
@@ -284,7 +284,7 @@ def test_asynchronous_transition_guided_reduction_removes_transient_states():
 def test_xie_beerel_rejects_terminal_component_of_non_closed_candidate_set():
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": 1})
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="asynchronous",
     )
@@ -310,7 +310,7 @@ def test_transition_guided_asynchronous_attractors_match_explicit(rules):
     bn = bt.logic.bn.BooleanNetwork(rules)
     components = tuple(bn.keys())
     initial_configurations = bt.logic.ba.ConfigurationSet(components, [{}])
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="asynchronous",
     )
@@ -357,7 +357,7 @@ def test_synchronous_bdd_attractors_use_functional_cycles(monkeypatch):
     )
 
     monkeypatch.setattr(
-        _dynamics._BDDTransitionSystem,
+        _symbolic.SymbolicTransitionSystem,
         "_terminal_sccs",
         lambda *_args, **_kwargs: pytest.fail(
             "synchronous dynamics must use functional cycles"
@@ -383,7 +383,7 @@ def test_synchronous_bdd_attractors_remove_transient_states_functionally(
     bn = bt.logic.bn.BooleanNetwork({component: 0 for component in components})
 
     monkeypatch.setattr(
-        _dynamics._BDDTransitionSystem,
+        _symbolic.SymbolicTransitionSystem,
         "_terminal_sccs",
         lambda *_args, **_kwargs: pytest.fail(
             "synchronous dynamics must remove transients functionally"
@@ -439,26 +439,41 @@ def test_bdd_reachable_attractors_keep_transient_states_symbolic(
 
 
 @pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
-def test_boolean_network_attractors_bdd_reports_missing_dd(
-    monkeypatch,
+def test_bdd_attractors_and_symbolic_sccs_share_algorithm_selection(
     update,
+    monkeypatch,
 ):
-    bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
+    components = tuple(f"x{index}" for index in range(8))
+    bn = bt.logic.bn.BooleanNetwork(
+        {component: f"~{component}" for component in components}
+    )
+    initial_configurations = bt.logic.ba.ConfigurationSet(components, ({},))
+    original = _symbolic.SymbolicTransitionSystem._terminal_sccs_for_region
+    transition_closed_arguments = []
 
-    def missing_dd(name: str) -> Any:
-        if name in {"dd.autoref", "dd.cudd"}:
-            raise ImportError("missing dd")
-        return __import__(name)
-
-    monkeypatch.setattr(_dynamics, "import_module", missing_dd)
-
-    with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
-        _reachable_attractors_with_backend(
-            bn,
-            {"A": 0},
-            update=cast(Any, update),
-            backend="bdd",
+    def tracked(self, states, *, transition_closed=None):
+        transition_closed_arguments.append(transition_closed)
+        return original(
+            self,
+            states,
+            transition_closed=transition_closed,
         )
+
+    monkeypatch.setattr(
+        _symbolic.SymbolicTransitionSystem,
+        "_terminal_sccs_for_region",
+        tracked,
+    )
+
+    historical = _dynamics._bdd_reachable_attractors(
+        bn,
+        initial_configurations,
+        update=update,
+    )
+    symbolic = bn.symbolic(update=update).terminal_sccs()
+
+    assert _canonical_attractors(historical) == _canonical_attractors(symbolic)
+    assert transition_closed_arguments == [True, True]
 
 
 @pytest.mark.parametrize(
@@ -476,7 +491,6 @@ def test_asynchronous_attractor_backend_uses_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -511,7 +525,6 @@ def test_general_attractor_backend_uses_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -546,7 +559,6 @@ def test_synchronous_attractor_backend_uses_initial_configuration_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_synchronous_reachable_attractors",
@@ -568,7 +580,6 @@ def test_asynchronous_attractor_backend_uses_initial_configuration_bound(monkeyp
     bn = bt.logic.bn.BooleanNetwork({component: component for component in components})
     selected = []
 
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_attractors",
@@ -583,39 +594,6 @@ def test_asynchronous_attractor_backend_uses_initial_configuration_bound(monkeyp
     bn.attractors({}, update="asynchronous")
 
     assert selected == ["bdd"]
-
-
-@pytest.mark.parametrize("update", ["asynchronous", "synchronous", "general"])
-def test_automatic_attractor_backend_falls_back_without_dd(monkeypatch, update):
-    components = tuple(f"x{index}" for index in range(14))
-    bn = bt.logic.bn.BooleanNetwork(
-        {component: f"~{component}" for component in components}
-    )
-    selected = []
-
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: None)
-    monkeypatch.setattr(
-        _network,
-        "_explicit_reachable_attractors",
-        lambda *_args, **_kwargs: selected.append("explicit") or (),
-    )
-    monkeypatch.setattr(
-        _network,
-        "_synchronous_reachable_attractors",
-        lambda *_args, **_kwargs: selected.append("explicit") or (),
-    )
-    monkeypatch.setattr(
-        _network,
-        "_bdd_reachable_attractors",
-        lambda *_args, **_kwargs: selected.append("bdd") or (),
-    )
-
-    bn.attractors(
-        {component: 0 for component in components},
-        update=cast(Any, update),
-    )
-
-    assert selected == ["explicit"]
 
 
 @pytest.mark.parametrize(
@@ -639,7 +617,6 @@ def test_reachable_configurations_select_backend_from_closed_hypercube_bound(
     )
     selected = []
 
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: object())
     monkeypatch.setattr(
         _network,
         "_explicit_reachable_configurations",
@@ -658,38 +635,6 @@ def test_reachable_configurations_select_backend_from_closed_hypercube_bound(
 
     assert tuple(configurations) == ()
     assert selected == [expected_backend]
-
-
-@pytest.mark.parametrize("update", ["asynchronous", "general"])
-def test_reachable_configurations_fall_back_to_explicit_without_dd(
-    monkeypatch,
-    update,
-):
-    components = tuple(f"x{index}" for index in range(14))
-    bn = bt.logic.bn.BooleanNetwork(
-        {component: f"~{component}" for component in components}
-    )
-    selected = []
-
-    monkeypatch.setattr(_dynamics, "find_spec", lambda _name: None)
-    monkeypatch.setattr(
-        _network,
-        "_explicit_reachable_configurations",
-        lambda *_args, **_kwargs: selected.append("explicit") or iter(()),
-    )
-    monkeypatch.setattr(
-        _network,
-        "_bdd_reachable_configurations",
-        lambda *_args, **_kwargs: selected.append("bdd") or iter(()),
-    )
-
-    configurations = bn.reachable_configurations(
-        {component: 0 for component in components},
-        update=cast(Any, update),
-    )
-
-    assert tuple(configurations) == ()
-    assert selected == ["explicit"]
 
 
 def test_boolean_network_attractors_asynchronous_branching():
@@ -737,6 +682,69 @@ def test_boolean_network_attractors_defaults_to_free_configuration(update):
     )
 
     assert _canonical_attractors(omitted) == _canonical_attractors(explicit)
+
+
+@pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
+@pytest.mark.parametrize(
+    ("rule", "expected"),
+    [
+        ("A", ({"A": 0},)),
+        ("~A", ({"A": 0}, {"A": 1})),
+    ],
+)
+def test_attractors_include_an_initial_configuration_already_in_an_attractor(
+    update,
+    rule,
+    expected,
+):
+    bn = bt.logic.bn.BooleanNetwork({"A": rule})
+
+    attractors = bn.attractors({"A": 0}, update=update)
+
+    assert len(attractors) == 1
+    assert _canonical_configurations(attractors[0]) == _canonical_configurations(
+        expected
+    )
+
+
+def test_boolean_network_dynamics_default_to_general_updates():
+    bn = bt.logic.bn.BooleanNetwork(
+        {
+            "x1": 1,
+            "x2": "x1",
+            "x3": "~x1 & x2",
+        }
+    )
+    initial = {"x1": 0, "x2": 0, "x3": 0}
+    target = {"x1": 1, "x2": 1, "x3": 1}
+
+    for method_name in (
+        "attractors",
+        "reachable_configurations",
+        "transition",
+        "reachability",
+    ):
+        method = getattr(bn, method_name)
+        assert signature(method).parameters["update"].default == "general"
+
+    assert _canonical_attractors(bn.attractors(initial)) == _canonical_attractors(
+        bn.attractors(initial, update="general")
+    )
+    assert _canonical_configurations(
+        bn.reachable_configurations(initial)
+    ) == _canonical_configurations(
+        bn.reachable_configurations(initial, update="general")
+    )
+    assert bn.transition(initial, target) is bn.transition(
+        initial,
+        target,
+        update="general",
+    )
+    assert bn.reachability(initial, target) is bn.reachability(
+        initial,
+        target,
+        update="general",
+    )
 
 
 def test_boolean_network_attractors_explores_shared_paths_once(
@@ -994,7 +1002,7 @@ def test_boolean_network_transition_concrete_states_do_not_require_bdd(monkeypat
     def unexpected_bdd_import():
         raise AssertionError("concrete transitions should use bitsets")
 
-    monkeypatch.setattr(_dynamics, "_import_dd_backend", unexpected_bdd_import)
+    monkeypatch.setattr(_symbolic, "_import_dd_backend", unexpected_bdd_import)
 
     for update in ("synchronous", "asynchronous", "general"):
         assert bn.transition(
@@ -1056,7 +1064,7 @@ def test_bdd_transition_quantifiers_match_explicit_relation(update):
         tuple(state.items()): _explicit_successors(bn, state, update)
         for state in states
     }
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update=cast(Any, update),
     )
@@ -1096,7 +1104,7 @@ def test_bdd_transition_quantifiers_match_explicit_relation(update):
 
         for quantifier, expected_result in expected.items():
             assert (
-                transition_system.transition(
+                transition_system._transition(
                     initial_hypercube,
                     target_hypercube,
                     quantifier=cast(Any, quantifier),
@@ -1217,7 +1225,7 @@ def test_boolean_network_reachability_synchronous_avoids_bdd_for_concrete_state(
     def unexpected_bdd_import():
         raise AssertionError("the concrete synchronous trajectory should be direct")
 
-    monkeypatch.setattr(_dynamics, "_import_dd_backend", unexpected_bdd_import)
+    monkeypatch.setattr(_symbolic, "_import_dd_backend", unexpected_bdd_import)
 
     assert bn.reachability(
         {"A": 0, "B": 0},
@@ -1265,7 +1273,7 @@ def test_boolean_network_reachability_general_quantifies_partial_states():
 def test_general_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
-    original = _dynamics._bdd_general_transition_partitions
+    original = _symbolic._bdd_general_transition_partitions
     calls = 0
 
     def counted_transition_partitions(*args, **kwargs):
@@ -1274,22 +1282,22 @@ def test_general_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
         return original(*args, **kwargs)
 
     monkeypatch.setattr(
-        _dynamics,
+        _symbolic,
         "_bdd_general_transition_partitions",
         counted_transition_partitions,
     )
 
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="general",
     )
 
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 0},
         quantifier="robust",
     )
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 1},
         quantifier="robust",
@@ -1300,7 +1308,7 @@ def test_general_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
 def test_synchronous_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": "~B", "B": "~A"})
-    original = _dynamics._bdd_synchronous_transition_partitions
+    original = _symbolic._bdd_synchronous_transition_partitions
     calls = 0
 
     def counted_transition_partitions(*args, **kwargs):
@@ -1309,22 +1317,22 @@ def test_synchronous_bdd_transition_system_reuses_compiled_partitions(monkeypatc
         return original(*args, **kwargs)
 
     monkeypatch.setattr(
-        _dynamics,
+        _symbolic,
         "_bdd_synchronous_transition_partitions",
         counted_transition_partitions,
     )
 
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="synchronous",
     )
 
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 0},
         {"A": 1, "B": 1},
         quantifier="robust",
     )
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 0},
         {"A": 0, "B": 0},
         quantifier="robust",
@@ -1335,7 +1343,7 @@ def test_synchronous_bdd_transition_system_reuses_compiled_partitions(monkeypatc
 def test_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
     pytest.importorskip("dd.autoref")
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": "A"})
-    original = _dynamics._bdd_asynchronous_transition_partitions
+    original = _symbolic._bdd_asynchronous_transition_partitions
     calls = 0
 
     def counted_transition_partitions(*args, **kwargs):
@@ -1344,22 +1352,22 @@ def test_bdd_transition_system_reuses_compiled_partitions(monkeypatch):
         return original(*args, **kwargs)
 
     monkeypatch.setattr(
-        _dynamics,
+        _symbolic,
         "_bdd_asynchronous_transition_partitions",
         counted_transition_partitions,
     )
 
-    transition_system = _dynamics._BDDTransitionSystem(
+    transition_system = _symbolic.SymbolicTransitionSystem(
         bn,
         update="asynchronous",
     )
 
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 1},
         {"A": 0, "B": 0},
         quantifier="robust",
     )
-    assert transition_system.reachability(
+    assert transition_system._reachability(
         {"A": 0, "B": 1},
         {"A": 1, "B": 1},
         quantifier="robust",
@@ -1383,56 +1391,6 @@ def test_boolean_network_reachability_asynchronous_quantifies_partial_states():
         update="asynchronous",
         quantifier="robust",
     )
-
-
-@pytest.mark.parametrize(
-    ("update", "initial_configuration"),
-    [
-        ("asynchronous", {"A": 0}),
-        ("general", {"A": 0}),
-        ("synchronous", {"A": "*"}),
-    ],
-)
-def test_boolean_network_reachability_reports_missing_dd(
-    monkeypatch,
-    update,
-    initial_configuration,
-):
-    bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
-
-    def missing_dd(name: str) -> Any:
-        if name in {"dd.autoref", "dd.cudd"}:
-            raise ImportError("missing dd")
-        return __import__(name)
-
-    monkeypatch.setattr(_dynamics, "import_module", missing_dd)
-
-    with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
-        bn.reachability(
-            initial_configuration,
-            {"A": 1},
-            update=cast(Any, update),
-        )
-
-
-def test_boolean_network_transition_reports_missing_dd_for_partial_states(
-    monkeypatch,
-):
-    bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
-
-    def missing_dd(name: str) -> Any:
-        if name in {"dd.autoref", "dd.cudd"}:
-            raise ImportError("missing dd")
-        return __import__(name)
-
-    monkeypatch.setattr(_dynamics, "import_module", missing_dd)
-
-    with pytest.raises(ImportError, match=r"bonesistools\[bdd\]"):
-        bn.transition(
-            {},
-            {"A": 1},
-            update="asynchronous",
-        )
 
 
 @pytest.mark.parametrize(
