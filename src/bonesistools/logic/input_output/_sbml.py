@@ -43,7 +43,7 @@ def read_sbml(file: Union[str, Path]) -> ExecutableModel:
     Examples
     --------
     >>> model = read_sbml("model.sbml")
-    >>> network = model.get("boolean_network")
+    >>> network = model.boolean_network
 
     Parameters
     ----------
@@ -116,7 +116,7 @@ def read_sbml(file: Union[str, Path]) -> ExecutableModel:
     return ExecutableModel(
         boolean_network=boolean_network,
         influence_graph=influence_graph,
-        initial_states=initial_states,
+        initial_conditions=initial_states,
         metadata=metadata,
     )
 

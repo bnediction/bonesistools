@@ -75,7 +75,8 @@ def _collect_reachable_attractors(
     ],
 ) -> Dict[str, Any]:
 
-    network = model.get("boolean_network")
+    network = model.boolean_network
+    graph = model.influence_graph
     components = tuple(network.keys())
 
     case_states = []
@@ -114,8 +115,8 @@ def _collect_reachable_attractors(
         "configs": np.asarray(configs, dtype=np.int8),
         "graph_shape": np.asarray(
             [
-                model.get("influence_graph").number_of_nodes(),
-                model.get("influence_graph").number_of_edges(),
+                graph.number_of_nodes(),
+                graph.number_of_edges(),
             ],
             dtype=np.int64,
         ),
@@ -127,7 +128,7 @@ def _synthetic_30_node_initial_states(
 ) -> Dict[str, Dict[str, int]]:
 
     return {
-        "toggle_pair": _plain_state(model.initial_states["toggle_pair"]),
+        "toggle_pair": _plain_state(model.initial_conditions()["toggle_pair"]),
     }
 
 
@@ -135,7 +136,7 @@ def _death_receptor_cell_fate_initial_states(
     model: Any,
 ) -> Dict[str, Dict[str, int]]:
 
-    archive_initial = _plain_state(model.initial_states["FAS1"])
+    archive_initial = _plain_state(model.initial_conditions()["FAS1"])
 
     return {
         "archive_initial": dict(archive_initial),

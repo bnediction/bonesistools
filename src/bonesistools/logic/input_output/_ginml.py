@@ -52,14 +52,20 @@ def read_ginml(file: Union[str, Path]) -> ExecutableModel:
     `InfluenceGraph`; otherwise, signed GINML interactions are used directly.
     Component characters reserved by the Boolean-rule syntax are replaced by
     underscores; changed names are recorded in
-    `model.metadata["boolean_component_names"]`.
+    `model.metadata()["boolean_component_names"]`.
     """
 
     file = Path(file)
     content = file.read_bytes()
-    return _read_ginml_bytes(
+    boolean_network, influence_graph, metadata = _parse_ginml_bytes(
         content,
         source=str(file),
+    )
+
+    return ExecutableModel(
+        boolean_network=boolean_network,
+        influence_graph=influence_graph,
+        metadata=metadata,
     )
 
 
@@ -87,28 +93,49 @@ def read_zginml(file: Union[str, Path]) -> ExecutableModel:
         raise ValueError(f"invalid ZGINML archive: no '.ginml' file found in {file}")
 
     main_ginml = _select_main_ginml_file(ginml_files)
-    model = _read_ginml_bytes(
+    boolean_network, influence_graph, metadata = _parse_ginml_bytes(
         archive_files[main_ginml],
         source=str(file),
     )
 
-    model.metadata["format"] = "zginml"
-    model.metadata["archive"] = {
+    metadata["format"] = "zginml"
+    metadata["archive"] = {
         "path": str(file),
         "main_ginml": main_ginml,
         "files": sorted(archive_files),
     }
 
-    _parse_zginml_companion_files(model, archive_files, main_ginml)
+    (
+        initial_conditions,
+        parameters,
+        perturbations,
+        companion_metadata,
+    ) = _parse_zginml_companion_files(
+        archive_files,
+        main_ginml,
+        metadata=metadata,
+    )
+    metadata.update(companion_metadata)
 
-    return model
+    return ExecutableModel(
+        boolean_network=boolean_network,
+        influence_graph=influence_graph,
+        initial_conditions=initial_conditions,
+        parameters=parameters,
+        perturbations=perturbations,
+        metadata=metadata,
+    )
 
 
-def _read_ginml_bytes(
+def _parse_ginml_bytes(
     content: bytes,
     *,
     source: str,
-) -> ExecutableModel:
+) -> Tuple[
+    Optional[BooleanNetwork],
+    Optional[InfluenceGraph],
+    Dict[str, Any],
+]:
     root = ElementTree.fromstring(content.strip())
     graph_element = _find_graph_element(root)
 
@@ -136,11 +163,7 @@ def _read_ginml_bytes(
         boolean_network=boolean_network,
     )
 
-    return ExecutableModel(
-        boolean_network=boolean_network,
-        influence_graph=influence_graph,
-        metadata=metadata,
-    )
+    return boolean_network, influence_graph, metadata
 
 
 def _find_graph_element(root: ElementTree.Element) -> Optional[ElementTree.Element]:
@@ -173,6 +196,7 @@ def _parse_ginml_nodes(
         parameters = []
         unsupported_children = []
         visual_settings: Dict[str, Any] = {}
+        source_visual = None
         annotations = []
 
         for child in list(element):
@@ -199,6 +223,7 @@ def _parse_ginml_nodes(
                     child,
                     node_styles=node_styles,
                 )
+                source_visual = _ginml_xml_metadata(child)
 
             elif child_name == "annotation":
                 annotations.append(_ginml_xml_metadata(child))
@@ -217,6 +242,7 @@ def _parse_ginml_nodes(
             "values": values,
             "parameters": parameters,
             "visual": visual_settings,
+            "source_visual": source_visual,
             "annotations": annotations,
             "unsupported_children": unsupported_children,
         }
@@ -308,6 +334,7 @@ def _parse_ginml_edges(
             raise ValueError("invalid GINML file: edge without 'from' or 'to'")
 
         visual_settings: Dict[str, Any] = {}
+        source_visual = None
         annotations = []
         unsupported_children = []
 
@@ -320,6 +347,7 @@ def _parse_ginml_edges(
                     edge=element.attrib,
                     edge_styles=edge_styles,
                 )
+                source_visual = _ginml_xml_metadata(child)
             elif child_name == "annotation":
                 annotations.append(_ginml_xml_metadata(child))
             else:
@@ -335,6 +363,7 @@ def _parse_ginml_edges(
                 "sign": element.get("sign"),
                 "attributes": dict(element.attrib),
                 "visual": visual_settings,
+                "source_visual": source_visual,
                 "annotations": annotations,
                 "unsupported_children": unsupported_children,
             }
@@ -446,6 +475,11 @@ def _ginml_metadata(
             for edge in edges
             if edge["id"] is not None and edge["visual"]
         },
+        "edge_source_visual_settings": {
+            str(edge["id"]): edge["source_visual"]
+            for edge in edges
+            if edge["id"] is not None and edge["source_visual"] is not None
+        },
         "edge_annotations": {
             str(edge["id"]): edge["annotations"]
             for edge in edges
@@ -458,6 +492,7 @@ def _ginml_metadata(
                 "input": node["input"],
                 "attributes": node["attributes"],
                 "visual": node["visual"],
+                "source_visual": node["source_visual"],
                 "annotations": node["annotations"],
             }
             for node_id, node in nodes.items()
@@ -1178,8 +1213,7 @@ def _convert_ginml_expression(
 
             if node_id not in nodes:
                 raise ValueError(
-                    f"unsupported logical parameters: unknown component "
-                    f"{component!r}"
+                    f"unsupported logical parameters: unknown component {component!r}"
                 )
 
             maxvalue = int(nodes[node_id]["maxvalue"])
@@ -1317,10 +1351,20 @@ def _select_main_ginml_file(ginml_files: List[str]) -> str:
 
 
 def _parse_zginml_companion_files(
-    model: ExecutableModel,
     archive_files: Mapping[str, bytes],
     main_ginml: str,
-) -> None:
+    *,
+    metadata: Mapping[str, Any],
+) -> Tuple[
+    Dict[str, Hypercube],
+    Dict[str, Any],
+    Dict[str, Any],
+    Dict[str, Any],
+]:
+    initial_conditions = {}
+    parameters = {}
+    perturbations = {}
+    companion_metadata = {}
     unknown_companion_files = []
     unparsed_initial_states = {}
     initial_state_metadata = []
@@ -1332,54 +1376,63 @@ def _parse_zginml_companion_files(
         basename = Path(name).name.lower()
 
         if basename == "initialstate":
-            renamed_components = model.metadata.get("boolean_component_names", {})
+            renamed_components = metadata.get("boolean_component_names", {})
             component_names = {
                 node_id: renamed_components.get(node_id, node_id)
-                for node_id in model.metadata.get("nodes", {})
+                for node_id in metadata.get("nodes", {})
             }
             parsed, unparsed, state_metadata = _parse_initial_states(
                 content,
-                model.metadata.get("nodes", {}),
+                metadata.get("nodes", {}),
                 component_names,
             )
-            model.initial_states.update(parsed)
+            initial_conditions.update(parsed)
             unparsed_initial_states.update(unparsed)
             initial_state_metadata.extend(state_metadata)
             continue
 
         if basename == "mutant":
-            perturbations, perturbation_users = _parse_perturbations(content)
-            model.perturbations.update(perturbations)
+            parsed_perturbations, perturbation_users = _parse_perturbations(content)
+            perturbations.update(parsed_perturbations)
 
             if perturbation_users:
-                model.metadata["perturbation_users"] = perturbation_users
+                companion_metadata["perturbation_users"] = perturbation_users
 
             continue
 
         if basename == "avatar_parameters":
-            model.metadata["avatar_parameters"] = _parse_avatar_parameters(content)
+            parsed_parameters = _parse_avatar_parameters(content)
+            parameters["avatar_parameters"] = parsed_parameters
+            companion_metadata["avatar_parameters"] = parsed_parameters
             continue
 
         if basename == "modelsimplifier":
-            model.metadata["model_simplifier"] = _parse_model_simplifier(content)
+            companion_metadata["model_simplifier"] = _parse_model_simplifier(content)
             continue
 
         if basename == "reg2dyn_parameters":
-            model.metadata["simulation_parameters"] = _parse_simulation_parameters(
-                content
-            )
+            parsed_parameters = _parse_simulation_parameters(content)
+            parameters["simulation_parameters"] = parsed_parameters
+            companion_metadata["simulation_parameters"] = parsed_parameters
             continue
 
         unknown_companion_files.append(name)
 
     if unparsed_initial_states:
-        model.metadata["unparsed_initial_states"] = unparsed_initial_states
+        companion_metadata["unparsed_initial_states"] = unparsed_initial_states
 
     if initial_state_metadata:
-        model.metadata["initial_state_metadata"] = initial_state_metadata
+        companion_metadata["initial_state_metadata"] = initial_state_metadata
 
     if unknown_companion_files:
-        model.metadata["unknown_companion_files"] = sorted(unknown_companion_files)
+        companion_metadata["unknown_companion_files"] = sorted(unknown_companion_files)
+
+    return (
+        initial_conditions,
+        parameters,
+        perturbations,
+        companion_metadata,
+    )
 
 
 def _parse_initial_states(
@@ -1462,7 +1515,9 @@ def _initial_state_name(
 
 
 def _parse_avatar_parameters(content: bytes) -> Dict[str, Any]:
-    root = ElementTree.fromstring(content.strip())
+    root = ElementTree.fromstring(
+        _preserve_attribute_newlines(content, b"avatarparameters").strip()
+    )
     metadata: Dict[str, Any] = dict(root.attrib)
 
     if "nodeOrder" in metadata:
@@ -1473,6 +1528,22 @@ def _parse_avatar_parameters(content: bytes) -> Dict[str, Any]:
     ]
 
     return metadata
+
+
+def _preserve_attribute_newlines(content: bytes, attribute: bytes) -> bytes:
+    """Encode literal attribute newlines before XML whitespace normalization."""
+
+    pattern = re.compile(
+        rb"(\b" + re.escape(attribute) + rb"\s*=\s*)([\"'])(.*?)\2",
+        flags=re.DOTALL,
+    )
+
+    def replace(match: "re.Match[bytes]") -> bytes:
+        value = match.group(3).replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        value = value.replace(b"\n", b"&#10;")
+        return match.group(1) + match.group(2) + value + match.group(2)
+
+    return pattern.sub(replace, content)
 
 
 def _parse_model_simplifier(content: bytes) -> Dict[str, Any]:

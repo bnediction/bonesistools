@@ -311,14 +311,14 @@ def test_symbolic_system_captures_network_at_compilation():
     network = bt.logic.bn.BooleanNetwork({"A": 0})
     system = network.symbolic(update="synchronous")
     network["A"] = 1
-    exposed = system.to_boolean_network()
+    exposed = system.boolean_network()
     exposed["A"] = 1
 
     successors = system.configurations({"A": 0}).post()
 
     assert successors.enumerate() == ({"A": 0},)
-    assert system.to_boolean_network().rules == {"A": "0"}
-    assert system.to_boolean_network() is not exposed
+    assert system.boolean_network().rules == {"A": "0"}
+    assert system.boolean_network() is not exposed
 
 
 def test_symbolic_configuration_set_repr_is_compact():

@@ -8,6 +8,7 @@ from itertools import product
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -82,6 +83,9 @@ from ._most_permissive import (
 )
 from ._symbolic import SymbolicTransitionSystem
 from ._typing import BooleanNetworkLike, is_boolean_network_like
+
+if TYPE_CHECKING:
+    from ..input_output._executable_model import ExecutableModel
 
 NodeStyle = Literal["count", "stability"]
 _PyBoolNetPrimes = Dict[str, List[List[Dict[str, int]]]]
@@ -359,6 +363,62 @@ class BooleanNetwork(Dict[str, Expression]):
         """
 
         return type(self)(self, ba=self.ba, check=False)
+
+    def executable(
+        self,
+        *,
+        initial_conditions: Optional[Mapping[str, HypercubeLike]] = None,
+        parameters: Optional[Mapping[str, Any]] = None,
+        perturbations: Optional[Mapping[str, Any]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+    ) -> "ExecutableModel":
+        """
+        Create a protected executable model from this Boolean network.
+
+        The Boolean network and all supplied mappings are copied. The influence
+        graph is derived from the copied Boolean rules, so subsequent mutations
+        of this network do not affect the executable model.
+
+        Examples
+        --------
+        >>> bn = BooleanNetwork({"A": 1, "B": "A"})
+        >>> model = bn.executable(
+        ...     initial_conditions={
+        ...         "control": {"A": 0, "B": 0},
+        ...         "treated": {"A": 1, "B": 0},
+        ...     }
+        ... )
+        >>> model.boolean_network.rules
+        {'A': '1', 'B': 'A'}
+        >>> model.initial_conditions()
+        {'control': Hypercube(A=0, B=0), 'treated': Hypercube(A=1, B=0)}
+
+        Parameters
+        ----------
+        initial_conditions: Mapping[str, HypercubeLike], optional
+            Named, possibly partial, Boolean initial configurations.
+        parameters: Mapping[str, Any], optional
+            Executable or simulation parameters.
+        perturbations: Mapping[str, Any], optional
+            Named perturbation definitions.
+        metadata: Mapping[str, Any], optional
+            Additional model metadata.
+
+        Returns
+        -------
+        ExecutableModel
+            Protected executable snapshot with a consistent influence graph.
+        """
+
+        from ..input_output._executable_model import ExecutableModel
+
+        return ExecutableModel(
+            boolean_network=self,
+            initial_conditions=initial_conditions,
+            parameters=parameters,
+            perturbations=perturbations,
+            metadata=metadata,
+        )
 
     def symbolic(
         self,

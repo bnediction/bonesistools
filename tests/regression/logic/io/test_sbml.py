@@ -97,12 +97,12 @@ def test_read_sbml_converts_boolean_terms_and_default(tmp_path):
 
     model = bt.logic.io.read_sbml(file=path)
 
-    assert model.get("boolean_network").rules == {
+    assert model.boolean_network.rules == {
         "A": "A",
         "B": "A",
         "C": "~A",
     }
-    assert model.initial_states == {"default": {"A": 1}}
+    assert model.initial_conditions() == {"default": {"A": 1}}
     _assert_influence_graph_matches_boolean_network(model)
 
 
@@ -165,8 +165,8 @@ def test_read_sbml_booleanizes_multivalued_species_and_initial_levels(tmp_path):
     )
 
     model = bt.logic.io.read_sbml(path)
-    network = model.get("boolean_network")
-    graph = model.get("influence_graph")
+    network = model.boolean_network
+    graph = model.influence_graph
 
     assert network.components == {
         "X_signal_b1",
@@ -175,12 +175,12 @@ def test_read_sbml_booleanizes_multivalued_species_and_initial_levels(tmp_path):
         "Y_b1",
         "Y_b2",
     }
-    assert model.initial_states["default"] == {
+    assert model.initial_conditions()["default"] == {
         "X_signal_b1": 1,
         "X_signal_b2": 1,
         "X_signal_b3": 0,
     }
-    assert model.metadata["boolean_component_names"] == {"X-signal": "X_signal"}
+    assert model.metadata()["boolean_component_names"] == {"X-signal": "X_signal"}
     assert network.rules["X_signal_b3"] == ("X_signal_b1 & X_signal_b2 & X_signal_b3")
     assert graph.nodes["X_signal_b1"]["sbml_component"] == "X-signal"
     assert graph.nodes["X_signal_b1"]["sbml_threshold"] == 1
@@ -212,8 +212,8 @@ def test_read_sbml_booleanizes_multivalued_species_and_initial_levels(tmp_path):
 
 
 def _assert_influence_graph_matches_boolean_network(model):
-    imported = model.get("influence_graph")
-    expected = model.get("boolean_network").to_influence_graph()
+    imported = model.influence_graph
+    expected = model.boolean_network.to_influence_graph()
 
     assert set(imported) == set(expected)
     assert {

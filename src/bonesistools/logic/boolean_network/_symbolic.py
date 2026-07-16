@@ -279,7 +279,7 @@ class SymbolicTransitionSystem:
 
         return self._wrap(self._bdd.true)
 
-    def to_boolean_network(self) -> "BooleanNetwork":
+    def boolean_network(self) -> "BooleanNetwork":
         """
         Return the Boolean network captured at compilation.
 
@@ -287,7 +287,7 @@ class SymbolicTransitionSystem:
         --------
         >>> from bonesistools.logic.bn import BooleanNetwork
         >>> original = BooleanNetwork({"A": "~A"})
-        >>> restored = original.symbolic().to_boolean_network()
+        >>> restored = original.symbolic().boolean_network()
         >>> restored == original
         True
         >>> restored is original

@@ -4,6 +4,7 @@ from itertools import product
 from pathlib import Path
 from textwrap import dedent
 from typing import Union
+from xml.etree import ElementTree
 from zipfile import ZipFile
 
 import pytest
@@ -62,16 +63,16 @@ def test_read_ginml_returns_executable_model_with_boolean_network(tmp_path):
         "ExecutableModel(boolean_network(components=5), "
         "influence_graph(nodes=5, edges=6), "
     )
-    assert model.metadata["graph"]["id"] == "toy"
-    assert model.metadata["node_order"] == ["A", "B", "C", "D", "E"]
+    assert model.metadata()["graph"]["id"] == "toy"
+    assert model.metadata()["node_order"] == ["A", "B", "C", "D", "E"]
 
-    graph = model.get("influence_graph")
+    graph = model.influence_graph
     assert graph.number_of_nodes() == 5
     assert graph.number_of_edges() == 6
     assert graph.edge_sign("A", "A") == 1
     assert graph.edge_sign("C", "D") == -1
 
-    bn = model.get("boolean_network")
+    bn = model.boolean_network
     assert bn.rules == {
         "A": "A",
         "B": "1",
@@ -104,14 +105,14 @@ def test_read_ginml_threshold_encodes_simple_multivalued_inputs(tmp_path):
 
     model = bt.logic.io.read_ginml(path)
 
-    assert model.metadata["model_type"] == "multi-valued"
-    assert model.metadata["multi_valued_components"] == {"RA": 2}
-    assert model.get("boolean_network").rules == {
+    assert model.metadata()["model_type"] == "multi-valued"
+    assert model.metadata()["multi_valued_components"] == {"RA": 2}
+    assert model.boolean_network.rules == {
         "RA_b1": "RA_b1",
         "RA_b2": "RA_b1 & RA_b2",
         "Target": "RA_b1 & RA_b2",
     }
-    graph = model.get("influence_graph")
+    graph = model.influence_graph
     assert set(graph) == {"RA_b1", "RA_b2", "Target"}
     assert graph.nodes["RA_b1"]["ginml_threshold"] == 1
     assert graph.nodes["RA_b2"]["ginml_threshold"] == 2
@@ -126,7 +127,7 @@ def test_read_ginml_threshold_encodes_simple_multivalued_inputs(tmp_path):
     assert graph.edge_sign("RA_b1", "RA_b2") == 1
     assert graph["RA_b1"]["Target"][0]["id"] == "RA:Target"
     assert graph["RA_b2"]["Target"][0]["id"] == "RA:Target"
-    expected_graph = model.get("boolean_network").to_influence_graph()
+    expected_graph = model.boolean_network.to_influence_graph()
     assert set(graph) == set(expected_graph)
     assert {
         (source, target, attributes["sign"])
@@ -157,7 +158,7 @@ def test_read_ginml_regularizes_multivalued_target_thresholds(tmp_path):
         """,
     )
 
-    network = bt.logic.io.read_ginml(path).get("boolean_network")
+    network = bt.logic.io.read_ginml(path).boolean_network
 
     assert network.components == {"A", "B", "X_b1", "X_b2"}
 
@@ -195,7 +196,7 @@ def test_read_ginml_expands_multivalued_intervals_by_exact_level(tmp_path):
         """,
     )
 
-    network = bt.logic.io.read_ginml(path).get("boolean_network")
+    network = bt.logic.io.read_ginml(path).boolean_network
 
     assert network.rules["Target"] == ("(X_b1 & ~X_b2) | (X_b1 & X_b2 & ~X_b3)")
     assert (
@@ -226,7 +227,7 @@ def test_read_ginml_negates_complete_multivalued_regulator_condition(tmp_path):
         """,
     )
 
-    network = bt.logic.io.read_ginml(path).get("boolean_network")
+    network = bt.logic.io.read_ginml(path).boolean_network
 
     assert network.rules["Target"] == "~((X_b1 & ~X_b2) | (X_b1 & X_b2))"
     assert network.next_state("Target", {"X_b1": 0, "X_b2": 0, "Target": 0}) == 1
@@ -259,7 +260,7 @@ def test_read_ginml_explicit_context_overrides_multivalued_function(tmp_path):
         """,
     )
 
-    network = bt.logic.io.read_ginml(path).get("boolean_network")
+    network = bt.logic.io.read_ginml(path).boolean_network
     observed = network.next_configuration(
         {"S_b1": 1, "S_b2": 0, "V": 1, "X_b1": 1, "X_b2": 0}
     )
@@ -290,10 +291,9 @@ def test_read_ginml_keeps_unsupported_boolean_network_unavailable(tmp_path):
     with pytest.warns(UserWarning, match="Boolean-network conversion failed"):
         model = bt.logic.io.read_ginml(path)
 
-    assert model.boolean_network is None
-    assert model.get("influence_graph").number_of_edges() == 1
+    assert model.influence_graph.number_of_edges() == 1
     with pytest.raises(ValueError, match="Boolean network unavailable"):
-        model.get("boolean_network")
+        _ = model.boolean_network
 
 
 def test_read_ginml_converts_boolean_regulatory_contexts(tmp_path):
@@ -333,7 +333,7 @@ def test_read_ginml_converts_boolean_regulatory_contexts(tmp_path):
 
     model = bt.logic.io.read_ginml(path)
 
-    assert model.get("boolean_network").rules == {
+    assert model.boolean_network.rules == {
         "A": "A",
         "B": "A",
         "C": "~B",
@@ -343,7 +343,7 @@ def test_read_ginml_converts_boolean_regulatory_contexts(tmp_path):
         "X_Y": "X_Y",
         "F": "X_Y & A",
     }
-    assert model.metadata["boolean_component_names"] == {"X-Y": "X_Y"}
+    assert model.metadata()["boolean_component_names"] == {"X-Y": "X_Y"}
 
 
 def test_read_ginml_rejects_colliding_normalized_component_names(tmp_path):
@@ -368,8 +368,9 @@ def test_read_ginml_rejects_colliding_normalized_component_names(tmp_path):
     ):
         model = bt.logic.io.read_ginml(path)
 
-    assert model.boolean_network is None
-    assert "duplicate names: A_B" in model.metadata["boolean_network_reason"]
+    with pytest.raises(ValueError, match="duplicate names: A_B"):
+        _ = model.boolean_network
+    assert "duplicate names: A_B" in model.metadata()["boolean_network_reason"]
 
 
 def test_read_ginml_resolves_named_node_styles(tmp_path):
@@ -398,9 +399,9 @@ def test_read_ginml_resolves_named_node_styles(tmp_path):
     )
 
     model = bt.logic.io.read_ginml(path)
-    graph = model.get("influence_graph")
+    graph = model.influence_graph
 
-    assert model.metadata["node_styles"] == {
+    assert model.metadata()["node_styles"] == {
         "default": {
             "background": "#ffffff",
             "foreground": "#000000",
@@ -411,8 +412,8 @@ def test_read_ginml_resolves_named_node_styles(tmp_path):
         },
         "Arrest": {"background": "#ff9999"},
     }
-    assert model.metadata["node_style_groups"] == {"Arrest": ["CDKN1A"]}
-    assert model.metadata["node_visual_settings"]["CDKN1A"] == {
+    assert model.metadata()["node_style_groups"] == {"Arrest": ["CDKN1A"]}
+    assert model.metadata()["node_visual_settings"]["CDKN1A"] == {
         "background": "#ff9999",
         "foreground": "#000000",
         "text": "#000000",
@@ -423,7 +424,7 @@ def test_read_ginml_resolves_named_node_styles(tmp_path):
         "y": "20",
         "style": "Arrest",
     }
-    assert model.metadata["node_visual_settings"]["RB1"] == {
+    assert model.metadata()["node_visual_settings"]["RB1"] == {
         "background": "#ffffff",
         "foreground": "#000000",
         "text": "#000000",
@@ -470,11 +471,11 @@ def test_read_ginml_preserves_direct_node_visual_settings(tmp_path):
     )
 
     model = bt.logic.io.read_ginml(path)
-    graph = model.get("influence_graph")
+    graph = model.influence_graph
 
-    assert model.metadata["node_styles"] == {}
-    assert model.metadata["node_style_groups"] == {}
-    assert model.metadata["node_visual_settings"]["MEK"] == {
+    assert model.metadata()["node_styles"] == {}
+    assert model.metadata()["node_style_groups"] == {}
+    assert model.metadata()["node_visual_settings"]["MEK"] == {
         "shape": "ellipse",
         "x": "746",
         "y": "459",
@@ -489,6 +490,35 @@ def test_read_ginml_preserves_direct_node_visual_settings(tmp_path):
     assert graph.nodes["MEK"]["ginml_width"] == "80"
     assert graph.nodes["ERK"]["ginml_shape"] == "rect"
     assert graph.nodes["ERK"]["ginml_background"] == "#cccccc"
+
+    exported = tmp_path / "direct-visual.zginml"
+    model.save(exported)
+
+    with ZipFile(exported) as zf:
+        ginml_file = next(name for name in zf.namelist() if name.endswith(".ginml"))
+        root = ElementTree.fromstring(zf.read(ginml_file))
+
+    exported_nodes = {node.attrib["id"]: node for node in root.iter("node")}
+    mek_setting = next(exported_nodes["MEK"].iter("nodevisualsetting"))
+    erk_setting = next(exported_nodes["ERK"].iter("nodevisualsetting"))
+    assert mek_setting.attrib == {}
+    assert next(mek_setting.iter("ellipse")).attrib == {
+        "x": "746",
+        "y": "459",
+        "width": "80",
+        "height": "30",
+        "backgroundColor": "#ffcc66",
+        "foregroundColor": "#000000",
+    }
+    assert erk_setting.attrib == {}
+    assert next(erk_setting.iter("rect")).attrib == {
+        "x": "953",
+        "y": "421",
+        "width": "80",
+        "height": "30",
+        "backgroundColor": "#cccccc",
+        "foregroundColor": "#111111",
+    }
 
 
 def test_read_ginml_preserves_graph_edge_styles_and_annotations(tmp_path):
@@ -527,26 +557,26 @@ def test_read_ginml_preserves_graph_edge_styles_and_annotations(tmp_path):
     )
 
     model = bt.logic.io.read_ginml(path)
-    graph = model.get("influence_graph")
+    graph = model.influence_graph
     edge = next(iter(graph.get_edge_data("A", "B").values()))
 
-    assert model.metadata["graph_attributes"] == {"display.node": "name"}
-    assert model.metadata["annotations"][0]["children"][0] == {
+    assert model.metadata()["graph_attributes"] == {"display.node": "name"}
+    assert model.metadata()["annotations"][0]["children"][0] == {
         "tag": "comment",
         "attributes": {},
         "text": "Graph note",
     }
-    assert model.metadata["annotations"][0]["children"][1]["children"][0] == {
+    assert model.metadata()["annotations"][0]["children"][1]["children"][0] == {
         "tag": "link",
         "attributes": {"href": "https://example.org/model"},
     }
     assert (
-        model.metadata["nodes"]["B"]["annotations"][0]["children"][0]["text"]
+        model.metadata()["nodes"]["B"]["annotations"][0]["children"][0]["text"]
         == "Node note"
     )
-    assert model.metadata["edge_styles"]["Tick"] == {"line_width": "3"}
-    assert model.metadata["edge_style_groups"] == {"Tick": ["A:B"]}
-    assert model.metadata["edge_visual_settings"]["A:B"] == {
+    assert model.metadata()["edge_styles"]["Tick"] == {"line_width": "3"}
+    assert model.metadata()["edge_style_groups"] == {"Tick": ["A:B"]}
+    assert model.metadata()["edge_visual_settings"]["A:B"] == {
         "color": "#00c800",
         "line_width": "3",
         "properties": "positive:#00c800 negative:#c80000 dual:#0000c8",
@@ -555,7 +585,7 @@ def test_read_ginml_preserves_graph_edge_styles_and_annotations(tmp_path):
         "style": "Tick",
     }
     assert (
-        model.metadata["edge_annotations"]["A:B"][0]["children"][0]["text"]
+        model.metadata()["edge_annotations"]["A:B"][0]["children"][0]["text"]
         == "Edge note"
     )
     assert graph.graph["ginml_id"] == "metadata"
@@ -565,6 +595,27 @@ def test_read_ginml_preserves_graph_edge_styles_and_annotations(tmp_path):
     assert edge["ginml_color"] == "#00c800"
     assert edge["ginml_line_width"] == "3"
     assert edge["ginml_points"] == "10,20 30,40"
+
+    exported = tmp_path / "metadata.zginml"
+    model.save(exported)
+
+    with ZipFile(exported) as zf:
+        ginml_file = next(name for name in zf.namelist() if name.endswith(".ginml"))
+        root = ElementTree.fromstring(zf.read(ginml_file))
+
+    exported_nodes = {node.attrib["id"]: node for node in root.iter("node")}
+    node_setting = next(exported_nodes["B"].iter("nodevisualsetting"))
+    assert node_setting.attrib == {"x": "30", "y": "40", "style": ""}
+    assert list(node_setting) == []
+
+    exported_edge = next(root.iter("edge"))
+    edge_setting = next(exported_edge.iter("edgevisualsetting"))
+    assert edge_setting.attrib == {
+        "points": "10,20 30,40",
+        "anchor": "NE",
+        "style": "Tick",
+    }
+    assert list(edge_setting) == []
 
 
 def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
@@ -647,28 +698,29 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
 
     model = bt.logic.io.read_zginml(file=archive)
 
-    assert model.metadata["format"] == "zginml"
+    assert model.metadata()["format"] == "zginml"
     assert (
-        model.metadata["archive"]["main_ginml"] == "GINsim-data/regulatoryGraph.ginml"
+        model.metadata()["archive"]["main_ginml"] == "GINsim-data/regulatoryGraph.ginml"
     )
-    assert "GINsim-data/notes.txt" in model.metadata["archive"]["files"]
-    assert model.metadata["unknown_companion_files"] == ["GINsim-data/notes.txt"]
+    assert "GINsim-data/notes.txt" in model.metadata()["archive"]["files"]
+    assert model.metadata()["unknown_companion_files"] == ["GINsim-data/notes.txt"]
 
-    assert model.initial_states["state_A"] == {"A": 1, "B": 0}
-    assert model.initial_states["initialState_2"] == {"A": 0, "B": 1}
-    assert model.initial_states["initialState_3"] == {"A": 1, "B": 1}
-    assert model.initial_states["input_A"] == {"A": 1}
-    assert model.metadata["initial_state_metadata"][1] == {
+    initial_conditions = model.initial_conditions()
+    assert initial_conditions["state_A"] == {"A": 1, "B": 0}
+    assert initial_conditions["initialState_2"] == {"A": 0, "B": 1}
+    assert initial_conditions["initialState_3"] == {"A": 1, "B": 1}
+    assert initial_conditions["input_A"] == {"A": 1}
+    assert model.metadata()["initial_state_metadata"][1] == {
         "name": "initialState_2",
         "original_name": "",
         "section": "initialState",
     }
-    assert model.metadata["simulation_parameters"]["parameters"]["run_A"] == {
+    assert model.metadata()["simulation_parameters"]["parameters"]["run_A"] == {
         "attributes": {"name": "run_A", "updating": "Asynchronous"},
         "initstates": ["state_A"],
         "inputs": ["input_A"],
     }
-    assert model.metadata["simulation_parameters"]["priority_class_lists"] == [
+    assert model.metadata()["simulation_parameters"]["priority_class_lists"] == [
         {
             "attributes": {"id": "Priorities"},
             "classes": [
@@ -681,11 +733,11 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
             ],
         }
     ]
-    assert model.metadata["model_simplifier"]["simplifications"] == [
+    assert model.metadata()["model_simplifier"]["simplifications"] == [
         {"name": "Reduction", "strict": "true", "removeList": ["D", "E"]}
     ]
-    assert model.metadata["model_simplifier"]["strip_outputs"] == [{"key": "E"}]
-    assert model.metadata["avatar_parameters"]["parameters"] == [
+    assert model.metadata()["model_simplifier"]["strip_outputs"] == [{"key": "E"}]
+    assert model.metadata()["avatar_parameters"]["parameters"] == [
         {
             "tag": "parameter",
             "attributes": {"name": "AVATAR", "avatarparameters": "algorithm=0"},
@@ -697,15 +749,91 @@ def test_read_zginml_preserves_archive_metadata_and_companion_data(tmp_path):
             ],
         }
     ]
-    assert model.perturbations["A KO"] == [
+    assert model.parameters() == {
+        "avatar_parameters": model.metadata()["avatar_parameters"],
+        "simulation_parameters": model.metadata()["simulation_parameters"],
+    }
+    assert model.perturbations()["A KO"] == [
         {
             "type": "change",
             "attributes": {"target": "A", "min": "0", "max": "0"},
         }
     ]
-    assert model.metadata["perturbation_users"] == [
+    assert model.metadata()["perturbation_users"] == [
         {"key": "simulation::A", "value": "A KO"}
     ]
+
+    exported = tmp_path / "exported.zginml"
+    with pytest.warns(UserWarning, match="notes.txt"):
+        model.save(exported)
+
+    reloaded = bt.logic.io.read_zginml(exported)
+
+    assert reloaded.boolean_network.rules == model.boolean_network.rules
+    assert reloaded.initial_conditions() == model.initial_conditions()
+    assert reloaded.parameters() == model.parameters()
+    assert reloaded.perturbations() == model.perturbations()
+    assert {
+        (source, target, attributes["sign"])
+        for source, target, attributes in reloaded.influence_graph.edges(data=True)
+    } == {
+        (source, target, attributes["sign"])
+        for source, target, attributes in model.influence_graph.edges(data=True)
+    }
+
+    retained_metadata = (
+        "annotations",
+        "edge_annotations",
+        "edge_source_visual_settings",
+        "edge_style_definitions",
+        "edge_visual_settings",
+        "edges",
+        "graph",
+        "graph_attributes",
+        "model_simplifier",
+        "node_style_definitions",
+        "node_visual_settings",
+        "nodes",
+        "raw_logical_parameters",
+    )
+    for key in retained_metadata:
+        assert reloaded.metadata().get(key) == model.metadata().get(key)
+
+    with ZipFile(exported) as zf:
+        assert "GINsim-data/notes.txt" not in zf.namelist()
+
+
+def test_read_zginml_preserves_avatar_parameter_linebreaks(tmp_path):
+    archive = tmp_path / "avatar.zginml"
+    avatar_parameters = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<avatarParameters nodeOrder="A B C D E">\n'
+        '  <parameter name="AVATAR" avatarparameters="algorithm=0\n'
+        'avaRuns=10000"/>\n'
+        "</avatarParameters>"
+    )
+
+    with ZipFile(archive, "w") as zf:
+        zf.writestr("GINsim-data/regulatoryGraph.ginml", _toy_ginml().strip())
+        zf.writestr("GINsim-data/avatar_parameters", avatar_parameters)
+
+    model = bt.logic.io.read_zginml(archive)
+    exported = tmp_path / "exported.zginml"
+    model.save(exported)
+    reloaded = bt.logic.io.read_zginml(exported)
+
+    expected = "algorithm=0\navaRuns=10000"
+    assert (
+        model.parameters()["avatar_parameters"]["parameters"][0]["attributes"][
+            "avatarparameters"
+        ]
+        == expected
+    )
+    assert reloaded.parameters() == model.parameters()
+
+    with ZipFile(exported) as zf:
+        content = zf.read("GINsim-data/avatar_parameters")
+    assert b'avatarparameters="algorithm=0\navaRuns=10000"' in content
 
 
 def test_executable_model_is_not_promoted_from_io_namespace():
@@ -713,20 +841,170 @@ def test_executable_model_is_not_promoted_from_io_namespace():
     assert not hasattr(bt.logic.io, "ExecutableModel")
 
 
-def test_imported_model_get_returns_available_containers_and_validates_attribute():
+def test_executable_model_accessors_return_empty_copies():
     model = ExecutableModel()
 
-    assert model.get("initial_states") == {}
-    assert model.get("perturbations") == {}
-    assert model.get("metadata") == {}
+    for attribute in (
+        "network",
+        "graph",
+        "initial_states",
+        "get",
+    ):
+        assert not hasattr(model, attribute)
 
-    with pytest.raises(ValueError, match="unsupported executable model attribute"):
-        model.get("unknown")
+    assert model.initial_conditions() == {}
+    assert model.parameters() == {}
+    assert model.perturbations() == {}
+    assert model.metadata() == {}
+    with pytest.raises(ValueError, match="Boolean network unavailable"):
+        _ = model.boolean_network
+    with pytest.raises(ValueError, match="Influence graph unavailable"):
+        _ = model.influence_graph
+
+
+def test_executable_model_validates_shared_components():
+    network = bt.logic.bn.BooleanNetwork({"A": 1})
+    graph = bt.logic.ig.InfluenceGraph()
+    graph.add_node("B")
+
+    with pytest.raises(ValueError, match="exactly the Boolean-network components"):
+        ExecutableModel(boolean_network=network, influence_graph=graph)
+
+    with pytest.raises(ValueError, match="unknown components: B"):
+        network.executable(initial_conditions={"invalid": {"B": 0}})
+
+
+def test_boolean_network_executable_protects_all_internal_containers():
+    network = bt.logic.bn.BooleanNetwork({"A": 1, "B": "A"})
+    initial_conditions = {"control": bt.logic.ba.Hypercube({"A": 0, "B": 0})}
+    parameters = {"simulation": {"duration": 10}}
+    perturbations = {"A KO": [{"target": "A", "value": 0}]}
+    metadata = {"source": {"format": "manual"}}
+
+    model = network.executable(
+        initial_conditions=initial_conditions,
+        parameters=parameters,
+        perturbations=perturbations,
+        metadata=metadata,
+    )
+
+    network["A"] = 0
+    initial_conditions["control"]["A"] = 1
+    parameters["simulation"]["duration"] = 20
+    perturbations["A KO"][0]["value"] = 1
+    metadata["source"]["format"] = "changed"
+
+    returned_network = model.boolean_network
+    returned_graph = model.influence_graph
+    returned_conditions = model.initial_conditions()
+    returned_parameters = model.parameters()
+    returned_perturbations = model.perturbations()
+    returned_metadata = model.metadata()
+
+    returned_network["A"] = 0
+    returned_graph.remove_node("A")
+    returned_conditions["control"]["A"] = 1
+    returned_parameters["simulation"]["duration"] = 30
+    returned_perturbations["A KO"][0]["value"] = 1
+    returned_metadata["source"]["format"] = "returned"
+
+    assert model.boolean_network.rules == {"A": "1", "B": "A"}
+    assert set(model.influence_graph) == {"A", "B"}
+    assert model.initial_conditions()["control"] == {"A": 0, "B": 0}
+    assert model.parameters() == {"simulation": {"duration": 10}}
+    assert model.perturbations() == {"A KO": [{"target": "A", "value": 0}]}
+    assert model.metadata() == {"source": {"format": "manual"}}
+
+
+def test_executable_model_save_round_trips_a_manual_boolean_network(tmp_path):
+    model = bt.logic.bn.BooleanNetwork(
+        {
+            "A": 1,
+            "B": "A",
+            "C": "A & !B",
+        }
+    ).executable(
+        initial_conditions={"start": {"A": 0, "B": 0}},
+    )
+    file = tmp_path / "manual.zginml"
+
+    model.save(file)
+    reloaded = bt.logic.io.read_zginml(file)
+
+    assert reloaded.boolean_network.rules == model.boolean_network.rules
+    assert reloaded.initial_conditions() == model.initial_conditions()
+    assert reloaded.metadata()["model_type"] == "boolean"
+
+
+def test_executable_model_save_ignores_inconsistent_source_rules(tmp_path):
+    source_file = _write_text(tmp_path / "source.ginml", _toy_ginml())
+    source = bt.logic.io.read_ginml(source_file)
+    network = source.boolean_network
+    network["A"] = 0
+    model = ExecutableModel(
+        boolean_network=network,
+        metadata=source.metadata(),
+    )
+    file = tmp_path / "updated.zginml"
+
+    model.save(file)
+    reloaded = bt.logic.io.read_zginml(file)
+
+    assert reloaded.boolean_network.rules == network.rules
+
+
+def test_executable_model_save_validates_output_and_available_model(tmp_path):
+    model = bt.logic.bn.BooleanNetwork({"A": 1}).executable()
+
+    with pytest.raises(ValueError, match="expected a '.zginml' file"):
+        model.save(tmp_path / "model.ginml")
+
+    with pytest.raises(ValueError, match="no Boolean network"):
+        ExecutableModel().save(tmp_path / "model.zginml")
+
+
+def test_executable_model_resolves_named_conditions_for_dynamic_analyses():
+    model = bt.logic.bn.BooleanNetwork({"A": 1, "B": "A"}).executable(
+        initial_conditions={
+            "control": {"A": 0, "B": 0},
+            "intermediate": {"A": 1, "B": 0},
+            "terminal": {"A": 1, "B": 1},
+        }
+    )
+
+    assert list(model.reachable_configurations("control")) == [
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+        {"A": 1, "B": 1},
+    ]
+    assert model.transition("control", "intermediate")
+    assert model.reachability("control", "terminal")
+    assert model.attractors("control")[0].enumerate() == ({"A": 1, "B": 1},)
+
+    with pytest.raises(ValueError, match="unknown initial condition 'missing'"):
+        model.attractors("missing")
+
+
+def test_executable_model_attractors_without_initial_uses_complete_state_space():
+    model = bt.logic.bn.BooleanNetwork({"A": "A"}).executable(
+        initial_conditions={"zero": {"A": 0}}
+    )
+
+    attractors = model.attractors()
+
+    assert {
+        tuple(configuration["A"] for configuration in attractor)
+        for attractor in attractors
+    } == {
+        (0,),
+        (1,),
+    }
 
 
 def test_executable_model_repr_summarizes_large_mappings_by_counts():
     model = ExecutableModel(
-        initial_states={"state_A": bt.logic.ba.Hypercube({"A": 1})},
+        initial_conditions={"state_A": bt.logic.ba.Hypercube({"A": 1})},
+        parameters={"time": 10},
         perturbations={"A KO": [{"target": "A", "min": 0, "max": 0}]},
         metadata={"archive": {"files": ["model.ginml", "notes.txt"]}},
     )
@@ -735,7 +1013,8 @@ def test_executable_model_repr_summarizes_large_mappings_by_counts():
 
     assert representation == (
         "ExecutableModel(boolean_network=None, influence_graph=None, "
-        "initial_states(hypercubes=1), perturbations(n=1), metadata(entries=1))"
+        "initial_conditions(hypercubes=1), parameters(n=1), "
+        "perturbations(n=1), metadata(entries=1))"
     )
     assert "Hypercube" not in representation
     assert "state_A" not in representation
@@ -773,14 +1052,139 @@ def test_read_zginml_threshold_encodes_multivalued_initial_states(tmp_path):
 
     model = bt.logic.io.read_zginml(archive)
 
-    assert model.initial_states["RA_pharmacological"] == {
+    assert model.initial_conditions()["RA_pharmacological"] == {
         "RA_b1": 1,
         "RA_b2": 1,
     }
-    assert model.initial_states["RA_physiological"] == {
+    assert model.initial_conditions()["RA_physiological"] == {
         "RA_b1": 1,
         "RA_b2": 0,
     }
+
+    exported = tmp_path / "booleanized.zginml"
+    model.save(exported)
+    reloaded = bt.logic.io.read_zginml(exported)
+
+    assert reloaded.boolean_network.rules == model.boolean_network.rules
+    assert reloaded.initial_conditions() == model.initial_conditions()
+    assert reloaded.metadata()["model_type"] == "boolean"
+    assert {
+        (source, target, attributes["sign"])
+        for source, target, attributes in reloaded.influence_graph.edges(data=True)
+    } == {
+        (source, target, attributes["sign"])
+        for source, target, attributes in model.influence_graph.edges(data=True)
+    }
+
+
+def test_save_normalizes_legacy_point_visuals_after_booleanization(tmp_path):
+    archive = tmp_path / "multi.zginml"
+    ginml = _multivalued_ginml().replace(
+        '<node id="RA" maxvalue="2" input="true"/>',
+        """
+        <node id="RA" maxvalue="2" input="true">
+          <nodevisualsetting>
+            <point x="10" y="20"/>
+          </nodevisualsetting>
+        </node>
+        """,
+    )
+
+    with ZipFile(archive, "w") as zf:
+        zf.writestr("model.ginml", ginml.strip())
+
+    model = bt.logic.io.read_zginml(archive)
+    exported = tmp_path / "booleanized.zginml"
+    model.save(exported)
+
+    with ZipFile(exported) as zf:
+        ginml_file = next(name for name in zf.namelist() if name.endswith(".ginml"))
+        root = ElementTree.fromstring(zf.read(ginml_file))
+
+    assert not list(root.iter("point"))
+    ellipses = list(root.iter("ellipse"))
+    assert len(ellipses) == 2
+    assert [ellipse.attrib["x"] for ellipse in ellipses] == ["10", "70"]
+    for ellipse in ellipses:
+        assert {key: value for key, value in ellipse.attrib.items() if key != "x"} == {
+            "y": "20",
+            "width": "45",
+            "height": "25",
+            "backgroundColor": "#ffffff",
+            "foregroundColor": "#000000",
+        }
+
+
+def test_save_preserves_point_visuals_from_boolean_sources(tmp_path):
+    ginml = _toy_ginml().replace(
+        '<node id="A" maxvalue="1" input="true"/>',
+        """
+        <node id="A" maxvalue="1" input="true">
+          <nodevisualsetting>
+            <point x="10" y="20"/>
+          </nodevisualsetting>
+        </node>
+        """,
+    )
+    source = _write_text(tmp_path / "boolean.ginml", ginml)
+    model = bt.logic.io.read_ginml(source)
+    exported = tmp_path / "boolean.zginml"
+
+    model.save(exported)
+
+    with ZipFile(exported) as zf:
+        ginml_file = next(name for name in zf.namelist() if name.endswith(".ginml"))
+        root = ElementTree.fromstring(zf.read(ginml_file))
+
+    points = list(root.iter("point"))
+    assert len(points) == 1
+    assert points[0].attrib == {"x": "10", "y": "20"}
+    assert not list(root.iter("ellipse"))
+
+
+def test_save_booleanizes_multivalued_perturbation_intervals(tmp_path):
+    archive = tmp_path / "multi.zginml"
+
+    with ZipFile(archive, "w") as zf:
+        zf.writestr("model.ginml", _multivalued_ginml().strip())
+        zf.writestr(
+            "mutant",
+            dedent("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <perturbationConfig>
+                  <listOfPerturbations>
+                    <mutant name="RA low">
+                      <change target="RA" min="0" max="1"/>
+                    </mutant>
+                    <mutant name="RA high">
+                      <change target="RA" min="2" max="2"/>
+                    </mutant>
+                  </listOfPerturbations>
+                </perturbationConfig>
+                """).strip(),
+        )
+
+    model = bt.logic.io.read_zginml(archive)
+    exported = tmp_path / "booleanized.zginml"
+    model.save(exported)
+    reloaded = bt.logic.io.read_zginml(exported)
+
+    assert reloaded.perturbations()["RA low"] == [
+        {
+            "type": "change",
+            "attributes": {"target": "RA_b2", "min": "0", "max": "0"},
+        }
+    ]
+    assert reloaded.perturbations()["RA high"] == [
+        {
+            "type": "change",
+            "attributes": {"target": "RA_b1", "min": "1", "max": "1"},
+        },
+        {
+            "type": "change",
+            "attributes": {"target": "RA_b2", "min": "1", "max": "1"},
+        },
+    ]
 
 
 def test_read_zginml_normalizes_initial_state_component_names(tmp_path):
@@ -803,11 +1207,11 @@ def test_read_zginml_normalizes_initial_state_component_names(tmp_path):
 
     model = bt.logic.io.read_zginml(archive)
 
-    assert model.initial_states["high"] == {
+    assert model.initial_conditions()["high"] == {
         "RA_signal_b1": 1,
         "RA_signal_b2": 1,
     }
-    assert set(model.initial_states["high"]) <= model.get("boolean_network").components
+    assert set(model.initial_conditions()["high"]) <= (model.boolean_network.components)
 
 
 def _multivalued_ginml() -> str:

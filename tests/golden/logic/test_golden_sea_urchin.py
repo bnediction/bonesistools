@@ -49,7 +49,7 @@ def test_golden_sea_urchin_reference_files_are_unchanged():
 
 
 def test_golden_sea_urchin_metadata_is_complete(sea_urchin_model):
-    metadata = sea_urchin_model.metadata
+    metadata = sea_urchin_model.metadata()
     species = metadata["qualitative_species"]
 
     assert metadata["format"] == "sbml"
@@ -64,11 +64,11 @@ def test_golden_sea_urchin_metadata_is_complete(sea_urchin_model):
     } == _EXPECTED_MULTIVALUED_COMPONENTS
     assert len(metadata["transitions"]) == 24
     assert len(metadata["layout"]) == 31
-    assert sea_urchin_model.initial_states == {}
+    assert sea_urchin_model.initial_conditions() == {}
 
 
 def test_golden_sea_urchin_rules_match_biolqm_reference(sea_urchin_model):
-    network = sea_urchin_model.get("boolean_network")
+    network = sea_urchin_model.boolean_network
     expected = bt.logic.io.read_bnet(_EXPECTED_NETWORK_PATH, check=False)
     expected.pop("targets")
     expected.validate()
@@ -85,8 +85,8 @@ def test_golden_sea_urchin_rules_match_biolqm_reference(sea_urchin_model):
 
 
 def test_golden_sea_urchin_influence_graph_is_stable(sea_urchin_model):
-    network = sea_urchin_model.get("boolean_network")
-    graph = sea_urchin_model.get("influence_graph")
+    network = sea_urchin_model.boolean_network
+    graph = sea_urchin_model.influence_graph
     expected_graph = network.to_influence_graph()
     influences = _influences(graph)
 
@@ -105,7 +105,7 @@ def test_golden_sea_urchin_influence_graph_is_stable(sea_urchin_model):
 def test_golden_sea_urchin_threshold_nodes_preserve_source_metadata(
     sea_urchin_model,
 ):
-    graph = sea_urchin_model.get("influence_graph")
+    graph = sea_urchin_model.influence_graph
 
     for threshold in (1, 2, 3):
         attributes = graph.nodes[f"Nodal_In_b{threshold}"]

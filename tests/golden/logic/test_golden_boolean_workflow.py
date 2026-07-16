@@ -40,8 +40,8 @@ def test_golden_boolean_workflow_matches_expected_outputs(
 )
 def test_golden_imported_influence_graph_matches_boolean_network(path):
     model = bt.logic.io.read_zginml(path)
-    imported = model.get("influence_graph")
-    expected = model.get("boolean_network").to_influence_graph()
+    imported = model.influence_graph
+    expected = model.boolean_network.to_influence_graph()
 
     assert set(imported) == set(expected)
     assert {
