@@ -215,6 +215,15 @@ def test_boolean_network_ensemble_to_influence_graph(bnet_ensemble):
     assert isinstance(graph, bt.logic.ig.AggregatedInfluenceGraph)
     assert graph.total == 3
     assert set(graph.nodes) == {"A", "B", "C"}
+    assert list(graph.nodes) == ["A", "B", "C"]
+    assert [
+        (source, target, data["sign"])
+        for source, target, data in graph.edges(data=True)
+    ] == [
+        ("B", "A", 1),
+        ("C", "A", -1),
+        ("C", "A", 1),
+    ]
 
     assert graph.nodes["A"]["function_count"] == 3
     assert graph.nodes["B"]["function_count"] == 1

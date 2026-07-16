@@ -156,6 +156,7 @@ def test_doc_example_feedback_induced_graph():
 
     feedback = graph.feedback_induced_graph()
 
+    assert list(feedback.nodes()) == ["A", "B"]
     assert sorted(feedback.nodes()) == ["A", "B"]
     assert feedback.total == 3
 

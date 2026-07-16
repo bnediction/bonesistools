@@ -1641,9 +1641,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             include_selfloops=include_selfloops,
         )
 
-        return type(self)(
-            cast(_MultiDiGraphBase, self.subgraph(feedback_nodes).copy()),
-        )
+        return type(self)(_ordered_induced_subgraph(self, feedback_nodes))
 
     def collapsed_graph(
         self,
@@ -2945,7 +2943,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         )
 
         return type(self)(
-            self._plain_graph(self.subgraph(feedback_nodes)),
+            _ordered_induced_subgraph(self, feedback_nodes),
             total=self.total,
         )
 
@@ -4053,6 +4051,40 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         return _as_positive_integer(total, "total")
+
+
+def _ordered_induced_subgraph(
+    graph: nx.MultiDiGraph,
+    nodes: Iterable[str],
+) -> nx.MultiDiGraph:
+    """Return an induced subgraph with deterministic node and edge ordering."""
+
+    selected_nodes = set(nodes)
+    subgraph = nx.MultiDiGraph()
+    subgraph.graph.update(graph.graph)
+    subgraph.add_nodes_from(
+        (node, graph.nodes[node].copy())
+        for node in sorted(selected_nodes, key=str)
+    )
+
+    edges = (
+        (source, target, key, data)
+        for source, target, key, data in graph.edges(keys=True, data=True)
+        if source in selected_nodes and target in selected_nodes
+    )
+    for source, target, key, data in sorted(
+        edges,
+        key=lambda edge: (str(edge[0]), str(edge[1]), str(edge[2])),
+    ):
+        nx.MultiDiGraph.add_edge(
+            subgraph,
+            source,
+            target,
+            key=key,
+            **data.copy(),
+        )
+
+    return subgraph
 
 
 def _networkx_to_pydot(graph: nx.MultiDiGraph) -> "Dot":

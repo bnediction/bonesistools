@@ -194,12 +194,20 @@ Example:
 
 ## Conversion and serialization
 
-Use explicit `to_<target>()` methods for conversions that create and return a
-new in-memory Python object:
+Use explicit `to_<target>()` methods for conversions to a different in-memory
+representation:
 
 ```python
 mpbn_network = network.to_mpbn()
 influence_graph = network.to_influence_graph()
+```
+
+Do not use `to_` for access to an object already represented by a container,
+even when the accessor returns a defensive copy:
+
+```python
+network = model.boolean_network
+network = transition_system.boolean_network()
 ```
 
 Use `save(file, ...)` for filesystem serialization. A `save()` method writes

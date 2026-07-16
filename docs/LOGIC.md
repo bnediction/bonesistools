@@ -366,12 +366,14 @@ normalization collisions are rejected rather than silently merged.
 
 ### Influence-Graph Consistency
 
-When Booleanization succeeds, the imported influence graph is built from the
-actual Boolean rules so its nodes and dependencies match
-`BooleanNetwork.to_influence_graph()`. Source layout, style and annotation
-attributes are then attached to the corresponding Boolean nodes and edges.
-Attributes of a multi-valued component are copied to every threshold node, with
-origin and threshold metadata retained.
+When Booleanization succeeds, the imported influence graph has exactly the
+Boolean-network components. Its edges are extracted syntactically without
+resimplifying potentially large rules, so it can conservatively retain signed
+influences that disappear from `BooleanNetwork.to_influence_graph()` after
+simplification. Source layout, style and annotation attributes are attached to
+the corresponding Boolean nodes and edges. Attributes of a multi-valued
+component are copied to every threshold node, with origin and threshold
+metadata retained.
 
 If Booleanization cannot be justified, the Boolean network remains unavailable
 and the parser falls back to signed source interactions when possible. It must
@@ -383,6 +385,26 @@ Unsupported GINsim companion sections, logical parameters and SBML Qual/MathML
 constructs must not be interpreted heuristically. Recognized information is
 stored in the structured fields of `ExecutableModel`; unsupported information
 and failure reasons are retained in metadata whenever practical.
+
+`ExecutableModel` stores protected copies of its network, graph, named initial
+conditions, parameters, perturbations and metadata. Accessors return fresh
+copies, while dynamic analyses delegate to the protected Boolean network. This
+prevents external mutations from making the stored representations diverge.
+
+`ExecutableModel.save()` writes a ZGINML archive. For an imported Boolean
+GINML model, the writer reconstructs the retained logical parameters, graph
+attributes, annotations, visual settings and recognized companion files. A
+multi-valued source is instead exported as the Boolean threshold network held
+by the executable model; initial conditions and fixed or interval
+perturbations are translated to the same threshold encoding. Unknown companion
+files cannot be reproduced because their byte content is intentionally not
+retained, so their omission is reported explicitly.
+
+Threshold nodes retain the source component's visual attributes but are placed
+horizontally from the original coordinates using the node width plus a fixed
+gap. This prevents all thresholds from overlapping in GINsim. Legacy `point`
+visuals are converted to GINsim's default ellipse only along this Booleanization
+path; visual XML reconstructed from an already Boolean source is left intact.
 
 Only SBML Level 3 documents using the Qual package enter the SBML logical-model
 pipeline. Other SBML documents fail before Booleanization.

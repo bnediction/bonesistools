@@ -55,15 +55,16 @@ Main responsibilities:
 
 ### `input_output`
 
-Readers for Boolean modelling files and imported logical-model containers.
+Readers and writers for Boolean modelling files and imported logical-model
+containers.
 
 Main responsibilities:
 
 - `.bnet` import.
-- GINML, ZGINML and SBML Level 3 Qual import.
+- GINML, ZGINML and SBML Level 3 Qual import, plus ZGINML export.
 - Hypercube and influence-graph file readers.
-- Imported logical-model containers with Boolean networks, influence graphs,
-  initial states, perturbations and metadata when available.
+- Protected executable-model snapshots with Boolean networks, influence
+  graphs, named initial conditions, parameters, perturbations and metadata.
 
 ## Omics tools: `omics`
 

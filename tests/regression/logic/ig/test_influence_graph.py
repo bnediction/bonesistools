@@ -594,6 +594,7 @@ def test_feedback_induced_graph_and_collapsed_graph_from_docstring():
     feedback = ig.feedback_induced_graph()
 
     assert isinstance(feedback, bt.logic.ig.InfluenceGraph)
+    assert list(feedback.nodes()) == ["A", "B", "C", "D", "E", "H"]
     assert sorted(feedback.nodes()) == ["A", "B", "C", "D", "E", "H"]
     assert sorted(feedback.edges()) == [
         ("A", "B"),

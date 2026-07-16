@@ -2359,16 +2359,21 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         influence_counts = self.influence_counts()
 
-        for component in self.components:
+        for component in sorted(self.components):
             graph.add_node(
                 component,
                 function_count=function_counts[component],
                 function_stability=function_stabilities[component],
             )
 
-        for source, targets in influence_counts.items():
-            for target, signs in targets.items():
-                for sign, count in signs.items():
+        for source in sorted(influence_counts):
+            targets = influence_counts[source]
+
+            for target in sorted(targets):
+                signs = targets[target]
+
+                for sign in sorted(signs):
+                    count = signs[sign]
                     graph.add_edge(
                         source,
                         target,
