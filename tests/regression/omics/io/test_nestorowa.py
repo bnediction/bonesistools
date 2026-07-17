@@ -61,15 +61,15 @@ def _write_nestorowa_fixture(directory: Path) -> None:
 
 def _patch_gene_mapping(monkeypatch) -> None:
 
-    def fake_map_ensembl_to_official_names(adata: ad.AnnData) -> None:
+    def fake_map_ensembl_to_symbols(adata: ad.AnnData) -> None:
 
         adata.var_names = ["GeneA", "GeneB"]
         adata.var["symbol"] = adata.var_names.astype(str)
 
     monkeypatch.setattr(
         nestorowa_module,
-        "_map_ensembl_to_official_names",
-        fake_map_ensembl_to_official_names,
+        "_map_ensembl_to_symbols",
+        fake_map_ensembl_to_symbols,
     )
 
 
@@ -230,7 +230,7 @@ def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
 
     def fake_convert_gene_identifiers(scdata, **kwargs):
 
-        if kwargs.get("input_identifier_type") == "ensembl_id":
+        if kwargs.get("input_type") == "ensembl_id":
             scdata.var_names = ["GeneA", "GeneA", "GeneB"]
 
         return None
@@ -240,7 +240,7 @@ def test_nestorowa_gene_mapping_merges_duplicated_symbols(monkeypatch):
         "convert_gene_identifiers",
         fake_convert_gene_identifiers,
     )
-    nestorowa_module._map_ensembl_to_official_names(adata)
+    nestorowa_module._map_ensembl_to_symbols(adata)
 
     assert adata.var_names.tolist() == ["GeneA", "GeneB"]
     assert adata.var["symbol"].tolist() == ["GeneA", "GeneB"]

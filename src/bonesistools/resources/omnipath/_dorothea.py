@@ -37,7 +37,7 @@ def dorothea(
     organism: Union[str, int] = "mouse",
     levels: Optional[List[str]] = None,
     genesyn: Optional[GeneSynonymsLike] = None,
-    gene_identifier_type: OutputIdentifierType = "official_name",
+    gene_identifier_type: OutputIdentifierType = "symbol",
     version: OmnipathVersion = "latest",
     hcop_version: HcopVersion = "latest",
     compatibility: bool = False,
@@ -60,7 +60,7 @@ def dorothea(
         DoRothEA confidence levels to keep. If `None`, use `["A", "B", "C"]`.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
-    gene_identifier_type: OutputIdentifierType (default: "official_name")
+    gene_identifier_type: OutputIdentifierType (default: "symbol")
         Output gene identifier type used when `genesyn` is provided.
     version: str or date (default: "latest")
         OmniPath resource version to load. `"latest"` uses the current OmniPath
@@ -218,8 +218,8 @@ def dorothea(
 
     genesyn(
         grn,
-        input_identifier_type="name",
-        output_identifier_type=gene_identifier_type,
+        input_type="name",
+        output_type=gene_identifier_type,
         copy=False,
     )
     return grn

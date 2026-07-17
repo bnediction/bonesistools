@@ -142,7 +142,7 @@ def _read_full_nestorowa(paths: Dict[str, Path]) -> AnnData:
     ]
 
     adata.var["ensembl"] = adata.var_names.astype(str)
-    _map_ensembl_to_official_names(adata)
+    _map_ensembl_to_symbols(adata)
     adata.uns["nestorowa"] = {
         "source": {key: url for key, (_, url) in _NESTOROWA_URLS.items()},
         "labels": label_counts,
@@ -208,7 +208,7 @@ def _numeric_cluster_categories(cluster_ids: pd.Series) -> pd.Series:
     return cluster_ids.cat.rename_categories(mapping)
 
 
-def _map_ensembl_to_official_names(adata: AnnData) -> None:
+def _map_ensembl_to_symbols(adata: AnnData) -> None:
 
     from ..preprocessing import (
         convert_gene_identifiers,
@@ -218,8 +218,8 @@ def _map_ensembl_to_official_names(adata: AnnData) -> None:
     convert_gene_identifiers(
         adata,
         axis="var",
-        input_identifier_type="ensembl_id",
-        output_identifier_type="official_name",
+        input_type="ensembl_id",
+        output_type="symbol",
         copy=False,
     )
     convert_gene_identifiers(

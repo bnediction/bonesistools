@@ -118,17 +118,13 @@ def mitochondrial_genes(
 
     mt_id = {
         gene_id
-        for gene_id, identifiers in gene_synonyms.gene_aliases_mapping[
-            "gene_id"
-        ].items()
+        for gene_id, identifiers in gene_synonyms._iter_gene_identifiers()
         if identifiers.chromosome == "MT"
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = gene_synonyms.get_gene_id(
-            gene=index, input_identifier_type=index_type
-        )
+        gene_id = gene_synonyms.get_gene_id(gene=index, input_type=index_type)
         if gene_id in mt_id:
             annotations.at[index, key] = True
 
@@ -239,19 +235,15 @@ def ribosomal_genes(
 
     rps_id = {
         gene_id
-        for gene_id, identifiers in gene_synonyms.gene_aliases_mapping[
-            "gene_id"
-        ].items()
-        if getattr(identifiers, "official_name", "")
+        for gene_id, identifiers in gene_synonyms._iter_gene_identifiers()
+        if getattr(identifiers, "symbol", "")
         .lower()
         .startswith(("rps", "rpl", "mrps", "mrpl"))
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = gene_synonyms.get_gene_id(
-            gene=index, input_identifier_type=index_type
-        )
+        gene_id = gene_synonyms.get_gene_id(gene=index, input_type=index_type)
         if gene_id in rps_id:
             annotations.at[index, key] = True
 

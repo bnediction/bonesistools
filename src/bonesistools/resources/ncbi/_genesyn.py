@@ -7,8 +7,10 @@ from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     Iterator,
     List,
+    NamedTuple,
     Optional,
     Sequence,
     Tuple,
@@ -20,8 +22,6 @@ if TYPE_CHECKING:
     from ...logic.boolean_algebra import Hypercube
     from ...logic.boolean_network._typing import BooleanNetworkLike
 
-import copy
-import ctypes
 import gzip
 import inspect
 import re
@@ -30,7 +30,6 @@ import tempfile
 import urllib.error
 import urllib.request
 import warnings
-from collections import namedtuple
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as SequenceInstance
 from functools import partial, wraps
@@ -45,9 +44,10 @@ from typing_extensions import Literal
 
 from ..._compat import get_args
 from ..._validation import _as_boolean, _as_dataframe_axis
-from ..._warnings import _warn_deprecated, _warn_deprecated_argument
+from ..._warnings import _deprecated, _warn_deprecated, _warn_deprecated_argument
 from ._typing import (
     InputIdentifierType,
+    OutputIdentifierType,
 )
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
@@ -221,15 +221,28 @@ GENE_TYPE_PRIORITY = {
     "pseudo": 0,
 }
 
+
+class _Identifiers(NamedTuple):
+    symbol: str
+    ncbi_symbol: str
+    ensembl_id: Optional[str]
+    databases: Dict[str, str]
+    chromosome: str
+    gene_type: str
+
+
 _GENE_SYNONYMS_DEPRECATED_ARGS = {
-    "gene_type": "input_identifier_type",
-    "alias_gene": "output_identifier_type",
+    "gene_type": "input_type",
+    "alias_gene": "output_type",
+    "input_identifier_type": "input_type",
+    "output_identifier_type": "output_type",
 }
+_MISSING_STATE = object()
 
 
 def support_legacy_gene_synonyms_args(func):
     """
-    Decorate GeneSynonyms methods to accept deprecated argument names.
+    Decorate gene-identifier APIs to accept deprecated argument names.
 
     """
 
@@ -238,14 +251,13 @@ def support_legacy_gene_synonyms_args(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         for old_name, new_name in _GENE_SYNONYMS_DEPRECATED_ARGS.items():
-
             if old_name not in kwargs:
                 continue
 
             if new_name not in valid_parameters:
                 continue
 
-            _warn_deprecated_argument(old_name, new_name, stacklevel=2)
+            _warn_deprecated_argument(old_name, new_name, stacklevel=4)
 
             if new_name in kwargs:
                 raise TypeError(
@@ -265,17 +277,17 @@ class GeneSynonyms:
     Converter between gene identifiers using NCBI gene_info resources.
 
     GeneSynonyms loads organism-specific NCBI gene information and builds
-    mappings between gene IDs, official symbols, NCBI names, Ensembl IDs and
-    database-specific aliases when available.
+    mappings between gene IDs, nomenclature symbols, NCBI symbols, Ensembl IDs
+    and database-specific aliases when available.
 
     The instance is callable and dispatches conversion according to the input
     object type:
 
     - sequences of gene identifiers are converted with `convert_sequence`,
     - interaction lists are converted with `convert_interaction_list`,
-    - pandas DataFrames are converted with `convert_df`,
+    - pandas DataFrames are converted with `convert_dataframe`,
     - NetworkX graphs are converted with `convert_graph`,
-    - BooleanNetworkLike objects are converted with `convert_bn`.
+    - BooleanNetworkLike objects are converted with `convert_boolean_network`.
 
     Examples
     --------
@@ -318,13 +330,27 @@ class GeneSynonyms:
 
     Attributes
     ----------
-    databases: set
+    organism: str
+        Organism represented by the converter.
+    version: str
+        NCBI gene_info version used to build the mappings.
+    ncbi_file: Path
+        Local gene_info file used to build the mappings.
+    show_warnings: bool
+        Whether unresolved identifiers emit warnings.
+    databases: frozenset
         Database names available for the selected organism, such as `MGI` when
         present in the NCBI gene_info resource.
     valid_input_identifier_types: tuple
         Identifier types accepted as input.
     valid_output_identifier_types: tuple
         Identifier types accepted as output.
+
+    Notes
+    -----
+    Configuration attributes are read-only. Use `reset()` to reload the
+    converter and `to_dataframe()` to inspect its gene identifiers and
+    metadata.
 
     Raises
     ------
@@ -336,6 +362,28 @@ class GeneSynonyms:
     RuntimeError
         If downloading or parsing NCBI gene_info data fails.
     """
+
+    _organism: str
+    _version: str
+    _ncbi_file: Path
+    _show_warnings: bool
+    _databases: FrozenSet[str]
+    _valid_input_identifier_types: Tuple[str, ...]
+    _valid_output_identifier_types: Tuple[str, ...]
+    _gene_aliases_mapping: Dict[str, Any]
+
+    _READ_ONLY_ATTRIBUTES: FrozenSet[str] = frozenset(
+        {
+            "databases",
+            "gene_aliases_mapping",
+            "ncbi_file",
+            "organism",
+            "show_warnings",
+            "valid_input_identifier_types",
+            "valid_output_identifier_types",
+            "version",
+        }
+    )
 
     def __init__(
         self,
@@ -361,12 +409,19 @@ class GeneSynonyms:
 
         show_warnings = _as_boolean(show_warnings, "show_warnings")
 
-        self.organism = organism
-        self.version = self.__normalize_gene_info_version(version)
-        self.ncbi_file = self.__resolve_gene_info_file(self.version)
+        self._organism = organism
+        self._version = self.__normalize_gene_info_version(version)
+        self._ncbi_file = self.__resolve_gene_info_file(self._version)
 
         self.__download_gene_info()
         self._initialize_mappings(show_warnings=show_warnings)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self._READ_ONLY_ATTRIBUTES:
+            raise AttributeError(
+                f"{name!r} is read-only; use reset() to reconfigure GeneSynonyms"
+            )
+        object.__setattr__(self, name, value)
 
     def __call__(
         self,
@@ -419,13 +474,13 @@ class GeneSynonyms:
         ) or isinstance(data, set):
             return self.convert_sequence(cast(Sequence[str], data), *args, **kwargs)
         elif isinstance(data, DataFrame):
-            return self.convert_df(data, *args, **kwargs)
+            return self.convert_dataframe(data, *args, **kwargs)
         elif isinstance(data, Graph):
             return self.convert_graph(data, *args, **kwargs)
         elif isinstance(data, Hypercube):
             return self.convert_hypercube(data, *args, **kwargs)
         elif is_boolean_network_like(data):
-            return self.convert_bn(data, *args, **kwargs)
+            return self.convert_boolean_network(data, *args, **kwargs)
         else:
             raise TypeError(
                 f"unsupported argument type for 'data': "
@@ -437,12 +492,11 @@ class GeneSynonyms:
     def conversion(
         self,
         gene: str,
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
     ) -> Optional[str]:
         """
         Convert gene identifiers into the user-defined alias type.
@@ -451,12 +505,12 @@ class GeneSynonyms:
         ----------
         gene: str
             Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
 
@@ -471,38 +525,21 @@ class GeneSynonyms:
         `valid_input_identifier_types` and `valid_output_identifier_types`.
         """
 
-        if output_identifier_type in [
-            "gene_id",
-            "official_name",
-            "ncbi_name",
-            "ensembl_id",
-        ]:
-            convert = getattr(self, f"get_{output_identifier_type}")
-        elif output_identifier_type in self.databases:
-            convert = partial(
-                self.get_alias_from_database, database=output_identifier_type
-            )
-        else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute "
-                f"'get_{output_identifier_type}'"
-            )
-
-        return convert(
-            gene=gene,
-            input_identifier_type=cast(InputIdentifierType, input_identifier_type),
+        convert = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
         )
+        return convert(gene=gene)
 
     @support_legacy_gene_synonyms_args
     def convert_sequence(
         self,
         genes: Sequence[str],
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         keep_if_missing: bool = True,
     ) -> Sequence[str]:
         """
@@ -515,12 +552,12 @@ class GeneSynonyms:
         ----------
         genes: Sequence[str]
             Gene identifiers to convert.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         keep_if_missing: bool (default: True)
@@ -540,11 +577,12 @@ class GeneSynonyms:
         """
 
         aliases = list()
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
         for gene in genes:
-            output_alias = alias_conversion(
-                gene=gene, input_identifier_type=input_identifier_type
-            )
+            output_alias = alias_conversion(gene=gene)
             output_alias = (
                 gene if (keep_if_missing and output_alias is None) else output_alias
             )
@@ -561,12 +599,11 @@ class GeneSynonyms:
     def convert_hypercube(
         self,
         hypercube: "Hypercube",
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         copy: bool = True,
     ) -> Union["Hypercube", None]:
         """
@@ -576,12 +613,12 @@ class GeneSynonyms:
         ----------
         hypercube: Hypercube
             Hypercube whose explicitly specified components are converted.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         copy: bool (default: True)
@@ -609,13 +646,13 @@ class GeneSynonyms:
                 f"expected {Hypercube} but received {type(hypercube)}"
             )
 
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
         aliases_mapping = {}
         for component in hypercube:
-            output_alias = alias_conversion(
-                gene=component,
-                input_identifier_type=input_identifier_type,
-            )
+            output_alias = alias_conversion(gene=component)
             aliases_mapping[component] = (
                 component if output_alias is None else output_alias
             )
@@ -629,12 +666,11 @@ class GeneSynonyms:
     def convert_interaction_list(
         self,
         interaction_list: InteractionList,
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         keep_if_missing: bool = True,
     ) -> InteractionList:
         """
@@ -646,12 +682,12 @@ class GeneSynonyms:
         ----------
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
             Sequence of `(source, target, attributes)` interactions.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         keep_if_missing: bool (default: True)
@@ -671,31 +707,42 @@ class GeneSynonyms:
         """
 
         converted_interactions_list = list()
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
+        converted_genes = {}
+
+        def convert(gene: str) -> Optional[str]:
+            if self.show_warnings:
+                output_alias = alias_conversion(gene=gene)
+                return (
+                    gene if (keep_if_missing and output_alias is None) else output_alias
+                )
+            if gene not in converted_genes:
+                output_alias = alias_conversion(gene=gene)
+                converted_genes[gene] = (
+                    gene if (keep_if_missing and output_alias is None) else output_alias
+                )
+            return converted_genes[gene]
+
         for interaction in interaction_list:
-            source = alias_conversion(
-                gene=interaction[0], input_identifier_type=input_identifier_type
+            converted_interactions_list.append(
+                (convert(interaction[0]), convert(interaction[1]), interaction[2])
             )
-            source = interaction[0] if (keep_if_missing and source is None) else source
-            target = alias_conversion(
-                gene=interaction[1], input_identifier_type=input_identifier_type
-            )
-            target = interaction[1] if (keep_if_missing and target is None) else target
-            converted_interactions_list.append((source, target, interaction[2]))
 
         return converted_interactions_list
 
     @support_legacy_gene_synonyms_args
-    def convert_df(
+    def convert_dataframe(
         self,
         df: DataFrame,
+        *,
         axis: Axis = 0,
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         copy: bool = True,
     ) -> Union[DataFrame, None]:
         """
@@ -708,12 +755,12 @@ class GeneSynonyms:
         axis: {0, 1, "index", "columns"} (default: 0)
             If 0 or `"index"`, convert `df.index`. If 1 or `"columns"`,
             convert `df.columns`.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         copy: bool (default: True)
@@ -731,20 +778,17 @@ class GeneSynonyms:
         """
 
         df = df.copy() if copy is True else df
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
 
         genes = list()
         axis = _as_dataframe_axis(axis)
-
-        if axis == "index":
-            iterator = iter(df.index)
-        elif axis == "columns":
-            iterator = iter(df.columns)
+        iterator = iter(df.index if axis == "index" else df.columns)
 
         for gene in iterator:
-            output_alias = alias_conversion(
-                gene=gene, input_identifier_type=input_identifier_type
-            )
+            output_alias = alias_conversion(gene=gene)
             output_alias = gene if output_alias is None else output_alias
             genes.append(output_alias)
 
@@ -756,16 +800,38 @@ class GeneSynonyms:
         if copy is True:
             return df
 
+    @_deprecated(replacement="`GeneSynonyms.convert_dataframe()`")
+    @support_legacy_gene_synonyms_args
+    def convert_df(
+        self,
+        df: DataFrame,
+        *,
+        axis: Axis = 0,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
+        copy: bool = True,
+    ) -> Union[DataFrame, None]:
+        """Deprecated alias for `convert_dataframe()`."""
+
+        return self.convert_dataframe(
+            df,
+            axis=axis,
+            input_type=input_type,
+            output_type=output_type,
+            copy=copy,
+        )
+
     @support_legacy_gene_synonyms_args
     def convert_graph(
         self,
         graph: Graph[Any],
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         copy: bool = True,
     ) -> Union[Graph[Any], None]:
         """
@@ -775,12 +841,12 @@ class GeneSynonyms:
         ----------
         graph: nx.Graph
             Graph whose node identifiers are converted.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         copy: bool (default: True)
@@ -798,17 +864,18 @@ class GeneSynonyms:
         """
 
         aliases_mapping = dict()
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
         for gene in graph.nodes:
-            output_alias = alias_conversion(
-                gene=gene, input_identifier_type=input_identifier_type
-            )
+            output_alias = alias_conversion(gene=gene)
             output_alias = gene if output_alias is None else output_alias
             aliases_mapping[gene] = output_alias
 
         from ...logic.influence_graph import InfluenceGraph
 
-        if type(graph) is InfluenceGraph:
+        if isinstance(graph, InfluenceGraph):
             converted_graph = graph.copy()
             converted_graph.relabel(aliases_mapping)
             if copy is True:
@@ -823,15 +890,14 @@ class GeneSynonyms:
             return None
 
     @support_legacy_gene_synonyms_args
-    def convert_bn(
+    def convert_boolean_network(
         self,
         bn: "BooleanNetworkLike",
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
         copy: bool = False,
     ) -> Union["BooleanNetworkLike", None]:
         """
@@ -841,12 +907,12 @@ class GeneSynonyms:
         ----------
         bn: BooleanNetworkLike
             BooleanNetworkLike object whose component identifiers are converted.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
             (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
         copy: bool (default: False)
@@ -876,7 +942,7 @@ class GeneSynonyms:
                 f"but received {type(bn)}"
             )
 
-        input_type = type(bn)
+        network_type = type(bn)
         bn_any: Any = bn
         rebuild_as_input_type = False
         rename = getattr(bn_any, "rename", None)
@@ -900,34 +966,109 @@ class GeneSynonyms:
                 "a converted copy"
             )
 
-        alias_conversion = self.__conversion_function(output_identifier_type)
+        alias_conversion = self.__conversion_function(
+            output_type,
+            input_type=cast(InputIdentifierType, input_type),
+        )
         genes = tuple(gene for gene, _ in bn_any.items())
+        aliases_mapping = {}
         for gene in genes:
-            output_alias = alias_conversion(
-                gene=gene, input_identifier_type=input_identifier_type
-            )
+            output_alias = alias_conversion(gene=gene)
             output_alias = gene if output_alias is None else output_alias
-            rename(gene, output_alias)
+            aliases_mapping[gene] = output_alias
+
+        if isinstance(bn_any, BooleanNetwork):
+            bn_any.relabel(aliases_mapping)
+        else:
+            for gene, output_alias in aliases_mapping.items():
+                rename(gene, output_alias)
 
         if copy and rebuild_as_input_type:
             try:
                 return cast(
                     "BooleanNetworkLike",
-                    cast(Callable[[Any], Any], input_type)(bn_any.rules),
+                    cast(Callable[[Any], Any], network_type)(bn_any.rules),
                 )
             except Exception as e:
                 raise TypeError(
                     "unable to return converted Boolean network with original "
-                    f"type {input_type}"
+                    f"type {network_type}"
                 ) from e
 
         return cast("BooleanNetworkLike", bn_any) if copy else None
 
+    @_deprecated(replacement="`GeneSynonyms.convert_boolean_network()`")
+    @support_legacy_gene_synonyms_args
+    def convert_bn(
+        self,
+        bn: "BooleanNetworkLike",
+        *,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+        output_type: Union[
+            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
+        ] = "symbol",
+        copy: bool = False,
+    ) -> Union["BooleanNetworkLike", None]:
+        """Deprecated alias for `convert_boolean_network()`."""
+
+        return self.convert_boolean_network(
+            bn,
+            input_type=input_type,
+            output_type=output_type,
+            copy=copy,
+        )
+
+    def to_dataframe(self) -> DataFrame:
+        """Return gene identifiers and metadata as a DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Table indexed by NCBI Gene ID. Canonical and database-specific
+            identifiers precede the biological metadata columns.
+        """
+
+        databases = tuple(sorted(self.databases))
+        columns = (
+            "symbol",
+            "ncbi_symbol",
+            "ensembl_id",
+            *databases,
+            "chromosome",
+            "gene_type",
+        )
+        gene_identifiers = cast(
+            Dict[str, _Identifiers],
+            self._gene_aliases_mapping["gene_id"],
+        )
+        records = (
+            (
+                identifiers.symbol,
+                identifiers.ncbi_symbol,
+                identifiers.ensembl_id,
+                *(identifiers.databases.get(database) for database in databases),
+                identifiers.chromosome,
+                identifiers.gene_type,
+            )
+            for identifiers in gene_identifiers.values()
+        )
+        dataframe = DataFrame.from_records(
+            records,
+            index=tuple(gene_identifiers),
+            columns=columns,
+        )
+        dataframe.index.name = "gene_id"
+        return dataframe
+
+    @_deprecated(replacement="`GeneSynonyms.convert_sequence()`")
     def standardize_sequence(
-        self, genes: Sequence[str], keep_if_missing: bool = True
+        self,
+        genes: Sequence[str],
+        *,
+        keep_if_missing: bool = True,
     ) -> Sequence[str]:
         """
-        Standardize a sequence of gene names to official gene names.
+        Standardize a sequence of gene names to gene symbols.
 
         Parameters
         ----------
@@ -940,24 +1081,24 @@ class GeneSynonyms:
         Returns
         -------
         Sequence[str]
-            Sequence of official gene names, preserving the input sequence type
+            Sequence of gene symbols, preserving the input sequence type
             when possible.
         """
 
         return self.convert_sequence(
             genes=genes,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
             keep_if_missing=keep_if_missing,
         )
 
+    @_deprecated(replacement="`GeneSynonyms.convert_hypercube()`")
     def standardize_hypercube(
         self,
         hypercube: "Hypercube",
+        *,
         copy: bool = True,
     ) -> Union["Hypercube", None]:
         """
-        Standardize hypercube component names to official gene names.
+        Standardize hypercube component names to gene symbols.
 
         Parameters
         ----------
@@ -974,13 +1115,15 @@ class GeneSynonyms:
 
         return self.convert_hypercube(
             hypercube=hypercube,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
             copy=copy,
         )
 
+    @_deprecated(replacement="`GeneSynonyms.convert_interaction_list()`")
     def standardize_interaction_list(
-        self, interaction_list: InteractionList, keep_if_missing: bool = True
+        self,
+        interaction_list: InteractionList,
+        *,
+        keep_if_missing: bool = True,
     ) -> InteractionList:
         """
         Standardize source and target identifiers in an interaction list.
@@ -997,19 +1140,19 @@ class GeneSynonyms:
         -------
         InteractionList
             Interaction list with source and target identifiers standardized to
-            official gene names.
+            gene symbols.
         """
 
         return self.convert_interaction_list(
             interaction_list=interaction_list,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
             keep_if_missing=keep_if_missing,
         )
 
+    @_deprecated(replacement="`GeneSynonyms.convert_dataframe()`")
     def standardize_df(
         self,
         df: DataFrame,
+        *,
         axis: Axis = 0,
         copy: bool = True,
     ) -> Union[DataFrame, None]:
@@ -1032,17 +1175,17 @@ class GeneSynonyms:
             Standardized DataFrame if `copy=True`; otherwise None.
         """
 
-        return self.convert_df(
-            df=df,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
+        return self.convert_dataframe(
+            df,
             axis=axis,
             copy=copy,
         )
 
+    @_deprecated(replacement="`GeneSynonyms.convert_graph()`")
     def standardize_graph(
         self,
         graph: Graph[Any],
+        *,
         copy: bool = True,
     ) -> Union[Graph[Any], None]:
         """
@@ -1063,13 +1206,15 @@ class GeneSynonyms:
 
         return self.convert_graph(
             graph=graph,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
             copy=copy,
         )
 
+    @_deprecated(replacement="`GeneSynonyms.convert_boolean_network()`")
     def standardize_bn(
-        self, bn: "BooleanNetworkLike", copy: bool = False
+        self,
+        bn: "BooleanNetworkLike",
+        *,
+        copy: bool = False,
     ) -> Union["BooleanNetworkLike", None]:
         """
         Standardize gene names in Boolean network components and rules.
@@ -1087,10 +1232,8 @@ class GeneSynonyms:
             Standardized BooleanNetworkLike object if `copy=True`; otherwise None.
         """
 
-        return self.convert_bn(
-            bn=bn,
-            input_identifier_type="name",
-            output_identifier_type="official_name",
+        return self.convert_boolean_network(
+            bn,
             copy=copy,
         )
 
@@ -1134,7 +1277,6 @@ class GeneSynonyms:
 
         show_warnings = _as_boolean(show_warnings, "show_warnings")
 
-        self.organism = organism
         resolved_version: GeneInfoVersion
         if version is None:
             resolved_version = cast(
@@ -1143,23 +1285,78 @@ class GeneSynonyms:
             )
         else:
             resolved_version = version
-        self.version = self.__normalize_gene_info_version(resolved_version)
-        self.ncbi_file = self.__resolve_gene_info_file(self.version)
 
-        self.__download_gene_info()
-        self._initialize_mappings(show_warnings=show_warnings)
+        state_attributes = (
+            "_organism",
+            "_version",
+            "_ncbi_file",
+            "_show_warnings",
+            "_gene_aliases_mapping",
+            "_databases",
+            "_valid_input_identifier_types",
+            "_valid_output_identifier_types",
+        )
+        previous_state = {
+            attribute: getattr(self, attribute, _MISSING_STATE)
+            for attribute in state_attributes
+        }
 
-    def get_mapping(self):
-        """
-        Return a deep copy of the internal gene alias mapping.
+        try:
+            self._organism = organism
+            self._version = self.__normalize_gene_info_version(resolved_version)
+            self._ncbi_file = self.__resolve_gene_info_file(self._version)
+            self.__download_gene_info()
+            self._initialize_mappings(show_warnings=show_warnings)
+        except Exception:
+            for attribute, value in previous_state.items():
+                if value is _MISSING_STATE:
+                    if hasattr(self, attribute):
+                        object.__delattr__(self, attribute)
+                else:
+                    object.__setattr__(self, attribute, value)
+            raise
 
-        Returns
-        -------
-        Dict
-            Copy of the mapping structure used for identifier conversion.
-        """
+    @property
+    def organism(self) -> str:
+        """Organism represented by this converter."""
 
-        return copy.deepcopy(self.gene_aliases_mapping)
+        return self._organism
+
+    @property
+    def version(self) -> str:
+        """NCBI gene_info version used by this converter."""
+
+        return self._version
+
+    @property
+    def ncbi_file(self) -> Path:
+        """Local NCBI gene_info file used by this converter."""
+
+        return self._ncbi_file
+
+    @property
+    def show_warnings(self) -> bool:
+        """Whether unresolved identifiers emit warnings."""
+
+        return self._show_warnings
+
+    @property
+    def databases(self) -> FrozenSet[str]:
+        """Database-specific identifier namespaces available for conversion."""
+
+        return self._databases
+
+    @property
+    def valid_input_identifier_types(self) -> Tuple[str, ...]:
+        """Identifier types accepted as conversion inputs."""
+
+        return self._valid_input_identifier_types
+
+    @property
+    def valid_output_identifier_types(self) -> Tuple[str, ...]:
+        """Identifier types available as conversion outputs."""
+
+        return self._valid_output_identifier_types
 
     def contains(
         self,
@@ -1200,16 +1397,17 @@ class GeneSynonyms:
         """
 
         if identifier_type == "name":
-            return [gene.upper() in self.__upper_gene_names_mapping for gene in genes]
+            name_mapping = self._gene_aliases_mapping["name"]
+            return [gene.upper() in name_mapping for gene in genes]
 
         if identifier_type == "gene_id":
-            return [gene in self.gene_aliases_mapping["gene_id"] for gene in genes]
+            return [gene in self._gene_aliases_mapping["gene_id"] for gene in genes]
 
         if identifier_type == "ensembl_id":
-            return [gene in self.gene_aliases_mapping["ensembl_id"] for gene in genes]
+            return [gene in self._gene_aliases_mapping["ensembl_id"] for gene in genes]
 
         if identifier_type in self.databases:
-            database_mapping = self.gene_aliases_mapping["databases"][identifier_type]
+            database_mapping = self._gene_aliases_mapping["databases"][identifier_type]
             return [gene in database_mapping for gene in genes]
 
         raise ValueError(
@@ -1267,7 +1465,7 @@ class GeneSynonyms:
     def get_gene_id(
         self,
         gene: str,
-        input_identifier_type: Union[Literal["name", "ensembl_id"], str] = "name",
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
     ) -> Optional[str]:
         """
         Return the NCBI gene ID for a gene identifier.
@@ -1276,9 +1474,10 @@ class GeneSynonyms:
         ----------
         gene: str
             Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'ensembl_id' | <database> (default: 'name')
-            Input gene identifier type. Valid database-specific values are
-            listed in `databases`.
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Input gene identifier type. Valid database-specific values are listed
+            in `databases`.
 
         Returns
         -------
@@ -1287,138 +1486,150 @@ class GeneSynonyms:
             found.
         """
 
-        if input_identifier_type == "name":
-            gene_name = gene.upper()
-            if gene_name in self.__upper_gene_names_mapping:
-                return self.__upper_gene_names_mapping[gene_name].value.decode()
-            else:
-                if self.show_warnings:
-                    warnings.warn(f"no correspondence for gene '{gene}'", stacklevel=10)
-                return None
-        elif input_identifier_type == "ensembl_id":
-            if gene in self.gene_aliases_mapping[input_identifier_type]:
-                return self.gene_aliases_mapping[input_identifier_type][
-                    gene
-                ].value.decode()
-            else:
-                if self.show_warnings:
-                    warnings.warn(
-                        f"no gene_id correspondence found for {gene!r} "
-                        f"using input_identifier_type={input_identifier_type!r}",
-                        stacklevel=10,
-                    )
-                return None
-        elif input_identifier_type in self.databases:
-            if gene in self.gene_aliases_mapping["databases"][input_identifier_type]:
-                return self.gene_aliases_mapping["databases"][input_identifier_type][
-                    gene
-                ].value.decode()
-            else:
-                if self.show_warnings:
-                    warnings.warn(
-                        f"no gene_id correspondence found for {gene!r} "
-                        f"using input_identifier_type={input_identifier_type!r}",
-                        stacklevel=10,
-                    )
-                return None
+        if input_type == "name":
+            gene_id = self._gene_aliases_mapping["name"].get(gene.upper())
+            if gene_id is not None:
+                return gene_id
+            if self.show_warnings:
+                warnings.warn(f"no correspondence for gene '{gene}'", stacklevel=10)
+            return None
+
+        if input_type == "gene_id":
+            if gene in self._gene_aliases_mapping["gene_id"]:
+                return gene
+        elif input_type == "ensembl_id":
+            gene_id = self._gene_aliases_mapping["ensembl_id"].get(gene)
+            if gene_id is not None:
+                return gene_id
+        elif input_type in self.databases:
+            gene_id = self._gene_aliases_mapping["databases"][input_type].get(gene)
+            if gene_id is not None:
+                return gene_id
         else:
             raise ValueError(
-                f"invalid argument value for 'input_identifier_type': "
-                f"expected 'name', 'ensembl_id' or one of {self.databases} "
-                f"but received {input_identifier_type!r}"
+                f"invalid argument value for 'input_type': "
+                f"expected 'name', 'gene_id', 'ensembl_id' or one of "
+                f"{self.databases} but received {input_type!r}"
             )
 
+        if self.show_warnings:
+            warnings.warn(
+                f"no gene_id correspondence found for {gene!r} "
+                f"using input_type={input_type!r}",
+                stacklevel=10,
+            )
+        return None
+
+    @support_legacy_gene_synonyms_args
+    def get_ncbi_symbol(
+        self,
+        gene: str,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+    ) -> Optional[str]:
+        """
+        Return the NCBI symbol for a gene identifier.
+
+        Parameters
+        ----------
+        gene: str
+            Identifier of the gene of interest.
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
+
+        Returns
+        -------
+        str or None
+            NCBI symbol corresponding to `gene`, or None if no match is found.
+        """
+
+        gene_id = (
+            self.get_gene_id(gene, input_type) if input_type != "gene_id" else gene
+        )
+        identifiers = self._gene_aliases_mapping["gene_id"].get(gene_id)
+        if identifiers is not None:
+            return identifiers.ncbi_symbol
+        if self.show_warnings:
+            warnings.warn(
+                f"no NCBI symbol correspondence found for {gene!r} "
+                f"using input_type={input_type!r}",
+                stacklevel=10,
+            )
+        return None
+
+    @support_legacy_gene_synonyms_args
+    def get_symbol(
+        self,
+        gene: str,
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
+    ) -> Optional[str]:
+        """
+        Return the nomenclature symbol for a gene identifier.
+
+        Parameters
+        ----------
+        gene: str
+            Identifier of the gene of interest.
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Input gene identifier type. Valid database-specific values are
+            listed in `databases`.
+
+        Returns
+        -------
+        str or None
+            Nomenclature symbol corresponding to `gene`, or None if no match is
+            found.
+        """
+
+        gene_id = (
+            self.get_gene_id(gene, input_type) if input_type != "gene_id" else gene
+        )
+        identifiers = self._gene_aliases_mapping["gene_id"].get(gene_id)
+        if identifiers is not None:
+            return identifiers.symbol
+        if self.show_warnings:
+            warnings.warn(
+                f"no symbol correspondence found for {gene!r} "
+                f"using input_type={input_type!r}",
+                stacklevel=10,
+            )
+        return None
+
+    @_deprecated(replacement="`GeneSynonyms.get_ncbi_symbol()`")
     @support_legacy_gene_synonyms_args
     def get_ncbi_name(
         self,
         gene: str,
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
     ) -> Optional[str]:
-        """
-        Return the NCBI reference name for a gene identifier.
+        """Return the NCBI symbol for a gene identifier."""
 
-        Parameters
-        ----------
-        gene: str
-            Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
-            (default: 'name')
-            Input gene identifier type. Valid database-specific values are
-            listed in `databases`.
-
-        Returns
-        -------
-        str or None
-            NCBI reference name corresponding to `gene`, or None if no match is
-            found.
-        """
-
-        gene_id = (
-            self.get_gene_id(gene, input_identifier_type)
-            if input_identifier_type != "gene_id"
-            else gene
+        return self.get_ncbi_symbol(
+            gene,
+            input_type=input_type,
         )
-        if gene_id in self.gene_aliases_mapping["gene_id"]:
-            return self.gene_aliases_mapping["gene_id"][gene_id].ncbi_name
-        else:
-            if self.show_warnings:
-                warnings.warn(
-                    f"no NCBI reference name correspondence found for {gene!r} "
-                    f"using input_identifier_type={input_identifier_type!r}",
-                    stacklevel=10,
-                )
-            return None
 
+    @_deprecated(replacement="`GeneSynonyms.get_symbol()`")
     @support_legacy_gene_synonyms_args
     def get_official_name(
         self,
         gene: str,
-        input_identifier_type: Union[
-            Literal["name", "gene_id", "ensembl_id"], str
-        ] = "name",
+        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
     ) -> Optional[str]:
-        """
-        Return the official nomenclature name for a gene identifier.
+        """Return the nomenclature symbol for a gene identifier."""
 
-        Parameters
-        ----------
-        gene: str
-            Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
-            (default: 'name')
-            Input gene identifier type. Valid database-specific values are
-            listed in `databases`.
-
-        Returns
-        -------
-        str or None
-            Official gene name corresponding to `gene`, or None if no match is
-            found.
-        """
-
-        gene_id = (
-            self.get_gene_id(gene, input_identifier_type)
-            if input_identifier_type != "gene_id"
-            else gene
+        return self.get_symbol(
+            gene,
+            input_type=input_type,
         )
-        if gene_id in self.gene_aliases_mapping["gene_id"]:
-            return self.gene_aliases_mapping["gene_id"][gene_id].official_name
-        else:
-            if self.show_warnings:
-                warnings.warn(
-                    f"no official name correspondence found for {gene!r} "
-                    f"using input_identifier_type={input_identifier_type!r}",
-                    stacklevel=10,
-                )
-            return None
 
     @support_legacy_gene_synonyms_args
     def get_ensembl_id(
         self,
         gene: str,
-        input_identifier_type: Union[Literal["name", "gene_id"], str] = "name",
+        input_type: Union[Literal["name", "gene_id"], str] = "name",
     ) -> Optional[str]:
         """
         Return the Ensembl ID for a gene identifier.
@@ -1427,7 +1638,7 @@ class GeneSynonyms:
         ----------
         gene: str
             Identifier of the gene of interest.
-        input_identifier_type: 'name' | 'gene_id' | <database> (default: 'name')
+        input_type: 'name' | 'gene_id' | <database> (default: 'name')
             Input gene identifier type. Valid database-specific values are
             listed in `databases`.
 
@@ -1438,27 +1649,25 @@ class GeneSynonyms:
         """
 
         gene_id = (
-            self.get_gene_id(gene, input_identifier_type)
-            if input_identifier_type != "gene_id"
-            else gene
+            self.get_gene_id(gene, input_type) if input_type != "gene_id" else gene
         )
-        if gene_id in self.gene_aliases_mapping["gene_id"]:
-            return self.gene_aliases_mapping["gene_id"][gene_id].ensembl_id
-        else:
-            if self.show_warnings:
-                warnings.warn(
-                    f"no Ensembl id correspondence found for {gene!r} "
-                    f"using input_identifier_type={input_identifier_type!r}",
-                    stacklevel=10,
-                )
-            return None
+        identifiers = self._gene_aliases_mapping["gene_id"].get(gene_id)
+        if identifiers is not None:
+            return identifiers.ensembl_id
+        if self.show_warnings:
+            warnings.warn(
+                f"no Ensembl id correspondence found for {gene!r} "
+                f"using input_type={input_type!r}",
+                stacklevel=10,
+            )
+        return None
 
     @support_legacy_gene_synonyms_args
     def get_alias_from_database(
         self,
         gene: str,
         database: str,
-        input_identifier_type: InputIdentifierType = "name",
+        input_type: InputIdentifierType = "name",
     ) -> Optional[str]:
         """
         Return a database-defined gene alias for a gene identifier.
@@ -1470,7 +1679,7 @@ class GeneSynonyms:
         database: <database>
             Organism-related database name providing gene identifiers.
             See `databases` for valid database names.
-        input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' (default: 'name')
+        input_type: 'name' | 'gene_id' | 'ensembl_id' (default: 'name')
             Input gene identifier type.
 
         Returns
@@ -1487,29 +1696,20 @@ class GeneSynonyms:
             )
 
         gene_id = (
-            self.get_gene_id(gene, input_identifier_type)
-            if input_identifier_type != "gene_id"
-            else gene
+            self.get_gene_id(gene, input_type) if input_type != "gene_id" else gene
         )
-        if gene_id in self.gene_aliases_mapping["gene_id"]:
-            if database in self.gene_aliases_mapping["gene_id"][gene_id].databases:
-                return self.gene_aliases_mapping["gene_id"][gene_id].databases[database]
-            else:
-                if self.show_warnings:
-                    warnings.warn(
-                        f"no {database} correspondence found for {gene!r} "
-                        f"using input_identifier_type={input_identifier_type!r}",
-                        stacklevel=10,
-                    )
-                return None
-        else:
-            if self.show_warnings:
-                warnings.warn(
-                    f"no {database} correspondence found for {gene!r} "
-                    f"using input_identifier_type={input_identifier_type!r}",
-                    stacklevel=10,
-                )
-            return None
+        identifiers = self._gene_aliases_mapping["gene_id"].get(gene_id)
+        if identifiers is not None:
+            alias = identifiers.databases.get(database)
+            if alias is not None:
+                return alias
+        if self.show_warnings:
+            warnings.warn(
+                f"no {database} correspondence found for {gene!r} "
+                f"using input_type={input_type!r}",
+                stacklevel=10,
+            )
+        return None
 
     def __normalize_gene_info_version(self, version: GeneInfoVersion) -> str:
 
@@ -1636,8 +1836,8 @@ class GeneSynonyms:
                     "\t".join(
                         [
                             "gene_id",
-                            "official_name",
-                            "ncbi_name",
+                            "symbol",
+                            "ncbi_symbol",
                             "synonyms",
                             "dbXrefs",
                             "chromosome",
@@ -1670,18 +1870,6 @@ class GeneSynonyms:
             Mapping structure for gene identifiers and aliases.
         """
 
-        Identifiers = namedtuple(
-            "Identifiers",
-            [
-                "official_name",
-                "ncbi_name",
-                "ensembl_id",
-                "databases",
-                "chromosome",
-                "gene_type",
-            ],
-        )
-
         gene_aliases_mapping = {
             "gene_id": dict(),
             "name": dict(),
@@ -1689,8 +1877,7 @@ class GeneSynonyms:
             "databases": dict(),
         }
 
-        gene_info_rows = []
-        protected_official_names = set()
+        protected_symbols = set()
 
         try:
             for fields in self.__iter_gene_info_rows(
@@ -1698,64 +1885,36 @@ class GeneSynonyms:
                 reduced=self.version == "bundled",
             ):
                 gene_id = fields[0]
-                official_name = fields[1]
-                ncbi_name = fields[2]
+                symbol = fields[1]
+                ncbi_symbol = fields[2]
                 chromosome = fields[5]
                 gene_type = fields[6]
-                if official_name == "-":
-                    official_name = ncbi_name
-
-                gene_info_rows.append(
-                    (
-                        gene_id,
-                        official_name,
-                        ncbi_name,
-                        fields[3],
-                        fields[4],
-                        chromosome,
-                        gene_type,
-                    )
-                )
-
-                if GENE_TYPE_PRIORITY.get(gene_type, -1) > 0:
-                    protected_official_names.add(official_name.upper())
-
-            for (
-                gene_id,
-                official_name,
-                ncbi_name,
-                synonyms_field,
-                db_xrefs_field,
-                chromosome,
-                gene_type,
-            ) in gene_info_rows:
+                if symbol == "-":
+                    symbol = ncbi_symbol
 
                 synonyms = [
                     synonym
-                    for synonym in (synonyms_field.split("|") + [ncbi_name])
-                    if synonym != "-" and synonym.upper() != official_name.upper()
+                    for synonym in (fields[3].split("|") + [ncbi_symbol])
+                    if synonym != "-" and synonym.upper() != symbol.upper()
                 ]
 
                 ensembl_id = None
                 database_aliases = {}
 
-                for db_entry in db_xrefs_field.split("|"):
+                for db_entry in fields[4].split("|"):
                     if db_entry == "-":
                         continue
 
                     database, database_name = db_entry.split(":", maxsplit=1)
 
                     if database == "Ensembl":
-                        ensembl_match = re.findall("[A-Z]{7}[0-9]{11}", database_name)
-                        ensembl_id = ensembl_match[0] if ensembl_match else None
+                        ensembl_id = database_name
                     else:
                         database_aliases[database] = database_name
 
-                gene_id_pointer = ctypes.create_string_buffer(gene_id.encode())
-
-                gene_aliases_mapping["gene_id"][gene_id] = Identifiers(
-                    official_name=official_name,
-                    ncbi_name=ncbi_name,
+                gene_aliases_mapping["gene_id"][gene_id] = _Identifiers(
+                    symbol=symbol,
+                    ncbi_symbol=ncbi_symbol,
                     ensembl_id=ensembl_id,
                     databases=database_aliases,
                     chromosome=chromosome,
@@ -1763,45 +1922,44 @@ class GeneSynonyms:
                 )
 
                 priority = GENE_TYPE_PRIORITY.get(gene_type, -1)
+                symbol_upper = symbol.upper()
 
-                # Official name always wins
-                gene_aliases_mapping["name"][official_name.upper()] = (
-                    gene_id_pointer,
+                # The nomenclature symbol always wins.
+                gene_aliases_mapping["name"][symbol_upper] = (
+                    gene_id,
                     priority,
                 )
+                if priority > 0:
+                    protected_symbols.add(symbol_upper)
 
                 for synonym in synonyms:
                     synonym_upper = synonym.upper()
-                    # Prevent overwriting another protected official name
-                    if synonym_upper in protected_official_names:
+                    # Do not overwrite another protected nomenclature symbol.
+                    if synonym_upper in protected_symbols:
                         continue
                     if synonym_upper not in gene_aliases_mapping["name"]:
                         gene_aliases_mapping["name"][synonym_upper] = (
-                            gene_id_pointer,
+                            gene_id,
                             priority,
                         )
                     else:
                         _, old_priority = gene_aliases_mapping["name"][synonym_upper]
                         if priority > old_priority:
                             gene_aliases_mapping["name"][synonym_upper] = (
-                                gene_id_pointer,
+                                gene_id,
                                 priority,
                             )
 
                 if ensembl_id:
-                    gene_aliases_mapping["ensembl_id"][ensembl_id] = gene_id_pointer
+                    gene_aliases_mapping["ensembl_id"][ensembl_id] = gene_id
 
                 for database, identifier in database_aliases.items():
                     gene_aliases_mapping["databases"].setdefault(database, {})
-                    gene_aliases_mapping["databases"][database][
-                        identifier
-                    ] = gene_id_pointer
+                    gene_aliases_mapping["databases"][database][identifier] = gene_id
 
             # Remove stored priorities after conflict resolution
-            gene_aliases_mapping["name"] = {
-                alias: pointer
-                for alias, (pointer, _) in gene_aliases_mapping["name"].items()
-            }
+            for alias, (gene_id, _) in gene_aliases_mapping["name"].items():
+                gene_aliases_mapping["name"][alias] = gene_id
         except (IndexError, OSError) as e:
             raise RuntimeError("failed to parse NCBI gene_info file") from e
 
@@ -1809,57 +1967,61 @@ class GeneSynonyms:
 
     def _initialize_mappings(self, show_warnings: bool) -> None:
 
-        self.show_warnings = show_warnings
+        self._show_warnings = show_warnings
         try:
-            self.gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
+            self._gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
         finally:
             if self.version == "latest":
                 self.__unlink_if_exists(self.ncbi_file)
                 self.__unlink_if_exists(Path(f"{self.ncbi_file}.gz"))
 
-        self.__upper_gene_names_mapping = {
-            key.upper(): value
-            for key, value in self.gene_aliases_mapping["name"].items()
-        }
+        database_mapping = cast(
+            Dict[str, Dict[str, str]],
+            self._gene_aliases_mapping["databases"],
+        )
+        databases = tuple(sorted(database_mapping))
+        self._databases = frozenset(databases)
 
-        self.databases = set(self.gene_aliases_mapping["databases"].keys())
-
-        self.valid_input_identifier_types = (
+        self._valid_input_identifier_types = (
             "name",
             "gene_id",
             "ensembl_id",
-            *self.databases,
+            *databases,
         )
-        self.valid_output_identifier_types = (
-            "official_name",
-            "ncbi_name",
+        self._valid_output_identifier_types = (
+            "symbol",
+            "ncbi_symbol",
             "gene_id",
             "ensembl_id",
-            *self.databases,
+            *databases,
         )
+
+    def _iter_gene_identifiers(self) -> Iterator[Tuple[str, _Identifiers]]:
+        """Iterate over internal gene IDs and their identifier records."""
+
+        return iter(self._gene_aliases_mapping["gene_id"].items())
 
     def __initialize_mappings(self, show_warnings: bool) -> None:
 
         self._initialize_mappings(show_warnings=show_warnings)
 
-    @support_legacy_gene_synonyms_args
     def __conversion_function(
         self,
-        output_identifier_type: Union[
-            Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"], str
-        ] = "official_name",
-        *args: Any,
-        **kwargs: Any,
+        output_type: Union[OutputIdentifierType, str] = "symbol",
+        input_type: InputIdentifierType = "name",
     ) -> Callable[..., Optional[str]]:
         """
         Function converting gene identifiers.
 
         Parameters
         ----------
-        output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-            'ensembl_id' | <database> (default: 'official_name')
+        output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+            'ensembl_id' | <database> (default: 'symbol')
             Output gene identifier type. Valid database-specific values are
             listed in `databases`.
+        input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+            (default: 'name')
+            Input gene identifier type.
 
         Returns
         -------
@@ -1873,22 +2035,111 @@ class GeneSynonyms:
         `valid_output_identifier_types`.
         """
 
-        if output_identifier_type in [
+        deprecated_output_types = {
+            "official_name": "symbol",
+            "ncbi_name": "ncbi_symbol",
+        }
+        replacement = deprecated_output_types.get(output_type)
+        if replacement is not None:
+            _warn_deprecated(
+                f"`output_type={output_type!r}`",
+                replacement=f"`output_type={replacement!r}`",
+                stacklevel=5,
+            )
+            output_type = replacement
+
+        builtin_output_types = (
             "gene_id",
-            "official_name",
-            "ncbi_name",
+            "symbol",
+            "ncbi_symbol",
             "ensembl_id",
-        ]:
-            return getattr(self, f"get_{output_identifier_type}")
-        elif output_identifier_type in self.databases:
+        )
+        if output_type in builtin_output_types:
+            if not self.show_warnings:
+                return self.__fast_conversion_function(
+                    input_type=input_type,
+                    output_type=output_type,
+                )
             return partial(
-                self.get_alias_from_database, database=output_identifier_type
+                getattr(self, f"get_{output_type}"),
+                input_type=input_type,
             )
+
+        if output_type in self.databases:
+            if not self.show_warnings:
+                return self.__fast_conversion_function(
+                    input_type=input_type,
+                    output_type=output_type,
+                )
+            return partial(
+                self.get_alias_from_database,
+                database=output_type,
+                input_type=input_type,
+            )
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute 'get_{output_type}'"
+        )
+
+    def __fast_conversion_function(
+        self,
+        input_type: InputIdentifierType,
+        output_type: str,
+    ) -> Callable[..., Optional[str]]:
+        """Build a warning-free identifier converter for repeated lookups."""
+
+        mappings = self._gene_aliases_mapping
+        identifiers_by_gene_id = mappings["gene_id"]
+
+        if input_type == "name":
+            input_mapping = mappings["name"]
+
+            def resolve_gene_id(gene: str) -> Optional[str]:
+                return input_mapping.get(gene.upper())
+
+        elif input_type == "gene_id":
+
+            def resolve_gene_id(gene: str) -> Optional[str]:
+                return gene if gene in identifiers_by_gene_id else None
+
+        elif input_type == "ensembl_id":
+            input_mapping = mappings["ensembl_id"]
+
+            def resolve_gene_id(gene: str) -> Optional[str]:
+                return input_mapping.get(gene)
+
+        elif input_type in self.databases:
+            input_mapping = mappings["databases"][input_type]
+
+            def resolve_gene_id(gene: str) -> Optional[str]:
+                return input_mapping.get(gene)
+
         else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute "
-                f"'get_{output_identifier_type}'"
-            )
+
+            def resolve_gene_id(gene: str) -> Optional[str]:
+                raise ValueError(
+                    f"invalid argument value for 'input_type': "
+                    f"expected 'name', 'gene_id', 'ensembl_id' or one of "
+                    f"{self.databases} but received {input_type!r}"
+                )
+
+        if output_type == "gene_id":
+            return resolve_gene_id
+
+        def convert(gene: str) -> Optional[str]:
+            gene_id = resolve_gene_id(gene)
+            identifiers = identifiers_by_gene_id.get(gene_id)
+            if identifiers is None:
+                return None
+            if output_type == "symbol":
+                return identifiers.symbol
+            if output_type == "ncbi_symbol":
+                return identifiers.ncbi_symbol
+            if output_type == "ensembl_id":
+                return identifiers.ensembl_id
+            return identifiers.databases.get(output_type)
+
+        return convert
 
     @staticmethod
     def __gene_info_base_name(gene_info_file: Path) -> str:

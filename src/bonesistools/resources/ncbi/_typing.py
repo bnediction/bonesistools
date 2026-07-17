@@ -5,7 +5,14 @@ from typing import Any
 from typing_extensions import Literal, Protocol
 
 InputIdentifierType = Literal["name", "gene_id", "ensembl_id"]
-OutputIdentifierType = Literal["official_name", "ncbi_name", "gene_id", "ensembl_id"]
+OutputIdentifierType = Literal[
+    "symbol",
+    "ncbi_symbol",
+    "gene_id",
+    "ensembl_id",
+    "official_name",
+    "ncbi_name",
+]
 
 
 class GeneSynonymsLike(Protocol):

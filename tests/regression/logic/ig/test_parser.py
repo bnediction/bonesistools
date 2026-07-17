@@ -17,10 +17,7 @@ def _edge_data(graph, source, target, key=0):
 def test_read_influence_graph_keeps_edge_attributes(tmp_path):
     infile = tmp_path / "graph.csv"
     infile.write_text(
-        "source,target,sign,confidence\n"
-        "A,B,1,high\n"
-        "B,C,-1,low\n"
-        "C,A,,unknown\n",
+        "source,target,sign,confidence\nA,B,1,high\nB,C,-1,low\nC,A,,unknown\n",
     )
 
     graph = bt.logic.io.read_influence_graph(infile)
@@ -36,7 +33,7 @@ def test_read_influence_graph_keeps_edge_attributes(tmp_path):
 def test_read_influence_graph_supports_custom_separator(tmp_path):
     infile = tmp_path / "graph.tsv"
     infile.write_text(
-        "source\ttarget\tsign\n" "A\tB\t1\n",
+        "source\ttarget\tsign\nA\tB\t1\n",
     )
 
     graph = bt.logic.io.read_influence_graph(infile, sep="\t")
@@ -105,20 +102,51 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
     graph = bt.logic.io.read_influence_graph(
         infile,
         genesyn=cast(Any, genesyn),
-        input_identifier_type="gene_id",
-        output_identifier_type="ensembl_id",
+        input_type="gene_id",
+        output_type="ensembl_id",
     )
 
     assert genesyn.calls == [
         (
             graph,
             {
-                "input_identifier_type": "gene_id",
-                "output_identifier_type": "ensembl_id",
+                "input_type": "gene_id",
+                "output_type": "ensembl_id",
                 "copy": False,
             },
         )
     ]
+
+
+def test_read_influence_graph_accepts_deprecated_identifier_arguments(
+    monkeypatch,
+    tmp_path,
+):
+    class FakeGeneSynonyms:
+        def __call__(self, graph, **kwargs):
+            self.kwargs = kwargs
+
+    infile = tmp_path / "graph.csv"
+    infile.write_text("source,target,sign\nA,B,1\n")
+    genesyn = FakeGeneSynonyms()
+    monkeypatch.setattr(_influence_graph, "GeneSynonyms", FakeGeneSynonyms)
+
+    with pytest.warns(FutureWarning) as warning_records:
+        cast(Any, bt.logic.io.read_influence_graph)(
+            infile,
+            genesyn=cast(Any, genesyn),
+            input_identifier_type="gene_id",
+            output_identifier_type="ensembl_id",
+        )
+
+    messages = [str(record.message) for record in warning_records]
+    assert any("input_identifier_type" in message for message in messages)
+    assert any("output_identifier_type" in message for message in messages)
+    assert genesyn.kwargs == {
+        "input_type": "gene_id",
+        "output_type": "ensembl_id",
+        "copy": False,
+    }
 
 
 def test_deprecated_read_influence_graph_routes_to_io(tmp_path):

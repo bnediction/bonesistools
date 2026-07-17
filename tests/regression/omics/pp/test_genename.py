@@ -95,10 +95,32 @@ def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
     assert called_df is adata.var
     assert kwargs == {
         "axis": "index",
-        "input_identifier_type": "name",
-        "output_identifier_type": "official_name",
+        "input_type": "name",
+        "output_type": "symbol",
         "copy": False,
     }
+
+
+def test_convert_gene_identifiers_accepts_deprecated_identifier_arguments(
+    fake_gene_synonyms_cls,
+):
+    adata = ad.AnnData(
+        X=np.ones((1, 1)),
+        var=pd.DataFrame(index=["Tp53"]),
+    )
+
+    with pytest.warns(FutureWarning) as warning_records:
+        cast(Any, bt.omics.pp.convert_gene_identifiers)(
+            adata,
+            genesyn=fake_gene_synonyms_cls(),
+            input_identifier_type="name",
+            output_identifier_type="symbol",
+        )
+
+    messages = [str(record.message) for record in warning_records]
+    assert any("input_identifier_type" in message for message in messages)
+    assert any("output_identifier_type" in message for message in messages)
+    assert adata.var_names.tolist() == ["Trp53"]
 
 
 def test_merge_duplicate_vars_sums_counts_and_var_rows():

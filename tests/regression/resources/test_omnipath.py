@@ -59,7 +59,7 @@ def test_resolve_interactions_archive_reports_available_dates(monkeypatch):
         error.value
     )
     assert (
-        "available date ranges: " "2023-01-01..2023-05-01, 2023-05-02..2024-01-01"
+        "available date ranges: 2023-01-01..2023-05-01, 2023-05-02..2024-01-01"
     ) in str(error.value)
 
 
@@ -661,8 +661,8 @@ def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
         (
             grn,
             {
-                "input_identifier_type": "name",
-                "output_identifier_type": "ensembl_id",
+                "input_type": "name",
+                "output_type": "ensembl_id",
                 "copy": False,
             },
         )

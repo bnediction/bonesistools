@@ -25,9 +25,10 @@ from .._validation import _as_anndata_axis
 @overload
 def convert_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[False] = False,
 ) -> None: ...
@@ -36,9 +37,10 @@ def convert_gene_identifiers(
 @overload
 def convert_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[True] = True,
 ) -> ScData: ...
@@ -47,9 +49,10 @@ def convert_gene_identifiers(
 @overload
 def convert_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
 ) -> Union[ScData, None]: ...
@@ -59,9 +62,10 @@ def convert_gene_identifiers(
 @anndata_or_mudata_checker
 def convert_gene_identifiers(
     scdata: ScData,  # type: ignore
+    *,
     axis: Axis = "var",
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
@@ -82,12 +86,12 @@ def convert_gene_identifiers(
         If `"obs"`, convert `scdata.obs.index`. If `"var"`, convert
         `scdata.var.index`. Deprecated values 0 and 1 are still accepted as
         aliases for `"obs"` and `"var"`.
-    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+    input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
         (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
         in `databases`.
-    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-        'ensembl_id' | <database> (default: 'official_name')
+    output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+        'ensembl_id' | <database> (default: 'symbol')
         Output gene identifier type. Valid database-specific values are listed
         in `databases`.
     genesyn: GeneSynonyms, optional
@@ -117,16 +121,16 @@ def convert_gene_identifiers(
         genesyn(
             scdata.obs,
             axis="index",
-            input_identifier_type=input_identifier_type,
-            output_identifier_type=output_identifier_type,
+            input_type=input_type,
+            output_type=output_type,
             copy=False,
         )
     elif axis == "var":
         genesyn(
             scdata.var,
             axis="index",
-            input_identifier_type=input_identifier_type,
-            output_identifier_type=output_identifier_type,
+            input_type=input_type,
+            output_type=output_type,
             copy=False,
         )
     return scdata if copy else None
@@ -135,6 +139,7 @@ def convert_gene_identifiers(
 @overload
 def standardize_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[False] = False,
@@ -144,6 +149,7 @@ def standardize_gene_identifiers(
 @overload
 def standardize_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: Literal[True] = True,
@@ -153,6 +159,7 @@ def standardize_gene_identifiers(
 @overload
 def standardize_gene_identifiers(
     scdata: ScData,
+    *,
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
@@ -163,12 +170,13 @@ def standardize_gene_identifiers(
 @anndata_checker
 def standardize_gene_identifiers(
     scdata: ScData,  # type: ignore
+    *,
     axis: Axis = "var",
     genesyn: Optional[GeneSynonymsLike] = None,
     copy: bool = False,
 ) -> Union[ScData, None]:  # type: ignore
     """
-    Deprecated. Convert gene names to official names.
+    Deprecated. Convert gene names to gene symbols.
 
     Use `convert_gene_identifiers(...)` instead.
 

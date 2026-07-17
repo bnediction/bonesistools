@@ -11,18 +11,20 @@ from typing import Any, Optional, Union
 
 import networkx as nx
 
+from ...resources.ncbi._genesyn import support_legacy_gene_synonyms_args
 from ...resources.ncbi._typing import InputIdentifierType, OutputIdentifierType
 from ..input_output import _influence_graph
 
 GeneSynonyms = _influence_graph.GeneSynonyms
 
 
+@support_legacy_gene_synonyms_args
 def read_influence_graph(
     file: Union[str, Path],
     *,
     genesyn: Optional[Any] = None,
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     sep: str = ",",
     **kwargs: Any,
 ) -> nx.MultiDiGraph[Any]:
@@ -33,8 +35,8 @@ def read_influence_graph(
         return _influence_graph.read_influence_graph(
             file,
             genesyn=genesyn,
-            input_identifier_type=input_identifier_type,
-            output_identifier_type=output_identifier_type,
+            input_type=input_type,
+            output_type=output_type,
             sep=sep,
             **kwargs,
         )

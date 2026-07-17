@@ -110,16 +110,12 @@ def fake_gene_synonyms_cls():
 
         gene_aliases_mapping = {
             "gene_id": {
-                "mt_gene": SimpleNamespace(official_name="mt-Co1", chromosome="MT"),
-                "mt_human_gene": SimpleNamespace(
-                    official_name="MT-ND1", chromosome="MT"
-                ),
-                "rps_gene": SimpleNamespace(official_name="Rps1", chromosome="1"),
-                "rps_human_gene": SimpleNamespace(official_name="RPS1", chromosome="1"),
-                "alias_only_gene": SimpleNamespace(
-                    official_name="Lactb", chromosome="1"
-                ),
-                "other_gene": SimpleNamespace(official_name="Other", chromosome="1"),
+                "mt_gene": SimpleNamespace(symbol="mt-Co1", chromosome="MT"),
+                "mt_human_gene": SimpleNamespace(symbol="MT-ND1", chromosome="MT"),
+                "rps_gene": SimpleNamespace(symbol="Rps1", chromosome="1"),
+                "rps_human_gene": SimpleNamespace(symbol="RPS1", chromosome="1"),
+                "alias_only_gene": SimpleNamespace(symbol="Lactb", chromosome="1"),
+                "other_gene": SimpleNamespace(symbol="Other", chromosome="1"),
             },
             "name": {
                 "mt-Co1": SimpleNamespace(value=b"mt_gene"),
@@ -130,7 +126,7 @@ def fake_gene_synonyms_cls():
             },
         }
 
-        _official_names = {
+        _symbols = {
             "Tp53": "Trp53",
             "Myc": "Myc",
             "NF-kappaB": "Nfkb1",
@@ -156,19 +152,22 @@ def fake_gene_synonyms_cls():
         def __init__(self, organism="mouse", **_):
             type(self).organism = organism
 
+        def _iter_gene_identifiers(self):
+            return iter(self.gene_aliases_mapping["gene_id"].items())
+
         def __call__(
             self,
             data,
             axis="index",
-            output_identifier_type="official_name",
+            output_type="symbol",
             copy=True,
             **_,
         ):
             data = data.copy() if copy else data
 
-            if output_identifier_type == "official_name":
-                convert = self.get_official_name
-            elif output_identifier_type == "gene_id":
+            if output_type == "symbol":
+                convert = self.get_symbol
+            elif output_type == "gene_id":
                 convert = self.get_gene_id
             else:
 
@@ -182,10 +181,10 @@ def fake_gene_synonyms_cls():
 
             return data if copy else None
 
-        def get_official_name(self, gene, **_):
-            return self._official_names.get(gene, gene)
+        def get_symbol(self, gene, **_):
+            return self._symbols.get(gene, gene)
 
-        def get_gene_id(self, gene, input_identifier_type="name", **_):
+        def get_gene_id(self, gene, input_type="name", **_):
             return self._gene_ids.get(gene, gene)
 
     return FakeGeneSynonyms

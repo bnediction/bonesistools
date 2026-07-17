@@ -13,6 +13,7 @@ from typing import (
 import networkx as nx
 import pandas as pd
 
+from ...resources.ncbi._genesyn import support_legacy_gene_synonyms_args
 from ...resources.ncbi._typing import InputIdentifierType, OutputIdentifierType
 
 if TYPE_CHECKING:
@@ -21,12 +22,13 @@ else:
     GeneSynonyms = None
 
 
+@support_legacy_gene_synonyms_args
 def read_influence_graph(
     file: Union[str, Path],
     *,
     genesyn: Optional[GeneSynonyms] = None,
-    input_identifier_type: InputIdentifierType = "name",
-    output_identifier_type: OutputIdentifierType = "official_name",
+    input_type: InputIdentifierType = "name",
+    output_type: OutputIdentifierType = "symbol",
     sep: str = ",",
     **kwargs: Any,
 ) -> nx.MultiDiGraph[Any]:
@@ -42,12 +44,12 @@ def read_influence_graph(
         Path to the tabular file containing the influence graph.
     genesyn: GeneSynonyms, optional
         GeneSynonyms object used to convert graph node identifiers.
-    input_identifier_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
+    input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
         (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
         in `databases`.
-    output_identifier_type: 'official_name' | 'ncbi_name' | 'gene_id' |
-        'ensembl_id' | <database> (default: 'official_name')
+    output_type: 'symbol' | 'ncbi_symbol' | 'gene_id' |
+        'ensembl_id' | <database> (default: 'symbol')
         Output gene identifier type. Valid database-specific values are listed
         in `databases`.
     sep: str (default: ",")
@@ -120,8 +122,8 @@ def read_influence_graph(
     if isinstance(genesyn, gene_synonyms_class):
         genesyn(
             grn,
-            input_identifier_type=input_identifier_type,
-            output_identifier_type=output_identifier_type,
+            input_type=input_type,
+            output_type=output_type,
             copy=False,
         )
         return grn
