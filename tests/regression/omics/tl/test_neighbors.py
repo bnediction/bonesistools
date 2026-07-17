@@ -489,12 +489,42 @@ def test_knn_arrays_are_sorted_canonically():
         sorted_distances,
         np.array(
             [
-                [1e-7, 0.2, 0.5, 0.5],
-                [1e-7, 0.1, 0.1, 0.7],
+                [0.0, 0.2, 0.5, 0.5],
+                [0.0, 0.1, 0.1, 0.7],
             ],
             dtype=np.float32,
         ),
     )
+
+
+def test_umap_connectivities_ignore_numerical_self_distances():
+    indices = np.array(
+        [
+            [0, 1, 2],
+            [1, 0, 2],
+            [2, 1, 0],
+        ],
+        dtype=np.int32,
+    )
+    distances = np.array(
+        [
+            [0.0, 0.2, 0.5],
+            [0.0, 0.3, 0.6],
+            [0.0, 0.4, 0.7],
+        ],
+        dtype=np.float32,
+    )
+    noisy_distances = distances.copy()
+    noisy_distances[:, 0] = np.array([1e-7, 2e-7, 3e-7], dtype=np.float32)
+
+    expected = _neighbors._umap_connectivities_from_knn(indices, distances, n_obs=3)
+    actual = _neighbors._umap_connectivities_from_knn(
+        indices,
+        noisy_distances,
+        n_obs=3,
+    )
+
+    np.testing.assert_array_equal(actual.toarray(), expected.toarray())
 
 
 def test_sparse_distance_neighbors_reject_short_rows():
