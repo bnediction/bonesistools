@@ -174,14 +174,14 @@ partition is composed with the existing per-component clusters;
 closures may use the reflexive cluster relation because identity edges do not
 change a fixed point.
 
-Synchronous and general forward reachability, together with generic backward
+Synchronous and general forward reachability, together with their backward
 reachability, use frontier fixed points over BDD state sets. Asynchronous
-forward reachability uses partition chaining with per-transition worksets as
-described below.
+forward and backward reachability use partition chaining with per-transition
+worksets as described below.
 The implementation never materializes an STG unless it intentionally switches
 to the explicit path for a small symbolic result.
 
-#### Asynchronous Forward Chaining
+#### Asynchronous Reachability Chaining
 
 The asynchronous relation is a disjunction of transition partitions
 `T_0, ..., T_n`, one for each updated component. Applying every partition to a
@@ -234,10 +234,16 @@ implementation remains a top-level worklist iteration over BDD transition
 partitions.
 
 The implementation is `_bdd_asynchronous_forward_chaining()` in
-`_asynchronous.py`. `_forward_reachable_states()` dispatches to it solely for
-asynchronous semantics; synchronous and general semantics retain their
-conjunctive-partition frontier algorithm. There is deliberately no size
-threshold or public backend option.
+`_asynchronous.py`. Backward closure uses the symmetric recurrence with
+`pre_i(fresh)` through `_bdd_asynchronous_backward_chaining()`. Its sweep
+direction alternates after every productive pass, while worksets remain tied
+to their transition labels. This reduces dependence on component order without
+processing the same configuration-transition pair twice.
+
+`_forward_reachable_states()` and `_backward_reachable_states()` dispatch to
+these helpers solely for asynchronous semantics; synchronous and general
+semantics retain their conjunctive-partition frontier algorithm. There is
+deliberately no size threshold or public backend option.
 
 This choice was validated on the 36 local ZGINML models. The benchmark covered
 the all-zero configuration, all-one and alternating configurations, a
@@ -263,6 +269,16 @@ and on 700 randomly generated networks with two to eight components, including
 partial initial configurations and 349 restricted regions. The two remaining
 ZGINML equality checks exceeded the isolated verification timeout; every case
 where both implementations completed had identical state counts.
+
+Backward chaining was benchmarked separately on 181 target-region pairs from
+the same ZGINML corpus. Among the 121 pairs completed by both implementations,
+frontier iteration took 15.17 seconds and alternating chaining took 0.86
+seconds, a 17.64-fold aggregate speedup. Every one of the 28 frontier cases
+taking at least 10 milliseconds became faster, with a 13.41-fold median
+speedup. Chaining completed 32 additional cases within the isolated timeout,
+introduced no new timeout and reduced aggregate peak live BDD nodes 4.20-fold.
+Exact BDD equality was additionally checked on 700 randomized networks with
+partial target sets and regions.
 
 `BooleanNetwork.symbolic()` captures a network copy and compiles one reusable
 transition system. Subsequent changes to the source network do not alter the

@@ -20,6 +20,7 @@ from ..boolean_algebra import ConfigurationSet, Hypercube
 from ..boolean_algebra._typing import Configuration, HypercubeLike
 from ._asynchronous import (
     _AsynchronousTransition,
+    _bdd_asynchronous_backward_chaining,
     _bdd_asynchronous_forward_chaining,
     _bdd_asynchronous_predecessors,
     _bdd_asynchronous_relation_partitions,
@@ -492,6 +493,10 @@ class SymbolicTransitionSystem:
         supplied, target configurations outside that region and transitions
         leaving it are excluded.
 
+        Under asynchronous semantics, predecessor partitions are chained so
+        configurations discovered by one partition are immediately available
+        to subsequent partitions [1].
+
         Examples
         --------
         Both configurations of the Boolean switch can reach `A = 1`:
@@ -521,6 +526,12 @@ class SymbolicTransitionSystem:
             If an argument is not a `SymbolicConfigurationSet`.
         ValueError
             If an argument belongs to another transition system.
+
+        References
+        ----------
+        [1] Ciardo et al. (2006). The saturation algorithm for symbolic
+        state-space exploration. International Journal on Software Tools for
+        Technology Transfer, 8(1), 4-25.
         """
 
         target_node = self._configuration_node(target)
@@ -1095,8 +1106,24 @@ class SymbolicTransitionSystem:
         Return the symbolic backward-reachability closure within a region.
 
         Predecessors contained in `within` are accumulated until no transition
-        discovers a new configuration.
+        discovers a new configuration. Asynchronous semantics use alternating
+        transition-partition chaining [1], refined with one workset per
+        partition.
+
+        References
+        ----------
+        [1] Ciardo et al. (2006). The saturation algorithm for symbolic
+        state-space exploration. International Journal on Software Tools for
+        Technology Transfer, 8(1), 4-25.
         """
+
+        if self._update == "asynchronous":
+            return _bdd_asynchronous_backward_chaining(
+                self._bdd,
+                initial,
+                self._disjunctive_transitions,
+                within=within,
+            )
 
         reachable = initial
         frontier = initial

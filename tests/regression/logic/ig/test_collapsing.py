@@ -243,8 +243,8 @@ def test_copy_and_collapse_preserve_expected_types():
 def test_to_graphviz_supports_collapse_modes(fake_graphviz):
     graph = _collapse_graph()
 
-    exact = graph.to_graphviz(graph_attr={"rankdir": "LR"})
-    family = graph.to_graphviz(collapse="family")
+    exact = cast(Any, graph.to_graphviz(graph_attr={"rankdir": "LR"}))
+    family = cast(Any, graph.to_graphviz(collapse="family"))
 
     assert isinstance(exact, fake_graphviz)
     assert exact.graph_attr["rankdir"] == "LR"
@@ -272,8 +272,8 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
         ]
     )
 
-    feedback = feedback_graph.to_graphviz(collapse="feedback")
-    both = feedback_graph.to_graphviz(collapse="both")
+    feedback = cast(Any, feedback_graph.to_graphviz(collapse="feedback"))
+    both = cast(Any, feedback_graph.to_graphviz(collapse="both"))
 
     assert sorted((source, target) for source, target, _ in feedback.edges) == [
         ("A", "B"),
@@ -302,7 +302,10 @@ def test_to_graphviz_supports_collapse_modes(fake_graphviz):
 def test_to_graphviz_can_force_count_edge_labels_on_collapsed_graph(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(collapse="family", edge_label="count")
+    rendered = cast(
+        Any,
+        graph.to_graphviz(collapse="family", edge_label="count"),
+    )
 
     assert isinstance(rendered, fake_graphviz)
     assert _rendered_edges(rendered) == [
@@ -318,7 +321,10 @@ def test_to_graphviz_styles_family_from_lowest_member_stability(fake_graphviz):
     graph.nodes["g2"]["function_stability"] = 0.75
     graph.nodes["out"]["function_stability"] = 1.0
 
-    rendered = graph.to_graphviz(collapse="family", node_style="stability")
+    rendered = cast(
+        Any,
+        graph.to_graphviz(collapse="family", node_style="stability"),
+    )
     family_attrs = _rendered_nodes(rendered)["g1|g2"]
 
     assert family_attrs["function_stability"] == "0.75"
@@ -336,7 +342,10 @@ def test_to_graphviz_styles_family_as_orange_when_all_members_are_orange(
     graph.nodes["g2"]["function_stability"] = 1.0
     graph.nodes["out"]["function_stability"] = 1.0
 
-    rendered = graph.to_graphviz(collapse="family", node_style="stability")
+    rendered = cast(
+        Any,
+        graph.to_graphviz(collapse="family", node_style="stability"),
+    )
     family_attrs = _rendered_nodes(rendered)["g1|g2"]
 
     assert family_attrs["function_stability"] == "1.0"
@@ -354,7 +363,10 @@ def test_to_graphviz_styles_family_from_highest_member_function_count(
     graph.nodes["g2"]["function_count"] = 2
     graph.nodes["out"]["function_count"] = 1
 
-    rendered = graph.to_graphviz(collapse="family", node_style="count")
+    rendered = cast(
+        Any,
+        graph.to_graphviz(collapse="family", node_style="count"),
+    )
     family_attrs = _rendered_nodes(rendered)["g1|g2"]
 
     assert family_attrs["function_count"] == "2"
@@ -435,7 +447,7 @@ def test_to_graphviz_wraps_long_family_labels(fake_graphviz):
     for gene in family:
         graph.add_edge("TF", gene, sign=1, count=3)
 
-    rendered = graph.to_graphviz(collapse="family")
+    rendered = cast(Any, graph.to_graphviz(collapse="family"))
     family_name = "|".join(sorted(family))
     label = _rendered_nodes(rendered)[family_name]["label"]
 
@@ -450,7 +462,10 @@ def test_to_graphviz_wraps_long_family_labels(fake_graphviz):
 def test_to_graphviz_family_attr_can_be_disabled(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(collapse="family", family_attr=False)
+    rendered = cast(
+        Any,
+        graph.to_graphviz(collapse="family", family_attr=False),
+    )
     family_attrs = _rendered_nodes(rendered)["g1|g2"]
 
     assert "height" not in family_attrs
@@ -463,14 +478,17 @@ def test_to_graphviz_family_attr_can_be_disabled(fake_graphviz):
 def test_to_graphviz_family_attr_updates_default_family_attributes(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(
-        collapse="family",
-        family_attr={
-            "height": "0.1",
-            "margin": "0.02",
-            "shape": "oval",
-            "style": "dashed",
-        },
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            collapse="family",
+            family_attr={
+                "height": "0.1",
+                "margin": "0.02",
+                "shape": "oval",
+                "style": "dashed",
+            },
+        ),
     )
     family_attrs = _rendered_nodes(rendered)["g1|g2"]
 

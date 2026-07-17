@@ -218,6 +218,62 @@ def _bdd_asynchronous_forward_chaining(
             return reachable
 
 
+def _bdd_asynchronous_backward_chaining(
+    bdd: _BDDManager,
+    initial: _BDDConfigurationSetNode,
+    transitions: Tuple[_AsynchronousTransition, ...],
+    *,
+    within: _BDDConfigurationSetNode,
+) -> _BDDConfigurationSetNode:
+    """
+    Return the asynchronous backward closure by transition chaining.
+
+    Each transition receives only target configurations that it has not
+    processed before. Newly discovered predecessors are immediately available
+    to subsequent transitions. The sweep direction alternates after each pass
+    to reduce dependence on component order.
+
+    This is the backward counterpart of the transition-partition chaining
+    described in Section 2.5 of [1].
+
+    References
+    ----------
+    [1] Ciardo, G., Marmorstein, R., & Siminiceanu, R. (2006). The saturation
+    algorithm for symbolic state-space exploration. International Journal on
+    Software Tools for Technology Transfer, 8(1), 4-25.
+    """
+
+    coreachable = initial
+    processed = [bdd.false for _ in transitions]
+    indexed_transitions = tuple(enumerate(transitions))
+    reverse = False
+
+    while True:
+        changed = False
+        ordered_transitions = (
+            reversed(indexed_transitions) if reverse else iter(indexed_transitions)
+        )
+        for index, transition in ordered_transitions:
+            fresh = coreachable & ~processed[index]
+            if fresh == bdd.false:
+                continue
+
+            processed[index] |= fresh
+            predecessors = _bdd_asynchronous_predecessors(
+                bdd,
+                fresh,
+                transition,
+            )
+            new = predecessors & within & ~coreachable
+            if new != bdd.false:
+                coreachable |= new
+                changed = True
+
+        if not changed:
+            return coreachable
+        reverse = not reverse
+
+
 def _asynchronous_successor_configuration_bits(
     configuration: int,
     unstable_mask: int,

@@ -42,11 +42,14 @@ def _collapse_graph():
 def test_to_graphviz_can_filter_and_disable_frequency_style(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(
-        collapse="family",
-        min_frequency=0.6,
-        edge_label=None,
-        edge_style=None,
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            collapse="family",
+            min_frequency=0.6,
+            edge_label=None,
+            edge_style=None,
+        ),
     )
 
     assert isinstance(rendered, fake_graphviz)
@@ -60,10 +63,13 @@ def test_to_graphviz_can_filter_and_disable_frequency_style(fake_graphviz):
 def test_to_graphviz_accepts_default_graph_node_and_edge_attributes(fake_graphviz):
     graph = _single_edge_graph()
 
-    rendered = graph.to_graphviz(
-        graph_attr={"rankdir": "LR", "bgcolor": None},
-        node_attr={"fontsize": 20},
-        edge_attr={"fontcolor": "gray"},
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            graph_attr={"rankdir": "LR", "bgcolor": None},
+            node_attr={"fontsize": 20},
+            edge_attr={"fontcolor": "gray"},
+        ),
     )
 
     assert isinstance(rendered, fake_graphviz)
@@ -77,7 +83,7 @@ def test_to_graphviz_accepts_default_graph_node_and_edge_attributes(fake_graphvi
 def test_to_graphviz_can_force_frequency_edge_labels_on_exact_graph(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(edge_label="frequency")
+    rendered = cast(Any, graph.to_graphviz(edge_label="frequency"))
 
     assert isinstance(rendered, fake_graphviz)
     assert _rendered_edges(rendered) == [
@@ -92,7 +98,7 @@ def test_to_graphviz_can_label_edges_from_custom_attribute(fake_graphviz):
     graph = _single_edge_graph()
     cast(Any, graph["A"]["B"])[0]["support"] = "manual"
 
-    rendered = graph.to_graphviz(edge_label="support")
+    rendered = cast(Any, graph.to_graphviz(edge_label="support"))
 
     assert isinstance(rendered, fake_graphviz)
     assert _rendered_edges(rendered) == [("A", "B", "manual", "normal")]
@@ -101,7 +107,7 @@ def test_to_graphviz_can_label_edges_from_custom_attribute(fake_graphviz):
 def test_to_graphviz_can_disable_edge_labels_with_edge_label_none(fake_graphviz):
     graph = _collapse_graph()
 
-    rendered = graph.to_graphviz(edge_label=None)
+    rendered = cast(Any, graph.to_graphviz(edge_label=None))
 
     assert isinstance(rendered, fake_graphviz)
     assert all("label" not in attrs for _, _, attrs in rendered.edges)
@@ -126,9 +132,12 @@ def test_to_graphviz_can_drop_isolates(fake_graphviz):
     graph.add_edge("A", "B", sign=1, count=4)
     graph.add_edge("C", "D", sign=-1, count=1)
 
-    rendered = graph.to_graphviz(
-        min_frequency=0.5,
-        drop_isolates=True,
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            min_frequency=0.5,
+            drop_isolates=True,
+        ),
     )
 
     assert isinstance(rendered, fake_graphviz)
@@ -144,7 +153,7 @@ def test_to_graphviz_can_style_nodes_from_function_count(fake_graphviz):
     graph.add_node("B", function_count=2)
     graph.add_edge("A", "B", sign=1, count=4)
 
-    rendered = graph.to_graphviz(node_style="count")
+    rendered = cast(Any, graph.to_graphviz(node_style="count"))
 
     assert isinstance(rendered, fake_graphviz)
 
@@ -165,7 +174,7 @@ def test_to_graphviz_node_style_warns_for_partially_missing_attributes(
     graph.add_edge("A", "B", sign=1, count=4)
 
     with pytest.warns(UserWarning, match="B"):
-        rendered = graph.to_graphviz(node_style="stability")
+        rendered = cast(Any, graph.to_graphviz(node_style="stability"))
 
     node_attrs = {node: attrs for node, attrs in rendered.nodes}
 
@@ -200,7 +209,7 @@ def test_to_graphviz_node_style_warns_without_listing_when_all_missing(
     graph.add_edge("A", "B", sign=1, count=4)
 
     with pytest.warns(UserWarning) as warnings:
-        rendered = graph.to_graphviz(node_style="stability")
+        rendered = cast(Any, graph.to_graphviz(node_style="stability"))
 
     message = str(warnings[0].message)
 
@@ -218,7 +227,7 @@ def test_to_graphviz_can_style_nodes_from_function_stability(
     graph.add_node("B", function_stability=0.5)
     graph.add_edge("A", "B", sign=1, count=4)
 
-    rendered = graph.to_graphviz(node_style="stability")
+    rendered = cast(Any, graph.to_graphviz(node_style="stability"))
 
     node_attrs = {node: attrs for node, attrs in rendered.nodes}
 
@@ -238,7 +247,7 @@ def test_to_graphviz_callable_node_style_uses_named_attributes(fake_graphviz):
             "penwidth": str(function_count),
         }
 
-    rendered = graph.to_graphviz(node_style=style)
+    rendered = cast(Any, graph.to_graphviz(node_style=style))
 
     node_attrs = {node: attrs for node, attrs in rendered.nodes}
 
@@ -297,7 +306,7 @@ def test_to_graphviz_rejects_unknown_edge_style():
 def test_to_graphviz_accepts_frequency_edge_style(fake_graphviz):
     graph = _single_edge_graph(total=4)
 
-    rendered = graph.to_graphviz(edge_style="frequency")
+    rendered = cast(Any, graph.to_graphviz(edge_style="frequency"))
 
     assert isinstance(rendered, fake_graphviz)
     assert rendered.edges[0][2]["style"] == "bold"
@@ -307,10 +316,13 @@ def test_to_graphviz_accepts_frequency_edge_style(fake_graphviz):
 def test_to_graphviz_callable_edge_style_uses_named_attributes(fake_graphviz):
     graph = _single_edge_graph(total=4)
 
-    rendered = graph.to_graphviz(
-        edge_style=lambda frequency, count, sign: {
-            "tooltip": f"{frequency:.2f}:{count}:{sign}"
-        }
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            edge_style=lambda frequency, count, sign: {
+                "tooltip": f"{frequency:.2f}:{count}:{sign}"
+            }
+        ),
     )
 
     assert isinstance(rendered, fake_graphviz)

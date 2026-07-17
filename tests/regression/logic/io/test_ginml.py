@@ -3,7 +3,7 @@
 from itertools import product
 from pathlib import Path
 from textwrap import dedent
-from typing import Union
+from typing import Any, Union, cast
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
@@ -125,8 +125,8 @@ def test_read_ginml_threshold_encodes_simple_multivalued_inputs(tmp_path):
     assert graph.edge_sign("RA_b1", "Target") == 1
     assert graph.edge_sign("RA_b2", "Target") == 1
     assert graph.edge_sign("RA_b1", "RA_b2") == 1
-    assert graph["RA_b1"]["Target"][0]["id"] == "RA:Target"
-    assert graph["RA_b2"]["Target"][0]["id"] == "RA:Target"
+    assert cast(Any, graph["RA_b1"]["Target"])[0]["id"] == "RA:Target"
+    assert cast(Any, graph["RA_b2"]["Target"])[0]["id"] == "RA:Target"
     expected_graph = model.boolean_network.to_influence_graph()
     assert set(graph) == set(expected_graph)
     assert {

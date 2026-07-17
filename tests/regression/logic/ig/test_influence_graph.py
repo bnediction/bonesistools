@@ -622,10 +622,13 @@ def test_to_graphviz_applies_signed_edge_styles_and_custom_options(fake_graphviz
     ig.add_edge("A", "B", sign=1)
     ig.add_edge("B", "C", sign=-1)
 
-    graph = ig.to_graphviz(
-        program="neato",
-        edge_style=lambda sign: {"label": sign},
-        rankdir="LR",
+    graph = cast(
+        Any,
+        ig.to_graphviz(
+            program="neato",
+            edge_style=lambda sign: {"label": sign},
+            rankdir="LR",
+        ),
     )
 
     edge_styles = {(source, target): attrs for source, target, attrs in graph.edges}

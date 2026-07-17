@@ -115,8 +115,10 @@ def test_boolean_network_fixed_points_and_predicate():
 
 def test_boolean_network_fixed_points_use_symbolic_constraint_for_large_network():
     components = [f"x{index}" for index in range(13)]
-    rules = {component: 0 for component in components}
-    rules[components[0]] = components[0]
+    rules = {
+        component: component if index == 0 else 0
+        for index, component in enumerate(components)
+    }
     bn = bt.logic.bn.BooleanNetwork(rules)
 
     assert bn.fixed_points() == [

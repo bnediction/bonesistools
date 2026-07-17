@@ -533,6 +533,20 @@ def test_symbolic_dynamics_match_random_explicit_state_graphs():
             ) == _terminal_scc_keys(network, universe_keys, update)
 
 
+def test_asynchronous_coreachable_follows_partitioned_predecessor_chain():
+    network = bt.logic.bn.BooleanNetwork(
+        {
+            "A": 1,
+            "B": "A",
+            "C": "B",
+        }
+    )
+    system = network.symbolic(update="asynchronous")
+    target = system.configurations({"A": 1, "B": 1, "C": 1})
+
+    assert target.coreachable().count() == 8
+
+
 @pytest.mark.parametrize("update", ["synchronous", "asynchronous", "general"])
 def test_small_symbolic_universe_uses_explicit_terminal_sccs(update, monkeypatch):
     network = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"})
