@@ -38,7 +38,7 @@ def test_hcop_translate_translates_requested_columns(monkeypatch):
         }
     )
 
-    translated = hcop.orthologs(target_organism="mouse").translate_df(
+    translated = hcop.orthologs(target_organism="mouse").translate_dataframe(
         net,
         columns=["source", "target"],
         keep_if_missing=False,
@@ -81,7 +81,7 @@ def test_hcop_translate_prioritizes_evidence_then_frequency(monkeypatch):
     orthologs = hcop.orthologs(target_organism="mouse")
     assert orthologs.translate("B") == ["b1", "b2"]
 
-    translated = orthologs.translate_df(
+    translated = orthologs.translate_dataframe(
         net,
         columns=["source", "target"],
     )
@@ -91,7 +91,7 @@ def test_hcop_translate_prioritizes_evidence_then_frequency(monkeypatch):
     ]
 
 
-def test_hcop_translate_df_expands_one_to_many_like_decoupler(monkeypatch):
+def test_hcop_translate_dataframe_expands_one_to_many_like_decoupler(monkeypatch):
     monkeypatch.setattr(
         _hcop_orthologs.Orthologs,
         "_read_hcop_table",
@@ -122,7 +122,7 @@ def test_hcop_translate_df_expands_one_to_many_like_decoupler(monkeypatch):
         }
     )
 
-    translated = hcop.orthologs(target_organism="mouse").translate_df(
+    translated = hcop.orthologs(target_organism="mouse").translate_dataframe(
         net,
         columns=["source", "target"],
         one_to_many=2,
@@ -134,6 +134,294 @@ def test_hcop_translate_df_expands_one_to_many_like_decoupler(monkeypatch):
         {"source": "a1_d", "target": "t", "row": 2},
         {"source": "a2_d", "target": "t", "row": 2},
     ]
+
+
+def test_hcop_one_to_many_mapping_is_refreshed_after_reset():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "A", "T"],
+                "target_symbol": ["a1", "a2", "t"],
+                "support": ["Ensembl,HGNC,MGI"] * 3,
+                "evidence": [3, 3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+    dataframe = pd.DataFrame({"source": ["A"], "target": ["T"], "row": [1]})
+
+    before_reset = orthologs.translate_dataframe(
+        dataframe,
+        columns=["source", "target"],
+        one_to_many=2,
+    )
+
+    orthologs.reset(
+        target_organism="mouse",
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "T", "T"],
+                "target_symbol": ["new_a", "new_t1", "new_t2"],
+                "support": ["Ensembl,HGNC,MGI"] * 3,
+                "evidence": [3, 3, 3],
+            }
+        ),
+    )
+    after_reset = orthologs.translate_dataframe(
+        dataframe,
+        columns=["source", "target"],
+        one_to_many=2,
+    )
+
+    assert before_reset.to_dict("records") == [
+        {"source": "a1", "target": "t", "row": 1},
+        {"source": "a2", "target": "t", "row": 1},
+    ]
+    assert after_reset.to_dict("records") == [
+        {"source": "new_a", "target": "new_t1", "row": 1},
+        {"source": "new_a", "target": "new_t2", "row": 1},
+    ]
+
+
+def test_hcop_dataframe_translation_preserves_complex_and_missing_values():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["a", "b"],
+                "support": ["source"] * 2,
+                "evidence": [1, 1],
+            }
+        ),
+        target_organism="mouse",
+    )
+    dataframe = pd.DataFrame({"genesymbol": ["A", "A_B", "A_missing", "missing", 1]})
+
+    kept = orthologs.translate_dataframe(dataframe)
+    removed = orthologs.translate_dataframe(dataframe, keep_if_missing=False)
+
+    assert kept["genesymbol"].tolist() == [
+        "a",
+        "a_b",
+        "a_missing",
+        "missing",
+        "1",
+    ]
+    assert removed["genesymbol"].tolist() == ["a", "a_b"]
+
+
+def test_hcop_one_to_many_preserves_source_row_order_and_duplicates():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "A", "A"],
+                "target_symbol": ["a2", "a1", "a2"],
+                "support": ["source"] * 3,
+                "evidence": [1, 1, 1],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    translated = orthologs.translate_dataframe(
+        pd.DataFrame({"genesymbol": ["A"]}),
+        one_to_many=3,
+    )
+
+    assert translated["genesymbol"].tolist() == ["a2", "a1", "a2"]
+
+
+def test_hcop_best_mapping_is_refreshed_after_reset():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A"],
+                "target_symbol": ["a"],
+                "support": ["source"],
+                "evidence": [1],
+            }
+        ),
+        target_organism="mouse",
+    )
+    assert orthologs.translate_sequence(["A"]) == ["a"]
+
+    orthologs.reset(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A"],
+                "target_symbol": ["new_a"],
+                "support": ["source"],
+                "evidence": [1],
+            }
+        )
+    )
+
+    assert orthologs.translate_sequence(["A"]) == ["new_a"]
+
+
+def test_hcop_mapping_order_is_deterministic():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["B", "A", "B"],
+                "target_symbol": ["b2", "a", "b1"],
+                "support": ["source"] * 3,
+                "evidence": [1, 1, 2],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    assert list(orthologs.to_dict().items()) == [
+        ("A", ["a"]),
+        ("B", ["b1", "b2"]),
+    ]
+
+
+def test_hcop_translates_between_non_human_organisms_with_scores(monkeypatch):
+    def read_hcop_table(output_organism, version="bundled"):
+        if output_organism == "mouse":
+            return pd.DataFrame(
+                {
+                    "human_symbol": ["H1", "H2", "-"],
+                    "mouse_symbol": ["M", "M", "placeholder_mouse"],
+                    "support": ["a,b,c,d", "a,b", "a,b,c"],
+                }
+            )
+        if output_organism == "rat":
+            return pd.DataFrame(
+                {
+                    "human_symbol": ["H1", "H1", "H2", "H2", "-"],
+                    "rat_symbol": ["R1", "R2", "R2", "R3", "placeholder_rat"],
+                    "support": [
+                        "a,b,c,d",
+                        "a,b,c,d,e",
+                        "a,b,c,d",
+                        "a,b,c",
+                        "a,b,c",
+                    ],
+                }
+            )
+        raise AssertionError(output_organism)
+
+    monkeypatch.setattr(
+        _hcop_orthologs.Orthologs,
+        "_read_hcop_table",
+        staticmethod(read_hcop_table),
+    )
+
+    orthologs = hcop.orthologs(
+        input_organism="mouse",
+        output_organism="rat",
+        min_evidence=1,
+    )
+
+    assert orthologs.translate("M") == ["R2", "R1", "R3"]
+    assert orthologs.translate("placeholder_mouse") == []
+
+    paths = orthologs.to_dataframe()
+    r2_paths = paths.loc[paths["target_symbol"] == "R2"]
+    assert set(r2_paths["human_symbol"]) == {"H1", "H2"}
+    assert set(r2_paths["evidence"]) == {2, 4}
+    assert set(r2_paths["best_evidence"]) == {4}
+    assert set(r2_paths["paths"]) == {2}
+
+    r1_paths = paths.loc[paths["target_symbol"] == "R1"]
+    assert set(r1_paths["best_evidence"]) == {4}
+    assert set(r1_paths["paths"]) == {1}
+
+    translated = orthologs.translate_dataframe(
+        pd.DataFrame({"source": ["M"], "row": [1]}),
+        columns="source",
+        one_to_many=3,
+    )
+    assert translated.to_dict("records") == [
+        {"source": "R2", "row": 1},
+        {"source": "R1", "row": 1},
+        {"source": "R3", "row": 1},
+    ]
+
+
+def test_hcop_translates_non_human_genes_to_human(monkeypatch):
+    monkeypatch.setattr(
+        _hcop_orthologs.Orthologs,
+        "_read_hcop_table",
+        staticmethod(
+            lambda output_organism, version="bundled": pd.DataFrame(
+                {
+                    "human_symbol": ["H1", "H2", "-"],
+                    "mouse_symbol": ["M", "M", "placeholder_mouse"],
+                    "support": ["a,b,c,d", "a,b", "a,b,c"],
+                }
+            )
+        ),
+    )
+
+    orthologs = hcop.orthologs(
+        input_organism="mouse",
+        output_organism="human",
+        min_evidence=1,
+    )
+
+    assert orthologs.translate("M") == ["H1", "H2"]
+    assert orthologs.translate("placeholder_mouse") == []
+    assert list(orthologs.to_dataframe().columns) == [
+        "source_symbol",
+        "target_symbol",
+        "support",
+        "evidence",
+    ]
+
+
+def test_hcop_filters_both_branches_of_non_human_mapping(monkeypatch):
+    def read_hcop_table(output_organism, version="bundled"):
+        if output_organism == "mouse":
+            return pd.DataFrame(
+                {
+                    "human_symbol": ["H1", "H2"],
+                    "mouse_symbol": ["M", "M"],
+                    "support": ["a,b,c,d", "a,b"],
+                }
+            )
+        return pd.DataFrame(
+            {
+                "human_symbol": ["H1", "H1", "H2", "H2"],
+                "rat_symbol": ["R1", "R2", "R2", "R3"],
+                "support": ["a,b,c", "a,b,c,d,e", "a,b,c,d", "a,b,c"],
+            }
+        )
+
+    monkeypatch.setattr(
+        _hcop_orthologs.Orthologs,
+        "_read_hcop_table",
+        staticmethod(read_hcop_table),
+    )
+
+    orthologs = hcop.orthologs(
+        input_organism="mouse",
+        output_organism="rat",
+        min_evidence=3,
+    )
+
+    assert orthologs.translate("M") == ["R2", "R1"]
+    assert set(orthologs.to_dataframe()["human_symbol"]) == {"H1"}
+
+
+def test_hcop_accepts_direct_custom_non_human_mapping():
+    orthologs = _hcop_orthologs.Orthologs(
+        input_organism="mouse",
+        output_organism="rat",
+        table=pd.DataFrame(
+            {
+                "source_symbol": ["M"],
+                "target_symbol": ["R"],
+                "support": ["custom"],
+                "evidence": [1],
+            }
+        ),
+    )
+
+    assert orthologs.translate("M") == ["R"]
 
 
 def test_hcop_translates_sequences_and_dispatches_supported_objects():
@@ -250,7 +538,7 @@ def test_hcop_translate_hypercube_rejects_component_collisions():
         orthologs.translate_hypercube(bt.logic.ba.Hypercube({"A": 1, "B": 0}))
 
 
-def test_hcop_translate_boolean_network_copy_and_mapping_behaviors():
+def test_hcop_translate_boolean_network_copy_and_mapping_behaviors(monkeypatch):
     orthologs = _hcop_orthologs.Orthologs(
         table=pd.DataFrame(
             {
@@ -263,23 +551,37 @@ def test_hcop_translate_boolean_network_copy_and_mapping_behaviors():
         target_organism="mouse",
     )
 
+    relabel_calls = []
+    original_relabel = bt.logic.bn.BooleanNetwork.relabel
+
+    def record_relabel(network, mapping):
+        relabel_calls.append(dict(mapping))
+        return original_relabel(network, mapping)
+
+    monkeypatch.setattr(
+        bt.logic.bn.BooleanNetwork,
+        "relabel",
+        record_relabel,
+    )
+
     bn = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
-    copied = orthologs.translate_bn(bn, copy=True)
+    copied = orthologs.translate_boolean_network(bn, copy=True)
 
     assert isinstance(copied, bt.logic.bn.BooleanNetwork)
     assert copied.rules == {"a": "b", "b": "1"}
     assert bn.rules == {"A": "B", "B": "1"}
+    assert relabel_calls == [{"A": "a", "B": "b"}]
 
     mapping_bn = {"A": "B", "B": 1}
-    translated_mapping = orthologs.translate_bn(mapping_bn, copy=True)
+    translated_mapping = orthologs.translate_boolean_network(mapping_bn, copy=True)
 
     assert translated_mapping == {"a": "b", "b": "1"}
 
     with pytest.raises(TypeError, match="copy=True"):
-        orthologs.translate_bn(mapping_bn, copy=False)
+        orthologs.translate_boolean_network(mapping_bn, copy=False)
 
     with pytest.raises(ValueError, match="unmapped component"):
-        orthologs.translate_bn(
+        orthologs.translate_boolean_network(
             bt.logic.bn.BooleanNetwork({"A": "missing", "missing": 1}),
             keep_if_missing=False,
         )
@@ -300,7 +602,7 @@ def test_hcop_translate_rejects_invalid_arguments():
     )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'df'"):
-        orthologs.translate_df(cast(Any, "not a dataframe"))
+        orthologs.translate_dataframe(cast(Any, "not a dataframe"))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'hypercube'"):
         orthologs.translate_hypercube(cast(Any, {"A": 1}))
@@ -308,18 +610,27 @@ def test_hcop_translate_rejects_invalid_arguments():
     with pytest.raises(ValueError, match="output_organism"):
         hcop.orthologs(target_organism="frog")
 
+    with pytest.raises(ValueError, match="input_organism"):
+        hcop.orthologs(input_organism="frog")
+
+    with pytest.raises(ValueError, match="must differ"):
+        hcop.orthologs(input_organism="mouse", output_organism="mouse")
+
     with pytest.raises(ValueError, match="columns"):
-        orthologs.translate_df(pd.DataFrame({"other": ["A"]}), columns=["source"])
+        orthologs.translate_dataframe(
+            pd.DataFrame({"other": ["A"]}),
+            columns=["source"],
+        )
 
     with pytest.raises(ValueError, match="one_to_many"):
-        orthologs.translate_df(
+        orthologs.translate_dataframe(
             pd.DataFrame({"source": ["A"]}),
             columns=["source"],
             one_to_many=0,
         )
 
     with pytest.raises(TypeError, match="copy=True"):
-        orthologs.translate_df(
+        orthologs.translate_dataframe(
             pd.DataFrame({"source": ["A"]}),
             columns=["source"],
             copy=False,
@@ -327,9 +638,42 @@ def test_hcop_translate_rejects_invalid_arguments():
         )
 
 
+def test_hcop_deprecated_translation_aliases_warn():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A"],
+                "target_symbol": ["a"],
+                "support": ["Ensembl,HGNC,MGI"],
+                "evidence": [3],
+            }
+        ),
+        target_organism="mouse",
+    )
+
+    with pytest.warns(FutureWarning, match="translate_dataframe"):
+        dataframe = orthologs.translate_df(pd.DataFrame({"source": ["A"]}))
+    assert dataframe.to_dict("records") == [{"source": "a"}]
+
+    network = bt.logic.bn.BooleanNetwork({"A": 1})
+    with pytest.warns(FutureWarning, match="translate_boolean_network"):
+        translated = orthologs.translate_bn(network, copy=True)
+    assert isinstance(translated, bt.logic.bn.BooleanNetwork)
+    assert translated.rules == {"a": "1"}
+
+
 def test_hcop_organisms_lists_supported_targets():
     assert "mouse" in hcop.organisms()
     assert "rat" in hcop.organisms()
+
+
+def test_hcop_deprecated_ortholog_versions_warns():
+    deprecated_versions = getattr(hcop.orthologs, "versions")
+
+    with pytest.warns(FutureWarning, match="hcop.versions"):
+        result = deprecated_versions("mouse")
+
+    assert result == hcop.versions()
 
 
 def test_hcop_orthologs_loads_hcop_mapping(monkeypatch):
@@ -413,7 +757,7 @@ def test_hcop_orthologs_rejects_invalid_table(monkeypatch):
 def test_hcop_orthologs_loads_bundled_snapshot(tmp_path, monkeypatch):
     bundled_file = tmp_path / "human_mouse_hcop.tsv"
     bundled_file.write_text(
-        "human_symbol\tmouse_symbol\tsupport\n" "A\tA_mouse\tEnsembl,HGNC,MGI\n",
+        "human_symbol\tmouse_symbol\tsupport\nA\tA_mouse\tEnsembl,HGNC,MGI\n",
         encoding="utf-8",
     )
 
@@ -423,13 +767,13 @@ def test_hcop_orthologs_loads_bundled_snapshot(tmp_path, monkeypatch):
 
     assert orthologs.version == "bundled"
     assert orthologs.translate("A") == ["A_mouse"]
-    assert hcop.orthologs.versions("mouse") == ["bundled", "latest"]
+    assert hcop.versions() == ["bundled", "latest"]
 
 
 def test_hcop_orthologs_loads_custom_file(tmp_path):
     hcop_file = tmp_path / "custom_hcop.tsv"
     hcop_file.write_text(
-        "human_symbol\tmouse_symbol\tsupport\n" "A\tA_mouse\tEnsembl,HGNC,MGI\n",
+        "human_symbol\tmouse_symbol\tsupport\nA\tA_mouse\tEnsembl,HGNC,MGI\n",
         encoding="utf-8",
     )
 
@@ -437,6 +781,21 @@ def test_hcop_orthologs_loads_custom_file(tmp_path):
 
     assert orthologs.version == str(hcop_file)
     assert orthologs.translate("A") == ["A_mouse"]
+
+
+def test_hcop_non_human_mapping_rejects_single_custom_hcop_file(tmp_path):
+    hcop_file = tmp_path / "custom_hcop.tsv"
+    hcop_file.write_text(
+        "human_symbol\tmouse_symbol\tsupport\nA\tA_mouse\tEnsembl,HGNC,MGI\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires two HCOP tables"):
+        hcop.orthologs(
+            input_organism="mouse",
+            output_organism="rat",
+            version=hcop_file,
+        )
 
 
 def test_hcop_orthologs_reset_reconfigures_existing_converter():

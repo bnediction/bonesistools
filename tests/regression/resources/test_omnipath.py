@@ -187,7 +187,7 @@ def test_load_interactions_version_translates_non_human_organisms(monkeypatch):
     calls = []
 
     class FakeOrthologs:
-        def translate_df(self, net, **kwargs):
+        def translate_dataframe(self, net, **kwargs):
             calls.append((net.copy(), kwargs))
             translated = net.copy()
             translated["source"] = ["TfB_mouse"]
@@ -248,7 +248,7 @@ def test_load_interactions_version_uses_requested_hcop_version(monkeypatch):
     calls = []
 
     class FakeOrthologs:
-        def translate_df(self, net, **kwargs):
+        def translate_dataframe(self, net, **kwargs):
             calls.append((net.copy(), kwargs))
             translated = net.copy()
             translated["source"] = ["TfA_mouse"]

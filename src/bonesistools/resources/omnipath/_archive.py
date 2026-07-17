@@ -614,7 +614,7 @@ def _translate_hcop(
     translated = hcop_orthologs(
         target_organism=target_organism,
         version=hcop_version,
-    ).translate_df(
+    ).translate_dataframe(
         net,
         columns=["source", "target"],
         one_to_many=5,

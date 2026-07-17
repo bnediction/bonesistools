@@ -129,3 +129,4 @@ tests/reproducibility/*.json
 scripts/
 *.zginml
 !tests/golden/*.zginml
+test_*/

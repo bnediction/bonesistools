@@ -28,6 +28,7 @@ from typing_extensions import Protocol
 
 from ..._compat import Literal
 from ..._validation import _as_positive_integer
+from ..._warnings import _deprecated, _warn_deprecated
 
 if TYPE_CHECKING:
     from ...logic.boolean_algebra import Hypercube
@@ -40,12 +41,14 @@ HCOP_DIR = Path(__file__).resolve().parent / "data"
 
 class Orthologs:
     """
-    Converter between human genes and HCOP-supported orthologs.
+    Converter between genes from HCOP-supported organisms.
 
-    Orthologs loads HCOP mappings from human genes to one target organism and
-    exposes helpers for translating common biological objects: sequences,
-    interaction lists, DataFrames, hypercubes, NetworkX graphs and Boolean
-    networks.
+    HCOP tables use human genes as their reference. Human-to-organism and
+    organism-to-human conversions therefore use one table, while conversions
+    between two non-human organisms join their HCOP tables through shared human
+    orthologs. The converter exposes helpers for translating common biological
+    objects: sequences, interaction lists, DataFrames, hypercubes, NetworkX
+    graphs and Boolean networks.
 
     Single-gene translation may return several orthologs. Object-level
     translations use the first ortholog in the deterministic ranking built from
@@ -55,8 +58,8 @@ class Orthologs:
     Parameters
     ----------
     input_organism: str (default: "human")
-        Source organism. HCOP translation is currently restricted to human
-        source genes.
+        Organism associated with the input gene symbols. Supported values are
+        listed by `bt.resources.hcop.organisms()`.
     output_organism: str (default: "mouse")
         Target organism. Supported values are listed by
         `bt.resources.hcop.organisms()`.
@@ -68,9 +71,10 @@ class Orthologs:
         with bonesistools. `"latest"` loads the current public HCOP file.
         File paths resolve directly to user-provided HCOP tables.
     table: pandas.DataFrame, optional
-        Preloaded HCOP-like table with columns `human_symbol`,
-        `target_symbol`, `support` and `evidence`. If `None`, the table is
-        downloaded from HCOP.
+        Preloaded direct mapping with columns `source_symbol`, `target_symbol`,
+        `support` and `evidence`. For backward compatibility, `human_symbol`
+        can replace `source_symbol` when `input_organism="human"`. If `None`,
+        the required HCOP table or tables are loaded automatically.
     target_organism: str, optional
         Alias for `output_organism`.
 
@@ -93,8 +97,8 @@ class Orthologs:
     """
 
     download_url = "https://storage.googleapis.com/public-download-files/hcop"
-    input_organisms = ["human"]
     supported_organisms = [
+        "human",
         "anole_lizard",
         "c.elegans",
         "cat",
@@ -115,6 +119,11 @@ class Orthologs:
         "xenopus",
         "zebrafish",
     ]
+    input_organisms = supported_organisms
+    _table: pd.DataFrame
+    _mapping: Dict[str, List[str]]
+    _best_mapping: Dict[str, str]
+    _one_to_many_mapping_cache: Optional[Dict[object, List[object]]]
 
     def __init__(
         self,
@@ -241,7 +250,7 @@ class Orthologs:
         ----------
         data: str, sequence, set, InteractionList, DataFrame, Graph, Hypercube
             or BooleanNetworkLike
-            Object containing human gene symbols to translate.
+            Object containing symbols from `input_organism` to translate.
         *args: Any
             Positional arguments forwarded to the selected translation method.
         **kwargs: Any
@@ -254,9 +263,6 @@ class Orthologs:
             translation method.
 
         """
-
-        from ...logic.boolean_algebra import Hypercube
-        from ...logic.boolean_network._typing import is_boolean_network_like
 
         if isinstance(data, str):
             return self.translate(data, *args, **kwargs)
@@ -275,13 +281,17 @@ class Orthologs:
                 **kwargs,
             )
         if isinstance(data, pd.DataFrame):
-            return self.translate_df(data, *args, **kwargs)
+            return self.translate_dataframe(data, *args, **kwargs)
         if isinstance(data, Graph):
             return self.translate_graph(data, *args, **kwargs)
+
+        from ...logic.boolean_algebra import Hypercube
+        from ...logic.boolean_network._typing import is_boolean_network_like
+
         if isinstance(data, Hypercube):
             return self.translate_hypercube(data, *args, **kwargs)
         if is_boolean_network_like(data):
-            return self.translate_bn(data, *args, **kwargs)
+            return self.translate_boolean_network(data, *args, **kwargs)
         raise TypeError(
             f"unsupported argument type for 'data': "
             f"expected str, sequence, set, interaction list, {pd.DataFrame}, "
@@ -293,17 +303,30 @@ class Orthologs:
         """
         Return a deep copy of the loaded orthology table.
 
+        Human-to-organism mappings retain the historical `human_symbol`
+        column. Other conversion routes use `source_symbol`. For conversions
+        between two non-human organisms, each row also records the intermediate
+        `human_symbol`, both branch-specific evidence values, the conservative
+        path evidence, the best evidence for the target and the number of
+        distinct human paths supporting it.
+
         Returns
         -------
         pandas.DataFrame
             Copy of the filtered HCOP table used by the converter.
         """
 
-        return copylib.deepcopy(self._table)
+        table = copylib.deepcopy(self._table)
+        if self.input_organism == "human":
+            table = cast(
+                pd.DataFrame,
+                table.rename(columns={"source_symbol": "human_symbol"}),
+            )
+        return table
 
     def to_dict(self) -> Dict[str, List[str]]:
         """
-        Return orthology mappings as human symbol -> target symbols.
+        Return orthology mappings as source symbol -> target symbols.
 
         Returns
         -------
@@ -312,19 +335,19 @@ class Orthologs:
             deterministic HCOP ranking.
         """
 
-        return copylib.deepcopy(self._mapping)
+        return {source: list(targets) for source, targets in self._mapping.items()}
 
     def translate(self, gene: str, keep_if_missing: bool = False) -> List[str]:
         """
-        Translate one human gene symbol to the selected output organism.
+        Translate one gene symbol to the selected output organism.
 
-        A single human gene can have several target orthologs. For one-to-one
+        A single source gene can have several target orthologs. For one-to-one
         object translations, the first value of this list is used.
 
         Parameters
         ----------
         gene: str
-            Human gene symbol to translate. Complex names separated by `_` are
+            Source gene symbol to translate. Complex names separated by `_` are
             translated subunit by subunit.
         keep_if_missing: bool (default: False)
             If `True`, keep the original gene symbol when no ortholog is found.
@@ -348,8 +371,9 @@ class Orthologs:
                 for translated_complex in product(*translated_subunits)
             ]
 
-        if gene in self._mapping:
-            return list(self._mapping[gene])
+        targets = self._mapping.get(gene)
+        if targets is not None:
+            return list(targets)
         return [gene] if keep_if_missing else []
 
     @overload
@@ -386,7 +410,7 @@ class Orthologs:
         keep_if_missing: bool = True,
     ) -> Union[Sequence[str], Set[str]]:
         """
-        Translate a sequence or set of human gene symbols.
+        Translate a sequence or set of source gene symbols.
 
         Each gene is translated to one target symbol using the deterministic
         HCOP ranking. Missing genes are either kept or removed depending on
@@ -395,7 +419,7 @@ class Orthologs:
         Parameters
         ----------
         genes: sequence or set of str
-            Human gene symbols to translate.
+            Source gene symbols to translate.
         keep_if_missing: bool (default: True)
             If `True`, keep original gene symbols with no ortholog.
 
@@ -406,11 +430,27 @@ class Orthologs:
             possible.
         """
 
-        translated_genes: List[str] = []
-        for gene in genes:
-            translated = self._translate_best(gene, keep_if_missing=keep_if_missing)
-            if translated is not None:
-                translated_genes.append(translated)
+        best_mapping = self._best_mapping
+        if keep_if_missing:
+            translated_genes = [
+                cast(str, self._translate_best(gene, keep_if_missing=True))
+                if "_" in gene
+                else best_mapping.get(gene, gene)
+                for gene in genes
+            ]
+        else:
+            translated_genes = []
+            for gene in genes:
+                translated = (
+                    self._translate_best(gene, keep_if_missing=False)
+                    if "_" in gene
+                    else best_mapping.get(gene)
+                )
+                if translated is not None:
+                    translated_genes.append(translated)
+
+        if isinstance(genes, list):
+            return translated_genes
 
         sequence_constructor = cast(Any, type(genes))
         try:
@@ -510,15 +550,16 @@ class Orthologs:
             Translated interaction list with preserved edge attributes.
         """
 
+        translate = self._translate_best
         translated_interactions: List[Tuple[str, str, Dict[str, int]]] = []
         for source, target, attributes in interaction_list:
-            translated_source = self._translate_best(
+            translated_source = translate(
                 source,
-                keep_if_missing=keep_if_missing,
+                keep_if_missing,
             )
-            translated_target = self._translate_best(
+            translated_target = translate(
                 target,
-                keep_if_missing=keep_if_missing,
+                keep_if_missing,
             )
             if translated_source is None or translated_target is None:
                 continue
@@ -529,7 +570,7 @@ class Orthologs:
         return translated_interactions
 
     @overload
-    def translate_df(
+    def translate_dataframe(
         self,
         df: pd.DataFrame,
         columns: Optional[Union[str, Sequence[str]]] = None,
@@ -539,7 +580,7 @@ class Orthologs:
     ) -> pd.DataFrame: ...
 
     @overload
-    def translate_df(
+    def translate_dataframe(
         self,
         df: pd.DataFrame,
         columns: Optional[Union[str, Sequence[str]]] = None,
@@ -550,7 +591,7 @@ class Orthologs:
     ) -> None: ...
 
     @overload
-    def translate_df(
+    def translate_dataframe(
         self,
         df: pd.DataFrame,
         columns: Optional[Union[str, Sequence[str]]] = None,
@@ -559,7 +600,7 @@ class Orthologs:
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]: ...
 
-    def translate_df(
+    def translate_dataframe(
         self,
         df: pd.DataFrame,
         columns: Optional[Union[str, Sequence[str]]] = None,
@@ -568,7 +609,7 @@ class Orthologs:
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]:
         """
-        Translate human gene symbols in selected DataFrame columns.
+        Translate gene symbols in selected DataFrame columns.
 
         Each selected value is translated to one target symbol using the
         deterministic HCOP ranking by default. If `one_to_many` is provided,
@@ -579,7 +620,7 @@ class Orthologs:
         Parameters
         ----------
         df: pandas.DataFrame
-            DataFrame containing human gene symbols.
+            DataFrame containing symbols from `input_organism`.
         columns: str or sequence of str, optional
             Columns to translate. If `None`, translate any existing column among
             `source`, `target` and `genesymbol`.
@@ -630,11 +671,9 @@ class Orthologs:
             return translated
 
         for column in selected_columns:
-            translated[column] = cast(pd.Series, translated[column]).map(
-                lambda gene: self._translate_best(
-                    str(gene),
-                    keep_if_missing=keep_if_missing,
-                )
+            translated[column] = self._translate_series(
+                cast(pd.Series, translated[column]),
+                keep_if_missing=keep_if_missing,
             )
             if not keep_if_missing:
                 translated = cast(pd.DataFrame, translated.dropna(subset=[column]))
@@ -642,6 +681,56 @@ class Orthologs:
         translated = translated.reset_index(drop=True)
         if copy:
             return translated
+
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        copy: Literal[True] = True,
+        one_to_many: Optional[int] = None,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        *,
+        copy: Literal[False],
+        one_to_many: Optional[int] = None,
+    ) -> None: ...
+
+    @overload
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        copy: bool = True,
+        one_to_many: Optional[int] = None,
+    ) -> Union[pd.DataFrame, None]: ...
+
+    @_deprecated(replacement="`Orthologs.translate_dataframe()`")
+    def translate_df(
+        self,
+        df: pd.DataFrame,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        keep_if_missing: bool = True,
+        copy: bool = True,
+        one_to_many: Optional[int] = None,
+    ) -> Union[pd.DataFrame, None]:
+        """Deprecated alias for `translate_dataframe()`."""
+
+        return self.translate_dataframe(
+            df,
+            columns=columns,
+            keep_if_missing=keep_if_missing,
+            copy=copy,
+            one_to_many=one_to_many,
+        )
 
     def translate_graph(
         self,
@@ -658,7 +747,7 @@ class Orthologs:
         Parameters
         ----------
         graph: networkx.Graph
-            Graph whose node identifiers are human gene symbols.
+            Graph whose node identifiers are symbols from `input_organism`.
         keep_if_missing: bool (default: True)
             If `True`, keep original node labels with no ortholog. If `False`,
             unmapped nodes and incident edges are removed.
@@ -679,24 +768,25 @@ class Orthologs:
             )
 
         translated = graph.copy() if copy else graph
-        if not keep_if_missing:
-            missing = [
-                node
-                for node in translated.nodes
-                if self._translate_best(node, keep_if_missing=False) is None
-            ]
-            translated.remove_nodes_from(missing)
+        mapping = {}
+        missing = []
+        for node in translated.nodes:
+            target = self._translate_best(
+                node,
+                keep_if_missing=keep_if_missing,
+            )
+            if target is None:
+                missing.append(node)
+            else:
+                mapping[node] = target
 
-        mapping = {
-            node: self._translate_best(node, keep_if_missing=True)
-            for node in translated.nodes
-        }
+        translated.remove_nodes_from(missing)
         nx.relabel_nodes(translated, mapping=mapping, copy=False)
 
         if copy:
             return translated
 
-    def translate_bn(
+    def translate_boolean_network(
         self,
         bn: "BooleanNetworkLike",
         keep_if_missing: bool = True,
@@ -706,14 +796,14 @@ class Orthologs:
         Translate Boolean network component names.
 
         Components are translated to one target symbol using the deterministic
-        HCOP ranking. Rules are renamed through the Boolean network `rename`
-        method when available.
+        HCOP ranking. Component references in Boolean rules are updated
+        accordingly.
 
         Parameters
         ----------
         bn: BooleanNetworkLike
-            Boolean network-like object whose component identifiers are human
-            gene symbols.
+            Boolean network-like object whose component identifiers are symbols
+            from `input_organism`.
         keep_if_missing: bool (default: True)
             If `True`, keep original component names with no ortholog. If `False`,
             raise an error for unmapped components.
@@ -745,6 +835,7 @@ class Orthologs:
         bn_any: Any = bn
         rebuild_as_input_type = False
         rename = getattr(bn_any, "rename", None)
+        relabel = getattr(bn_any, "relabel", None)
 
         if copy:
             copy_method = getattr(bn_any, "copy", None)
@@ -754,18 +845,21 @@ class Orthologs:
                 else BooleanNetwork(bn_any, check=False)
             )
             rename = getattr(bn_any, "rename", None)
-            if not callable(rename):
+            relabel = getattr(bn_any, "relabel", None)
+            if not callable(rename) and not callable(relabel):
                 bn_any = BooleanNetwork(bn_any, check=False)
                 rename = bn_any.rename
+                relabel = bn_any.relabel
                 rebuild_as_input_type = True
-        elif not callable(rename):
+        elif not callable(rename) and not callable(relabel):
             raise TypeError(
                 "unsupported argument value for 'bn': in-place Boolean network "
-                "translation requires a 'rename' method; use copy=True to return "
-                "a translated copy"
+                "translation requires a 'relabel' or 'rename' method; use "
+                "copy=True to return a translated copy"
             )
 
         genes = tuple(gene for gene, _ in bn_any.items())
+        mapping = {}
         for gene in genes:
             translated = self._translate_best(gene, keep_if_missing=keep_if_missing)
             if translated is None:
@@ -773,7 +867,13 @@ class Orthologs:
                     "Boolean network translation cannot remove an unmapped "
                     f"component: {gene!r}"
                 )
-            rename(gene, translated)
+            mapping[gene] = translated
+
+        if callable(relabel):
+            relabel(mapping)
+        elif callable(rename):
+            for gene, translated in mapping.items():
+                rename(gene, translated)
 
         if copy and rebuild_as_input_type:
             try:
@@ -788,6 +888,21 @@ class Orthologs:
                 ) from error
 
         return cast("BooleanNetworkLike", bn_any) if copy else None
+
+    @_deprecated(replacement="`Orthologs.translate_boolean_network()`")
+    def translate_bn(
+        self,
+        bn: "BooleanNetworkLike",
+        keep_if_missing: bool = True,
+        copy: bool = False,
+    ) -> Union["BooleanNetworkLike", None]:
+        """Deprecated alias for `translate_boolean_network()`."""
+
+        return self.translate_boolean_network(
+            bn,
+            keep_if_missing=keep_if_missing,
+            copy=copy,
+        )
 
     def reset(
         self,
@@ -805,7 +920,6 @@ class Orthologs:
         ----------
         input_organism: str, optional
             Source organism. If `None`, keep the current source organism.
-            Currently only `"human"` is supported.
         output_organism: str, optional
             Target organism. If `None`, keep the current target organism.
         min_evidence: int, optional
@@ -813,7 +927,8 @@ class Orthologs:
         version: "bundled", "latest", str path or Path, optional
             HCOP version to load. If `None`, keep the current version.
         table: pandas.DataFrame, optional
-            Preloaded HCOP-like table. If `None`, reload mappings from HCOP.
+            Preloaded direct source-to-target table. If `None`, reload the
+            required mapping from HCOP.
         target_organism: str, optional
             Alias for `output_organism`.
 
@@ -858,6 +973,11 @@ class Orthologs:
 
         self._validate_input_organism(resolved_input_organism)
         self._validate_output_organism(resolved_output_organism)
+        if resolved_input_organism == resolved_output_organism:
+            raise ValueError(
+                "invalid organism pair: 'input_organism' and "
+                "'output_organism' must differ"
+            )
         resolved_min_evidence = self._validate_min_evidence(resolved_min_evidence)
 
         if table is None:
@@ -869,15 +989,22 @@ class Orthologs:
             )
         else:
             table = copylib.deepcopy(table)
-            self._validate_orthologs_table(table)
+            table = self._normalize_direct_table(
+                table,
+                input_organism=resolved_input_organism,
+            )
 
         self.input_organism = resolved_input_organism
         self.output_organism = resolved_output_organism
         self.target_organism = resolved_output_organism
         self.min_evidence = resolved_min_evidence
         self.version = normalized_version
-        self._table = table
-        self._mapping = self._build_mapping(table)
+        self._table = cast(pd.DataFrame, table)
+        self._mapping = self._build_mapping(self._table)
+        self._best_mapping = {
+            source: targets[0] for source, targets in self._mapping.items()
+        }
+        self._one_to_many_mapping_cache = None
 
     def contains(self, *genes: str) -> List[bool]:
         """
@@ -895,7 +1022,8 @@ class Orthologs:
             list.
         """
 
-        return [gene in self._mapping for gene in genes]
+        mapping = self._mapping
+        return [gene in mapping for gene in genes]
 
     def find(self, *genes: str) -> List[str]:
         """
@@ -913,45 +1041,52 @@ class Orthologs:
             input order.
         """
 
-        return [
-            gene
-            for gene, found in zip(
-                genes,
-                self.contains(*genes),
-            )
-            if found
-        ]
-
-    @staticmethod
-    def versions(output_organism: Optional[str] = None) -> List[str]:
-        """
-        List available HCOP version labels without loading an HCOP table.
-
-        Parameters
-        ----------
-        output_organism: str, optional
-            If provided, only report local snapshots available for this target
-            organism.
-
-        Returns
-        -------
-        list of str
-            Accepted version labels. `"bundled"` denotes the HCOP snapshot
-            distributed with bonesistools. `"latest"` denotes the current
-            public HCOP files.
-        """
-
-        if output_organism is not None:
-            Orthologs._validate_output_organism(output_organism)
-
-        return ["bundled", "latest"]
+        mapping = self._mapping
+        return [gene for gene in genes if gene in mapping]
 
     def _translate_best(self, gene: str, keep_if_missing: bool) -> Optional[str]:
 
-        translated = self.translate(gene, keep_if_missing=keep_if_missing)
-        if len(translated) == 0:
-            return None
-        return translated[0]
+        if "_" in gene:
+            translated_subunits: List[str] = []
+            for subunit in gene.split("_"):
+                translated = self._best_mapping.get(subunit)
+                if translated is None:
+                    if not keep_if_missing:
+                        return None
+                    translated = subunit
+                translated_subunits.append(translated)
+            return "_".join(translated_subunits)
+
+        translated = self._best_mapping.get(gene)
+        if translated is not None:
+            return translated
+        return gene if keep_if_missing else None
+
+    def _translate_series(
+        self,
+        values: pd.Series,
+        keep_if_missing: bool,
+    ) -> pd.Series:
+        """Translate a Series while preserving complex-name semantics."""
+
+        source = values.astype(str)
+        best_mapping = self._best_mapping
+        translate = self._translate_best
+        if keep_if_missing:
+            translated = [
+                translate(gene, keep_if_missing=True)
+                if "_" in gene
+                else best_mapping.get(gene, gene)
+                for gene in source
+            ]
+        else:
+            translated = [
+                translate(gene, keep_if_missing=False)
+                if "_" in gene
+                else best_mapping.get(gene)
+                for gene in source
+            ]
+        return pd.Series(translated, index=values.index, name=values.name)
 
     def _translate_df_one_to_many(
         self,
@@ -960,13 +1095,13 @@ class Orthologs:
         one_to_many: int,
     ) -> pd.DataFrame:
 
-        map_data = self._generate_orthologs(
+        expansions = self._ortholog_expansions(
             values=cast(pd.Series, df[column]),
             one_to_many=one_to_many,
         )
-        translated = df.merge(map_data, left_on=column, right_index=True, how="left")
-        translated[column] = translated["orthology_target"]
-        translated = cast(pd.DataFrame, translated.drop(columns=["orthology_target"]))
+        translated = df
+        translated[column] = cast(pd.Series, translated[column]).map(expansions)
+        translated = cast(pd.DataFrame, translated.explode(column))
         return cast(pd.DataFrame, translated.dropna(subset=[column]))
 
     @staticmethod
@@ -980,15 +1115,14 @@ class Orthologs:
         """
         Load HCOP orthology mappings as a filtered DataFrame.
 
-        This method downloads the HCOP table for `output_organism`, keeps
-        human-to-target mappings with enough supporting orthology sources, and
-        normalizes the target organism column to `target_symbol`.
+        Human-to-organism mappings are loaded directly, organism-to-human
+        mappings are reversed, and mappings between two non-human organisms are
+        joined through shared human orthologs.
 
         Parameters
         ----------
         input_organism: str (default: "human")
-            Source organism. HCOP translation is currently restricted to human
-            source genes.
+            Source organism.
         output_organism: str (default: "mouse")
             Target organism. Supported values are listed by
             `bt.resources.hcop.organisms()`.
@@ -1004,16 +1138,16 @@ class Orthologs:
 
             If `"latest"`, load the current public HCOP file.
 
-            If a path is provided, load that file directly. This is the
-            recommended mode for custom HCOP-like tables.
+            If a path is provided, load that file directly. A single custom
+            HCOP file can only describe a route with human at one endpoint.
         target_organism: str, optional
             Alias for `output_organism`.
 
         Returns
         -------
         pandas.DataFrame
-            Deep copy of the filtered HCOP table with columns
-            `human_symbol`, `target_symbol`, `support` and `evidence`.
+            Filtered source-to-target mapping. The internal source column is
+            named `source_symbol`.
 
         Raises
         ------
@@ -1029,10 +1163,73 @@ class Orthologs:
             output_organism = target_organism
         Orthologs._validate_input_organism(input_organism)
         Orthologs._validate_output_organism(output_organism)
+        if input_organism == output_organism:
+            raise ValueError(
+                "invalid organism pair: 'input_organism' and "
+                "'output_organism' must differ"
+            )
         min_evidence = Orthologs._validate_min_evidence(min_evidence)
         version_label = Orthologs._normalize_version(version)
 
-        hcop = Orthologs._read_hcop_table(output_organism, version=version_label)
+        if (
+            input_organism != "human"
+            and output_organism != "human"
+            and version_label not in {"bundled", "latest"}
+        ):
+            raise ValueError(
+                "non-human to non-human conversion requires two HCOP tables; "
+                "use version='bundled', version='latest', or provide a direct "
+                "table with source_symbol and target_symbol columns"
+            )
+
+        if input_organism == "human":
+            direct = Orthologs._load_human_orthologs_table(
+                output_organism,
+                min_evidence=min_evidence,
+                version=version_label,
+            )
+            return cast(
+                pd.DataFrame,
+                direct.rename(columns={"human_symbol": "source_symbol"}),
+            )
+
+        if output_organism == "human":
+            direct = Orthologs._load_human_orthologs_table(
+                input_organism,
+                min_evidence=min_evidence,
+                version=version_label,
+            )
+            valid = Orthologs._without_placeholder_symbols(direct)
+            return pd.DataFrame(
+                {
+                    "source_symbol": valid["target_symbol"],
+                    "target_symbol": valid["human_symbol"],
+                    "support": valid["support"],
+                    "evidence": valid["evidence"],
+                }
+            ).reset_index(drop=True)
+
+        source = Orthologs._load_human_orthologs_table(
+            input_organism,
+            min_evidence=min_evidence,
+            version=version_label,
+        )
+        target = Orthologs._load_human_orthologs_table(
+            output_organism,
+            min_evidence=min_evidence,
+            version=version_label,
+        )
+        return Orthologs._bridge_hcop_tables(source, target)
+
+    @staticmethod
+    def _load_human_orthologs_table(
+        output_organism: str,
+        min_evidence: int,
+        version: HcopVersion,
+    ) -> pd.DataFrame:
+        """Load one filtered human-to-organism HCOP table."""
+
+        hcop = Orthologs._read_hcop_table(output_organism, version=version)
         target_column = Orthologs._target_symbol_column(output_organism)
         if target_column not in hcop and "target_symbol" in hcop:
             target_column = "target_symbol"
@@ -1046,7 +1243,7 @@ class Orthologs:
 
         table = cast(pd.DataFrame, hcop[required_columns].dropna()).copy()
         support = cast(pd.Series, table["support"]).astype(str)
-        table["evidence"] = support.apply(lambda value: len(value.split(",")))
+        table["evidence"] = support.str.count(",") + 1
         table = cast(pd.DataFrame, table[table["evidence"] >= min_evidence])
         table = cast(
             pd.DataFrame,
@@ -1054,7 +1251,100 @@ class Orthologs:
                 drop=True
             ),
         )
-        return copylib.deepcopy(table)
+        return table
+
+    @staticmethod
+    def _without_placeholder_symbols(table: pd.DataFrame) -> pd.DataFrame:
+        """Remove HCOP rows whose source or target symbol is a placeholder."""
+
+        valid = (table["human_symbol"] != "-") & (table["target_symbol"] != "-")
+        return cast(pd.DataFrame, table.loc[valid]).copy()
+
+    @staticmethod
+    def _bridge_hcop_tables(
+        source: pd.DataFrame,
+        target: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Project two HCOP mappings through their shared human symbols."""
+
+        source_edges = Orthologs._without_placeholder_symbols(source)
+        source_edges = cast(
+            pd.DataFrame,
+            source_edges.sort_values(
+                "evidence",
+                ascending=False,
+                kind="mergesort",
+            ).drop_duplicates(["human_symbol", "target_symbol"]),
+        )
+        source_edges = cast(
+            pd.DataFrame,
+            source_edges.rename(
+                columns={
+                    "target_symbol": "source_symbol",
+                    "support": "source_support",
+                    "evidence": "source_evidence",
+                }
+            ),
+        )
+
+        target_edges = Orthologs._without_placeholder_symbols(target)
+        target_edges = cast(
+            pd.DataFrame,
+            target_edges.sort_values(
+                "evidence",
+                ascending=False,
+                kind="mergesort",
+            ).drop_duplicates(["human_symbol", "target_symbol"]),
+        )
+        target_edges = cast(
+            pd.DataFrame,
+            target_edges.rename(
+                columns={
+                    "support": "target_support",
+                    "evidence": "target_evidence",
+                }
+            ),
+        )
+
+        paths = cast(
+            pd.DataFrame,
+            source_edges.merge(target_edges, on="human_symbol", how="inner"),
+        )
+        paths["evidence"] = paths[["source_evidence", "target_evidence"]].min(axis=1)
+        paths["support"] = (
+            paths["source_support"].astype(str)
+            + " -> "
+            + paths["target_support"].astype(str)
+        )
+
+        grouped_paths = paths.groupby(
+            ["source_symbol", "target_symbol"],
+            sort=False,
+        )
+        paths["best_evidence"] = grouped_paths["evidence"].transform("max")
+        paths["paths"] = grouped_paths["human_symbol"].transform("nunique")
+        paths = cast(
+            pd.DataFrame,
+            paths.sort_values(
+                ["source_symbol", "target_symbol", "human_symbol"],
+                kind="mergesort",
+            ).reset_index(drop=True),
+        )
+        return paths[
+            [
+                "source_symbol",
+                "target_symbol",
+                "human_symbol",
+                "source_support",
+                "target_support",
+                "source_evidence",
+                "target_evidence",
+                "evidence",
+                "best_evidence",
+                "paths",
+                "support",
+            ]
+        ]
 
     @staticmethod
     def _is_interaction(item: Any) -> bool:
@@ -1078,7 +1368,7 @@ class Orthologs:
             return False
         if len(data) == 0:
             return False
-        return all(Orthologs._is_interaction(item) for item in data)
+        return Orthologs._is_interaction(next(iter(data)))
 
     @staticmethod
     def _select_columns(
@@ -1110,16 +1400,15 @@ class Orthologs:
 
         return selected_columns
 
-    def _generate_orthologs(
+    def _ortholog_expansions(
         self,
         values: pd.Series,
         one_to_many: int,
-    ) -> pd.DataFrame:
+    ) -> Dict[str, List[str]]:
+        """Return row-ordered target expansions for distinct source values."""
 
-        map_dict = (
-            self._table.groupby("human_symbol")["target_symbol"].apply(list).to_dict()
-        )
-        complexes: List[Tuple[str, str]] = []
+        map_dict = self._one_to_many_mapping()
+        expansions: Dict[str, List[str]] = {}
         for value in values.drop_duplicates():
             source = str(value)
             subunit_lists: List[List[str]] = []
@@ -1131,20 +1420,37 @@ class Orthologs:
                     subunit_lists.append([str(target) for target in targets])
             if any(len(subunit_list) == 0 for subunit_list in subunit_lists):
                 continue
-            for translated_complex in product(*subunit_lists):
-                complexes.append((source, "_".join(translated_complex)))
+            expansions[source] = [
+                "_".join(translated_complex)
+                for translated_complex in product(*subunit_lists)
+            ]
 
-        if len(complexes) == 0:
-            result = pd.DataFrame({"orthology_target": pd.Series(dtype="object")})
-            result.index.name = "orthology_source"
-            return result
+        return expansions
 
-        return pd.DataFrame(
-            {
-                "orthology_source": [source for source, _ in complexes],
-                "orthology_target": [target for _, target in complexes],
-            }
-        ).set_index("orthology_source")
+    def _one_to_many_mapping(self) -> Dict[object, List[object]]:
+        """Return the cached row-ordered mapping used for expansion."""
+
+        mapping = self._one_to_many_mapping_cache
+        if mapping is None:
+            if self.input_organism == "human":
+                row_mapping: Dict[object, List[object]] = {}
+                sources = self._table["source_symbol"]
+                targets = self._table["target_symbol"]
+                for source, target in zip(sources, targets):
+                    if pd.isna(source):
+                        continue
+                    row_mapping.setdefault(source, []).append(target)
+                mapping = row_mapping
+            else:
+                mapping = cast(
+                    Dict[object, List[object]],
+                    {
+                        source: list(targets)
+                        for source, targets in self._mapping.items()
+                    },
+                )
+            self._one_to_many_mapping_cache = mapping
+        return mapping
 
     @staticmethod
     def _target_symbol_column(output_organism: str) -> str:
@@ -1214,9 +1520,26 @@ class Orthologs:
         return version_label
 
     @staticmethod
+    def _normalize_direct_table(
+        table: pd.DataFrame,
+        input_organism: str,
+    ) -> pd.DataFrame:
+        """Normalize a user-provided direct source-to-target mapping."""
+
+        normalized = table
+        if "source_symbol" not in normalized and input_organism == "human":
+            if "human_symbol" in normalized:
+                normalized = cast(
+                    pd.DataFrame,
+                    normalized.rename(columns={"human_symbol": "source_symbol"}),
+                )
+        Orthologs._validate_orthologs_table(normalized)
+        return normalized
+
+    @staticmethod
     def _validate_orthologs_table(table: pd.DataFrame) -> None:
 
-        required_columns = ["human_symbol", "target_symbol", "support", "evidence"]
+        required_columns = ["source_symbol", "target_symbol", "support", "evidence"]
         missing_columns = [column for column in required_columns if column not in table]
         if missing_columns:
             raise ValueError(
@@ -1227,21 +1550,57 @@ class Orthologs:
     @staticmethod
     def _build_mapping(table: pd.DataFrame) -> Dict[str, List[str]]:
 
-        ranked = table.groupby(["human_symbol", "target_symbol"], as_index=False).agg(
-            count=("target_symbol", "size"),
-            evidence=("evidence", "max"),
-        )
-        ranked = cast(
-            pd.DataFrame,
-            cast(Any, ranked).sort_values(
-                by=["human_symbol", "evidence", "count", "target_symbol"],
-                ascending=[True, False, False, True],
-            ),
-        )
-        grouped = ranked.groupby("human_symbol")["target_symbol"].apply(list).to_dict()
+        scores: Dict[Tuple[str, str], Tuple[int, int]] = {}
+        bridge = "best_evidence" in table and "paths" in table
+        valid = table["source_symbol"].notna() & table["target_symbol"].notna()
+        source_values = table.loc[valid, "source_symbol"].tolist()
+        target_values = table.loc[valid, "target_symbol"].tolist()
+        evidence_column = "best_evidence" if bridge else "evidence"
+        evidence_values = table.loc[valid, evidence_column].tolist()
+
+        if bridge:
+            count_values = table.loc[valid, "paths"].tolist()
+            for source, target, evidence_value, count_value in zip(
+                source_values,
+                target_values,
+                evidence_values,
+                count_values,
+            ):
+                key = (str(source), str(target))
+                evidence = int(evidence_value)
+                count = int(count_value)
+                previous = scores.get(key)
+                scores[key] = (
+                    evidence if previous is None else max(previous[0], evidence),
+                    count if previous is None else max(previous[1], count),
+                )
+        else:
+            for source, target, evidence_value in zip(
+                source_values,
+                target_values,
+                evidence_values,
+            ):
+                key = (str(source), str(target))
+                evidence = int(evidence_value)
+                previous = scores.get(key)
+                scores[key] = (
+                    evidence if previous is None else max(previous[0], evidence),
+                    1 if previous is None else previous[1] + 1,
+                )
+
+        grouped: Dict[str, List[Tuple[str, int, int]]] = {}
+        for (source, target), (evidence, count) in scores.items():
+            grouped.setdefault(source, []).append((target, evidence, count))
+
         return {
-            str(source): [str(target) for target in targets]
-            for source, targets in grouped.items()
+            source: [
+                target
+                for target, _, _ in sorted(
+                    grouped[source],
+                    key=lambda value: (-value[1], -value[2], value[0]),
+                )
+            ]
+            for source in sorted(grouped)
         }
 
     @staticmethod
@@ -1275,7 +1634,7 @@ class Orthologs:
 
         raise FileNotFoundError(
             f"HCOP version file not found: {version}. "
-            f"Available versions: {', '.join(Orthologs.versions(output_organism))}"
+            f"Available versions: {', '.join(versions())}"
         )
 
     @staticmethod
@@ -1303,6 +1662,20 @@ def organisms() -> List[str]:
     return list(Orthologs.supported_organisms)
 
 
+def versions() -> List[str]:
+    """
+    List version labels accepted by the HCOP resource loader.
+
+    Returns
+    -------
+    list of str
+        `"bundled"` denotes the HCOP snapshot distributed with bonesistools.
+        `"latest"` denotes the current public HCOP files.
+    """
+
+    return ["bundled", "latest"]
+
+
 class _OrthologsCallable(Protocol):
     def __call__(
         self,
@@ -1310,9 +1683,9 @@ class _OrthologsCallable(Protocol):
         min_evidence: int = 3,
         version: HcopVersion = "bundled",
         target_organism: Optional[str] = None,
+        *,
+        input_organism: str = "human",
     ) -> Orthologs: ...
-
-    def versions(self, output_organism: Optional[str] = None) -> List[str]: ...
 
 
 def _orthologs(
@@ -1320,14 +1693,17 @@ def _orthologs(
     min_evidence: int = 3,
     version: HcopVersion = "bundled",
     target_organism: Optional[str] = None,
+    *,
+    input_organism: str = "human",
 ) -> Orthologs:
     """
     Create an HCOP orthology converter.
 
-    The returned `Orthologs` object stores human-to-target mappings for one
-    selected target organism. Single-gene translation can return several
+    HCOP uses human genes as its reference. Conversions involving human use one
+    HCOP table; conversions between two non-human organisms join their tables
+    through shared human orthologs. Single-gene translation can return several
     orthologs, while object-level translations use a deterministic one-to-one
-    choice: strongest evidence, then most frequent target, then alphabetical
+    choice: strongest evidence, then most supporting paths, then alphabetical
     order.
 
     Parameters
@@ -1344,11 +1720,14 @@ def _orthologs(
         resolve to custom HCOP-like files.
     target_organism: str, optional
         Alias for `output_organism`.
+    input_organism: str (default: "human")
+        Organism associated with the input gene symbols. Supported values are
+        listed by `bt.resources.hcop.organisms()`.
 
     Returns
     -------
     Orthologs
-        Converter initialized with HCOP mappings from human genes to
+        Converter initialized with mappings from `input_organism` to
         `output_organism`.
 
     Raises
@@ -1361,7 +1740,7 @@ def _orthologs(
     if target_organism is not None:
         output_organism = target_organism
     return Orthologs(
-        input_organism="human",
+        input_organism=input_organism,
         output_organism=output_organism,
         min_evidence=min_evidence,
         version=version,
@@ -1369,18 +1748,16 @@ def _orthologs(
 
 
 def _orthologs_versions(output_organism: Optional[str] = None) -> List[str]:
-    """
-    List available HCOP versions without loading an HCOP table.
+    """Deprecated compatibility alias for `bt.resources.hcop.versions()`."""
 
-    Returns
-    -------
-    list of str
-        Accepted version labels. `"bundled"` denotes the HCOP snapshot
-        distributed with bonesistools. `"latest"` denotes the current public
-        HCOP files.
-    """
-
-    return Orthologs.versions(output_organism=output_organism)
+    _warn_deprecated(
+        "`bt.resources.hcop.orthologs.versions()`",
+        replacement="`bt.resources.hcop.versions()`",
+        stacklevel=3,
+    )
+    if output_organism is not None:
+        Orthologs._validate_output_organism(output_organism)
+    return versions()
 
 
 setattr(_orthologs, "versions", _orthologs_versions)

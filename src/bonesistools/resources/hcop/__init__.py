@@ -3,18 +3,18 @@
 """
 Interfaces to HCOP orthology mappings.
 
-The `hcop` sub-package provides utilities for translating human gene symbols
-to supported target organisms with the HGNC Comparison of Orthology
-Predictions resource.
+The `hcop` sub-package provides utilities for translating gene symbols between
+organisms supported by the HGNC Comparison of Orthology Predictions resource.
 """
 
 from typing import List as _List
 
-from ._orthologs import organisms, orthologs
+from ._orthologs import organisms, orthologs, versions
 
 __all__ = [
     "organisms",
     "orthologs",
+    "versions",
 ]
 
 
