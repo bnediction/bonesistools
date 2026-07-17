@@ -3,6 +3,7 @@
 import builtins
 from typing import Any, cast
 
+import anndata as ad
 import networkx as nx
 import numpy as np
 import pytest
@@ -309,27 +310,21 @@ def test_neighbors_explicit_pynndescent_requires_dependency(
 def test_neighbors_can_feed_shared_neighbors(mini_adata):
     mini_adata.uns.clear()
     mini_adata.obsp.clear()
-    close_distance = np.sqrt(0.05)
-    far_distance = np.sqrt(8.0)
-    farther_distance = np.sqrt(9.25)
     expected_snn_distances = np.array(
         [
-            [0.0, close_distance, far_distance, farther_distance],
-            [close_distance, 0.0, 0.0, far_distance],
-            [far_distance, 0.0, 0.0, close_distance],
-            [farther_distance, far_distance, close_distance, 0.0],
+            [0.0, 2 / 3, 2 / 3, 0.0],
+            [2 / 3, 0.0, 0.0, 2 / 3],
+            [2 / 3, 0.0, 0.0, 2 / 3],
+            [0.0, 2 / 3, 2 / 3, 0.0],
         ]
     )
-    expected_snn_connectivities = (
-        np.array(
-            [
-                [0.0, 1.0, 1.0, 2.0],
-                [1.0, 0.0, 0.0, 1.0],
-                [1.0, 0.0, 0.0, 1.0],
-                [2.0, 1.0, 1.0, 0.0],
-            ]
-        )
-        / 3.0
+    expected_snn_connectivities = np.array(
+        [
+            [0.0, 1 / 3, 1 / 3, 1.0],
+            [1 / 3, 0.0, 0.0, 1 / 3],
+            [1 / 3, 0.0, 0.0, 1 / 3],
+            [1.0, 1 / 3, 1 / 3, 0.0],
+        ]
     )
 
     bt.omics.tl.neighbors(
@@ -340,14 +335,15 @@ def test_neighbors_can_feed_shared_neighbors(mini_adata):
     )
     bt.omics.tl.shared_neighbors(
         mini_adata,
-        knn_key="neighbors",
-        snn_key="snn_from_neighbors",
-        prune_snn=0,
+        neighbors_key="neighbors",
+        key_added="snn_from_neighbors",
+        prune=0,
     )
 
     assert mini_adata.uns["snn_from_neighbors"]["params"]["knn_base"] == (
         "scdata.uns['neighbors']"
     )
+    assert mini_adata.uns["snn_from_neighbors"]["params"]["metric"] == "jaccard"
     assert np.allclose(
         mini_adata.obsp["snn_from_neighbors_distances"].toarray(),
         expected_snn_distances,
@@ -636,39 +632,264 @@ def test_knn_graph_rejects_invalid_node_label_mode(mini_adata):
 
 def test_shared_neighbors_stores_distances_connectivities_and_metadata(
     mini_adata,
-    expected_mini_pca2_distances,
     expected_mini_snn_connectivities,
 ):
     result = bt.omics.tl.shared_neighbors(
         mini_adata,
-        prune_snn=0,
-        snn_key="snn",
+        prune=0,
+        key_added="snn",
         copy=True,
     )
 
     assert "snn" not in mini_adata.uns
     assert result.uns["snn"]["distances_key"] == "snn_distances"
     assert result.uns["snn"]["connectivities_key"] == "snn_connectivities"
+    assert result.uns["snn"]["params"]["prune"] == 0
+    assert "prune_snn" not in result.uns["snn"]["params"]
 
-    expected_distances = np.zeros_like(expected_mini_pca2_distances)
-    expected_distances[0, 3] = expected_mini_pca2_distances[0, 3]
-    expected_distances[1, 2] = expected_mini_pca2_distances[1, 2]
-    expected_distances[2, 1] = expected_mini_pca2_distances[2, 1]
-    expected_distances[3, 0] = expected_mini_pca2_distances[3, 0]
-
-    assert np.allclose(
-        result.obsp["snn_distances"].toarray(),
-        expected_distances,
-    )
+    distances = result.obsp["snn_distances"]
+    assert distances.nnz == 4
+    assert np.all(distances.data == 0.0)
     assert np.allclose(
         result.obsp["snn_connectivities"].toarray(),
-        expected_mini_snn_connectivities / 3,
+        expected_mini_snn_connectivities / 2,
     )
+
+
+@pytest.mark.parametrize(
+    ("metric", "expected"),
+    (
+        ("jaccard", 2 / 3),
+        ("overlap", 1.0),
+        ("binary-cosine", 2 / np.sqrt(6)),
+        ("weighted-jaccard", 4 / 9),
+        ("ranked-jaccard", 9 / 11),
+    ),
+)
+def test_shared_neighbors_metrics_are_normalized(metric, expected):
+    adata = ad.AnnData(X=np.zeros((5, 1), dtype=np.float32))
+    adata.obsp["distances"] = csr_matrix(
+        [
+            [0.0, 0.0, 0.1, 0.4, 0.0],
+            [0.0, 0.0, 0.2, 0.3, 0.5],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    adata.obsp["connectivities"] = csr_matrix(
+        [
+            [0.0, 0.0, 0.9, 0.4, 0.0],
+            [0.0, 0.0, 0.6, 0.2, 0.5],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    adata.uns["neighbors"] = {
+        "distances_key": "distances",
+        "connectivities_key": "connectivities",
+        "params": {"n_neighbors": 4},
+    }
+
+    bt.omics.tl.shared_neighbors(
+        adata,
+        prune=0,
+        metric=metric,
+    )
+
+    connectivities = cast(csr_matrix, adata.obsp["shared_neighbors_connectivities"])
+    distances = cast(csr_matrix, adata.obsp["shared_neighbors_distances"])
+    assert connectivities.nnz == 2
+    assert distances.nnz == 2
+    assert connectivities[0, 1] == pytest.approx(expected)
+    assert connectivities[1, 0] == pytest.approx(expected)
+    assert distances[0, 1] == pytest.approx(1 - expected)
+    assert np.all((connectivities.data >= 0) & (connectivities.data <= 1))
+    assert adata.uns["shared_neighbors"]["params"]["metric"] == metric
+
+
+def test_shared_neighbors_metrics_match_dense_definitions():
+    neighborhoods = (
+        (1, 2, 4),
+        (2, 3),
+        (0, 3, 4),
+        (0, 1, 4),
+        (1,),
+    )
+    n_obs = len(neighborhoods)
+    source_distances = np.zeros((n_obs, n_obs), dtype=np.float32)
+    source_weights = np.zeros((n_obs, n_obs), dtype=np.float32)
+    ranks = []
+    for row, neighbors in enumerate(neighborhoods):
+        row_ranks = {}
+        for rank, neighbor in enumerate(neighbors, start=1):
+            source_distances[row, neighbor] = rank / 10
+            source_weights[row, neighbor] = (1 + ((2 * row + neighbor) % 7)) / 10
+            row_ranks[neighbor] = rank
+        ranks.append(row_ranks)
+
+    adata = ad.AnnData(X=np.zeros((n_obs, 1), dtype=np.float32))
+    adata.obsp["distances"] = csr_matrix(source_distances)
+    adata.obsp["connectivities"] = csr_matrix(source_weights)
+    adata.uns["neighbors"] = {
+        "distances_key": "distances",
+        "connectivities_key": "connectivities",
+        "params": {"n_neighbors": 4},
+    }
+
+    maximum_ranked_score = sum(1 / (2 * rank) for rank in range(1, 4))
+    for metric in (
+        "jaccard",
+        "overlap",
+        "binary-cosine",
+        "weighted-jaccard",
+        "ranked-jaccard",
+    ):
+        expected = np.zeros((n_obs, n_obs), dtype=np.float32)
+        for left in range(n_obs):
+            left_neighbors = set(neighborhoods[left])
+            for right in range(left + 1, n_obs):
+                right_neighbors = set(neighborhoods[right])
+                shared = left_neighbors & right_neighbors
+                if not shared:
+                    continue
+                if metric == "jaccard":
+                    value = len(shared) / len(left_neighbors | right_neighbors)
+                elif metric == "overlap":
+                    value = len(shared) / min(
+                        len(left_neighbors),
+                        len(right_neighbors),
+                    )
+                elif metric == "binary-cosine":
+                    value = len(shared) / np.sqrt(
+                        len(left_neighbors) * len(right_neighbors)
+                    )
+                elif metric == "weighted-jaccard":
+                    intersection = sum(
+                        min(
+                            source_weights[left, neighbor],
+                            source_weights[right, neighbor],
+                        )
+                        for neighbor in shared
+                    )
+                    union = sum(
+                        max(
+                            source_weights[left, neighbor],
+                            source_weights[right, neighbor],
+                        )
+                        for neighbor in left_neighbors | right_neighbors
+                    )
+                    value = intersection / union
+                else:
+                    value = (
+                        sum(
+                            1 / (ranks[left][neighbor] + ranks[right][neighbor])
+                            for neighbor in shared
+                        )
+                        / maximum_ranked_score
+                    )
+                expected[left, right] = value
+                expected[right, left] = value
+
+        bt.omics.tl.shared_neighbors(
+            adata,
+            prune=0,
+            metric=cast(Any, metric),
+        )
+
+        connectivities = cast(
+            csr_matrix,
+            adata.obsp["shared_neighbors_connectivities"],
+        )
+        distances = cast(csr_matrix, adata.obsp["shared_neighbors_distances"])
+        expected_distances = np.where(expected > 0, 1 - expected, 0)
+        np.testing.assert_allclose(connectivities.toarray(), expected, rtol=1e-6)
+        np.testing.assert_allclose(
+            distances.toarray(),
+            expected_distances,
+            rtol=1e-6,
+        )
+        assert distances.nnz == np.count_nonzero(expected)
+
+
+def test_shared_neighbors_supports_more_than_127_neighbors():
+    n_obs = 132
+    source_distances = csr_matrix(
+        np.ones((n_obs, n_obs), dtype=np.float32)
+        - np.eye(n_obs, dtype=np.float32)
+    )
+    adata = ad.AnnData(X=np.zeros((n_obs, 1), dtype=np.float32))
+    adata.obsp["distances"] = source_distances
+    adata.uns["neighbors"] = {
+        "distances_key": "distances",
+        "params": {"n_neighbors": n_obs},
+    }
+
+    bt.omics.tl.shared_neighbors(adata, prune=0)
+
+    connectivities = cast(
+        csr_matrix,
+        adata.obsp["shared_neighbors_connectivities"],
+    )
+    assert connectivities[0, 1] == pytest.approx((n_obs - 2) / n_obs)
+
+
+def test_shared_neighbors_deprecated_key_arguments_warn_and_delegate(mini_adata):
+    deprecated_shared_neighbors = cast(Any, bt.omics.tl.shared_neighbors)
+
+    with pytest.warns(FutureWarning) as warning_records:
+        result = deprecated_shared_neighbors(
+            mini_adata,
+            knn_key="neighbors",
+            snn_key="legacy_snn",
+            prune=0,
+            copy=True,
+        )
+
+    messages = tuple(str(record.message) for record in warning_records)
+    assert any("`knn_key` is deprecated" in message for message in messages)
+    assert any("`snn_key` is deprecated" in message for message in messages)
+    assert "legacy_snn" in result.uns
+
+
+def test_shared_neighbors_deprecated_and_current_keys_are_mutually_exclusive(
+    mini_adata,
+):
+    deprecated_shared_neighbors = cast(Any, bt.omics.tl.shared_neighbors)
+
+    with pytest.warns(FutureWarning, match="`knn_key` is deprecated"):
+        with pytest.raises(TypeError, match="either 'knn_key' or 'neighbors_key'"):
+            deprecated_shared_neighbors(
+                mini_adata,
+                neighbors_key="neighbors",
+                knn_key="neighbors",
+            )
+
+
+def test_shared_neighbors_does_not_accept_deprecated_prune_name(mini_adata):
+    with pytest.raises(TypeError, match="unexpected keyword argument 'prune_snn'"):
+        cast(Any, bt.omics.tl.shared_neighbors)(mini_adata, prune_snn=0)
+
+
+def test_shared_neighbors_options_are_keyword_only(mini_adata):
+    with pytest.raises(TypeError):
+        cast(Any, bt.omics.tl.shared_neighbors)(mini_adata, "neighbors")
 
 
 def test_shared_neighbors_validates_source_graph_and_pruning(mini_adata):
     with pytest.raises(KeyError, match="neighborhood graph not found"):
-        bt.omics.tl.shared_neighbors(mini_adata, knn_key="missing")
+        bt.omics.tl.shared_neighbors(mini_adata, neighbors_key="missing")
 
-    with pytest.raises(ValueError, match="invalid argument value for 'prune_snn'"):
-        bt.omics.tl.shared_neighbors(mini_adata, prune_snn=-1)
+    with pytest.raises(ValueError, match="invalid argument value for 'prune'"):
+        bt.omics.tl.shared_neighbors(mini_adata, prune=-1)
+
+    with pytest.raises(ValueError, match="expected integer"):
+        bt.omics.tl.shared_neighbors(mini_adata, prune=1.5)
+
+    with pytest.raises(ValueError, match="invalid argument value for 'metric'"):
+        bt.omics.tl.shared_neighbors(mini_adata, metric=cast(Any, "euclidean"))
+
+    del mini_adata.obsp["connectivities"]
+    with pytest.raises(KeyError, match="requires a source connectivity graph"):
+        bt.omics.tl.shared_neighbors(mini_adata, metric="weighted-jaccard")

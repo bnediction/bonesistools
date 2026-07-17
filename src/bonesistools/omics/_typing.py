@@ -108,6 +108,13 @@ Metric: TypeAlias = Literal[
     "wminkowski",
     "yule",
 ]
+SNNMetric: TypeAlias = Literal[
+    "jaccard",
+    "weighted-jaccard",
+    "overlap",
+    "binary-cosine",
+    "ranked-jaccard",
+]
 UMAPMetric: TypeAlias = Literal[
     "braycurtis",
     "canberra",

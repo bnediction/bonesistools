@@ -1330,21 +1330,24 @@ class Orthologs:
                 kind="mergesort",
             ).reset_index(drop=True),
         )
-        return paths[
-            [
-                "source_symbol",
-                "target_symbol",
-                "human_symbol",
-                "source_support",
-                "target_support",
-                "source_evidence",
-                "target_evidence",
-                "evidence",
-                "best_evidence",
-                "paths",
-                "support",
-            ]
-        ]
+        return cast(
+            pd.DataFrame,
+            paths[
+                [
+                    "source_symbol",
+                    "target_symbol",
+                    "human_symbol",
+                    "source_support",
+                    "target_support",
+                    "source_evidence",
+                    "target_evidence",
+                    "evidence",
+                    "best_evidence",
+                    "paths",
+                    "support",
+                ]
+            ],
+        )
 
     @staticmethod
     def _is_interaction(item: Any) -> bool:

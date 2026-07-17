@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import math
 import warnings
+from functools import wraps
 from importlib import import_module
 from importlib import util as importlib_util
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Hashable,
     Iterable,
@@ -18,6 +20,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     overload,
@@ -30,7 +33,6 @@ from networkx import DiGraph, Graph
 from scipy.sparse import (
     coo_matrix,
     csr_matrix,
-    diags,
     issparse,
 )
 
@@ -52,6 +54,7 @@ from .._typing import (
     Metric,
     ScData,
     Shortest_Path_Method,
+    SNNMetric,
     anndata_or_mudata_checker,
 )
 from ._utils import (
@@ -63,9 +66,11 @@ from ._utils import (
 IndexOrName = Literal["index", "name"]
 NeighborBackend = Literal["exact", "pynndescent"]
 NeighborConnectivityMethod = Literal["fuzzy", "binary"]
+_F = TypeVar("_F", bound=Callable[..., Any])
 _SMOOTH_K_TOLERANCE = 1e-5
 _MIN_K_DIST_SCALE = 0.001
 _NPY_FLOATMAX = np.float32(3.4028235e38)
+_SNN_SCORE_CHUNK_SIZE = 500_000
 
 
 @overload
@@ -1863,14 +1868,39 @@ def _normalize_knnsc_configuration(
     )
 
 
+def _support_legacy_shared_neighbors_arguments(function: _F) -> _F:
+    """Accept deprecated shared-neighbor argument names."""
+
+    deprecated_arguments = {
+        "knn_key": "neighbors_key",
+        "snn_key": "key_added",
+    }
+
+    @wraps(function)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        for old_name, new_name in deprecated_arguments.items():
+            if old_name not in kwargs:
+                continue
+            _warn_deprecated_argument(old_name, new_name, stacklevel=4)
+            if new_name in kwargs:
+                raise TypeError(
+                    f"invalid argument combination: use either '{old_name}' "
+                    f"or '{new_name}', not both"
+                )
+            kwargs[new_name] = kwargs.pop(old_name)
+        return function(*args, **kwargs)
+
+    return cast(_F, wrapper)
+
+
 @overload
 def shared_neighbors(
     scdata: ScData,
-    knn_key: str = "neighbors",
-    snn_key: str = "shared_neighbors",
-    prune_snn: Optional[Union[float, int]] = 1 / 15,
-    normalize_connectivities: bool = True,
-    metric: Metric = "euclidean",
+    *,
+    neighbors_key: str = "neighbors",
+    key_added: str = "shared_neighbors",
+    prune: Optional[Union[float, int]] = 1 / 15,
+    metric: SNNMetric = "jaccard",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: Literal[False] = False,
@@ -1880,14 +1910,13 @@ def shared_neighbors(
 @overload
 def shared_neighbors(
     scdata: ScData,
-    knn_key: str = "neighbors",
-    snn_key: str = "shared_neighbors",
-    prune_snn: Optional[Union[float, int]] = 1 / 15,
-    normalize_connectivities: bool = True,
-    metric: Metric = "euclidean",
+    *,
+    neighbors_key: str = "neighbors",
+    key_added: str = "shared_neighbors",
+    prune: Optional[Union[float, int]] = 1 / 15,
+    metric: SNNMetric = "jaccard",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
-    *,
     copy: Literal[True],
 ) -> ScData: ...
 
@@ -1895,65 +1924,87 @@ def shared_neighbors(
 @overload
 def shared_neighbors(
     scdata: ScData,
-    knn_key: str = "neighbors",
-    snn_key: str = "shared_neighbors",
-    prune_snn: Optional[Union[float, int]] = 1 / 15,
-    normalize_connectivities: bool = True,
-    metric: Metric = "euclidean",
+    *,
+    neighbors_key: str = "neighbors",
+    key_added: str = "shared_neighbors",
+    prune: Optional[Union[float, int]] = 1 / 15,
+    metric: SNNMetric = "jaccard",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False,
 ) -> Optional[ScData]: ...
 
 
+@_support_legacy_shared_neighbors_arguments
 @anndata_or_mudata_checker
 def shared_neighbors(
     scdata: ScData,  # type: ignore
-    knn_key: str = "neighbors",
-    snn_key: str = "shared_neighbors",
-    prune_snn: Optional[Union[float, int]] = 1 / 15,
-    normalize_connectivities: bool = True,
-    metric: Metric = "euclidean",
+    *,
+    neighbors_key: str = "neighbors",
+    key_added: str = "shared_neighbors",
+    prune: Optional[Union[float, int]] = 1 / 15,
+    metric: SNNMetric = "jaccard",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
     copy: bool = False,
 ) -> Optional[ScData]:  # type: ignore
     """
-    Compute a shared-nearest-neighbor graph of observations.
+    Compute a shared nearest neighbor (SNN) graph of observations.
 
-    The neighbor search relies on a previously computed neighborhood graph,
-    such as one produced by `scanpy.pp.neighbors`.
-
-    Parameters
-    ----------
-    scdata: AnnData or MuData
-        Unimodal or multimodal annotated data matrix.
-    knn_key: str (default: 'neighbors')
-        Key in `scdata.uns` containing the source neighborhood graph metadata.
-    snn_key: str (default: 'shared_neighbors')
-        Key used to store shared-neighbor graph metadata in `scdata.uns`.
-    prune_snn: float | int (default: 1/15)
-        If zero, no pruning is performed. If strictly positive, remove edges
-        whose number of shared neighbors is less than or equal to the threshold.
-        Value can be relative (float between 0 and 1) or absolute
-        (integer between 1 and k).
-    normalize_connectivities: bool (default: True)
-        If `False`, connectivities store the absolute number of shared neighbors.
-        Otherwise, connectivities are normalized.
-    metric: Metric (default: 'euclidean')
-        Metric used when calculating pairwise distances between observations.
-    distances_key: str (optional, default: None)
-        Key used to store distances in `scdata.obsp`.
-    connectivities_key: str (optional, default: None)
-        Key used to store connectivities in `scdata.obsp`.
-    copy: bool (default: False)
-        Return a copy instead of modifying `scdata`.
+    Shared-neighbor connectivities are computed between the neighborhoods
+    stored by a previous call to `neighbors` or an equivalent tool.
 
     Examples
     --------
     >>> bt.omics.tl.pca(adata, n_components=50)
     >>> bt.omics.tl.neighbors(adata, representation="X_pca")
     >>> bt.omics.tl.shared_neighbors(adata)
+
+    Parameters
+    ----------
+    scdata: AnnData or MuData
+        Unimodal or multimodal annotated data matrix.
+    neighbors_key: str (default: 'neighbors')
+        Key in `scdata.uns` containing the source neighborhood graph metadata.
+    key_added: str (default: 'shared_neighbors')
+        Key used to store shared-neighbor graph metadata in `scdata.uns`.
+    prune: float | int (default: 1/15)
+        Prune edges according to the raw number of shared neighbors before
+        computing the selected similarity metric. If zero, no pruning is
+        performed. Otherwise, edges at or below the threshold are removed.
+        The threshold can be relative (float between 0 and 1) or absolute
+        (integer between 1 and k).
+    metric: {'jaccard', 'weighted-jaccard', 'overlap', 'binary-cosine',
+             'ranked-jaccard'}
+        Shared-neighbor similarity metric:
+        - `jaccard` (default): intersection divided by union;
+        - `weighted-jaccard`: source-connectivity-weighted Jaccard;
+        - `overlap`: intersection divided by the smaller neighborhood;
+        - `binary-cosine`: cosine similarity of binary neighborhood vectors;
+        - `ranked-jaccard`: rank-weighted Jaccard normalized to `[0, 1]`.
+    distances_key: str (optional, default: None)
+        Key used to store distances in `scdata.obsp`. If `None`, uses
+        `f"{key_added}_distances"`.
+    connectivities_key: str (optional, default: None)
+        Key used to store connectivities in `scdata.obsp`. If `None`, uses
+        `f"{key_added}_connectivities"`.
+    copy: bool (default: False)
+        Return a copy instead of modifying `scdata`.
+
+    Notes
+    -----
+    Unlike `neighbors`, this function constructs a shared nearest neighbor
+    (SNN) graph whose edge weights measure the similarity between local
+    neighborhoods rather than pairwise proximity. All supported similarity
+    metrics return connectivities normalized to the interval `[0, 1]`,
+    allowing the resulting graph to be used directly with graph-based
+    algorithms such as Leiden, Louvain, PAGA, diffusion maps and UMAP.
+
+    Distances are defined as
+
+        distance = 1 - connectivity
+
+    for every retained edge.
 
     Returns
     -------
@@ -1963,110 +2014,472 @@ def shared_neighbors(
 
         Shared-neighbor results are stored in:
 
-        - `scdata.uns[snn_key]`: shared-neighbor graph metadata;
+        - `scdata.uns[key_added]`: shared-neighbor graph metadata;
         - `scdata.obsp[distances_key]`: pairwise distances;
         - `scdata.obsp[connectivities_key]`: shared-neighbor connectivities.
 
     Raises
     ------
     KeyError
-        If `knn_key` is not found in `scdata.uns`.
+        If `neighbors_key` is not found in `scdata.uns`.
     ValueError
-        If `prune_snn` is negative or greater than or equal to the number of
-        neighbors.
+        If `prune` is negative or greater than or equal to the number of
+        neighbors, or if `metric` is invalid.
     """
 
-    from sklearn.metrics import pairwise_distances
-
-    if knn_key not in scdata.uns:
+    if neighbors_key not in scdata.uns:
         raise KeyError(
             "neighborhood graph not found in 'scdata': "
-            "please run 'scanpy.pp.neighbors' or specify 'knn_key'"
+            "please run 'scanpy.pp.neighbors' or specify 'neighbors_key'"
         )
-    if prune_snn is None:
-        prune_snn = 0
+    if prune is None:
+        prune = 0
     if distances_key is None:
-        distances_key = f"{snn_key}_distances"
+        distances_key = f"{key_added}_distances"
     if connectivities_key is None:
-        connectivities_key = f"{snn_key}_connectivities"
-    n_neighbors = scdata.uns[knn_key]["params"]["n_neighbors"]
+        connectivities_key = f"{key_added}_connectivities"
+    metric = _as_literal(
+        metric,
+        choices=get_args(SNNMetric),
+        name="metric",
+    )
+    n_neighbors = _as_positive_integer(
+        scdata.uns[neighbors_key]["params"]["n_neighbors"],
+        "n_neighbors",
+    )
+    neighborhood_size = n_neighbors - 1
+    prune_threshold = _resolve_snn_pruning(
+        prune,
+        neighborhood_size=neighborhood_size,
+    )
 
     scdata = scdata.copy() if copy else scdata
 
-    snn_graph = _shared_nearest_neighbors_graph(
-        scdata, cluster_key=knn_key, prune_snn=prune_snn
+    source_distances = _snn_source_distances(
+        scdata,
+        neighbors_key=neighbors_key,
     )
-
-    knn_params = scdata.uns[knn_key]["params"]
-    n_pcs = knn_params["n_pcs"]
-    representation = knn_params.get("representation", knn_params.get("use_rep"))
-    representation = _as_string(representation, "representation")
-
-    representation_mtx = scdata.obsm[representation][:, 0:n_pcs]
-    zeros_ones = snn_graph.toarray()
-    zeros_ones[zeros_ones > 0] = 1
-
-    distances_matrix = pairwise_distances(representation_mtx, metric=metric)
-    distances_matrix = np.multiply(zeros_ones, distances_matrix)
-    distances_matrix = csr_matrix(distances_matrix)
-    connectivities_matrix = snn_graph.copy()
-    if normalize_connectivities:
-        connectivities_matrix = connectivities_matrix.astype(float)
-        connectivities_matrix.data /= n_neighbors
+    neighborhood_graph = _binary_neighborhood_graph(source_distances)
+    shared_counts = _shared_neighbor_counts(
+        neighborhood_graph,
+        prune_threshold=prune_threshold,
+    )
+    degrees = np.diff(neighborhood_graph.indptr)
+    connectivities_matrix = _snn_connectivities(
+        scdata,
+        neighbors_key=neighbors_key,
+        source_distances=source_distances,
+        neighborhood_graph=neighborhood_graph,
+        shared_counts=shared_counts,
+        degrees=degrees,
+        metric=metric,
+    )
+    distances_matrix = connectivities_matrix.copy()
+    distances_matrix.data = np.asarray(
+        1.0 - distances_matrix.data,
+        dtype=np.float32,
+    )
 
     scdata.obsp[distances_key] = distances_matrix
     scdata.obsp[connectivities_key] = connectivities_matrix
 
-    scdata.uns[snn_key] = dict()
-    scdata.uns[snn_key]["distances_key"] = distances_key
-    scdata.uns[snn_key]["connectivities_key"] = connectivities_key
-    scdata.uns[snn_key]["params"] = {
-        "knn_base": f"scdata.uns['{knn_key}']",
-        "prune_snn": (
-            prune_snn if prune_snn >= 1 else math.ceil(n_neighbors * prune_snn)
-        ),
+    scdata.uns[key_added] = dict()
+    scdata.uns[key_added]["distances_key"] = distances_key
+    scdata.uns[key_added]["connectivities_key"] = connectivities_key
+    scdata.uns[key_added]["params"] = {
+        "knn_base": f"scdata.uns['{neighbors_key}']",
+        "prune": prune_threshold,
         "metric": metric,
     }
 
     return scdata if copy else None
 
 
-@anndata_or_mudata_checker
-def _shared_nearest_neighbors_graph(
-    scdata: ScData,
-    cluster_key: str,
-    prune_snn: float,  # type: ignore
-) -> csr_matrix:
+def _resolve_snn_pruning(
+    prune: Optional[Union[float, int]],
+    *,
+    neighborhood_size: int,
+) -> int:
+    """Resolve a relative or absolute shared-neighbor threshold."""
 
-    n_neighbors = scdata.uns[cluster_key]["params"]["n_neighbors"] - 1
-    prune_snn = _as_non_negative_number(prune_snn, "prune_snn")
-    if prune_snn < 1:
-        prune_snn = math.ceil(n_neighbors * prune_snn)
-    elif prune_snn >= n_neighbors:
-        raise ValueError(
-            f"invalid argument values for 'prune_snn' and 'n_neighbors': "
-            f"expected prune_snn < n_neighbors but received "
-            f"prune_snn={prune_snn!r} and n_neighbors={n_neighbors!r}"
-        )
-
-    n_cells = scdata.n_obs
-    distances_key = scdata.uns[cluster_key]["distances_key"]
-
-    neighborhood_graph = scdata.obsp[distances_key].copy()
-    if not issparse(neighborhood_graph):
-        neighborhood_graph = csr_matrix(neighborhood_graph)
-    neighborhood_graph.data[neighborhood_graph.data > 0] = 1
-
-    neighborhood_graph = neighborhood_graph * neighborhood_graph.transpose()
-    neighborhood_graph -= n_neighbors * diags(
-        np.ones(n_cells), offsets=0, shape=(n_cells, n_cells)
+    resolved = _as_non_negative_number(
+        0 if prune is None else prune,
+        "prune",
     )
-    neighborhood_graph.sort_indices()
-    neighborhood_graph = neighborhood_graph.astype(dtype=np.int8)
+    threshold = (
+        math.ceil(neighborhood_size * resolved)
+        if resolved < 1
+        else _as_non_negative_integer(resolved, "prune")
+    )
+    if threshold >= neighborhood_size:
+        raise ValueError(
+            f"invalid argument values for 'prune' and 'n_neighbors': "
+            f"expected prune < n_neighbors but received "
+            f"prune={prune!r} and n_neighbors={neighborhood_size!r}"
+        )
+    return threshold
 
-    if prune_snn:
-        mask = neighborhood_graph.data <= prune_snn
-        neighborhood_graph.data[mask] = 0
-        neighborhood_graph.eliminate_zeros()
 
-    return neighborhood_graph
+def _snn_source_distances(
+    scdata: ScData,
+    *,
+    neighbors_key: str,
+) -> csr_matrix:
+    """Retrieve and validate a CSR copy of KNN distances without self-loops."""
+
+    distances_key = scdata.uns[neighbors_key]["distances_key"]
+    source = scdata.obsp[distances_key]
+    if issparse(source):
+        distances = cast(csr_matrix, source.tocsr(copy=True))
+    else:
+        distances = csr_matrix(source)
+    distances.sum_duplicates()
+    distances.setdiag(0)
+    distances.eliminate_zeros()
+    distances.sort_indices()
+    if np.any(~np.isfinite(distances.data)) or np.any(distances.data < 0):
+        raise ValueError("invalid KNN distance graph: expected finite distances >= 0")
+    return distances
+
+
+def _binary_neighborhood_graph(source_distances: csr_matrix) -> csr_matrix:
+    """Encode non-zero KNN entries as binary neighborhood vectors."""
+
+    return csr_matrix(
+        (
+            np.ones(source_distances.nnz, dtype=np.int32),
+            source_distances.indices.copy(),
+            source_distances.indptr.copy(),
+        ),
+        shape=source_distances.shape,
+    )
+
+
+def _shared_neighbor_counts(
+    neighborhood_graph: csr_matrix,
+    *,
+    prune_threshold: int,
+) -> csr_matrix:
+    """Count shared neighbors for every pair with a non-empty intersection."""
+
+    counts = cast(
+        csr_matrix,
+        neighborhood_graph @ neighborhood_graph.transpose(),
+    )
+    counts = counts.tocsr()
+    counts.setdiag(0)
+    counts.eliminate_zeros()
+    if prune_threshold:
+        counts.data[counts.data <= prune_threshold] = 0
+        counts.eliminate_zeros()
+    counts.sort_indices()
+    return counts
+
+
+def _snn_connectivities(
+    scdata: ScData,
+    *,
+    neighbors_key: str,
+    source_distances: csr_matrix,
+    neighborhood_graph: csr_matrix,
+    shared_counts: csr_matrix,
+    degrees: np.ndarray,
+    metric: SNNMetric,
+) -> csr_matrix:
+    """Normalize shared-neighbor scores with the selected metric."""
+
+    if metric in ("jaccard", "overlap", "binary-cosine"):
+        return _binary_snn_connectivities(
+            shared_counts,
+            degrees=degrees,
+            metric=metric,
+        )
+    if metric == "weighted-jaccard":
+        weights = _snn_neighborhood_weights(
+            scdata,
+            neighbors_key=neighbors_key,
+            neighborhood_graph=neighborhood_graph,
+        )
+        return _weighted_jaccard_connectivities(
+            weights,
+            shared_counts=shared_counts,
+        )
+    return _ranked_jaccard_connectivities(
+        source_distances,
+        shared_counts=shared_counts,
+        degrees=degrees,
+    )
+
+
+def _binary_snn_connectivities(
+    shared_counts: csr_matrix,
+    *,
+    degrees: np.ndarray,
+    metric: SNNMetric,
+) -> csr_matrix:
+    """Normalize binary-neighborhood intersections."""
+
+    rows = _csr_rows(shared_counts)
+    columns = shared_counts.indices
+    intersections = shared_counts.data.astype(np.float64, copy=False)
+    left_degrees = degrees[rows].astype(np.float64, copy=False)
+    right_degrees = degrees[columns].astype(np.float64, copy=False)
+    if metric == "jaccard":
+        denominators = left_degrees + right_degrees - intersections
+    elif metric == "overlap":
+        denominators = np.minimum(left_degrees, right_degrees)
+    else:
+        denominators = np.sqrt(left_degrees * right_degrees)
+    values = np.divide(
+        intersections,
+        denominators,
+        out=np.zeros_like(intersections),
+        where=denominators > 0,
+    ).astype(np.float32, copy=False)
+    return _connectivity_matrix(shared_counts, values)
+
+
+def _snn_neighborhood_weights(
+    scdata: ScData,
+    *,
+    neighbors_key: str,
+    neighborhood_graph: csr_matrix,
+) -> csr_matrix:
+    """Restrict source KNN connectivities to directed neighborhoods."""
+
+    connectivities_key = scdata.uns[neighbors_key].get("connectivities_key")
+    if connectivities_key is None or connectivities_key not in scdata.obsp:
+        raise KeyError(
+            "KNN connectivities not found in 'scdata': "
+            "metric='weighted-jaccard' requires a source connectivity graph"
+        )
+    source = scdata.obsp[connectivities_key]
+    if issparse(source):
+        weights = cast(csr_matrix, source.tocsr(copy=True))
+    else:
+        weights = csr_matrix(source)
+    weights.sum_duplicates()
+    weights.setdiag(0)
+    weights.eliminate_zeros()
+    if np.any(~np.isfinite(weights.data)) or np.any(weights.data < 0):
+        raise ValueError("invalid KNN connectivity graph: expected finite weights >= 0")
+    weights = cast(csr_matrix, weights.multiply(neighborhood_graph).tocsr())
+    weights.eliminate_zeros()
+    weights.sort_indices()
+    return weights.astype(np.float32, copy=False)
+
+
+def _weighted_jaccard_connectivities(
+    weights: csr_matrix,
+    *,
+    shared_counts: csr_matrix,
+) -> csr_matrix:
+    """Normalize minimum weighted intersections by weighted unions."""
+
+    intersections = _pairwise_shared_scores(weights, method="minimum")
+    intersections = _restrict_snn_scores(intersections, shared_counts)
+    rows = _csr_rows(intersections)
+    columns = intersections.indices
+    weight_sums = np.asarray(weights.sum(axis=1)).ravel()
+    denominators = (
+        weight_sums[rows] + weight_sums[columns] - intersections.data
+    )
+    values = np.divide(
+        intersections.data,
+        denominators,
+        out=np.zeros_like(intersections.data),
+        where=denominators > 0,
+    ).astype(np.float32, copy=False)
+    return _connectivity_matrix(intersections, values)
+
+
+def _ranked_jaccard_connectivities(
+    source_distances: csr_matrix,
+    *,
+    shared_counts: csr_matrix,
+    degrees: np.ndarray,
+) -> csr_matrix:
+    """Normalize rank-weighted shared-neighbor scores."""
+
+    ranks = _snn_rank_matrix(source_distances)
+    scores = _pairwise_shared_scores(ranks, method="ranked")
+    scores = _restrict_snn_scores(scores, shared_counts)
+    max_degree = int(degrees.max(initial=0))
+    if max_degree == 0:
+        return csr_matrix(shared_counts.shape, dtype=np.float32)
+    maximum_score = np.sum(
+        1.0 / (2.0 * np.arange(1, max_degree + 1, dtype=np.float64))
+    )
+    values = np.asarray(scores.data / maximum_score, dtype=np.float32)
+    return _connectivity_matrix(scores, values)
+
+
+def _snn_rank_matrix(source_distances: csr_matrix) -> csr_matrix:
+    """Encode each neighbor by its one-based distance rank."""
+
+    ranks = _binary_neighborhood_graph(source_distances).astype(np.float32)
+    n_rows = cast(Tuple[int, int], source_distances.shape)[0]
+    for row in range(n_rows):
+        start = source_distances.indptr[row]
+        end = source_distances.indptr[row + 1]
+        if end == start:
+            continue
+        order = np.lexsort(
+            (
+                source_distances.indices[start:end],
+                source_distances.data[start:end],
+            )
+        )
+        row_ranks = np.empty(end - start, dtype=np.float32)
+        row_ranks[order] = np.arange(1, end - start + 1, dtype=np.float32)
+        ranks.data[start:end] = row_ranks
+    return ranks
+
+
+def _pairwise_shared_scores(
+    values: csr_matrix,
+    *,
+    method: Literal["minimum", "ranked"],
+) -> csr_matrix:
+    """Accumulate weighted contributions over shared sparse columns."""
+
+    columns = values.tocsc()
+    shape = cast(Tuple[int, int], values.shape)
+    scores = csr_matrix(shape, dtype=np.float32)
+    row_chunks = []
+    column_chunks = []
+    value_chunks = []
+    pair_indices: Dict[int, Tuple[np.ndarray, np.ndarray]] = {}
+    pending_scores = 0
+    n_columns = cast(Tuple[int, int], columns.shape)[1]
+    for feature in range(n_columns):
+        start = columns.indptr[feature]
+        end = columns.indptr[feature + 1]
+        size = end - start
+        if size < 2:
+            continue
+        pairs = pair_indices.get(size)
+        if pairs is None:
+            pairs = np.triu_indices(size, k=1)
+            pair_indices[size] = pairs
+        left, right = pairs
+        rows = columns.indices[start:end]
+        feature_values = columns.data[start:end]
+        row_chunks.append(rows[left])
+        column_chunks.append(rows[right])
+        if method == "minimum":
+            contributions = np.minimum(
+                feature_values[left],
+                feature_values[right],
+            )
+        else:
+            contributions = 1.0 / (
+                feature_values[left] + feature_values[right]
+            )
+        value_chunks.append(np.asarray(contributions, dtype=np.float32))
+        pending_scores += left.size
+        if pending_scores >= _SNN_SCORE_CHUNK_SIZE:
+            scores = cast(
+                csr_matrix,
+                (
+                    scores
+                    + _symmetric_snn_score_chunk(
+                        row_chunks,
+                        column_chunks,
+                        value_chunks,
+                        shape=shape,
+                    )
+                ).tocsr(),
+            )
+            row_chunks.clear()
+            column_chunks.clear()
+            value_chunks.clear()
+            pending_scores = 0
+    if row_chunks:
+        scores = cast(
+            csr_matrix,
+            (
+                scores
+                + _symmetric_snn_score_chunk(
+                    row_chunks,
+                    column_chunks,
+                    value_chunks,
+                    shape=shape,
+                )
+            ).tocsr(),
+        )
+    scores.sum_duplicates()
+    scores.sort_indices()
+    return scores
+
+
+def _symmetric_snn_score_chunk(
+    row_chunks: Sequence[np.ndarray],
+    column_chunks: Sequence[np.ndarray],
+    value_chunks: Sequence[np.ndarray],
+    *,
+    shape: Tuple[int, int],
+) -> csr_matrix:
+    """Combine sparse upper-triangle contributions and their transpose."""
+
+    upper_rows = np.concatenate(row_chunks)
+    upper_columns = np.concatenate(column_chunks)
+    contributions = np.concatenate(value_chunks)
+    return cast(
+        csr_matrix,
+        coo_matrix(
+            (
+                np.concatenate((contributions, contributions)),
+                (
+                    np.concatenate((upper_rows, upper_columns)),
+                    np.concatenate((upper_columns, upper_rows)),
+                ),
+            ),
+            shape=shape,
+            dtype=np.float32,
+        ).tocsr(),
+    )
+
+
+def _restrict_snn_scores(
+    scores: csr_matrix,
+    shared_counts: csr_matrix,
+) -> csr_matrix:
+    """Restrict weighted scores to retained shared-neighbor edges."""
+
+    retained = shared_counts.copy()
+    retained.data.fill(1)
+    scores = cast(csr_matrix, scores.multiply(retained).tocsr())
+    scores.eliminate_zeros()
+    scores.sort_indices()
+    return scores
+
+
+def _connectivity_matrix(
+    structure: csr_matrix,
+    values: np.ndarray,
+) -> csr_matrix:
+    """Build a bounded connectivity matrix with an existing CSR structure."""
+
+    values = np.asarray(values, dtype=np.float32)
+    np.clip(values, 0.0, 1.0, out=values)
+    connectivities = csr_matrix(
+        (
+            values,
+            structure.indices.copy(),
+            structure.indptr.copy(),
+        ),
+        shape=structure.shape,
+    )
+    connectivities.eliminate_zeros()
+    return connectivities
+
+
+def _csr_rows(matrix: csr_matrix) -> np.ndarray:
+    """Return the row index associated with each CSR data entry."""
+
+    n_rows = cast(Tuple[int, int], matrix.shape)[0]
+    return np.repeat(
+        np.arange(n_rows, dtype=matrix.indices.dtype),
+        np.diff(matrix.indptr),
+    )

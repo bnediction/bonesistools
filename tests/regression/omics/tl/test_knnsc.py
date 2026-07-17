@@ -643,8 +643,7 @@ def test_shared_neighbors_pruning_and_inplace_modes(
 ):
     result = bt.omics.tl.shared_neighbors(
         mini_adata,
-        prune_snn=None,
-        normalize_connectivities=False,
+        prune=None,
         distances_key="raw_snn_distances",
         connectivities_key="raw_snn_connectivities",
         copy=True,
@@ -652,35 +651,35 @@ def test_shared_neighbors_pruning_and_inplace_modes(
 
     assert "raw_snn_distances" in result.obsp
     assert "raw_snn_connectivities" in result.obsp
-    assert result.uns["shared_neighbors"]["params"]["metric"] == "euclidean"
+    assert result.uns["shared_neighbors"]["params"]["metric"] == "jaccard"
     assert np.allclose(
         result.obsp["raw_snn_connectivities"].toarray(),
-        expected_mini_snn_connectivities,
+        expected_mini_snn_connectivities / 2,
     )
 
     dense_adata = mini_adata.copy()
     dense_adata.obsp["distances"] = dense_adata.obsp["distances"].toarray()
     dense_result = bt.omics.tl.shared_neighbors(
         dense_adata,
-        prune_snn=1,
-        snn_key="dense_snn",
+        prune=1,
+        key_added="dense_snn",
         copy=True,
     )
 
     assert np.allclose(
         dense_result.obsp["dense_snn_connectivities"].toarray(),
-        expected_mini_snn_connectivities / 3,
+        expected_mini_snn_connectivities / 2,
     )
 
     returned = bt.omics.tl.shared_neighbors(
         mini_adata,
-        prune_snn=0,
-        snn_key="snn_inplace",
+        prune=0,
+        key_added="snn_inplace",
         copy=False,
     )
 
     assert returned is None
     assert "snn_inplace" in mini_adata.uns
 
-    with pytest.raises(ValueError, match="expected prune_snn < n_neighbors"):
-        bt.omics.tl.shared_neighbors(mini_adata, prune_snn=2)
+    with pytest.raises(ValueError, match="expected prune < n_neighbors"):
+        bt.omics.tl.shared_neighbors(mini_adata, prune=2)
