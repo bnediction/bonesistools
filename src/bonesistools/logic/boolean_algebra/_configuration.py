@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Iterable, Iterator, Mapping
 from itertools import product
 from typing import List, Optional, Sequence, Tuple, Union, overload
@@ -12,6 +13,11 @@ from ._hypercube import Hypercube
 from ._typing import Configuration, ConfigurationLike, HypercubeLike
 
 _EncodedHypercube = Tuple[int, int]
+
+try:
+    _INT_BIT_COUNT = int.bit_count
+except AttributeError:  # pragma: no cover - Python < 3.8
+    _INT_BIT_COUNT = None
 
 
 class ConfigurationSet:
@@ -124,8 +130,17 @@ class ConfigurationSet:
         if not isinstance(other, ConfigurationSet):
             return NotImplemented
 
+        if self is other:
+            return True
+
         if set(self._components) != set(other._components):
             return False
+
+        if self._components == other._components:
+            if self._hypercubes == other._hypercubes:
+                return True
+            if set(self._hypercubes) == set(other._hypercubes):
+                return True
 
         if self.count() != other.count():
             return False
@@ -370,7 +385,33 @@ class ConfigurationSet:
             return self._sample_one(rng)
 
         n = _as_positive_integer(n, "n")
-        return tuple(self._sample_one(rng) for _ in range(n))
+        cumulative_sizes = []
+        total = 0
+        for hypercube in self._hypercubes:
+            total += _count_hypercube_configurations(
+                hypercube,
+                len(self._components),
+            )
+            cumulative_sizes.append(total)
+
+        sampled = []
+        for _ in range(n):
+            index = int(
+                rng.randint(total)  # pyright: ignore[reportAttributeAccessIssue]
+            )
+            hypercube_index = bisect_right(cumulative_sizes, index)
+            previous_size = (
+                cumulative_sizes[hypercube_index - 1] if hypercube_index > 0 else 0
+            )
+            sampled.append(
+                _configuration_at_index(
+                    self._hypercubes[hypercube_index],
+                    self._components,
+                    index - previous_size,
+                )
+            )
+
+        return tuple(sampled)
 
     @classmethod
     def _from_encoded_hypercubes(
@@ -497,12 +538,18 @@ def _coerce_components(components: Iterable[str]) -> Tuple[str, ...]:
     if not all(isinstance(component, str) for component in resolved):
         raise TypeError("components must be an iterable of strings")
 
-    duplicated = sorted(
-        component for component in set(resolved) if resolved.count(component) > 1
-    )
+    seen = set()
+    duplicated = set()
+    for component in resolved:
+        if component in seen:
+            duplicated.add(component)
+        else:
+            seen.add(component)
+
     if duplicated:
         raise ValueError(
-            f"components must be unique; duplicated components: {', '.join(duplicated)}"
+            "components must be unique; duplicated components: "
+            f"{', '.join(sorted(duplicated))}"
         )
 
     return resolved
@@ -739,5 +786,8 @@ def _component_values(
 
 
 def _bit_count(mask: int) -> int:
+
+    if _INT_BIT_COUNT is not None:
+        return _INT_BIT_COUNT(mask)
 
     return bin(mask).count("1")

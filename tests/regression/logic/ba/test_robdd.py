@@ -41,6 +41,22 @@ def test_robdd_configurations_and_count():
     assert robdd.count(0) == 1
 
 
+def test_robdd_configurations_builds_disjoint_encoding_without_add(monkeypatch):
+    robdd = bt.logic.ba.ROBDD("(A & B) | (~A & C)")
+
+    def fail(*args, **kwargs):
+        raise AssertionError("ROBDD paths are already disjoint")
+
+    monkeypatch.setattr(bt.logic.ba.ConfigurationSet, "add", fail)
+
+    assert robdd.configurations().enumerate() == (
+        {"A": 0, "B": 0, "C": 1},
+        {"A": 0, "B": 1, "C": 1},
+        {"A": 1, "B": 1, "C": 0},
+        {"A": 1, "B": 1, "C": 1},
+    )
+
+
 def test_robdd_constants():
     false = bt.logic.ba.ROBDD(0)
     true = bt.logic.ba.ROBDD(1)

@@ -206,6 +206,7 @@ def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
     assert copied == bn
     assert copied is not bn
     assert copied.ba is bn.ba
+    assert copied["A"] is bn["A"]
     assert copied.undefined_symbols == {"B"}
 
 

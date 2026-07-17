@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping as MappingABC
 from importlib import import_module
-from itertools import product
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import (
@@ -69,6 +69,7 @@ from ._dynamics import (
     _explicit_reachable_attractors,
     _explicit_reachable_configurations,
     _finite_state_transition,
+    _fixed_points,
     _synchronous_reachability,
     _synchronous_reachable_attractors,
     _synchronous_reachable_configurations,
@@ -362,7 +363,11 @@ class BooleanNetwork(Dict[str, Expression]):
             Shallow copy of the Boolean network.
         """
 
-        return type(self)(self, ba=self.ba, check=False)
+        return type(self)._from_expressions(
+            self,
+            ba=self.ba,
+            check=False,
+        )
 
     def executable(
         self,
@@ -1114,8 +1119,9 @@ class BooleanNetwork(Dict[str, Expression]):
         Return fixed points of the Boolean network.
 
         Fixed points are fully specified configurations `x` such that
-        `f_i(x) = x_i` for every component `i`. The computation is exhaustive
-        and therefore exponential in the number of components.
+        `f_i(x) = x_i` for every component `i`. Small state spaces are evaluated
+        with compiled bitsets; larger networks are solved symbolically. The
+        worst-case complexity remains exponential.
 
         Examples
         --------
@@ -1144,19 +1150,7 @@ class BooleanNetwork(Dict[str, Expression]):
 
         limit = _as_non_negative_integer(limit, "limit")
 
-        components = list(self.keys())
-        fixed_points = []
-
-        for values in product([0, 1], repeat=len(components)):
-            configuration = dict(zip(components, values))
-
-            if self.next_configuration(configuration) == configuration:
-                fixed_points.append(configuration)
-
-                if limit and len(fixed_points) >= limit:
-                    break
-
-        return fixed_points
+        return _fixed_points(self, limit=limit)
 
     def trap_spaces(
         self,
@@ -1992,6 +1986,23 @@ class BooleanNetwork(Dict[str, Expression]):
             f"expected str, bool, int or Expression but received {type(rule)}"
         )
 
+    @classmethod
+    def _from_expressions(
+        cls,
+        rules: Mapping[str, Expression],
+        *,
+        ba: BooleanAlgebra,
+        check: bool,
+    ) -> "BooleanNetwork":
+        """Build a network from trusted expressions without reparsing them."""
+
+        network = cls(ba=ba, check=False)
+        dict.update(network, rules)
+        if check:
+            network.validate()
+
+        return network
+
     @staticmethod
     def _normalize_boolean_value(
         value: Any,
@@ -2075,6 +2086,7 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         self.__ba = BooleanAlgebra() if ba is None else ba
         self._networks: List[BooleanNetwork] = []
+        self._rule_cache: Dict[str, Expression] = {}
 
         if components is not None:
             self._components: Set[str] = set(components)
@@ -2338,48 +2350,40 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
 
         graph = AggregatedInfluenceGraph(total=len(self))
 
-        component_implicants = self.dnf_implicants()
+        implicant_cache: Dict[Expression, Implicants] = {}
+        regulator_cache: Dict[Expression, FrozenSet[Tuple[str, bool]]] = {}
+        function_structures = {component: Counter() for component in self._components}
+        influence_counts: Counter[Tuple[str, str, bool]] = Counter()
 
-        function_counts = {}
-        function_stabilities = {}
+        for network in self:
+            for target, rule in network.items():
+                if rule not in implicant_cache:
+                    implicant_cache[rule] = dnf_implicants(
+                        rule,
+                        ba=network.ba,
+                    )
+                function_structures[target][implicant_cache[rule]] += 1
 
-        for component, implicants_by_network in component_implicants.items():
-            implicant_counts = {}
-
-            for implicants in implicants_by_network:
-                if implicants not in implicant_counts:
-                    implicant_counts[implicants] = 0
-
-                implicant_counts[implicants] += 1
-
-            function_counts[component] = len(implicant_counts)
-            function_stabilities[component] = (
-                max(implicant_counts.values()) / len(self) if implicant_counts else 0
-            )
-
-        influence_counts = self.influence_counts()
+                if rule not in regulator_cache:
+                    regulator_cache[rule] = _signed_regulators(network.ba, rule)
+                for source, sign in regulator_cache[rule]:
+                    influence_counts[source, target, sign] += 1
 
         for component in sorted(self.components):
+            structures = function_structures[component]
             graph.add_node(
                 component,
-                function_count=function_counts[component],
-                function_stability=function_stabilities[component],
+                function_count=len(structures),
+                function_stability=max(structures.values()) / len(self),
             )
 
-        for source in sorted(influence_counts):
-            targets = influence_counts[source]
-
-            for target in sorted(targets):
-                signs = targets[target]
-
-                for sign in sorted(signs):
-                    count = signs[sign]
-                    graph.add_edge(
-                        source,
-                        target,
-                        sign=1 if sign else -1,
-                        count=count,
-                    )
+        for (source, target, sign), count in sorted(influence_counts.items()):
+            graph.add_edge(
+                source,
+                target,
+                sign=1 if sign else -1,
+                count=count,
+            )
 
         if drop_isolates:
             isolated = [node for node, degree in graph.degree() if degree == 0]
@@ -2521,12 +2525,17 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         component_implicants: Dict[str, List[Implicants]] = {
             component: [] for component in self._components
         }
+        cache: Dict[Expression, Implicants] = {}
 
         for bn in self:
             for component, rule in bn.items():
-                component_implicants[component].append(
-                    dnf_implicants(rule, value=value, ba=bn.ba)
-                )
+                if rule not in cache:
+                    cache[rule] = dnf_implicants(
+                        rule,
+                        value=value,
+                        ba=bn.ba,
+                    )
+                component_implicants[component].append(cache[rule])
 
         return component_implicants
 
@@ -2572,16 +2581,17 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         component_implicants: Dict[str, List[Implicants]] = {
             component: [] for component in self._components
         }
+        cache: Dict[Expression, Implicants] = {}
 
         for bn in self:
             for component, rule in bn.items():
-                component_implicants[component].append(
-                    prime_implicants(
+                if rule not in cache:
+                    cache[rule] = prime_implicants(
                         rule,
                         value=value,
                         ba=bn.ba,
                     )
-                )
+                component_implicants[component].append(cache[rule])
 
         return component_implicants
 
@@ -2614,28 +2624,14 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         counts: Dict[str, Dict[str, Dict[bool, int]]] = {
             component: {} for component in self._components
         }
+        cache: Dict[Expression, FrozenSet[Tuple[str, bool]]] = {}
 
         for bn in self:
             for target, rule in bn.items():
-                influences: Set[Tuple[str, bool]] = set()
+                if rule not in cache:
+                    cache[rule] = _signed_regulators(bn.ba, rule)
 
-                literals = cast(
-                    Iterable[Any],
-                    rule.simplify().literalize().get_literals(),
-                )
-
-                for literal in literals:
-                    if isinstance(literal, bn.ba.NOT):
-                        operand = cast(Any, literal.args[0])
-                        regulator = cast(str, operand.obj)
-                        sign = False
-                    else:
-                        regulator = cast(str, literal.obj)
-                        sign = True
-
-                    influences.add((regulator, sign))
-
-                for regulator, sign in influences:
+                for regulator, sign in cache[rule]:
                     if regulator not in counts[target]:
                         counts[target][regulator] = {}
 
@@ -2733,4 +2729,55 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         """
 
         self._check_network(bn)
-        return BooleanNetwork(bn, ba=self.__ba, check=False)
+        rules = {}
+        for component, rule in bn.items():
+            key = _boolean_rule_cache_key(rule)
+            if key not in self._rule_cache:
+                parser = BooleanNetwork(ba=self.__ba, check=False)
+                self._rule_cache[key] = parser._coerce_rule(rule)
+            rules[component] = self._rule_cache[key]
+
+        return BooleanNetwork._from_expressions(
+            rules,
+            ba=self.__ba,
+            check=False,
+        )
+
+
+def _boolean_rule_cache_key(rule: BooleanRule) -> str:
+    """Return a stable text key before coercing an ensemble rule."""
+
+    if isinstance(rule, Expression):
+        return rule_to_string(rule)
+    if isinstance(rule, bool):
+        return "1" if rule else "0"
+    if isinstance(rule, int) and rule in (0, 1):
+        return str(rule)
+    if isinstance(rule, str):
+        return rule.strip()
+
+    raise TypeError(
+        "unsupported argument type for 'rule': expected str, bool, int or "
+        f"Expression but received {type(rule)}"
+    )
+
+
+def _signed_regulators(
+    ba: BooleanAlgebra,
+    rule: Expression,
+) -> FrozenSet[Tuple[str, bool]]:
+    """Return distinct signed literals occurring in one Boolean rule."""
+
+    influences = set()
+    literals = cast(
+        Iterable[Any],
+        rule.simplify().literalize().get_literals(),
+    )
+    for literal in literals:
+        if isinstance(literal, ba.NOT):
+            operand = cast(Any, literal.args[0])
+            influences.add((cast(str, operand.obj), False))
+        else:
+            influences.add((cast(str, literal.obj), True))
+
+    return frozenset(influences)

@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 import importlib
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     Mapping,
     Optional,
 )
+
+if TYPE_CHECKING:
+    from graphviz import Digraph  # pyright: ignore[reportMissingImports]
 
 
 def _graphviz_attributes(
@@ -40,7 +46,7 @@ def _new_graphviz_digraph(
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
     **kwargs: Any,
-) -> Any:
+) -> "Digraph":
 
     try:
         graphviz = importlib.import_module("graphviz")
@@ -94,7 +100,7 @@ def _networkx_to_graphviz(
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
     **kwargs: Any,
-) -> Any:
+) -> "Digraph":
 
     graphviz_graph = _new_graphviz_digraph(
         program=program,

@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from typing import (
     TYPE_CHECKING,
-    Any,
     Iterable,
     Iterator,
     List,
@@ -19,7 +18,15 @@ from ..._compat import Literal
 from ..._validation import _as_literal
 from ..boolean_algebra import ConfigurationSet, Hypercube
 from ..boolean_algebra._typing import Configuration, HypercubeLike
-from ._asynchronous import _bdd_asynchronous_transition_partitions
+from ._asynchronous import (
+    _AsynchronousTransition,
+    _bdd_asynchronous_forward_chaining,
+    _bdd_asynchronous_predecessors,
+    _bdd_asynchronous_relation_partitions,
+    _bdd_asynchronous_successors,
+    _bdd_asynchronous_transition_partitions,
+    _bdd_asynchronous_transition_sources,
+)
 from ._bdd import (
     _bdd_equivalence,
     _bdd_exclusive_or,
@@ -46,6 +53,12 @@ from ._synchronous import _bdd_synchronous_transition_partitions
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
+    from ._typing import (
+        _BDDConfigurationSetNode,
+        _BDDManager,
+        _BDDNode,
+        _BDDTransitionRelationNode,
+    )
 
 _SYNCHRONOUS_LARGE_NETWORK_SIZE = 90
 _SYNCHRONOUS_UNATENESS_DAG_SIZE = 256
@@ -120,6 +133,7 @@ class SymbolicTransitionSystem:
         "_and_exists",
         "_bdd",
         "_components",
+        "_current_variable_set",
         "_current_variables",
         "_direct_forward_quantification",
         "_direct_transition_clusters",
@@ -411,6 +425,10 @@ class SymbolicTransitionSystem:
         supplied, initial configurations outside that region and transitions
         leaving it are excluded.
 
+        Under asynchronous semantics, transition partitions are chained so
+        configurations reached by one partition are immediately available to
+        subsequent partitions [1].
+
         Examples
         --------
         >>> from bonesistools.logic.bn import BooleanNetwork
@@ -444,6 +462,12 @@ class SymbolicTransitionSystem:
             If an argument is not a `SymbolicConfigurationSet`.
         ValueError
             If an argument belongs to another transition system.
+
+        References
+        ----------
+        [1] Ciardo et al. (2006). The saturation algorithm for symbolic
+        state-space exploration. International Journal on Software Tools for
+        Technology Transfer, 8(1), 4-25.
         """
 
         initial_node = self._configuration_node(initial)
@@ -603,19 +627,20 @@ class SymbolicTransitionSystem:
             name="target",
         )
         initial = self._encode_hypercube(source_hypercube)
-        target = self._encode_hypercube(target_hypercube)
+        target_node = self._encode_hypercube(target_hypercube)
 
         if quantifier == "universal":
+            self._ensure_next_variables()
             target_next = self._bdd.let(
                 self._rename_current_to_next,
-                target,
+                target_node,
             )
             required_transitions = initial & target_next
             return (
                 required_transitions & ~self._transition_relation() == self._bdd.false
             )
 
-        predecessors = self._transition_predecessors(target)
+        predecessors = self._transition_predecessors(target_node)
         if quantifier == "exists":
             return initial & predecessors != self._bdd.false
 
@@ -641,9 +666,9 @@ class SymbolicTransitionSystem:
             name="target",
         )
         initial = self._encode_hypercube(source_hypercube)
-        target = self._encode_hypercube(target_hypercube)
+        target_node = self._encode_hypercube(target_hypercube)
         reachable_from_initial = self._forward_reachable_states(initial)
-        reachable_target = reachable_from_initial & target
+        reachable_target = reachable_from_initial & target_node
 
         if reachable_target == self._bdd.false:
             return False
@@ -698,10 +723,10 @@ class SymbolicTransitionSystem:
 
     def _terminal_sccs_for_region(
         self,
-        states: Any,
+        states: _BDDConfigurationSetNode,
         *,
         transition_closed: Optional[bool] = None,
-    ) -> Tuple[Any, ...]:
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """Select one shared terminal-SCC algorithm for a symbolic region."""
 
         if states == self._bdd.false:
@@ -728,7 +753,7 @@ class SymbolicTransitionSystem:
         candidates = self._transition_guided_reduction(states)
         return self._xie_beerel_terminal_sccs(candidates)
 
-    def _is_transition_closed(self, states: Any) -> bool:
+    def _is_transition_closed(self, states: _BDDConfigurationSetNode) -> bool:
         """Return whether every successor of a region remains in that region."""
 
         return self._successors(states) & ~states == self._bdd.false
@@ -745,7 +770,7 @@ class SymbolicTransitionSystem:
         def iterate() -> Iterator[Configuration]:
             for assignment in self._bdd.pick_iter(
                 reachable,
-                care_vars=self._current_variables,
+                care_vars=self._current_variable_set,
             ):
                 yield {
                     component: int(assignment[variable])
@@ -767,24 +792,28 @@ class SymbolicTransitionSystem:
 
         bdd_module = _import_dd_backend()
         self._network = network
-        self._bdd = bdd_module.BDD()
+        self._bdd: _BDDManager = bdd_module.BDD()
         self._and_exists = getattr(bdd_module, "and_exists", None)
         self._update: Literal["asynchronous", "synchronous", "general"] = update
         self._components = tuple(network.keys())
         self._current_variables = tuple(
             f"x{index}" for index in range(len(self._components))
         )
+        self._current_variable_set = set(self._current_variables)
         self._next_variables = tuple(
             f"y{index}" for index in range(len(self._components))
         )
-        ordered_variables = tuple(
-            variable
-            for pair in zip(self._current_variables, self._next_variables)
-            for variable in pair
-        )
+        if update == "asynchronous":
+            ordered_variables = self._current_variables
+        else:
+            ordered_variables = tuple(
+                variable
+                for pair in zip(self._current_variables, self._next_variables)
+                for variable in pair
+            )
         self._bdd.declare(*ordered_variables)
-        self._disjunctive_transitions: Tuple[Any, ...] = ()
-        self._transition_clusters: Tuple[Any, ...] = ()
+        self._disjunctive_transitions: Tuple[_AsynchronousTransition, ...] = ()
+        self._transition_clusters: Tuple[_BDDTransitionRelationNode, ...] = ()
         self._forward_quantification: Tuple[Tuple[str, ...], ...] = ()
         if update in {"synchronous", "general"}:
             transition_partitions = (
@@ -808,7 +837,6 @@ class SymbolicTransitionSystem:
                 bdd=self._bdd,
                 components=self._components,
                 current_vars=self._current_variables,
-                next_vars=self._next_variables,
             )
         self._rename_current_to_next = dict(
             zip(self._current_variables, self._next_variables)
@@ -820,7 +848,10 @@ class SymbolicTransitionSystem:
         self._direct_forward_quantification = None
         self._direct_transition_relation = None
 
-    def _wrap(self, node: Any) -> "SymbolicConfigurationSet":
+    def _wrap(
+        self,
+        node: _BDDConfigurationSetNode,
+    ) -> "SymbolicConfigurationSet":
         """Wrap a BDD node without copying or validating it."""
 
         return SymbolicConfigurationSet._from_node(self, node)
@@ -828,7 +859,7 @@ class SymbolicTransitionSystem:
     def _configuration_node(
         self,
         configurations: "SymbolicConfigurationSet",
-    ) -> Any:
+    ) -> _BDDConfigurationSetNode:
         """Return the BDD node of a compatible symbolic configuration set."""
 
         if not isinstance(configurations, SymbolicConfigurationSet):
@@ -845,15 +876,24 @@ class SymbolicTransitionSystem:
     def _optional_configuration_node(
         self,
         configurations: Optional["SymbolicConfigurationSet"],
-    ) -> Any:
+    ) -> Optional[_BDDConfigurationSetNode]:
         """Return a compatible node or None for an omitted symbolic set."""
 
         if configurations is None:
             return None
         return self._configuration_node(configurations)
 
-    def _direct_successors(self, configurations: Any) -> Any:
-        """Return exact one-step successors without a monolithic relation."""
+    def _direct_successors(
+        self,
+        configurations: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
+        """
+        Return exact one-step successors for the public `post()` operation.
+
+        General reachability uses identity transitions internally to simplify
+        its partitioned relation. This direct variant adds the constraint that
+        at least one component changes, as required by the public semantics.
+        """
 
         if self._update != "general":
             return self._successors(configurations)
@@ -877,7 +917,10 @@ class SymbolicTransitionSystem:
             successors,
         )
 
-    def _direct_predecessors(self, configurations: Any) -> Any:
+    def _direct_predecessors(
+        self,
+        configurations: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Return exact one-step predecessors without a monolithic relation."""
 
         if self._update != "general":
@@ -902,7 +945,10 @@ class SymbolicTransitionSystem:
 
     def _general_direct_partitions(
         self,
-    ) -> Tuple[Tuple[Any, ...], Tuple[Tuple[str, ...], ...]]:
+    ) -> Tuple[
+        Tuple[_BDDTransitionRelationNode, ...],
+        Tuple[Tuple[str, ...], ...],
+    ]:
         """Return lazily compiled partitions for non-reflexive general steps."""
 
         if (
@@ -922,7 +968,7 @@ class SymbolicTransitionSystem:
             self._direct_forward_quantification,
         )
 
-    def _general_changed_partition(self) -> Any:
+    def _general_changed_partition(self) -> _BDDTransitionRelationNode:
         """Return the lazy BDD constraint requiring one changed component."""
 
         if self._direct_transition_clusters is not None:
@@ -939,7 +985,10 @@ class SymbolicTransitionSystem:
             )
         return changed
 
-    def _encode_hypercube(self, hypercube: Hypercube) -> Any:
+    def _encode_hypercube(
+        self,
+        hypercube: Hypercube,
+    ) -> _BDDConfigurationSetNode:
         """Encode one validated Boolean hypercube."""
 
         return self._encode_hypercube_variables(
@@ -951,7 +1000,7 @@ class SymbolicTransitionSystem:
         self,
         hypercube: Hypercube,
         variables: Tuple[str, ...],
-    ) -> Any:
+    ) -> _BDDConfigurationSetNode:
         """Encode one hypercube over a selected BDD variable family."""
 
         encoded = self._bdd.true
@@ -966,7 +1015,10 @@ class SymbolicTransitionSystem:
 
         return encoded
 
-    def _encode_configurations(self, configurations: ConfigurationSet) -> Any:
+    def _encode_configurations(
+        self,
+        configurations: ConfigurationSet,
+    ) -> _BDDConfigurationSetNode:
         """Encode a ConfigurationSet as a BDD over current variables."""
 
         source_indices = {
@@ -990,8 +1042,33 @@ class SymbolicTransitionSystem:
 
         return states
 
-    def _forward_reachable_states(self, initial: Any, within: Any = None) -> Any:
-        """Compute the symbolic forward reachability fixed point."""
+    def _forward_reachable_states(
+        self,
+        initial: _BDDConfigurationSetNode,
+        within: Optional[_BDDConfigurationSetNode] = None,
+    ) -> _BDDConfigurationSetNode:
+        """
+        Return the symbolic forward-reachability closure of an initial set.
+
+        Successors are accumulated until no transition discovers a new
+        configuration. If `within` is provided, successors outside that region
+        are excluded. Asynchronous semantics use transition-partition chaining
+        [1], refined with one workset per partition.
+
+        References
+        ----------
+        [1] Ciardo et al. (2006). The saturation algorithm for symbolic
+        state-space exploration. International Journal on Software Tools for
+        Technology Transfer, 8(1), 4-25.
+        """
+
+        if self._update == "asynchronous":
+            return _bdd_asynchronous_forward_chaining(
+                self._bdd,
+                initial,
+                self._disjunctive_transitions,
+                within=within,
+            )
 
         reachable = initial
         frontier = initial
@@ -1009,8 +1086,17 @@ class SymbolicTransitionSystem:
 
         return reachable
 
-    def _backward_reachable_states(self, initial: Any, within: Any) -> Any:
-        """Compute a symbolic backward reachability fixed point within a region."""
+    def _backward_reachable_states(
+        self,
+        initial: _BDDConfigurationSetNode,
+        within: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
+        """
+        Return the symbolic backward-reachability closure within a region.
+
+        Predecessors contained in `within` are accumulated until no transition
+        discovers a new configuration.
+        """
 
         reachable = initial
         frontier = initial
@@ -1026,7 +1112,10 @@ class SymbolicTransitionSystem:
 
         return reachable
 
-    def _synchronous_terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+    def _synchronous_terminal_sccs(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """Select a conservative synchronous terminal-SCC algorithm."""
 
         if len(self._components) >= _SYNCHRONOUS_LARGE_NETWORK_SIZE:
@@ -1062,7 +1151,10 @@ class SymbolicTransitionSystem:
 
         return 3 * n_non_unate > n_influences
 
-    def _synchronous_terminal_cycles(self, states: Any) -> Tuple[Any, ...]:
+    def _synchronous_terminal_cycles(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """Extract cycles from a deterministic synchronous transition system."""
 
         remaining = self._synchronous_recurrent_states(states)
@@ -1082,7 +1174,10 @@ class SymbolicTransitionSystem:
 
         return tuple(cycles)
 
-    def _synchronous_recurrent_states(self, states: Any) -> Any:
+    def _synchronous_recurrent_states(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Remove transient states until only synchronous cycles remain."""
 
         recurrent = states
@@ -1093,7 +1188,10 @@ class SymbolicTransitionSystem:
                 return recurrent
             recurrent = updated
 
-    def _transition_guided_reduction(self, states: Any) -> Any:
+    def _transition_guided_reduction(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """
         Remove states that cannot belong to asynchronous terminal SCCs.
 
@@ -1220,7 +1318,10 @@ class SymbolicTransitionSystem:
 
         return remaining
 
-    def _xie_beerel_terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+    def _xie_beerel_terminal_sccs(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """
         Extract global terminal SCCs from a reduced candidate state set.
 
@@ -1270,10 +1371,10 @@ class SymbolicTransitionSystem:
 
     def _saturated_backward_reachable_states(
         self,
-        initial: Any,
+        initial: _BDDConfigurationSetNode,
         *,
-        within: Any,
-    ) -> Any:
+        within: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Compute backward reachability one transition label at a time."""
 
         reachable = initial
@@ -1286,7 +1387,11 @@ class SymbolicTransitionSystem:
                 return reachable
             reachable |= predecessors
 
-    def _saturation_successors(self, states: Any, within: Any = None) -> Any:
+    def _saturation_successors(
+        self,
+        states: _BDDConfigurationSetNode,
+        within: Optional[_BDDConfigurationSetNode] = None,
+    ) -> _BDDConfigurationSetNode:
         """Return new successors for the first productive transition label."""
 
         for transition in reversed(self._disjunctive_transitions):
@@ -1299,7 +1404,12 @@ class SymbolicTransitionSystem:
 
         return self._bdd.false
 
-    def _saturation_predecessors(self, states: Any, *, within: Any) -> Any:
+    def _saturation_predecessors(
+        self,
+        states: _BDDConfigurationSetNode,
+        *,
+        within: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Return new predecessors for the first productive transition label."""
 
         for transition in reversed(self._disjunctive_transitions):
@@ -1310,55 +1420,61 @@ class SymbolicTransitionSystem:
 
         return self._bdd.false
 
-    def _transition_sources(self, transition: Any, states: Any) -> Any:
+    def _transition_sources(
+        self,
+        transition: _AsynchronousTransition,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Return states enabling one labelled asynchronous transition."""
 
-        return self._relational_product(
+        return _bdd_asynchronous_transition_sources(
             states,
             transition,
-            self._next_variables,
         )
 
-    def _transition_sources_outside(self, transition: Any, states: Any) -> Any:
+    def _transition_sources_outside(
+        self,
+        transition: _AsynchronousTransition,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Return sources whose labelled transition leaves a state set."""
 
-        states_next = self._bdd.let(
-            self._rename_current_to_next,
-            states,
-        )
-        return self._relational_product(
-            transition & states,
-            ~states_next,
-            self._next_variables,
+        return states & _bdd_asynchronous_predecessors(
+            self._bdd,
+            ~states,
+            transition,
         )
 
-    def _partition_successors(self, states: Any, transition: Any) -> Any:
+    def _partition_successors(
+        self,
+        states: _BDDConfigurationSetNode,
+        transition: _AsynchronousTransition,
+    ) -> _BDDConfigurationSetNode:
         """Return successors through one asynchronous transition partition."""
 
-        successors = self._relational_product(
+        return _bdd_asynchronous_successors(
+            self._bdd,
             states,
             transition,
-            self._current_variables,
-        )
-        return self._bdd.let(
-            self._rename_next_to_current,
-            successors,
         )
 
-    def _partition_predecessors(self, states: Any, transition: Any) -> Any:
+    def _partition_predecessors(
+        self,
+        states: _BDDConfigurationSetNode,
+        transition: _AsynchronousTransition,
+    ) -> _BDDConfigurationSetNode:
         """Return predecessors through one asynchronous transition partition."""
 
-        states_next = self._bdd.let(
-            self._rename_current_to_next,
+        return _bdd_asynchronous_predecessors(
+            self._bdd,
             states,
-        )
-        return self._relational_product(
             transition,
-            states_next,
-            self._next_variables,
         )
 
-    def _terminal_sccs(self, states: Any) -> Tuple[Any, ...]:
+    def _terminal_sccs(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """Extract terminal SCCs while keeping state regions symbolic."""
 
         remaining = states
@@ -1371,7 +1487,10 @@ class SymbolicTransitionSystem:
 
         return tuple(terminal_components)
 
-    def _terminal_scc(self, states: Any) -> Any:
+    def _terminal_scc(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Follow the symbolic SCC graph until reaching one terminal SCC."""
 
         region = states
@@ -1388,7 +1507,10 @@ class SymbolicTransitionSystem:
             region = forward & ~backward
             seed = self._pick_state(successors)
 
-    def _explicit_terminal_scc_nodes(self, states: Any) -> Tuple[Any, ...]:
+    def _explicit_terminal_scc_nodes(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_BDDConfigurationSetNode, ...]:
         """Compute terminal SCCs of a small symbolic region explicitly."""
 
         configuration_bits = frozenset(self._decode_configuration_bits(states))
@@ -1416,17 +1538,31 @@ class SymbolicTransitionSystem:
             for component in _terminal_strongly_connected_components(successors)
         )
 
-    def _successors(self, configurations: Any) -> Any:
-        """Return symbolic successors of a configuration set."""
+    def _successors(
+        self,
+        configurations: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
+        """
+        Return closure-oriented successors under the configured semantics.
+
+        A transition system is compiled for one semantics, stored in
+        `self._update`, so the semantics is not passed to each operation.
+        Asynchronous dynamics take the union of each component's local update;
+        synchronous and general dynamics apply their compiled transition
+        partitions. General dynamics may retain identity transitions because
+        they do not change reachability closures or terminal SCCs. The public
+        `post()` operation uses `_direct_successors()` to exclude them.
+        """
 
         if self._update == "asynchronous":
             successors = self._bdd.false
             for transition in self._disjunctive_transitions:
-                successors |= self._relational_product(
+                successors |= _bdd_asynchronous_successors(
+                    self._bdd,
                     configurations,
                     transition,
-                    self._current_variables,
                 )
+            return successors
         else:
             successors = configurations
             for cluster, quantified_variables in zip(
@@ -1446,23 +1582,34 @@ class SymbolicTransitionSystem:
             successors,
         )
 
-    def _predecessors(self, configurations: Any) -> Any:
-        """Return symbolic predecessors of a configuration set."""
+    def _predecessors(
+        self,
+        configurations: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
+        """
+        Return symbolic predecessors under the configured update semantics.
+
+        A transition system is compiled for one semantics, stored in
+        `self._update`, so the semantics is not passed to each operation.
+        Asynchronous dynamics take the union of each component's local update;
+        synchronous and general dynamics apply their compiled transition
+        partitions.
+        """
+
+        if self._update == "asynchronous":
+            predecessors = self._bdd.false
+            for transition in self._disjunctive_transitions:
+                predecessors |= _bdd_asynchronous_predecessors(
+                    self._bdd,
+                    configurations,
+                    transition,
+                )
+            return predecessors
 
         configurations_next = self._bdd.let(
             self._rename_current_to_next,
             configurations,
         )
-        if self._update == "asynchronous":
-            predecessors = self._bdd.false
-            for transition in self._disjunctive_transitions:
-                predecessors |= self._relational_product(
-                    transition,
-                    configurations_next,
-                    self._next_variables,
-                )
-            return predecessors
-
         predecessors = configurations_next
         for cluster, next_variable in zip(
             self._transition_clusters,
@@ -1475,7 +1622,10 @@ class SymbolicTransitionSystem:
             )
         return predecessors
 
-    def _transition_predecessors(self, configurations: Any) -> Any:
+    def _transition_predecessors(
+        self,
+        configurations: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Return sources with a direct transition into a configuration set."""
 
         if self._update != "general":
@@ -1490,15 +1640,23 @@ class SymbolicTransitionSystem:
             self._transition_relation() & configurations_next,
         )
 
-    def _transition_relation(self) -> Any:
+    def _transition_relation(self) -> _BDDTransitionRelationNode:
         """Return the exact, non-reflexive relation where required."""
 
         if self._direct_transition_relation is not None:
             return self._direct_transition_relation
 
         if self._update == "asynchronous":
+            self._ensure_next_variables()
             relation = self._bdd.false
-            for transition in self._disjunctive_transitions:
+            for transition in _bdd_asynchronous_relation_partitions(
+                self._network,
+                bdd=self._bdd,
+                components=self._components,
+                current_vars=self._current_variables,
+                next_vars=self._next_variables,
+                functional_transitions=self._disjunctive_transitions,
+            ):
                 relation |= transition
         else:
             relation = self._bdd.true
@@ -1520,12 +1678,23 @@ class SymbolicTransitionSystem:
         self._direct_transition_relation = relation
         return relation
 
+    def _ensure_next_variables(self) -> None:
+        """Declare next-state variables when a full relation is requested."""
+
+        undeclared = tuple(
+            variable
+            for variable in self._next_variables
+            if variable not in self._bdd.vars
+        )
+        if undeclared:
+            self._bdd.declare(*undeclared)
+
     def _relational_product(
         self,
-        left: Any,
-        right: Any,
+        left: _BDDNode,
+        right: _BDDNode,
         quantified_variables: Tuple[str, ...],
-    ) -> Any:
+    ) -> _BDDNode:
         """Conjoin two BDDs while existentially quantifying variables."""
 
         if self._and_exists is not None:
@@ -1535,9 +1704,9 @@ class SymbolicTransitionSystem:
 
     def _all_initial_configurations_reach_all_target_configurations(
         self,
-        initial: Any,
+        initial: _BDDConfigurationSetNode,
         target_hypercube: Hypercube,
-        reachable_from_initial: Any,
+        reachable_from_initial: _BDDConfigurationSetNode,
     ) -> bool:
         """Test universal reachability without enumerating target states."""
 
@@ -1580,8 +1749,8 @@ class SymbolicTransitionSystem:
 
     def _matches_reachability_quantifier(
         self,
-        initial: Any,
-        states_reaching_target: Any,
+        initial: _BDDConfigurationSetNode,
+        states_reaching_target: _BDDConfigurationSetNode,
         *,
         quantifier: Literal["exists", "robust"],
     ) -> bool:
@@ -1592,13 +1761,18 @@ class SymbolicTransitionSystem:
 
         return initial & ~states_reaching_target == self._bdd.false
 
-    def _pick_state(self, states: Any) -> Any:
+    def _pick_state(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> _BDDConfigurationSetNode:
         """Select one concrete state from a non-empty symbolic state set."""
 
         assignment = next(
-            self._bdd.pick_iter(
-                states,
-                care_vars=self._current_variables,
+            iter(
+                self._bdd.pick_iter(
+                    states,
+                    care_vars=self._current_variable_set,
+                )
             )
         )
         selected = self._bdd.true
@@ -1608,7 +1782,10 @@ class SymbolicTransitionSystem:
 
         return selected
 
-    def _decode_configuration_set(self, states: Any) -> ConfigurationSet:
+    def _decode_configuration_set(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> ConfigurationSet:
         """Decode a symbolic state set into exact disjoint hypercubes."""
 
         hypercubes = []
@@ -1630,13 +1807,16 @@ class SymbolicTransitionSystem:
             hypercubes,
         )
 
-    def _decode_configuration_bits(self, states: Any) -> Tuple[_ConfigurationBits, ...]:
+    def _decode_configuration_bits(
+        self,
+        states: _BDDConfigurationSetNode,
+    ) -> Tuple[_ConfigurationBits, ...]:
         """Decode a symbolic state set into explicit bitsets."""
 
         decoded = []
         for assignment in self._bdd.pick_iter(
             states,
-            care_vars=self._current_variables,
+            care_vars=self._current_variable_set,
         ):
             configuration_bits = 0
             for index, variable_name in enumerate(self._current_variables):
@@ -2280,7 +2460,10 @@ class SymbolicConfigurationSet:
 
         return self._system.terminal_sccs(self)
 
-    def _compatible_node(self, other: "SymbolicConfigurationSet") -> Any:
+    def _compatible_node(
+        self,
+        other: "SymbolicConfigurationSet",
+    ) -> _BDDConfigurationSetNode:
         """Return another set node after checking manager identity."""
 
         if other._system is not self._system:
@@ -2293,7 +2476,7 @@ class SymbolicConfigurationSet:
     def _from_node(
         cls,
         system: SymbolicTransitionSystem,
-        node: Any,
+        node: _BDDConfigurationSetNode,
     ) -> "SymbolicConfigurationSet":
         """Wrap one BDD node without validation, copying or counting."""
 

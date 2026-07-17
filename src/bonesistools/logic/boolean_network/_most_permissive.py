@@ -826,7 +826,7 @@ def _rule_can_take_value_in_hypercube(
     """Test whether a rule can take a value inside a hypercube."""
 
     if component not in rule_bdds:
-        rule_bdds[component] = ROBDD._from_rule(
+        rule_bdds[component] = ROBDD._from_expression(
             network[component],
             ba=network.ba,
         )
@@ -991,7 +991,7 @@ def _non_unate_bdd_asp_facts(
     """Encode one non-unate Boolean function as a reduced ordered BDD."""
 
     rule = network[target]
-    robdd = ROBDD._from_rule(rule, ba=network.ba)
+    robdd = ROBDD._from_expression(rule, ba=network.ba)
     target_symbol = component_symbols[target]
     facts = [
         f"non_unate({target_symbol}).",

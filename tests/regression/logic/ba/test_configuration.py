@@ -112,6 +112,24 @@ def test_configuration_set_equality_is_semantic_not_representational():
     assert compact.__eq__(object()) is NotImplemented
 
 
+def test_configuration_set_equality_skips_semantic_cover_for_same_encoding(
+    monkeypatch,
+):
+
+    configurations = bt.logic.ba.ConfigurationSet(
+        ["A", "B"],
+        [{"A": 0}, {"A": 1, "B": 0}],
+    )
+    copied = configurations.copy()
+
+    def fail(*args, **kwargs):
+        raise AssertionError("semantic cover should not be evaluated")
+
+    monkeypatch.setattr(bt.logic.ba.ConfigurationSet, "_covers", fail)
+
+    assert configurations == copied
+
+
 def test_configuration_set_samples_reproducibly():
 
     configurations = bt.logic.ba.ConfigurationSet(["A", "B"], [{"A": "*"}])
@@ -121,6 +139,18 @@ def test_configuration_set_samples_reproducibly():
         {"A": 0, "B": 0},
         {"A": 1, "B": 1},
         {"A": 0, "B": 1},
+    )
+
+    configurations = bt.logic.ba.ConfigurationSet(
+        ["A", "B", "C"],
+        [{"A": 0}, {"A": 1, "B": 0}],
+    )
+    assert configurations.sample(5, seed=0) == (
+        {"A": 1, "B": 0, "C": 0},
+        {"A": 1, "B": 0, "C": 1},
+        {"A": 0, "B": 0, "C": 0},
+        {"A": 0, "B": 1, "C": 1},
+        {"A": 0, "B": 1, "C": 1},
     )
 
 

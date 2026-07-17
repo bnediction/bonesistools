@@ -44,6 +44,7 @@ tests/golden/
             sea_urchin_dorsal_ventral_axis.sbml
             synthetic_30_node_dynamics.zginml
         expected/
+            aggregated_influence_graph.dot
             death_receptor_cell_fate_mp.npz
             sea_urchin_dorsal_ventral_axis.bnet
             synthetic_30_node_dynamics.npz
@@ -170,6 +171,9 @@ Properties:
 Compressed NumPy archives storing reference outputs for deterministic Boolean
 workflows:
 
+* `aggregated_influence_graph.dot`: canonical Graphviz input generated from a
+  fixed Boolean network ensemble, freezing node and edge insertion order
+  independently of the installed Graphviz rendering engine;
 * `death_receptor_cell_fate_mp.npz`: parsed rules, influence-graph shape,
   selected initial states, and most-permissive reachable attractors;
 * `synthetic_30_node_dynamics.npz`: parsed rules, influence-graph shape, and

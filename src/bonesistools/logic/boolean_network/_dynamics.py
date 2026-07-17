@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
+from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -26,6 +27,7 @@ from ._asynchronous import (
     _asynchronous_successor_configuration_bits,
     _tarjan_asynchronous_terminal_sccs,
 )
+from ._bdd import _bdd_equivalence, _bdd_rule
 from ._general import (
     _general_successor_configuration_bits,
 )
@@ -35,9 +37,11 @@ from ._synchronous import (
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
+    from ._typing import _BDDConfigurationSetNode, _BDDManager
 
 _ConfigurationBits = int
 _CompiledRule = Callable[[_ConfigurationBits], int]
+_FIXED_POINTS_BITSET_COMPONENT_LIMIT = 12
 
 
 @dataclass
@@ -45,7 +49,7 @@ class _ForwardReduction:
     """Forward reachability task for one transition label."""
 
     transition_index: int
-    forward: Any
+    forward: _BDDConfigurationSetNode
 
 
 @dataclass
@@ -53,24 +57,24 @@ class _ExtendedComponentReduction:
     """Backward extended-component task within a forward set."""
 
     transition_index: int
-    forward: Any
-    extended_component: Any
+    forward: _BDDConfigurationSetNode
+    extended_component: _BDDConfigurationSetNode
 
 
 @dataclass
 class _ForwardBasinReduction:
     """Backward basin task used to discard states before a forward set."""
 
-    forward: Any
-    basin: Any
+    forward: _BDDConfigurationSetNode
+    basin: _BDDConfigurationSetNode
 
 
 @dataclass
 class _BottomBasinReduction:
     """Backward basin task used to discard states outside a bottom set."""
 
-    bottom: Any
-    basin: Any
+    bottom: _BDDConfigurationSetNode
+    basin: _BDDConfigurationSetNode
 
 
 _TransitionGuidedReduction = Union[
@@ -95,7 +99,7 @@ def _transition_guided_reduction_size(
 
 def _restrict_transition_guided_reduction(
     reduction: _TransitionGuidedReduction,
-    states: Any,
+    states: _BDDConfigurationSetNode,
 ) -> None:
     """Restrict all state sets held by a reduction task in place."""
 
@@ -160,6 +164,104 @@ def _reachable_configuration_dimension_upper_bound(
     )
     n_fixed = sum(value.is_fixed for value in closed_hypercube.values())
     return len(network) - n_fixed
+
+
+def _fixed_points(
+    network: "BooleanNetwork",
+    *,
+    limit: int,
+) -> List[Configuration]:
+    """Return fixed points with bitsets or a direct symbolic constraint."""
+
+    components = tuple(network.keys())
+    if len(components) <= _FIXED_POINTS_BITSET_COMPONENT_LIMIT:
+        return _bitset_fixed_points(network, components, limit=limit)
+
+    return _bdd_fixed_points(network, components, limit=limit)
+
+
+def _bitset_fixed_points(
+    network: "BooleanNetwork",
+    components: Tuple[str, ...],
+    *,
+    limit: int,
+) -> List[Configuration]:
+    """Enumerate a small state space with compiled bitset rules."""
+
+    compiled_rules = _compile_bitset_rules(network, components)
+    fixed_points = []
+
+    for values in product((0, 1), repeat=len(components)):
+        configuration = sum(value << index for index, value in enumerate(values))
+        if _next_configuration_bits(compiled_rules, configuration) != configuration:
+            continue
+
+        fixed_points.append(dict(zip(components, values)))
+        if limit and len(fixed_points) >= limit:
+            break
+
+    return fixed_points
+
+
+def _bdd_fixed_points(
+    network: "BooleanNetwork",
+    components: Tuple[str, ...],
+    *,
+    limit: int,
+) -> List[Configuration]:
+    """Solve all local fixed-point equations as one BDD constraint."""
+
+    bdd = _import_dd_backend().BDD()
+    variables = tuple(f"x{index}" for index in range(len(components)))
+    bdd.declare(*variables)
+    component_variables = dict(zip(components, variables))
+
+    fixed_points = bdd.true
+    for component, variable_name in zip(components, variables):
+        rule = _bdd_rule(
+            network,
+            network[component],
+            bdd=bdd,
+            variables=component_variables,
+        )
+        fixed_points &= _bdd_equivalence(bdd.var(variable_name), rule)
+
+    configurations = []
+    for values in _iter_bdd_assignments(
+        bdd,
+        fixed_points,
+        variables,
+    ):
+        configurations.append(dict(zip(components, values)))
+        if limit and len(configurations) >= limit:
+            break
+
+    return configurations
+
+
+def _iter_bdd_assignments(
+    bdd: _BDDManager,
+    node: _BDDConfigurationSetNode,
+    variables: Tuple[str, ...],
+) -> Iterator[Tuple[int, ...]]:
+    """Yield satisfying assignments in lexicographic Boolean order."""
+
+    pending: List[Tuple[_BDDConfigurationSetNode, int, Tuple[int, ...]]] = [
+        (node, 0, ())
+    ]
+    while pending:
+        current, index, values = pending.pop()
+        if current == bdd.false:
+            continue
+        if index == len(variables):
+            yield values
+            continue
+
+        variable = variables[index]
+        high = bdd.let({variable: True}, current)
+        low = bdd.let({variable: False}, current)
+        pending.append((high, index + 1, values + (1,)))
+        pending.append((low, index + 1, values + (0,)))
 
 
 def _bdd_reachable_attractors(

@@ -2,31 +2,84 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from ._bdd import _bdd_equivalence, _bdd_exclusive_or, _bdd_rule
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
+    from ._typing import (
+        _BDDConfigurationSetNode,
+        _BDDManager,
+        _BDDNode,
+        _BDDTransitionRelationNode,
+    )
+
+
+class _AsynchronousTransition(NamedTuple):
+    """Functional representation of one asynchronous update label."""
+
+    current_variable: str
+    current_value: _BDDNode
+    rule: _BDDNode
 
 
 def _bdd_asynchronous_transition_partitions(
     network: "BooleanNetwork",
     *,
-    bdd: Any,
+    bdd: _BDDManager,
+    components: Tuple[str, ...],
+    current_vars: Tuple[str, ...],
+) -> Tuple[_AsynchronousTransition, ...]:
+    """Compile one local rule for each asynchronous transition label."""
+
+    component_vars = dict(zip(components, current_vars))
+    return tuple(
+        _AsynchronousTransition(
+            current_variable=variable,
+            current_value=bdd.var(variable),
+            rule=_bdd_rule(
+                network,
+                network[component],
+                bdd=bdd,
+                variables=component_vars,
+            ),
+        )
+        for component, variable in zip(components, current_vars)
+    )
+
+
+def _bdd_asynchronous_relation_partitions(
+    network: "BooleanNetwork",
+    *,
+    bdd: _BDDManager,
     components: Tuple[str, ...],
     current_vars: Tuple[str, ...],
     next_vars: Tuple[str, ...],
-) -> Tuple[Any, ...]:
-    """Build disjunctive partitions of the asynchronous transition relation."""
+    functional_transitions: Optional[Tuple[_AsynchronousTransition, ...]] = None,
+) -> Tuple[_BDDTransitionRelationNode, ...]:
+    """Build full relation partitions for universal transition queries."""
 
-    component_vars = dict(zip(components, current_vars))
+    if functional_transitions is None:
+        functional_transitions = _bdd_asynchronous_transition_partitions(
+            network,
+            bdd=bdd,
+            components=components,
+            current_vars=current_vars,
+        )
+
     current_values = tuple(bdd.var(variable) for variable in current_vars)
     next_values = tuple(bdd.var(variable) for variable in next_vars)
-    rules = tuple(
-        _bdd_rule(network, network[component], bdd=bdd, variables=component_vars)
-        for component in components
-    )
     unchanged_prefixes = [bdd.true]
     for current_value, next_value in zip(current_values, next_values):
         unchanged_prefixes.append(
@@ -40,16 +93,129 @@ def _bdd_asynchronous_transition_partitions(
         )
 
     partitions = []
-    for updated_index, (current_value, next_value, rule) in enumerate(
-        zip(current_values, next_values, rules)
+    for updated_index, (transition, next_value) in enumerate(
+        zip(functional_transitions, next_values)
     ):
-        transition = _bdd_exclusive_or(current_value, rule)
-        transition &= _bdd_equivalence(next_value, rule)
-        transition &= unchanged_prefixes[updated_index]
-        transition &= unchanged_suffixes[updated_index + 1]
-        partitions.append(transition)
+        relation = _bdd_exclusive_or(
+            transition.current_value,
+            transition.rule,
+        )
+        relation &= _bdd_equivalence(next_value, transition.rule)
+        relation &= unchanged_prefixes[updated_index]
+        relation &= unchanged_suffixes[updated_index + 1]
+        partitions.append(relation)
 
     return tuple(partitions)
+
+
+def _bdd_asynchronous_transition_sources(
+    states: _BDDConfigurationSetNode,
+    transition: _AsynchronousTransition,
+) -> _BDDConfigurationSetNode:
+    """Return states enabling one functional asynchronous transition."""
+
+    return states & _bdd_exclusive_or(
+        transition.current_value,
+        transition.rule,
+    )
+
+
+def _bdd_asynchronous_successors(
+    bdd: _BDDManager,
+    states: _BDDConfigurationSetNode,
+    transition: _AsynchronousTransition,
+) -> _BDDConfigurationSetNode:
+    """Return successors through one functional asynchronous transition."""
+
+    upward = states & ~transition.current_value & transition.rule
+    downward = states & transition.current_value & ~transition.rule
+    successors = bdd.false
+    if upward != bdd.false:
+        successors |= (
+            bdd.exist(
+                (transition.current_variable,),
+                upward,
+            )
+            & transition.current_value
+        )
+    if downward != bdd.false:
+        successors |= (
+            bdd.exist(
+                (transition.current_variable,),
+                downward,
+            )
+            & ~transition.current_value
+        )
+
+    return successors
+
+
+def _bdd_asynchronous_predecessors(
+    bdd: _BDDManager,
+    states: _BDDConfigurationSetNode,
+    transition: _AsynchronousTransition,
+) -> _BDDConfigurationSetNode:
+    """Return predecessors through one functional asynchronous transition."""
+
+    target_low = bdd.let({transition.current_variable: False}, states)
+    target_high = bdd.let({transition.current_variable: True}, states)
+    return (~transition.current_value & transition.rule & target_high) | (
+        transition.current_value & ~transition.rule & target_low
+    )
+
+
+def _bdd_asynchronous_forward_chaining(
+    bdd: _BDDManager,
+    initial: _BDDConfigurationSetNode,
+    transitions: Tuple[_AsynchronousTransition, ...],
+    *,
+    within: Optional[_BDDConfigurationSetNode] = None,
+) -> _BDDConfigurationSetNode:
+    """
+    Return the asynchronous forward closure by transition-partition chaining.
+
+    Each partition immediately sees configurations reached by earlier partitions
+    in the same pass. For each partition, `processed[index]` records the
+    configurations already propagated through it, so a newly reached
+    configuration is processed only by partitions that have not seen it yet. If
+    `within` is provided, successors outside that region are discarded.
+
+    This implements transition-partition chaining as described in Section 2.5
+    of [1], refined with one workset per partition. It is not the recursive MDD
+    saturation algorithm that is the main subject of that article.
+
+    References
+    ----------
+    [1] Ciardo, G., Marmorstein, R., & Siminiceanu, R. (2006). The saturation
+    algorithm for symbolic state-space exploration. International Journal on
+    Software Tools for Technology Transfer, 8(1), 4-25.
+    """
+
+    reachable = initial
+    processed = [bdd.false for _ in transitions]
+
+    while True:
+        changed = False
+        for index, transition in enumerate(transitions):
+            fresh = reachable & ~processed[index]
+            if fresh == bdd.false:
+                continue
+
+            processed[index] |= fresh
+            successors = _bdd_asynchronous_successors(
+                bdd,
+                fresh,
+                transition,
+            )
+            if within is not None:
+                successors &= within
+            new = successors & ~reachable
+            if new != bdd.false:
+                reachable |= new
+                changed = True
+
+        if not changed:
+            return reachable
 
 
 def _asynchronous_successor_configuration_bits(

@@ -174,9 +174,95 @@ partition is composed with the existing per-component clusters;
 closures may use the reflexive cluster relation because identity edges do not
 change a fixed point.
 
-Forward and backward reachability are frontier fixed points over BDD state
-sets. The implementation never materializes an STG unless it intentionally
-switches to the explicit path for a small symbolic result.
+Synchronous and general forward reachability, together with generic backward
+reachability, use frontier fixed points over BDD state sets. Asynchronous
+forward reachability uses partition chaining with per-transition worksets as
+described below.
+The implementation never materializes an STG unless it intentionally switches
+to the explicit path for a small symbolic result.
+
+#### Asynchronous Forward Chaining
+
+The asynchronous relation is a disjunction of transition partitions
+`T_0, ..., T_n`, one for each updated component. Applying every partition to a
+global breadth-first frontier introduces a synchronization barrier: states
+discovered by one partition cannot be consumed by another partition until the
+next breadth-first round. Each round also constructs the union of every
+partition's successors before removing configurations that were already
+reached. On large symbolic regions, both the extra rounds and this transient
+union can create expensive intermediate BDDs.
+
+Forward closure therefore uses the transition-partition chaining described in
+Section 2.5 of [4], refined with one workset per transition partition. Let `R`
+contain every configuration reached so far and let `P_i` contain the
+configurations already propagated through `T_i`:
+
+```text
+R = initial
+P_i = false for every transition partition i
+
+repeat
+    for each transition partition T_i
+        fresh = R - P_i
+        P_i = P_i union fresh
+        R = R union (post_i(fresh) intersect within)
+until R no longer changes
+```
+
+The `within` intersection is omitted when no region is supplied. The
+`P_i` sets ensure that each pair consisting of a reached configuration and a
+transition partition is propagated at most once. States discovered by a later
+partition remain fresh for earlier partitions and are handled on the next
+pass. At termination, every partition maps `R` into `R`, so the result is the
+same least forward-reachability closure as the global-frontier algorithm.
+
+The performance gain comes from the order of symbolic operations, not from
+discarding transitions or configurations. A partition updates `R` immediately,
+so every later partition in the same pass can consume the newly reached states.
+This immediate reuse is the defining property of chaining [4]. The `P_i`
+worksets additionally avoid propagating a configuration through the same
+partition twice. Subtracting `R` and merging new states after each partition
+also avoids a monolithic union of all partition successors. The per-partition
+`fresh` sets often retain more BDD sharing than separate graph-distance
+frontiers, which reduces both relational-product work and peak live nodes.
+
+This citation applies specifically to the chaining strategy in Section 2.5 of
+[4]. It does not claim that this implementation reproduces the
+decision-diagram saturation algorithm from Section 3.5. That algorithm
+recursively saturates local MDD nodes according to event locality, whereas this
+implementation remains a top-level worklist iteration over BDD transition
+partitions.
+
+The implementation is `_bdd_asynchronous_forward_chaining()` in
+`_asynchronous.py`. `_forward_reachable_states()` dispatches to it solely for
+asynchronous semantics; synchronous and general semantics retain their
+conjunctive-partition frontier algorithm. There is deliberately no size
+threshold or public backend option.
+
+This choice was validated on the 36 local ZGINML models. The benchmark covered
+the all-zero configuration, all-one and alternating configurations, a
+region-restricted closure, and up to two named partial initial conditions per
+model:
+
+| Workload | Paired cases | Frontier | Chaining | Speedup | Extra completions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| all-zero | 33 | 5.90 s | 0.99 s | 5.96-fold | 2 |
+| varied and region-restricted | 82 | 17.34 s | 1.84 s | 9.42-fold | 12 |
+| named partial conditions | 27 | 15.46 s | 0.83 s | 18.73-fold | 2 |
+| **total** | **142** | **38.70 s** | **3.66 s** | **10.58-fold** | **16** |
+
+An extra completion is a case where chaining terminated but the frontier
+implementation exceeded its isolated timeout. The 35 measured regressions
+were confined to already trivial closures and the largest absolute difference
+was 0.139 milliseconds. For all 27 cases taking at least 10 milliseconds with
+the frontier algorithm, chaining reduced peak live BDD nodes; the aggregate
+reduction was 4.48-fold.
+
+Result equality was checked directly at the BDD-node level on 34 ZGINML models
+and on 700 randomly generated networks with two to eight components, including
+partial initial configurations and 349 restricted regions. The two remaining
+ZGINML equality checks exceeded the isolated verification timeout; every case
+where both implementations completed had identical state counts.
 
 `BooleanNetwork.symbolic()` captures a network copy and compiles one reusable
 transition system. Subsequent changes to the source network do not alter the
@@ -436,3 +522,8 @@ Transactions on Computer-Aided Design of Integrated Circuits and Systems,
 [3] Pauleve, L., Kolcak, J., Chatain, T., and Haar, S. (2020). Reconciling
 qualitative, abstract, and scalable modeling of biological networks. Nature
 Communications, 11(1), 4256.
+
+[4] Ciardo, G., Marmorstein, R., & Siminiceanu, R. (2006). The saturation
+algorithm for symbolic state-space exploration. International Journal on
+Software Tools for Technology Transfer, 8(1), 4-25.
+doi:10.1007/s10009-005-0188-7.

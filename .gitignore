@@ -69,6 +69,7 @@ Thumbs.db
 
 # Generated figures / graph exports
 *.dot
+!tests/golden/logic/expected/*.dot
 *.dot.pdf
 *.gv
 *.gv.pdf

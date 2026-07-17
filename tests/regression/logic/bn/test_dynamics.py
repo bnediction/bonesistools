@@ -113,6 +113,19 @@ def test_boolean_network_fixed_points_and_predicate():
     assert no_fixed_point.fixed_points() == []
 
 
+def test_boolean_network_fixed_points_use_symbolic_constraint_for_large_network():
+    components = [f"x{index}" for index in range(13)]
+    rules = {component: 0 for component in components}
+    rules[components[0]] = components[0]
+    bn = bt.logic.bn.BooleanNetwork(rules)
+
+    assert bn.fixed_points() == [
+        {component: 0 for component in components},
+        {component: int(index == 0) for index, component in enumerate(components)},
+    ]
+    assert bn.fixed_points(limit=1) == [{component: 0 for component in components}]
+
+
 def test_boolean_network_attractors_synchronous_cycle():
     bn = bt.logic.bn.BooleanNetwork({"A": "~A"})
 

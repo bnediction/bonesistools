@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 from ._bdd import _bdd_equivalence, _bdd_forward_quantification, _bdd_rule
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
+    from ._typing import _BDDManager, _BDDTransitionRelationNode
 
 
 def _bdd_general_transition_partitions(
     network: "BooleanNetwork",
     *,
-    bdd: Any,
+    bdd: _BDDManager,
     components: Tuple[str, ...],
     current_vars: Tuple[str, ...],
     next_vars: Tuple[str, ...],
-) -> Tuple[Tuple[Any, ...], Tuple[Tuple[str, ...], ...]]:
+) -> Tuple[Tuple[_BDDTransitionRelationNode, ...], Tuple[Tuple[str, ...], ...]]:
     """Build conjunctive partitions for general reachability analyses."""
 
     component_vars = dict(zip(components, current_vars))

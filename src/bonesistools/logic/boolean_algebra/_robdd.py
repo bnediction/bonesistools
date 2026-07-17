@@ -114,22 +114,25 @@ class ROBDD:
 
         target = _coerce_terminal_value(value)
         subspaces = []
-        waiting = [(self._root, {})]
+        waiting = [(self._root, 0, 0)]
 
         while waiting:
-            node, assignment = waiting.pop()
+            node, fixed_mask, value_mask = waiting.pop()
             if node == target:
-                subspaces.append(Hypercube(assignment))
+                subspaces.append((fixed_mask, value_mask))
                 continue
             if node <= 1:
                 continue
 
             variable, low, high = self._nodes[node]
-            variable_name = self._variables[variable]
-            waiting.append((high, {**assignment, variable_name: 1}))
-            waiting.append((low, {**assignment, variable_name: 0}))
+            bit = 1 << variable
+            waiting.append((high, fixed_mask | bit, value_mask | bit))
+            waiting.append((low, fixed_mask | bit, value_mask))
 
-        return ConfigurationSet(self._variables, subspaces)
+        return ConfigurationSet._from_encoded_hypercubes(
+            self._variables,
+            subspaces,
+        )
 
     def to_networkx(self) -> nx.DiGraph:
         """
@@ -380,6 +383,17 @@ class ROBDD:
     ) -> None:
 
         expression = _coerce_boolean_rule(ba, rule)
+        self._initialize_expression(expression, order=order, ba=ba)
+
+    def _initialize_expression(
+        self,
+        expression: Expression,
+        *,
+        order: Optional[Iterable[str]],
+        ba: BooleanAlgebra,
+    ) -> None:
+        """Initialize directly from a trusted compatible expression."""
+
         variables = tuple(sorted(str(symbol) for symbol in expression.symbols))
         self._variables = _validate_variable_order(variables, order)
         self._variable_indices = {
@@ -404,6 +418,20 @@ class ROBDD:
 
         robdd = cls.__new__(cls)
         robdd._initialize(rule, order=order, ba=ba)
+        return robdd
+
+    @classmethod
+    def _from_expression(
+        cls,
+        expression: Expression,
+        *,
+        order: Optional[Iterable[str]] = None,
+        ba: BooleanAlgebra,
+    ) -> "ROBDD":
+        """Build a ROBDD from a trusted compatible Boolean expression."""
+
+        robdd = cls.__new__(cls)
+        robdd._initialize_expression(expression, order=order, ba=ba)
         return robdd
 
     def _iter_nodes(self) -> Tuple[Tuple[int, str, int, int], ...]:

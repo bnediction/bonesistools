@@ -350,6 +350,53 @@ def test_synchronous_symbolic_updates_keep_fixed_point_self_loops():
     assert fixed.pre() == fixed
 
 
+def test_asynchronous_next_variables_are_compiled_only_for_full_relation():
+    system = bt.logic.bn.BooleanNetwork({"A": "~A", "B": "A"}).symbolic(
+        update="asynchronous"
+    )
+
+    assert set(system._bdd.vars) == {"x0", "x1"}
+    assert system.configurations({"A": 0, "B": 0}).post().enumerate() == (
+        {"A": 1, "B": 0},
+    )
+    assert set(system._bdd.vars) == {"x0", "x1"}
+
+    assert system._transition(
+        {"A": 0, "B": 0},
+        {"A": 1, "B": 0},
+        quantifier="universal",
+    )
+    assert set(system._bdd.vars) == {"x0", "x1", "y0", "y1"}
+
+
+def test_asynchronous_forward_reachability_uses_partition_chaining(monkeypatch):
+    system = bt.logic.bn.BooleanNetwork(
+        {
+            "A": "B",
+            "B": "C",
+            "C": 1,
+        }
+    ).symbolic(update="asynchronous")
+
+    def fail_global_successor_union(*args, **kwargs):
+        raise AssertionError("global asynchronous successor union was used")
+
+    monkeypatch.setattr(type(system), "_successors", fail_global_successor_union)
+    initial = system.configurations({"A": 0, "B": 0, "C": 0})
+
+    assert initial.reachable().enumerate() == (
+        {"A": 0, "B": 0, "C": 0},
+        {"A": 0, "B": 0, "C": 1},
+        {"A": 0, "B": 1, "C": 1},
+        {"A": 1, "B": 1, "C": 1},
+    )
+    assert initial.reachable(within=system.configurations({"A": 0})).enumerate() == (
+        {"A": 0, "B": 0, "C": 0},
+        {"A": 0, "B": 0, "C": 1},
+        {"A": 0, "B": 1, "C": 1},
+    )
+
+
 def test_symbolic_terminal_sccs_are_relative_to_the_induced_region():
     system = bt.logic.bn.BooleanNetwork({"A": 1}).symbolic(update="general")
     transient_region = system.configurations({"A": 0})

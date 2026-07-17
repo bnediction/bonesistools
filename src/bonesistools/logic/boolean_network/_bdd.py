@@ -6,23 +6,24 @@ from typing import TYPE_CHECKING, Any, Mapping, Tuple
 
 if TYPE_CHECKING:
     from ._network import BooleanNetwork
+    from ._typing import _BDDManager, _BDDNode, _BDDTransitionRelationNode
 
 
-def _bdd_equivalence(left: Any, right: Any) -> Any:
+def _bdd_equivalence(left: _BDDNode, right: _BDDNode) -> _BDDNode:
     """Return a BDD encoding logical equivalence."""
 
     return (left & right) | (~left & ~right)
 
 
-def _bdd_exclusive_or(left: Any, right: Any) -> Any:
+def _bdd_exclusive_or(left: _BDDNode, right: _BDDNode) -> _BDDNode:
     """Return a BDD encoding exclusive disjunction."""
 
     return (left & ~right) | (~left & right)
 
 
 def _bdd_forward_quantification(
-    bdd: Any,
-    clusters: Tuple[Any, ...],
+    bdd: _BDDManager,
+    clusters: Tuple[_BDDTransitionRelationNode, ...],
     current_vars: Tuple[str, ...],
 ) -> Tuple[Tuple[str, ...], ...]:
     """Assign each current variable to its last dependent partition."""
@@ -43,9 +44,9 @@ def _bdd_rule(
     network: "BooleanNetwork",
     rule: Any,
     *,
-    bdd: Any,
+    bdd: _BDDManager,
     variables: Mapping[str, str],
-) -> Any:
+) -> _BDDNode:
     """Convert a Boolean rule into a BDD over current-state variables."""
 
     if rule is network.ba.TRUE:

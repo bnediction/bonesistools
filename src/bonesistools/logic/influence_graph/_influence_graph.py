@@ -49,6 +49,7 @@ from ._styles import (
 from ._svg import SvgLength, scale_svg
 
 if TYPE_CHECKING:
+    from graphviz import Digraph  # pyright: ignore[reportMissingImports]
     from pydot import Dot
 
 CircuitSign = Literal[-1, 1]
@@ -123,7 +124,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         super().__init__(**attr)
 
         if graph is not None:
-            self._replace_with_graph(self._plain_graph(graph))
+            self._replace_with_graph(graph)
         else:
             self._validate_graph()
 
@@ -158,7 +159,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         if as_view:
             raise NotImplementedError("InfluenceGraph does not support view copies.")
 
-        return type(self)(self._plain_graph(self))
+        return type(self)(self)
 
     def to_directed(self, as_view: bool = False) -> "InfluenceGraph":
         """
@@ -1641,7 +1642,7 @@ class InfluenceGraph(_MultiDiGraphBase):
             include_selfloops=include_selfloops,
         )
 
-        return type(self)(_ordered_induced_subgraph(self, feedback_nodes))
+        return type(self)(cast(_MultiDiGraphBase, self.subgraph(feedback_nodes)))
 
     def collapsed_graph(
         self,
@@ -1726,7 +1727,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         program: str = "dot",
         edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
-    ):
+    ) -> "Digraph":
         """
         Convert the influence graph to a native graphviz Digraph.
 
@@ -1970,44 +1971,26 @@ class InfluenceGraph(_MultiDiGraphBase):
         Return a plain NetworkX MultiDiGraph copy.
         """
 
-        source_graph = nx.MultiDiGraph(graph)
-        plain_graph = nx.MultiDiGraph()
-        plain_graph.graph.update(source_graph.graph)
-        plain_graph.add_nodes_from(
-            (node, data.copy()) for node, data in source_graph.nodes(data=True)
-        )
-        for source, target, key, data in source_graph.edges(keys=True, data=True):
-            nx.MultiDiGraph.add_edge(
-                plain_graph,
-                source,
-                target,
-                key=key,
-                **data.copy(),
-            )
-
-        return plain_graph
+        return nx.MultiDiGraph(graph)
 
     def _replace_with_graph(self, graph: Any) -> None:
         """
         Replace graph contents while preserving InfluenceGraph invariants.
         """
 
-        plain_graph = self._plain_graph(graph)
-
         self.clear()
-        self.graph.update(plain_graph.graph)
+        self.graph.update(graph.graph)
         nx.MultiDiGraph.add_nodes_from(
             self,
-            ((node, data.copy()) for node, data in plain_graph.nodes(data=True)),
+            ((node, data.copy()) for node, data in graph.nodes(data=True)),
         )
 
-        for source, target, data in plain_graph.edges(data=True):
+        for source, target, data in graph.edges(data=True):
             data = data.copy()
 
             if "sign" not in data:
                 raise ValueError(
-                    f"missing edge attribute 'sign' for edge "
-                    f"{source!r} -> {target!r}"
+                    f"missing edge attribute 'sign' for edge {source!r} -> {target!r}"
                 )
 
             sign = data.pop("sign")
@@ -2065,8 +2048,7 @@ class InfluenceGraph(_MultiDiGraphBase):
         for source, target, data in self.edges(data=True):
             if "sign" not in data:
                 raise ValueError(
-                    f"missing edge attribute 'sign' for edge "
-                    f"{source!r} -> {target!r}"
+                    f"missing edge attribute 'sign' for edge {source!r} -> {target!r}"
                 )
 
             data["sign"] = self._normalize_sign(data["sign"])
@@ -2242,7 +2224,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
                 "AggregatedInfluenceGraph does not support view copies."
             )
 
-        return type(self)(graph=self._plain_graph(self), total=self.total)
+        return type(self)(graph=self, total=self.total)
 
     def add_edge(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
@@ -2943,7 +2925,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         )
 
         return type(self)(
-            _ordered_induced_subgraph(self, feedback_nodes),
+            cast(_MultiDiGraphBase, self.subgraph(feedback_nodes)),
             total=self.total,
         )
 
@@ -3049,7 +3031,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
         program: str = "dot",
-    ):
+    ) -> "Digraph":
         """
         Convert the aggregated influence graph to a native graphviz Digraph.
 
@@ -3639,7 +3621,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_label = self._resolve_edge_label(edge_label)
 
         if collapse is None:
-            graph = InfluenceGraph(self._plain_graph(self))
+            graph = InfluenceGraph(self)
 
         elif collapse == "family":
             graph = self.family_collapsed_graph(
@@ -3649,10 +3631,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
 
         elif collapse == "feedback":
             graph = InfluenceGraph(
-                self._plain_graph(
-                    self.feedback_induced_graph(
-                        include_selfloops=include_selfloops,
-                    )
+                self.feedback_induced_graph(
+                    include_selfloops=include_selfloops,
                 )
             )
 
@@ -3919,22 +3899,19 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         Replace graph contents while preserving aggregated invariants.
         """
 
-        plain_graph = self._plain_graph(graph)
-
         self.clear()
-        self.graph.update(plain_graph.graph)
+        self.graph.update(graph.graph)
         nx.MultiDiGraph.add_nodes_from(
             self,
-            ((node, data.copy()) for node, data in plain_graph.nodes(data=True)),
+            ((node, data.copy()) for node, data in graph.nodes(data=True)),
         )
 
-        for source, target, data in plain_graph.edges(data=True):
+        for source, target, data in graph.edges(data=True):
             data = data.copy()
 
             if "sign" not in data:
                 raise ValueError(
-                    f"missing edge attribute 'sign' for edge "
-                    f"{source!r} -> {target!r}"
+                    f"missing edge attribute 'sign' for edge {source!r} -> {target!r}"
                 )
 
             if "count" not in data:
@@ -4051,40 +4028,6 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         """
 
         return _as_positive_integer(total, "total")
-
-
-def _ordered_induced_subgraph(
-    graph: nx.MultiDiGraph,
-    nodes: Iterable[str],
-) -> nx.MultiDiGraph:
-    """Return an induced subgraph with deterministic node and edge ordering."""
-
-    selected_nodes = set(nodes)
-    subgraph = nx.MultiDiGraph()
-    subgraph.graph.update(graph.graph)
-    subgraph.add_nodes_from(
-        (node, graph.nodes[node].copy())
-        for node in sorted(selected_nodes, key=str)
-    )
-
-    edges = (
-        (source, target, key, data)
-        for source, target, key, data in graph.edges(keys=True, data=True)
-        if source in selected_nodes and target in selected_nodes
-    )
-    for source, target, key, data in sorted(
-        edges,
-        key=lambda edge: (str(edge[0]), str(edge[1]), str(edge[2])),
-    ):
-        nx.MultiDiGraph.add_edge(
-            subgraph,
-            source,
-            target,
-            key=key,
-            **data.copy(),
-        )
-
-    return subgraph
 
 
 def _networkx_to_pydot(graph: nx.MultiDiGraph) -> "Dot":

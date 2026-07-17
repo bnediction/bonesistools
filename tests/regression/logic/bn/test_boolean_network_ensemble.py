@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+import os
+import shutil
+import subprocess
+import sys
+from textwrap import dedent
 from typing import Any, cast
 
 import pytest
@@ -135,6 +140,17 @@ def test_boolean_network_ensemble_initialization_and_slice_mutation_errors():
     assert len(ensemble) == 0
 
 
+def test_boolean_network_ensemble_reuses_identical_coerced_rules():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(
+        {"A": "B & ~C", "B": 1, "C": 0},
+        {"A": "B & ~C", "B": 1, "C": 0},
+    )
+
+    assert ensemble[0]["A"] is ensemble[1]["A"]
+    assert ensemble[0]["B"] is ensemble[1]["B"]
+    assert ensemble[0]["C"] is ensemble[1]["C"]
+
+
 def test_boolean_network_ensemble_simplify_reduces_all_rules_in_place():
     ensemble = bt.logic.bn.BooleanNetworkEnsemble(
         {"A": "B | (B & C)", "B": 0, "C": 1},
@@ -248,19 +264,81 @@ def test_boolean_network_ensemble_to_influence_graph(bnet_ensemble):
 
     edge_data = list(graph.get_edge_data("C", "A").values())
     assert any(
-        data["sign"] == 1
-        and data["count"] == 1
-        and "frequency" not in data
+        data["sign"] == 1 and data["count"] == 1 and "frequency" not in data
         for data in edge_data
     )
     assert any(
-        data["sign"] == -1
-        and data["count"] == 1
-        and "frequency" not in data
+        data["sign"] == -1 and data["count"] == 1 and "frequency" not in data
         for data in edge_data
     )
     assert graph.edge_frequency("C", "A", sign=1) == pytest.approx(1 / 3)
     assert graph.edge_frequency("C", "A", sign=-1) == pytest.approx(1 / 3)
+
+
+def test_boolean_network_ensemble_graphviz_layout_is_hash_seed_independent():
+    pytest.importorskip("pydot")
+
+    if shutil.which("dot") is None:
+        pytest.skip("Graphviz 'dot' executable is unavailable")
+
+    script = dedent("""
+        import bonesistools as bt
+
+        networks = [
+            {
+                "APEX": "BCL2 | MCL1",
+                "BCL2": "MCL1 & ~CASP3",
+                "CASP3": "BAX & ~BCL2",
+                "BAX": "TP53 | CASP3",
+                "MCL1": "AKT & ~TP53",
+                "AKT": "PI3K",
+                "G1": "APEX",
+                "G2": "APEX",
+                "OUT": "G1 | G2",
+                "PI3K": "APEX",
+                "TP53": "CASP3 | MCL1",
+            },
+            {
+                "APEX": "BCL2 & MCL1",
+                "BCL2": "MCL1 | ~CASP3",
+                "CASP3": "BAX & ~BCL2",
+                "BAX": "TP53 & CASP3",
+                "MCL1": "AKT | ~TP53",
+                "AKT": "PI3K",
+                "G1": "APEX",
+                "G2": "APEX",
+                "OUT": "G1 | G2",
+                "PI3K": "APEX",
+                "TP53": "CASP3 & MCL1",
+            },
+        ]
+
+        graph = bt.logic.bn.BooleanNetworkEnsemble(*networks).to_influence_graph()
+
+        for collapse in (None, "family", "feedback", "both"):
+            dot = graph.to_pydot(
+                collapse=collapse,
+                edge_label=None,
+                node_style=None,
+                edge_style=None,
+            )
+            print(dot.create(format="plain").decode())
+        """)
+
+    layouts = []
+    for seed in (1, 2):
+        environment = os.environ.copy()
+        environment["PYTHONHASHSEED"] = str(seed)
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        layouts.append(result.stdout)
+
+    assert layouts[0] == layouts[1]
 
 
 def test_boolean_network_ensemble_to_influence_graph_drop_isolates(bnet_ensemble):

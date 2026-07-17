@@ -9,6 +9,7 @@ from pathlib import Path
 GOLDEN_DIR = Path(__file__).parent
 sys.path.insert(0, str(GOLDEN_DIR))
 
+from logic import _graph_layout  # noqa: E402
 from logic._boolean_workflow import (  # noqa: E402
     EXPECTED_DIR as BOOLEAN_EXPECTED_DIR,
 )
@@ -49,14 +50,18 @@ def main() -> None:
 
     if args.section in ["all", "logic"]:
         boolean_outputs = run_boolean_workflow()
+        graph_layout = _graph_layout.graphviz_input()
 
         for path in BOOLEAN_EXPECTED_DIR.glob("*.npz"):
             path.unlink()
 
         save_boolean_expected(boolean_outputs)
+        _graph_layout.save_expected(graph_layout)
 
         for path in sorted(BOOLEAN_EXPECTED_DIR.glob("*.npz")):
             print(f"wrote {path}")
+
+        print(f"wrote {_graph_layout.EXPECTED_PATH}")
 
 
 if __name__ == "__main__":

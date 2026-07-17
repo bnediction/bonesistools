@@ -56,6 +56,13 @@ class _InteractionScore:
         return self.score / self.total_weight
 
 
+_EMPTY_INTERACTION_SCORE = _InteractionScore(
+    score=0.0,
+    total_weight=0.0,
+    path_number=0,
+)
+
+
 def interaction_scores_from_walks(
     graph: nx.Graph[Any],
     genes: Optional[Iterable[str]] = None,
@@ -97,41 +104,51 @@ def interaction_scores_from_walks(
     max_depth = _as_positive_integer(max_depth, "max_depth")
 
     weights = _default_weights(max_depth) if weights is None else weights
+    all_nodes_are_sources = genes is None
     genes = list(graph.nodes if genes is None else genes)
     gene_set = set(genes)
 
     scores: Dict[str, Dict[str, _InteractionScore]] = {gene: {} for gene in genes}
-    accumulators: Dict[str, Dict[str, Dict[str, float]]] = {gene: {} for gene in genes}
+    accumulators: Dict[str, Dict[str, Tuple[float, float, int]]] = {
+        gene: {} for gene in genes
+    }
+    adjacency: Dict[str, Tuple[Tuple[str, int, int], ...]] = (
+        {node: _signed_successor_counts(graph, node) for node in graph}
+        if all_nodes_are_sources
+        else {}
+    )
 
     for source in genes:
         if source not in graph:
             continue
 
-        frontier: Dict[str, Dict[int, int]] = {source: {1: 1, -1: 0}}
+        frontier: Dict[str, Tuple[int, int]] = {source: (1, 0)}
 
         for path_length in range(1, max_depth + 1):
-            next_frontier: Dict[str, Dict[int, int]] = {}
+            next_frontier: Dict[str, Tuple[int, int]] = {}
 
             for node, signed_counts in frontier.items():
-                positive_count = signed_counts.get(1, 0)
-                negative_count = signed_counts.get(-1, 0)
+                positive_count, negative_count = signed_counts
 
                 if positive_count == 0 and negative_count == 0:
                     continue
 
-                for successor in getattr(graph, "successors")(node):
-                    target_counts = next_frontier.setdefault(
-                        successor,
-                        {1: 0, -1: 0},
-                    )
+                if node not in adjacency:
+                    adjacency[node] = _signed_successor_counts(graph, node)
 
-                    for edge_sign in _edge_signs(graph, node, successor):
-                        if edge_sign == 1:
-                            target_counts[1] += positive_count
-                            target_counts[-1] += negative_count
-                        else:
-                            target_counts[1] += negative_count
-                            target_counts[-1] += positive_count
+                for successor, positive_edges, negative_edges in adjacency[node]:
+                    previous_positive, previous_negative = next_frontier.get(
+                        successor,
+                        (0, 0),
+                    )
+                    next_frontier[successor] = (
+                        previous_positive
+                        + positive_count * positive_edges
+                        + negative_count * negative_edges,
+                        previous_negative
+                        + negative_count * positive_edges
+                        + positive_count * negative_edges,
+                    )
 
             if not next_frontier:
                 break
@@ -145,29 +162,30 @@ def interaction_scores_from_walks(
                 if target not in gene_set:
                     continue
 
-                positive_count = signed_counts.get(1, 0)
-                negative_count = signed_counts.get(-1, 0)
+                positive_count, negative_count = signed_counts
                 path_number = positive_count + negative_count
 
                 if path_number == 0:
                     continue
 
-                target_scores = accumulators[source].setdefault(
+                score, total_weight, total_paths = accumulators[source].get(
                     target,
-                    {"score": 0.0, "total_weight": 0.0, "path_number": 0},
+                    (0.0, 0.0, 0),
                 )
-                target_scores["score"] += (positive_count - negative_count) * weight
-                target_scores["total_weight"] += path_number * weight
-                target_scores["path_number"] += path_number
+                accumulators[source][target] = (
+                    score + (positive_count - negative_count) * weight,
+                    total_weight + path_number * weight,
+                    total_paths + path_number,
+                )
 
             frontier = next_frontier
 
     for source, targets in accumulators.items():
         for target, values in targets.items():
             scores[source][target] = _InteractionScore(
-                score=values["score"],
-                total_weight=values["total_weight"],
-                path_number=int(values["path_number"]),
+                score=values[0],
+                total_weight=values[1],
+                path_number=values[2],
             )
 
     return scores
@@ -219,30 +237,57 @@ def infer_signed_interactions(
 
     genes = list(scores if genes is None else genes)
     interactions = []
-
-    for idx, source in enumerate(genes):
-        for target in genes[idx + 1 :]:
-            forward = scores.get(source, {}).get(target, _empty_score())
-            backward = scores.get(target, {}).get(source, _empty_score())
-
-            candidates = [
-                (source, target, forward, backward),
-                (target, source, backward, forward),
-            ]
-
-            for candidate_source, candidate_target, score, opposite in candidates:
-                if not _passes_threshold(score, minimum_path_number, threshold):
+    gene_positions = {gene: index for index, gene in enumerate(genes)}
+    if len(gene_positions) == len(genes):
+        scored_pairs = set()
+        for source in genes:
+            source_index = gene_positions[source]
+            for target in scores.get(source, {}):
+                if target == source or target not in gene_positions:
                     continue
-
-                if not allow_bidirectional and abs(score.normalized_score) <= abs(
-                    opposite.normalized_score
-                ):
-                    continue
-
-                sign = 1 if score.normalized_score > 0 else -1
-                interactions.append(
-                    (candidate_source, candidate_target, {"sign": sign})
+                target_index = gene_positions[target]
+                scored_pairs.add(
+                    (min(source_index, target_index), max(source_index, target_index))
                 )
+        ordered_pairs = sorted(scored_pairs)
+    else:
+        ordered_pairs = [
+            (source_index, target_index)
+            for source_index, source in enumerate(genes)
+            for target_index, target in enumerate(
+                genes[source_index + 1 :],
+                start=source_index + 1,
+            )
+            if target in scores.get(source, {}) or source in scores.get(target, {})
+        ]
+
+    for source_index, target_index in ordered_pairs:
+        source = genes[source_index]
+        target = genes[target_index]
+        forward = scores.get(source, {}).get(target, _EMPTY_INTERACTION_SCORE)
+        backward = scores.get(target, {}).get(source, _EMPTY_INTERACTION_SCORE)
+
+        candidates = [
+            (source, target, forward, backward),
+            (target, source, backward, forward),
+        ]
+
+        for candidate_source, candidate_target, score, opposite in candidates:
+            normalized_score = score.normalized_score
+            if (
+                score.path_number < minimum_path_number
+                or normalized_score == 0
+                or abs(normalized_score) < threshold
+            ):
+                continue
+
+            if not allow_bidirectional and abs(normalized_score) <= abs(
+                opposite.normalized_score
+            ):
+                continue
+
+            sign = 1 if normalized_score > 0 else -1
+            interactions.append((candidate_source, candidate_target, {"sign": sign}))
 
     return interactions
 
@@ -346,6 +391,21 @@ def _edge_signs(
     return signs
 
 
+def _signed_successor_counts(
+    graph: nx.Graph[Any],
+    source: str,
+) -> Tuple[Tuple[str, int, int], ...]:
+    """Return signed parallel-edge counts for each direct successor."""
+
+    successors = []
+    for target in getattr(graph, "successors")(source):
+        signs = _edge_signs(graph, source, target)
+        positive = sum(sign == 1 for sign in signs)
+        successors.append((target, positive, len(signs) - positive))
+
+    return tuple(successors)
+
+
 def _path_weight(
     path_length: int,
     weights: Sequence[float],
@@ -359,24 +419,6 @@ def _path_weight(
             "invalid argument value for 'weights': "
             f"expected at least {path_length} values but received {len(weights)}"
         )
-
-
-def _empty_score() -> _InteractionScore:
-
-    return _InteractionScore(score=0.0, total_weight=0.0, path_number=0)
-
-
-def _passes_threshold(
-    score: _InteractionScore,
-    minimum_path_number: int,
-    threshold: float,
-) -> bool:
-
-    return (
-        score.path_number >= minimum_path_number
-        and score.normalized_score != 0
-        and abs(score.normalized_score) >= threshold
-    )
 
 
 def _walk_signs(

@@ -81,6 +81,9 @@ def equivalence(
         Whether the two expressions are logically equivalent.
     """
 
+    if expr1 == expr2:
+        return True
+
     expr1 = expr1.simplify()
     expr2 = expr2.simplify()
     if expr1 == expr2:
@@ -726,17 +729,13 @@ def _clingo_robdd_facts(
     variables: Tuple[str, ...],
 ) -> Tuple[str, ...]:
 
-    variable_indices = {
-        variable: index for index, variable in enumerate(variables)
-    }
+    variable_indices = {variable: index for index, variable in enumerate(variables)}
     facts = [
         *(f"variable({index})." for index in range(len(variables))),
         f"root({robdd._root_id}).",
     ]
     facts.extend(
-        "decision("
-        f"{node}, {variable_indices[variable]}, {low}, {high}"
-        ")."
+        "decision(" f"{node}, {variable_indices[variable]}, {low}, {high}" ")."
         for node, variable, low, high in robdd._iter_nodes()
     )
 

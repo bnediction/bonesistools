@@ -1,0 +1,31 @@
+digraph {
+AKT [function_count=1, function_stability=1.0];
+APEX [function_count=2, function_stability=0.5];
+BAX [function_count=2, function_stability=0.5];
+BCL2 [function_count=2, function_stability=0.5];
+CASP3 [function_count=1, function_stability=1.0];
+G1 [function_count=1, function_stability=1.0];
+G2 [function_count=1, function_stability=1.0];
+MCL1 [function_count=2, function_stability=0.5];
+OUT [function_count=1, function_stability=1.0];
+PI3K [function_count=1, function_stability=1.0];
+TP53 [function_count=2, function_stability=0.5];
+AKT -> MCL1 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+APEX -> G1 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+APEX -> G2 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+APEX -> PI3K [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+BAX -> CASP3 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+BCL2 -> APEX [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+BCL2 -> CASP3 [key=0, count=2, sign="-1", frequency=1.0, color=red2, arrowhead=tee, penwidth=2];
+CASP3 -> BAX [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+CASP3 -> BCL2 [key=0, count=2, sign="-1", frequency=1.0, color=red2, arrowhead=tee, penwidth=2];
+CASP3 -> TP53 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+G1 -> OUT [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+G2 -> OUT [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+MCL1 -> APEX [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+MCL1 -> BCL2 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+MCL1 -> TP53 [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+PI3K -> AKT [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+TP53 -> BAX [key=0, count=2, sign=1, frequency=1.0, color=green4, arrowhead=normal, penwidth=2];
+TP53 -> MCL1 [key=0, count=2, sign="-1", frequency=1.0, color=red2, arrowhead=tee, penwidth=2];
+}
