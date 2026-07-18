@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Any,
     Optional,
     Union,
@@ -14,19 +13,18 @@ import networkx as nx
 import pandas as pd
 
 from ...resources.ncbi._genesyn import support_legacy_gene_synonyms_args
-from ...resources.ncbi._typing import InputIdentifierType, OutputIdentifierType
-
-if TYPE_CHECKING:
-    from ...resources.ncbi._genesyn import GeneSynonyms
-else:
-    GeneSynonyms = None
+from ...resources.ncbi._typing import (
+    GeneIdentifiersLike,
+    InputIdentifierType,
+    OutputIdentifierType,
+)
 
 
 @support_legacy_gene_synonyms_args
 def read_influence_graph(
     file: Union[str, Path],
     *,
-    genesyn: Optional[GeneSynonyms] = None,
+    genesyn: Optional[GeneIdentifiersLike] = None,
     input_type: InputIdentifierType = "name",
     output_type: OutputIdentifierType = "symbol",
     sep: str = ",",
@@ -42,8 +40,8 @@ def read_influence_graph(
     ----------
     file: str | Path
         Path to the tabular file containing the influence graph.
-    genesyn: GeneSynonyms, optional
-        GeneSynonyms object used to convert graph node identifiers.
+    genesyn: GeneIdentifiers, optional
+        GeneIdentifiers object used to convert graph node identifiers.
     input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
         (default: 'name')
         Input gene identifier type. Valid database-specific values are listed
@@ -71,7 +69,7 @@ def read_influence_graph(
         If the input file is missing required columns or contains unsupported
         sign values.
     TypeError
-        If `genesyn` is neither None nor a GeneSynonyms object.
+        If `genesyn` is neither None nor a GeneIdentifiers object.
 
     Notes
     -----
@@ -114,12 +112,7 @@ def read_influence_graph(
     if genesyn is None:
         return grn
 
-    gene_synonyms_class = GeneSynonyms
-
-    if gene_synonyms_class is None:
-        from ...resources.ncbi._genesyn import GeneSynonyms as gene_synonyms_class
-
-    if isinstance(genesyn, gene_synonyms_class):
+    if callable(genesyn):
         genesyn(
             grn,
             input_type=input_type,
@@ -130,5 +123,5 @@ def read_influence_graph(
 
     raise TypeError(
         f"unsupported argument type for 'genesyn': "
-        f"expected GeneSynonyms but received {type(genesyn)}"
+        f"expected a GeneIdentifiers-compatible callable but received {type(genesyn)}"
     )

@@ -108,11 +108,11 @@ Submodules:
 Example:
 
 ```python
-genesyn = bt.resources.ncbi.genesyn()
+gene_identifiers = bt.resources.ncbi.identifiers()
 
 grn = bt.resources.omnipath.collectri(
     organism="mouse",
-    genesyn=genesyn,
+    identifiers=gene_identifiers,
 )
 ```
 

@@ -106,7 +106,7 @@ def test_deprecated_public_names_are_hidden_from_tab_completion():
             "load",
             "nestorowa",
         ],
-        bt.resources.ncbi: ["GeneSynonyms"],
+        bt.resources.ncbi: ["GeneSynonyms", "genesyn"],
         bt.resources.omnipath: ["load_collectri_grn", "load_dorothea_grn"],
     }
 

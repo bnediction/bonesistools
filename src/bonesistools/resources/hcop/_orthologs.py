@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import copy as copylib
 from collections.abc import Mapping as MappingInstance
+from collections.abc import MutableMapping as MutableMappingInstance
 from collections.abc import Sequence as SequenceInstance
+from functools import wraps
 from itertools import product
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     List,
     Optional,
     Sequence,
     Set,
     Tuple,
+    TypeVar,
     Union,
     cast,
     overload,
@@ -28,15 +32,82 @@ from typing_extensions import Protocol
 
 from ..._compat import Literal
 from ..._validation import _as_positive_integer
-from ..._warnings import _deprecated, _warn_deprecated
+from ..._warnings import (
+    _deprecated,
+    _warn_deprecated,
+    _warn_deprecated_argument,
+)
 
 if TYPE_CHECKING:
     from ...logic.boolean_algebra import Hypercube
+    from ...logic.boolean_algebra._typing import HypercubeLike
     from ...logic.boolean_network._typing import BooleanNetworkLike
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 HcopVersion = Union[Literal["bundled", "latest"], str, Path]
 HCOP_DIR = Path(__file__).resolve().parent / "data"
+_F = TypeVar("_F", bound=Callable[..., Any])
+_HypercubeLikeT = TypeVar("_HypercubeLikeT", bound="HypercubeLike")
+
+
+def _support_legacy_keep_if_missing(
+    *,
+    positional_parameters: Tuple[str, ...],
+    false_policy: Literal["raise", "drop"],
+) -> Callable[[_F], _F]:
+    """Accept the deprecated missing-symbol boolean as an unmapped policy."""
+
+    def decorator(function: _F) -> _F:
+        @wraps(function)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            positional = args[:2]
+            legacy_values = args[2:]
+            if len(legacy_values) > len(positional_parameters):
+                raise TypeError(
+                    f"expected at most {len(positional_parameters) + 1} "
+                    "positional arguments"
+                )
+            for name, value in zip(positional_parameters, legacy_values):
+                if name in kwargs:
+                    raise TypeError(f"multiple values for argument {name!r}")
+                kwargs[name] = value
+
+            if "keep_if_missing" in kwargs:
+                if "on_unmapped" in kwargs:
+                    raise TypeError(
+                        "cannot specify both 'keep_if_missing' and 'on_unmapped'"
+                    )
+                keep_if_missing = kwargs.pop("keep_if_missing")
+                if not isinstance(keep_if_missing, bool):
+                    raise TypeError("'keep_if_missing' must be a boolean")
+                _warn_deprecated_argument(
+                    "keep_if_missing",
+                    "on_unmapped",
+                    stacklevel=4,
+                )
+                kwargs["on_unmapped"] = "keep" if keep_if_missing else false_policy
+
+            return function(*positional, **kwargs)
+
+        return cast(_F, wrapped)
+
+    return decorator
+
+
+def _validate_on_unmapped(
+    on_unmapped: str,
+    *,
+    allowed: Tuple[str, ...],
+) -> str:
+    """Validate a missing-symbol policy against the supported values."""
+
+    if on_unmapped not in allowed:
+        expected = ", ".join(repr(policy) for policy in allowed)
+        raise ValueError(
+            "invalid argument value for 'on_unmapped': "
+            f"expected one of {expected} but received {on_unmapped!r}"
+        )
+    return on_unmapped
 
 
 class Orthologs:
@@ -148,7 +219,6 @@ class Orthologs:
     def __call__(
         self,
         data: str,
-        *args: Any,
         **kwargs: Any,
     ) -> List[str]: ...
 
@@ -156,7 +226,6 @@ class Orthologs:
     def __call__(
         self,
         data: List[str],
-        *args: Any,
         **kwargs: Any,
     ) -> List[str]: ...
 
@@ -164,7 +233,6 @@ class Orthologs:
     def __call__(
         self,
         data: Tuple[str, ...],
-        *args: Any,
         **kwargs: Any,
     ) -> Tuple[str, ...]: ...
 
@@ -172,7 +240,6 @@ class Orthologs:
     def __call__(
         self,
         data: Set[str],
-        *args: Any,
         **kwargs: Any,
     ) -> Set[str]: ...
 
@@ -180,7 +247,6 @@ class Orthologs:
     def __call__(
         self,
         data: Sequence[str],
-        *args: Any,
         **kwargs: Any,
     ) -> Sequence[str]: ...
 
@@ -188,7 +254,6 @@ class Orthologs:
     def __call__(
         self,
         data: InteractionList,
-        *args: Any,
         **kwargs: Any,
     ) -> InteractionList: ...
 
@@ -196,7 +261,6 @@ class Orthologs:
     def __call__(
         self,
         data: pd.DataFrame,
-        *args: Any,
         **kwargs: Any,
     ) -> pd.DataFrame: ...
 
@@ -204,7 +268,6 @@ class Orthologs:
     def __call__(
         self,
         data: Graph[Any],
-        *args: Any,
         **kwargs: Any,
     ) -> Graph[Any]: ...
 
@@ -212,7 +275,6 @@ class Orthologs:
     def __call__(
         self,
         data: "Hypercube",
-        *args: Any,
         **kwargs: Any,
     ) -> "Hypercube": ...
 
@@ -220,7 +282,6 @@ class Orthologs:
     def __call__(
         self,
         data: "BooleanNetworkLike",
-        *args: Any,
         **kwargs: Any,
     ) -> "BooleanNetworkLike": ...
 
@@ -236,23 +297,20 @@ class Orthologs:
             "Hypercube",
             "BooleanNetworkLike",
         ],
-        *args: Any,
         **kwargs: Any,
     ) -> Any:
         """
         Translate genes in a supported object.
 
         This method dispatches to the appropriate translation method according
-        to `data` type. Additional positional and keyword arguments are passed
-        to the selected translation method.
+        to `data` type. Additional keyword arguments are passed to the selected
+        translation method.
 
         Parameters
         ----------
         data: str, sequence, set, InteractionList, DataFrame, Graph, Hypercube
             or BooleanNetworkLike
             Object containing symbols from `input_organism` to translate.
-        *args: Any
-            Positional arguments forwarded to the selected translation method.
         **kwargs: Any
             Keyword arguments forwarded to the selected translation method.
 
@@ -265,11 +323,10 @@ class Orthologs:
         """
 
         if isinstance(data, str):
-            return self.translate(data, *args, **kwargs)
+            return self.translate(data, **kwargs)
         if self._is_interaction_list(data):
             return self.translate_interaction_list(
                 cast(InteractionList, data),
-                *args,
                 **kwargs,
             )
         if (
@@ -277,21 +334,20 @@ class Orthologs:
         ) or isinstance(data, set):
             return self.translate_sequence(
                 cast(Union[Sequence[str], Set[str]], data),
-                *args,
                 **kwargs,
             )
         if isinstance(data, pd.DataFrame):
-            return self.translate_dataframe(data, *args, **kwargs)
+            return self.translate_dataframe(data, **kwargs)
         if isinstance(data, Graph):
-            return self.translate_graph(data, *args, **kwargs)
+            return self.translate_graph(data, **kwargs)
 
         from ...logic.boolean_algebra import Hypercube
         from ...logic.boolean_network._typing import is_boolean_network_like
 
         if isinstance(data, Hypercube):
-            return self.translate_hypercube(data, *args, **kwargs)
+            return self.translate_hypercube(data, **kwargs)
         if is_boolean_network_like(data):
-            return self.translate_boolean_network(data, *args, **kwargs)
+            return self.translate_boolean_network(data, **kwargs)
         raise TypeError(
             f"unsupported argument type for 'data': "
             f"expected str, sequence, set, interaction list, {pd.DataFrame}, "
@@ -337,7 +393,16 @@ class Orthologs:
 
         return {source: list(targets) for source, targets in self._mapping.items()}
 
-    def translate(self, gene: str, keep_if_missing: bool = False) -> List[str]:
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing",),
+        false_policy="drop",
+    )
+    def translate(
+        self,
+        gene: str,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
+    ) -> List[str]:
         """
         Translate one gene symbol to the selected output organism.
 
@@ -349,20 +414,34 @@ class Orthologs:
         gene: str
             Source gene symbol to translate. Complex names separated by `_` are
             translated subunit by subunit.
-        keep_if_missing: bool (default: False)
-            If `True`, keep the original gene symbol when no ortholog is found.
+        on_unmapped: {"raise", "keep", "drop"} (default: "raise")
+            Strategy for a gene symbol with no target ortholog. `"raise"`
+            raises a `ValueError`, `"keep"` returns the original symbol and
+            `"drop"` returns an empty list.
 
         Returns
         -------
         list of str
-            Target ortholog symbols. An empty list is returned when no mapping
-            is found and `keep_if_missing=False`.
+            Target ortholog symbols.
+
+        Raises
+        ------
+        ValueError
+            If no target ortholog exists and `on_unmapped="raise"`.
         """
+
+        on_unmapped = cast(
+            Literal["raise", "keep", "drop"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep", "drop"),
+            ),
+        )
 
         if "_" in gene:
             translated_subunits: List[List[str]] = []
             for subunit in gene.split("_"):
-                translated = self.translate(subunit, keep_if_missing=keep_if_missing)
+                translated = self.translate(subunit, on_unmapped=on_unmapped)
                 if len(translated) == 0:
                     return []
                 translated_subunits.append(translated)
@@ -374,54 +453,66 @@ class Orthologs:
         targets = self._mapping.get(gene)
         if targets is not None:
             return list(targets)
-        return [gene] if keep_if_missing else []
+        if on_unmapped == "raise":
+            raise ValueError(f"no target ortholog found for gene symbol {gene!r}")
+        return [gene] if on_unmapped == "keep" else []
 
     @overload
     def translate_sequence(
         self,
         genes: List[str],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> List[str]: ...
 
     @overload
     def translate_sequence(
         self,
         genes: Tuple[str, ...],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> Tuple[str, ...]: ...
 
     @overload
     def translate_sequence(
         self,
         genes: Set[str],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> Set[str]: ...
 
     @overload
     def translate_sequence(
         self,
         genes: Sequence[str],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> Sequence[str]: ...
 
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing",),
+        false_policy="drop",
+    )
     def translate_sequence(
         self,
         genes: Union[Sequence[str], Set[str]],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> Union[Sequence[str], Set[str]]:
         """
         Translate a sequence or set of source gene symbols.
 
         Each gene is translated to one target symbol using the deterministic
-        HCOP ranking. Missing genes are either kept or removed depending on
-        `keep_if_missing`.
+        HCOP ranking.
 
         Parameters
         ----------
         genes: sequence or set of str
             Source gene symbols to translate.
-        keep_if_missing: bool (default: True)
-            If `True`, keep original gene symbols with no ortholog.
+        on_unmapped: {"raise", "keep", "drop"} (default: "raise")
+            Strategy for gene symbols with no target ortholog. `"raise"`
+            raises a `ValueError`, `"keep"` preserves the original symbols and
+            `"drop"` removes them from the result.
 
         Returns
         -------
@@ -430,24 +521,36 @@ class Orthologs:
             possible.
         """
 
+        on_unmapped = cast(
+            Literal["raise", "keep", "drop"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep", "drop"),
+            ),
+        )
         best_mapping = self._best_mapping
-        if keep_if_missing:
+        if on_unmapped == "keep":
             translated_genes = [
-                cast(str, self._translate_best(gene, keep_if_missing=True))
+                cast(str, self._translate_best(gene, on_unmapped="keep"))
                 if "_" in gene
                 else best_mapping.get(gene, gene)
                 for gene in genes
             ]
-        else:
+        elif on_unmapped == "drop":
             translated_genes = []
             for gene in genes:
                 translated = (
-                    self._translate_best(gene, keep_if_missing=False)
+                    self._translate_best(gene, on_unmapped="drop")
                     if "_" in gene
                     else best_mapping.get(gene)
                 )
                 if translated is not None:
                     translated_genes.append(translated)
+        else:
+            translated_genes = [
+                cast(str, self._translate_best(gene, on_unmapped="raise"))
+                for gene in genes
+            ]
 
         if isinstance(genes, list):
             return translated_genes
@@ -458,77 +561,158 @@ class Orthologs:
         except TypeError:
             return translated_genes
 
+    @overload
     def translate_hypercube(
         self,
-        hypercube: "Hypercube",
-        keep_if_missing: bool = True,
+        hypercube: _HypercubeLikeT,
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
+        copy: Literal[True] = True,
+    ) -> _HypercubeLikeT: ...
+
+    @overload
+    def translate_hypercube(
+        self,
+        hypercube: "HypercubeLike",
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
+        copy: Literal[False],
+    ) -> None: ...
+
+    @overload
+    def translate_hypercube(
+        self,
+        hypercube: _HypercubeLikeT,
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
         copy: bool = True,
-    ) -> Union["Hypercube", None]:
+    ) -> Union[_HypercubeLikeT, None]: ...
+
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing", "copy"),
+        false_policy="raise",
+    )
+    def translate_hypercube(
+        self,
+        hypercube: _HypercubeLikeT,
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
+        copy: bool = True,
+    ) -> Union[_HypercubeLikeT, None]:
         """
         Translate hypercube component names.
 
         Components are translated to one target symbol using the deterministic
-        HCOP ranking. Missing components are kept by default because removing
-        an explicitly specified component would broaden the represented state
-        space.
+        HCOP ranking. An explicitly specified component cannot be dropped
+        because doing so would broaden the represented state space.
 
         Parameters
         ----------
-        hypercube: Hypercube
-            Hypercube whose explicitly specified components are translated.
-        keep_if_missing: bool (default: True)
-            If `True`, keep component names with no ortholog. If `False`, raise
-            an error when a component has no ortholog.
+        hypercube: HypercubeLike
+            Hypercube or compatible component mapping to translate.
+        on_unmapped: {"raise", "keep"} (default: "raise")
+            Strategy for component symbols with no target ortholog. `"raise"`
+            raises a `ValueError` and `"keep"` preserves the original symbol.
         copy: bool (default: True)
-            Return a translated copy instead of modifying `hypercube`.
+            Return a translated object of the same type instead of modifying
+            `hypercube`. In-place translation requires a mutable mapping.
 
         Returns
         -------
-        Hypercube or None
-            Translated hypercube if `copy=True`; otherwise None.
+        HypercubeLike or None
+            Translated object with the same type as `hypercube` if `copy=True`;
+            otherwise None.
 
         Raises
         ------
         TypeError
-            If `hypercube` is not a Hypercube.
+            If `hypercube` is not hypercube-like, or if `copy=False` is used
+            with an immutable mapping.
         ValueError
-            If `keep_if_missing=False` and a component has no ortholog, or if
-            translation would merge explicitly specified components.
+            If a component has no target ortholog and `on_unmapped="raise"`, or
+            if translation would merge explicitly specified components.
         """
 
         from ...logic.boolean_algebra import Hypercube
+        from ...logic.boolean_algebra._typing import is_hypercube_like
 
-        if not isinstance(hypercube, Hypercube):
+        if not isinstance(hypercube, Hypercube) and not is_hypercube_like(hypercube):
             raise TypeError(
                 f"unsupported argument type for 'hypercube': "
-                f"expected {Hypercube} but received {type(hypercube)}"
+                "expected a hypercube-like mapping "
+                f"but received {type(hypercube)}"
+            )
+        if not copy and not isinstance(hypercube, MutableMappingInstance):
+            raise TypeError(
+                "invalid argument combination: copy=False requires a "
+                "mutable hypercube-like mapping"
             )
 
+        on_unmapped = cast(
+            Literal["raise", "keep"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep"),
+            ),
+        )
         mapping = {}
 
         for component in hypercube:
             translated = self._translate_best(
                 component,
-                keep_if_missing=keep_if_missing,
+                on_unmapped="keep" if on_unmapped == "keep" else "drop",
             )
-
             if translated is None:
                 raise ValueError(
                     "hypercube translation cannot remove an unmapped "
                     f"component: {component!r}"
                 )
-
             mapping[component] = translated
 
-        translated_hypercube = hypercube.copy() if copy else hypercube
-        translated_hypercube.relabel(mapping)
+        translated_values: Dict[str, Any] = {}
+        for component, value in hypercube.items():
+            translated_component = mapping[component]
+            if translated_component in translated_values:
+                raise ValueError("relabeling would merge hypercube components")
+            translated_values[translated_component] = value
 
-        return translated_hypercube if copy else None
+        if not copy:
+            translated_hypercube = cast(Any, hypercube)
+            translated_hypercube.clear()
+            translated_hypercube.update(translated_values)
+            return None
 
+        hypercube_type = cast(Any, type(hypercube))
+        try:
+            translated_hypercube = hypercube_type(translated_values)
+        except Exception as constructor_error:
+            if not isinstance(hypercube, MutableMappingInstance):
+                raise TypeError(
+                    "cannot create a translated copy while preserving "
+                    f"hypercube type {type(hypercube)}"
+                ) from constructor_error
+
+            translated_hypercube = copylib.copy(hypercube)
+            translated_hypercube.clear()
+            translated_hypercube.update(translated_values)
+
+        if type(translated_hypercube) is not type(hypercube):
+            raise TypeError(
+                "cannot create a translated copy while preserving "
+                f"hypercube type {type(hypercube)}"
+            )
+
+        return cast(_HypercubeLikeT, translated_hypercube)
+
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing",),
+        false_policy="drop",
+    )
     def translate_interaction_list(
         self,
         interaction_list: InteractionList,
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
     ) -> InteractionList:
         """
         Translate source and target genes in an interaction list.
@@ -540,9 +724,10 @@ class Orthologs:
         ----------
         interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
             Sequence of `(source, target, attributes)` interactions.
-        keep_if_missing: bool (default: True)
-            If `True`, keep original source or target symbols with no ortholog.
-            If `False`, interactions with unmapped endpoints are removed.
+        on_unmapped: {"raise", "keep", "drop"} (default: "raise")
+            Strategy for endpoint symbols with no target ortholog. `"raise"`
+            raises a `ValueError`, `"keep"` preserves the original endpoint and
+            `"drop"` removes interactions containing an unmapped endpoint.
 
         Returns
         -------
@@ -550,16 +735,23 @@ class Orthologs:
             Translated interaction list with preserved edge attributes.
         """
 
+        on_unmapped = cast(
+            Literal["raise", "keep", "drop"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep", "drop"),
+            ),
+        )
         translate = self._translate_best
         translated_interactions: List[Tuple[str, str, Dict[str, int]]] = []
         for source, target, attributes in interaction_list:
             translated_source = translate(
                 source,
-                keep_if_missing,
+                on_unmapped,
             )
             translated_target = translate(
                 target,
-                keep_if_missing,
+                on_unmapped,
             )
             if translated_source is None or translated_target is None:
                 continue
@@ -573,8 +765,9 @@ class Orthologs:
     def translate_dataframe(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: Literal[True] = True,
         one_to_many: Optional[int] = None,
     ) -> pd.DataFrame: ...
@@ -583,9 +776,9 @@ class Orthologs:
     def translate_dataframe(
         self,
         df: pd.DataFrame,
-        columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
         *,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: Literal[False],
         one_to_many: Optional[int] = None,
     ) -> None: ...
@@ -594,17 +787,28 @@ class Orthologs:
     def translate_dataframe(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: bool = True,
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]: ...
 
+    @_support_legacy_keep_if_missing(
+        positional_parameters=(
+            "columns",
+            "keep_if_missing",
+            "copy",
+            "one_to_many",
+        ),
+        false_policy="drop",
+    )
     def translate_dataframe(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: bool = True,
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]:
@@ -613,9 +817,30 @@ class Orthologs:
 
         Each selected value is translated to one target symbol using the
         deterministic HCOP ranking by default. If `one_to_many` is provided,
-        use decoupler-like expansion: genes with up to `one_to_many` orthologs
-        expand to all orthologs, while genes with more orthologs or no mapping
-        are removed.
+        values with up to that many orthologs expand to one row per ortholog.
+        Values with more orthologs are removed.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> from bonesistools.resources.hcop import orthologs
+        >>> converter = orthologs(
+        ...     output_organism="mouse",
+        ...     input_organism="human",
+        ...     version="bundled",
+        ... )
+        >>> df = pd.DataFrame(
+        ...     {"gene": ["EZH2", "ABCB1"], "lambda": [0.2, 0.8]}
+        ... )
+        >>> converter.translate_dataframe(
+        ...     df,
+        ...     columns="gene",
+        ...     one_to_many=2,
+        ... )
+             gene  lambda
+        0    Ezh2     0.2
+        1  Abcb1a     0.8
+        2  Abcb1b     0.8
 
         Parameters
         ----------
@@ -624,14 +849,18 @@ class Orthologs:
         columns: str or sequence of str, optional
             Columns to translate. If `None`, translate any existing column among
             `source`, `target` and `genesymbol`.
-        keep_if_missing: bool (default: True)
-            If `True`, keep original symbols with no ortholog. If `False`, rows
-            with missing translations in selected columns are removed.
+        on_unmapped: {"raise", "keep", "drop", "nan"} (default: "raise")
+            Strategy for gene symbols with no target ortholog.
+
+            - `"raise"`: raise a `ValueError` if any symbol is unmapped.
+            - `"keep"`: preserve the original symbol.
+            - `"drop"`: remove rows containing an unmapped symbol.
+            - `"nan"`: replace unmapped symbols with `pandas.NA`.
         copy: bool (default: True)
             Return a translated copy instead of modifying `df`.
         one_to_many: int, optional
-            Maximum number of orthologs allowed per gene. If provided, use the
-            same expansion semantics as `decoupler.op.translate`.
+            Maximum number of orthologs allowed per gene. Each accepted
+            ortholog produces one output row.
 
         Returns
         -------
@@ -641,7 +870,9 @@ class Orthologs:
         Raises
         ------
         ValueError
-            If none of the requested columns are present in `df`.
+            If none of the requested columns are present in `df`, if
+            `on_unmapped` is invalid, or if an unmapped symbol is encountered
+            with `on_unmapped="raise"`.
         """
 
         if not isinstance(df, pd.DataFrame):
@@ -650,6 +881,13 @@ class Orthologs:
                 f"expected {pd.DataFrame} but received {type(df)}"
             )
 
+        on_unmapped = cast(
+            Literal["raise", "keep", "drop", "nan"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep", "drop", "nan"),
+            ),
+        )
         if one_to_many is not None:
             one_to_many = self._validate_one_to_many(one_to_many)
             if not copy:
@@ -666,6 +904,7 @@ class Orthologs:
                     translated,
                     column=column,
                     one_to_many=one_to_many,
+                    on_unmapped=on_unmapped,
                 )
             translated = translated.reset_index(drop=True)
             return translated
@@ -673,12 +912,12 @@ class Orthologs:
         for column in selected_columns:
             translated[column] = self._translate_series(
                 cast(pd.Series, translated[column]),
-                keep_if_missing=keep_if_missing,
+                on_unmapped=on_unmapped,
             )
-            if not keep_if_missing:
-                translated = cast(pd.DataFrame, translated.dropna(subset=[column]))
+            if on_unmapped == "drop":
+                translated.dropna(subset=[column], inplace=True)
 
-        translated = translated.reset_index(drop=True)
+        translated.reset_index(drop=True, inplace=True)
         if copy:
             return translated
 
@@ -686,8 +925,9 @@ class Orthologs:
     def translate_df(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: Literal[True] = True,
         one_to_many: Optional[int] = None,
     ) -> pd.DataFrame: ...
@@ -696,9 +936,9 @@ class Orthologs:
     def translate_df(
         self,
         df: pd.DataFrame,
-        columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
         *,
+        columns: Optional[Union[str, Sequence[str]]] = None,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: Literal[False],
         one_to_many: Optional[int] = None,
     ) -> None: ...
@@ -707,18 +947,29 @@ class Orthologs:
     def translate_df(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: bool = True,
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]: ...
 
     @_deprecated(replacement="`Orthologs.translate_dataframe()`")
+    @_support_legacy_keep_if_missing(
+        positional_parameters=(
+            "columns",
+            "keep_if_missing",
+            "copy",
+            "one_to_many",
+        ),
+        false_policy="drop",
+    )
     def translate_df(
         self,
         df: pd.DataFrame,
+        *,
         columns: Optional[Union[str, Sequence[str]]] = None,
-        keep_if_missing: bool = True,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"] = "raise",
         copy: bool = True,
         one_to_many: Optional[int] = None,
     ) -> Union[pd.DataFrame, None]:
@@ -727,15 +978,20 @@ class Orthologs:
         return self.translate_dataframe(
             df,
             columns=columns,
-            keep_if_missing=keep_if_missing,
+            on_unmapped=on_unmapped,
             copy=copy,
             one_to_many=one_to_many,
         )
 
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing", "copy"),
+        false_policy="drop",
+    )
     def translate_graph(
         self,
         graph: Graph[Any],
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep", "drop"] = "raise",
         copy: bool = True,
     ) -> Union[Graph[Any], None]:
         """
@@ -748,9 +1004,10 @@ class Orthologs:
         ----------
         graph: networkx.Graph
             Graph whose node identifiers are symbols from `input_organism`.
-        keep_if_missing: bool (default: True)
-            If `True`, keep original node labels with no ortholog. If `False`,
-            unmapped nodes and incident edges are removed.
+        on_unmapped: {"raise", "keep", "drop"} (default: "raise")
+            Strategy for node symbols with no target ortholog. `"raise"` raises
+            a `ValueError`, `"keep"` preserves the original node label and
+            `"drop"` removes unmapped nodes and their incident edges.
         copy: bool (default: True)
             Return a translated copy instead of modifying `graph`.
 
@@ -767,13 +1024,20 @@ class Orthologs:
                 f"expected {Graph} but received {type(graph)}"
             )
 
+        on_unmapped = cast(
+            Literal["raise", "keep", "drop"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep", "drop"),
+            ),
+        )
         translated = graph.copy() if copy else graph
         mapping = {}
         missing = []
         for node in translated.nodes:
             target = self._translate_best(
                 node,
-                keep_if_missing=keep_if_missing,
+                on_unmapped=on_unmapped,
             )
             if target is None:
                 missing.append(node)
@@ -786,10 +1050,15 @@ class Orthologs:
         if copy:
             return translated
 
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing", "copy"),
+        false_policy="raise",
+    )
     def translate_boolean_network(
         self,
         bn: "BooleanNetworkLike",
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
         copy: bool = False,
     ) -> Union["BooleanNetworkLike", None]:
         """
@@ -804,9 +1073,9 @@ class Orthologs:
         bn: BooleanNetworkLike
             Boolean network-like object whose component identifiers are symbols
             from `input_organism`.
-        keep_if_missing: bool (default: True)
-            If `True`, keep original component names with no ortholog. If `False`,
-            raise an error for unmapped components.
+        on_unmapped: {"raise", "keep"} (default: "raise")
+            Strategy for component symbols with no target ortholog. `"raise"`
+            raises a `ValueError` and `"keep"` preserves the original symbol.
         copy: bool (default: False)
             Return a translated copy instead of modifying `bn`.
 
@@ -818,7 +1087,7 @@ class Orthologs:
         Raises
         ------
         ValueError
-            If `keep_if_missing=False` and a component has no ortholog.
+            If a component has no target ortholog and `on_unmapped="raise"`.
         """
 
         from ...logic.boolean_network import BooleanNetwork
@@ -831,6 +1100,13 @@ class Orthologs:
                 f"but received {type(bn)}"
             )
 
+        on_unmapped = cast(
+            Literal["raise", "keep"],
+            _validate_on_unmapped(
+                on_unmapped,
+                allowed=("raise", "keep"),
+            ),
+        )
         input_type = type(bn)
         bn_any: Any = bn
         rebuild_as_input_type = False
@@ -861,7 +1137,10 @@ class Orthologs:
         genes = tuple(gene for gene, _ in bn_any.items())
         mapping = {}
         for gene in genes:
-            translated = self._translate_best(gene, keep_if_missing=keep_if_missing)
+            translated = self._translate_best(
+                gene,
+                on_unmapped="keep" if on_unmapped == "keep" else "drop",
+            )
             if translated is None:
                 raise ValueError(
                     "Boolean network translation cannot remove an unmapped "
@@ -890,17 +1169,22 @@ class Orthologs:
         return cast("BooleanNetworkLike", bn_any) if copy else None
 
     @_deprecated(replacement="`Orthologs.translate_boolean_network()`")
+    @_support_legacy_keep_if_missing(
+        positional_parameters=("keep_if_missing", "copy"),
+        false_policy="raise",
+    )
     def translate_bn(
         self,
         bn: "BooleanNetworkLike",
-        keep_if_missing: bool = True,
+        *,
+        on_unmapped: Literal["raise", "keep"] = "raise",
         copy: bool = False,
     ) -> Union["BooleanNetworkLike", None]:
         """Deprecated alias for `translate_boolean_network()`."""
 
         return self.translate_boolean_network(
             bn,
-            keep_if_missing=keep_if_missing,
+            on_unmapped=on_unmapped,
             copy=copy,
         )
 
@@ -1044,14 +1328,22 @@ class Orthologs:
         mapping = self._mapping
         return [gene for gene in genes if gene in mapping]
 
-    def _translate_best(self, gene: str, keep_if_missing: bool) -> Optional[str]:
+    def _translate_best(
+        self,
+        gene: str,
+        on_unmapped: Literal["raise", "keep", "drop"],
+    ) -> Optional[str]:
 
         if "_" in gene:
             translated_subunits: List[str] = []
             for subunit in gene.split("_"):
                 translated = self._best_mapping.get(subunit)
                 if translated is None:
-                    if not keep_if_missing:
+                    if on_unmapped == "raise":
+                        raise ValueError(
+                            f"no target ortholog found for gene symbol {subunit!r}"
+                        )
+                    if on_unmapped == "drop":
                         return None
                     translated = subunit
                 translated_subunits.append(translated)
@@ -1060,32 +1352,37 @@ class Orthologs:
         translated = self._best_mapping.get(gene)
         if translated is not None:
             return translated
-        return gene if keep_if_missing else None
+        if on_unmapped == "raise":
+            raise ValueError(f"no target ortholog found for gene symbol {gene!r}")
+        return gene if on_unmapped == "keep" else None
 
     def _translate_series(
         self,
         values: pd.Series,
-        keep_if_missing: bool,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"],
     ) -> pd.Series:
         """Translate a Series while preserving complex-name semantics."""
 
         source = values.astype(str)
         best_mapping = self._best_mapping
         translate = self._translate_best
-        if keep_if_missing:
+        if on_unmapped == "keep":
             translated = [
-                translate(gene, keep_if_missing=True)
+                translate(gene, on_unmapped="keep")
                 if "_" in gene
                 else best_mapping.get(gene, gene)
                 for gene in source
             ]
-        else:
+        elif on_unmapped in {"drop", "nan"}:
             translated = [
-                translate(gene, keep_if_missing=False)
+                translate(gene, on_unmapped="drop")
                 if "_" in gene
                 else best_mapping.get(gene)
                 for gene in source
             ]
+            translated = [pd.NA if gene is None else gene for gene in translated]
+        else:
+            translated = [translate(gene, on_unmapped="raise") for gene in source]
         return pd.Series(translated, index=values.index, name=values.name)
 
     def _translate_df_one_to_many(
@@ -1093,16 +1390,19 @@ class Orthologs:
         df: pd.DataFrame,
         column: str,
         one_to_many: int,
+        on_unmapped: Literal["raise", "keep", "drop", "nan"],
     ) -> pd.DataFrame:
 
         expansions = self._ortholog_expansions(
             values=cast(pd.Series, df[column]),
             one_to_many=one_to_many,
+            on_unmapped=on_unmapped,
         )
-        translated = df
-        translated[column] = cast(pd.Series, translated[column]).map(expansions)
-        translated = cast(pd.DataFrame, translated.explode(column))
-        return cast(pd.DataFrame, translated.dropna(subset=[column]))
+        expanded = cast(pd.Series, df[column]).astype(str).map(expansions)
+        retained = expanded.map(bool)
+        translated = cast(pd.DataFrame, df.loc[retained].copy())
+        translated[column] = expanded.loc[retained]
+        return cast(pd.DataFrame, translated.explode(column))
 
     @staticmethod
     def _load_orthologs_table(
@@ -1407,21 +1707,40 @@ class Orthologs:
         self,
         values: pd.Series,
         one_to_many: int,
-    ) -> Dict[str, List[str]]:
+        on_unmapped: Literal["raise", "keep", "drop", "nan"],
+    ) -> Dict[str, List[Any]]:
         """Return row-ordered target expansions for distinct source values."""
 
         map_dict = self._one_to_many_mapping()
-        expansions: Dict[str, List[str]] = {}
+        expansions: Dict[str, List[Any]] = {}
         for value in values.drop_duplicates():
             source = str(value)
             subunit_lists: List[List[str]] = []
+            has_excess = False
+            has_unmapped = False
             for subunit in source.split("_"):
                 targets = map_dict.get(subunit, [])
-                if len(targets) == 0 or len(targets) > one_to_many:
+                if len(targets) == 0:
+                    if on_unmapped == "raise":
+                        raise ValueError(
+                            f"no target ortholog found for gene symbol {subunit!r}"
+                        )
+                    has_unmapped = True
+                    if on_unmapped == "keep":
+                        subunit_lists.append([subunit])
+                    else:
+                        subunit_lists.append([])
+                elif len(targets) > one_to_many:
+                    has_excess = True
                     subunit_lists.append([])
                 else:
                     subunit_lists.append([str(target) for target in targets])
-            if any(len(subunit_list) == 0 for subunit_list in subunit_lists):
+
+            if has_excess or (has_unmapped and on_unmapped == "drop"):
+                expansions[source] = []
+                continue
+            if has_unmapped and on_unmapped == "nan":
+                expansions[source] = [pd.NA]
                 continue
             expansions[source] = [
                 "_".join(translated_complex)

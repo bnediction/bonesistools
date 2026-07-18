@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from types import MappingProxyType
 from typing import Any, cast
 
 import networkx as nx
@@ -41,7 +42,7 @@ def test_hcop_translate_translates_requested_columns(monkeypatch):
     translated = hcop.orthologs(target_organism="mouse").translate_dataframe(
         net,
         columns=["source", "target"],
-        keep_if_missing=False,
+        on_unmapped="drop",
     )
 
     assert translated.to_dict("records") == [
@@ -197,8 +198,12 @@ def test_hcop_dataframe_translation_preserves_complex_and_missing_values():
     )
     dataframe = pd.DataFrame({"genesymbol": ["A", "A_B", "A_missing", "missing", 1]})
 
-    kept = orthologs.translate_dataframe(dataframe)
-    removed = orthologs.translate_dataframe(dataframe, keep_if_missing=False)
+    with pytest.raises(ValueError, match="no target ortholog"):
+        orthologs.translate_dataframe(dataframe)
+
+    kept = orthologs.translate_dataframe(dataframe, on_unmapped="keep")
+    removed = orthologs.translate_dataframe(dataframe, on_unmapped="drop")
+    with_nan = orthologs.translate_dataframe(dataframe, on_unmapped="nan")
 
     assert kept["genesymbol"].tolist() == [
         "a",
@@ -208,6 +213,96 @@ def test_hcop_dataframe_translation_preserves_complex_and_missing_values():
         "1",
     ]
     assert removed["genesymbol"].tolist() == ["a", "a_b"]
+    assert with_nan["genesymbol"].iloc[:2].tolist() == ["a", "a_b"]
+    assert with_nan["genesymbol"].iloc[2:].isna().all()
+
+
+def test_hcop_dataframe_translation_drops_unmapped_rows_in_place():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A"],
+                "target_symbol": ["a"],
+                "support": ["source"],
+                "evidence": [1],
+            }
+        ),
+        target_organism="mouse",
+    )
+    dataframe = pd.DataFrame(
+        {
+            "genesymbol": ["A", "missing"],
+            "row": [1, 2],
+        },
+        index=[4, 8],
+    )
+
+    result = orthologs.translate_dataframe(
+        dataframe,
+        on_unmapped="drop",
+        copy=False,
+    )
+
+    assert result is None
+    assert dataframe.to_dict("records") == [{"genesymbol": "a", "row": 1}]
+    assert dataframe.index.tolist() == [0]
+
+
+def test_hcop_dataframe_one_to_many_honors_unmapped_policy():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "A", "B", "B", "B"],
+                "target_symbol": ["a1", "a2", "b1", "b2", "b3"],
+                "support": ["source"] * 5,
+                "evidence": [1] * 5,
+            }
+        ),
+        target_organism="mouse",
+    )
+    dataframe = pd.DataFrame(
+        {
+            "genesymbol": ["A", "missing", "A_missing", "B"],
+            "row": [1, 2, 3, 4],
+        }
+    )
+
+    with pytest.raises(ValueError, match="no target ortholog"):
+        orthologs.translate_dataframe(
+            dataframe,
+            one_to_many=2,
+        )
+
+    kept = orthologs.translate_dataframe(
+        dataframe,
+        on_unmapped="keep",
+        one_to_many=2,
+    )
+    dropped = orthologs.translate_dataframe(
+        dataframe,
+        on_unmapped="drop",
+        one_to_many=2,
+    )
+    with_nan = orthologs.translate_dataframe(
+        dataframe,
+        on_unmapped="nan",
+        one_to_many=2,
+    )
+
+    assert kept.to_dict("records") == [
+        {"genesymbol": "a1", "row": 1},
+        {"genesymbol": "a2", "row": 1},
+        {"genesymbol": "missing", "row": 2},
+        {"genesymbol": "a1_missing", "row": 3},
+        {"genesymbol": "a2_missing", "row": 3},
+    ]
+    assert dropped.to_dict("records") == [
+        {"genesymbol": "a1", "row": 1},
+        {"genesymbol": "a2", "row": 1},
+    ]
+    assert with_nan["row"].tolist() == [1, 1, 2, 3]
+    assert with_nan["genesymbol"].iloc[:2].tolist() == ["a1", "a2"]
+    assert with_nan["genesymbol"].iloc[2:].isna().all()
 
 
 def test_hcop_one_to_many_preserves_source_row_order_and_duplicates():
@@ -317,7 +412,7 @@ def test_hcop_translates_between_non_human_organisms_with_scores(monkeypatch):
     )
 
     assert orthologs.translate("M") == ["R2", "R1", "R3"]
-    assert orthologs.translate("placeholder_mouse") == []
+    assert orthologs.translate("placeholder_mouse", on_unmapped="drop") == []
 
     paths = orthologs.to_dataframe()
     r2_paths = paths.loc[paths["target_symbol"] == "R2"]
@@ -364,7 +459,7 @@ def test_hcop_translates_non_human_genes_to_human(monkeypatch):
     )
 
     assert orthologs.translate("M") == ["H1", "H2"]
-    assert orthologs.translate("placeholder_mouse") == []
+    assert orthologs.translate("placeholder_mouse", on_unmapped="drop") == []
     assert list(orthologs.to_dataframe().columns) == [
         "source_symbol",
         "target_symbol",
@@ -442,15 +537,13 @@ def test_hcop_translates_sequences_and_dispatches_supported_objects():
     )
 
     assert orthologs("A") == ["a"]
-    assert orthologs(("A", "missing")) == ("a", "missing")
-    assert orthologs.translate_sequence(("A", "missing"), keep_if_missing=False) == (
-        "a",
-    )
+    assert orthologs(("A", "missing"), on_unmapped="keep") == ("a", "missing")
+    assert orthologs.translate_sequence(("A", "missing"), on_unmapped="drop") == ("a",)
     assert orthologs.translate_sequence({"A", "B"}) == {"a", "b"}
     assert orthologs.translate("A_B") == ["a_b"]
 
     interactions = [("A", "B", {"sign": 1}), ("A", "missing", {"sign": -1})]
-    assert orthologs(interactions, keep_if_missing=False) == [("a", "b", {"sign": 1})]
+    assert orthologs(interactions, on_unmapped="drop") == [("a", "b", {"sign": 1})]
 
     df = pd.DataFrame({"source": ["A"], "target": ["B"]})
     assert orthologs(df, columns=["source", "target"]).to_dict("records") == [
@@ -478,7 +571,7 @@ def test_hcop_translate_graph_preserves_attributes_and_copy_semantics():
     graph.add_edge("A", "B", sign=1)
     graph.add_edge("B", "missing", sign=-1)
 
-    translated = orthologs.translate_graph(graph, keep_if_missing=False, copy=True)
+    translated = orthologs.translate_graph(graph, on_unmapped="drop", copy=True)
 
     assert translated is not None
     assert set(translated.nodes) == {"a", "b"}
@@ -486,7 +579,7 @@ def test_hcop_translate_graph_preserves_attributes_and_copy_semantics():
     assert translated["a"]["b"]["sign"] == 1
     assert set(graph.nodes) == {"A", "B", "missing"}
 
-    assert orthologs.translate_graph(graph, copy=False) is None
+    assert orthologs.translate_graph(graph, on_unmapped="keep", copy=False) is None
     assert set(graph.nodes) == {"a", "b", "missing"}
 
 
@@ -504,21 +597,61 @@ def test_hcop_translate_hypercube_copy_dispatch_and_missing_behaviors():
     )
     hypercube = bt.logic.ba.Hypercube({"A": 1, "B": 0, "missing": 1})
 
-    copied = orthologs.translate_hypercube(hypercube)
-    dispatched = orthologs(hypercube)
+    copied = orthologs.translate_hypercube(hypercube, on_unmapped="keep")
+    dispatched = orthologs(hypercube, on_unmapped="keep")
 
+    assert type(copied) is type(hypercube)
     assert copied == {"a": 1, "b": 0, "missing": 1}
     assert dispatched == copied
     assert hypercube == {"A": 1, "B": 0, "missing": 1}
 
-    assert orthologs.translate_hypercube(hypercube, copy=False) is None
+    assert (
+        orthologs.translate_hypercube(
+            hypercube,
+            on_unmapped="keep",
+            copy=False,
+        )
+        is None
+    )
     assert hypercube == {"a": 1, "b": 0, "missing": 1}
 
     with pytest.raises(ValueError, match="cannot remove an unmapped component"):
         orthologs.translate_hypercube(
             bt.logic.ba.Hypercube({"A": 1, "missing": 0}),
-            keep_if_missing=False,
+            on_unmapped="raise",
         )
+
+
+def test_hcop_translate_hypercube_preserves_hypercube_like_types():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A", "B"],
+                "target_symbol": ["a", "b"],
+                "support": ["Ensembl,HGNC,MGI", "Ensembl,HGNC,MGI"],
+                "evidence": [3, 3],
+            }
+        ),
+        target_organism="mouse",
+    )
+    mapping = {"A": 1, "B": "*"}
+    immutable_mapping = MappingProxyType({"A": 0})
+
+    translated_mapping = orthologs.translate_hypercube(mapping)
+    translated_immutable = orthologs.translate_hypercube(immutable_mapping)
+
+    assert type(translated_mapping) is dict
+    assert translated_mapping == {"a": 1, "b": "*"}
+    assert mapping == {"A": 1, "B": "*"}
+    assert type(translated_immutable) is type(immutable_mapping)
+    assert dict(translated_immutable) == {"a": 0}
+    assert dict(immutable_mapping) == {"A": 0}
+
+    assert orthologs.translate_hypercube(mapping, copy=False) is None
+    assert mapping == {"a": 1, "b": "*"}
+
+    with pytest.raises(TypeError, match="mutable hypercube-like mapping"):
+        orthologs.translate_hypercube(immutable_mapping, copy=False)
 
 
 def test_hcop_translate_hypercube_rejects_component_collisions():
@@ -583,7 +716,7 @@ def test_hcop_translate_boolean_network_copy_and_mapping_behaviors(monkeypatch):
     with pytest.raises(ValueError, match="unmapped component"):
         orthologs.translate_boolean_network(
             bt.logic.bn.BooleanNetwork({"A": "missing", "missing": 1}),
-            keep_if_missing=False,
+            on_unmapped="raise",
         )
 
 
@@ -605,7 +738,7 @@ def test_hcop_translate_rejects_invalid_arguments():
         orthologs.translate_dataframe(cast(Any, "not a dataframe"))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'hypercube'"):
-        orthologs.translate_hypercube(cast(Any, {"A": 1}))
+        orthologs.translate_hypercube(cast(Any, [("A", 1)]))
 
     with pytest.raises(ValueError, match="output_organism"):
         hcop.orthologs(target_organism="frog")
@@ -636,6 +769,51 @@ def test_hcop_translate_rejects_invalid_arguments():
             copy=False,
             one_to_many=1,
         )
+
+    with pytest.raises(ValueError, match="on_unmapped"):
+        orthologs.translate_dataframe(
+            pd.DataFrame({"source": ["A"]}),
+            on_unmapped=cast(Any, "invalid"),
+        )
+
+    with pytest.raises(ValueError, match="on_unmapped"):
+        orthologs.translate_hypercube(
+            bt.logic.ba.Hypercube({"A": 1}),
+            on_unmapped=cast(Any, "nan"),
+        )
+
+    with pytest.raises(TypeError):
+        cast(Any, orthologs)("A", False)
+
+
+def test_hcop_keep_if_missing_argument_is_deprecated():
+    orthologs = _hcop_orthologs.Orthologs(
+        table=pd.DataFrame(
+            {
+                "human_symbol": ["A"],
+                "target_symbol": ["a"],
+                "support": ["Ensembl,HGNC,MGI"],
+                "evidence": [3],
+            }
+        ),
+        target_organism="mouse",
+    )
+    legacy_translate = cast(Any, orthologs.translate_dataframe)
+    legacy_translate_sequence = cast(Any, orthologs.translate_sequence)
+
+    with pytest.warns(FutureWarning, match="on_unmapped"):
+        translated = legacy_translate(
+            pd.DataFrame({"source": ["A", "missing"]}),
+            keep_if_missing=False,
+        )
+    with pytest.warns(FutureWarning, match="on_unmapped"):
+        translated_sequence = legacy_translate_sequence(
+            ("A", "missing"),
+            False,
+        )
+
+    assert translated.to_dict("records") == [{"source": "a"}]
+    assert translated_sequence == ("a",)
 
 
 def test_hcop_deprecated_translation_aliases_warn():
@@ -832,7 +1010,7 @@ def test_hcop_orthologs_reset_reconfigures_existing_converter():
     assert orthologs.min_evidence == 2
     assert orthologs.version == "bundled"
     assert orthologs.translate("A") == ["A_rat"]
-    assert orthologs.translate("B") == []
+    assert orthologs.translate("B", on_unmapped="drop") == []
     assert orthologs.find("A", "B", "C") == ["A", "C"]
     assert orthologs.contains("A", "B", "C") == [True, False, True]
 

@@ -121,7 +121,7 @@ NCBI Gene-derived resources.
 
 Main responsibilities:
 
-- Gene synonym lookup.
+- Gene identifier resolution and conversion.
 - Identifier conversion.
 - Packaged `gene_info`-derived resources for selected organisms.
 

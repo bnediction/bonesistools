@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ...logic.boolean_network._typing import BooleanNetworkLike
 
 import gzip
-import inspect
 import re
 import shutil
 import tempfile
@@ -32,7 +31,7 @@ import urllib.request
 import warnings
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as SequenceInstance
-from functools import partial, wraps
+from functools import partial
 from os import PathLike
 from pathlib import Path
 
@@ -44,7 +43,6 @@ from typing_extensions import Literal
 
 from ..._compat import get_args
 from ..._validation import _as_boolean, _as_dataframe_axis
-from ..._warnings import _deprecated, _warn_deprecated, _warn_deprecated_argument
 from ._typing import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -52,7 +50,6 @@ from ._typing import (
 
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 GeneInfoVersion = Union[str, PathLike]
-_SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = False
 
 ORGANISMS = Literal[
     "all archaea bacteria",
@@ -231,52 +228,14 @@ class _Identifiers(NamedTuple):
     gene_type: str
 
 
-_GENE_SYNONYMS_DEPRECATED_ARGS = {
-    "gene_type": "input_type",
-    "alias_gene": "output_type",
-    "input_identifier_type": "input_type",
-    "output_identifier_type": "output_type",
-}
 _MISSING_STATE = object()
 
 
-def support_legacy_gene_synonyms_args(func):
-    """
-    Decorate gene-identifier APIs to accept deprecated argument names.
-
-    """
-
-    valid_parameters = inspect.signature(func).parameters
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        for old_name, new_name in _GENE_SYNONYMS_DEPRECATED_ARGS.items():
-            if old_name not in kwargs:
-                continue
-
-            if new_name not in valid_parameters:
-                continue
-
-            _warn_deprecated_argument(old_name, new_name, stacklevel=4)
-
-            if new_name in kwargs:
-                raise TypeError(
-                    f"invalid argument combination: use either '{old_name}' "
-                    f"or '{new_name}', not both"
-                )
-
-            kwargs[new_name] = kwargs.pop(old_name)
-
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-class GeneSynonyms:
+class GeneIdentifiers:
     """
     Converter between gene identifiers using NCBI gene_info resources.
 
-    GeneSynonyms loads organism-specific NCBI gene information and builds
+    GeneIdentifiers loads organism-specific NCBI gene information and builds
     mappings between gene IDs, nomenclature symbols, NCBI symbols, Ensembl IDs
     and database-specific aliases when available.
 
@@ -293,14 +252,14 @@ class GeneSynonyms:
     --------
     Convert a list of gene identifiers through the callable interface:
 
-    >>> gene_synonyms = genesyn(organism="mouse")
-    >>> gene_synonyms(["Trp53", "Myc"])
+    >>> gene_identifiers = identifiers(organism="mouse")
+    >>> gene_identifiers(["Trp53", "Myc"])
     ['Trp53', 'Myc']
 
     Convert an interaction list while preserving edge attributes:
 
     >>> interactions = [("Trp53", "Myc", {"sign": 1})]
-    >>> gene_synonyms(interactions)
+    >>> gene_identifiers(interactions)
     [('Trp53', 'Myc', {'sign': 1})]
 
     Parameters
@@ -391,14 +350,6 @@ class GeneSynonyms:
         version: GeneInfoVersion = "bundled",
         show_warnings: bool = False,
     ) -> None:
-
-        if not _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING:
-            _warn_deprecated(
-                "`bt.resources.ncbi.GeneSynonyms()`",
-                replacement="`bt.resources.ncbi.GeneIdentifiers()`",
-                stacklevel=2,
-            )
-
         organism = organism.lower().replace("-", " ")
 
         if organism not in get_args(ORGANISMS):
@@ -419,7 +370,7 @@ class GeneSynonyms:
     def __setattr__(self, name: str, value: Any) -> None:
         if name in self._READ_ONLY_ATTRIBUTES:
             raise AttributeError(
-                f"{name!r} is read-only; use reset() to reconfigure GeneSynonyms"
+                f"{name!r} is read-only; use reset() to reconfigure GeneIdentifiers"
             )
         object.__setattr__(self, name, value)
 
@@ -488,7 +439,6 @@ class GeneSynonyms:
                 f"Boolean network-like object but received {type(data)}"
             )
 
-    @support_legacy_gene_synonyms_args
     def conversion(
         self,
         gene: str,
@@ -531,7 +481,6 @@ class GeneSynonyms:
         )
         return convert(gene=gene)
 
-    @support_legacy_gene_synonyms_args
     def convert_sequence(
         self,
         genes: Sequence[str],
@@ -595,7 +544,6 @@ class GeneSynonyms:
 
         return aliases
 
-    @support_legacy_gene_synonyms_args
     def convert_hypercube(
         self,
         hypercube: "Hypercube",
@@ -662,7 +610,6 @@ class GeneSynonyms:
 
         return converted_hypercube if copy else None
 
-    @support_legacy_gene_synonyms_args
     def convert_interaction_list(
         self,
         interaction_list: InteractionList,
@@ -733,7 +680,6 @@ class GeneSynonyms:
 
         return converted_interactions_list
 
-    @support_legacy_gene_synonyms_args
     def convert_dataframe(
         self,
         df: DataFrame,
@@ -800,30 +746,6 @@ class GeneSynonyms:
         if copy is True:
             return df
 
-    @_deprecated(replacement="`GeneSynonyms.convert_dataframe()`")
-    @support_legacy_gene_synonyms_args
-    def convert_df(
-        self,
-        df: DataFrame,
-        *,
-        axis: Axis = 0,
-        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
-        output_type: Union[
-            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
-        ] = "symbol",
-        copy: bool = True,
-    ) -> Union[DataFrame, None]:
-        """Deprecated alias for `convert_dataframe()`."""
-
-        return self.convert_dataframe(
-            df,
-            axis=axis,
-            input_type=input_type,
-            output_type=output_type,
-            copy=copy,
-        )
-
-    @support_legacy_gene_synonyms_args
     def convert_graph(
         self,
         graph: Graph[Any],
@@ -889,7 +811,6 @@ class GeneSynonyms:
             nx.relabel_nodes(graph, mapping=aliases_mapping, copy=False)
             return None
 
-    @support_legacy_gene_synonyms_args
     def convert_boolean_network(
         self,
         bn: "BooleanNetworkLike",
@@ -997,27 +918,6 @@ class GeneSynonyms:
 
         return cast("BooleanNetworkLike", bn_any) if copy else None
 
-    @_deprecated(replacement="`GeneSynonyms.convert_boolean_network()`")
-    @support_legacy_gene_synonyms_args
-    def convert_bn(
-        self,
-        bn: "BooleanNetworkLike",
-        *,
-        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
-        output_type: Union[
-            Literal["symbol", "ncbi_symbol", "gene_id", "ensembl_id"], str
-        ] = "symbol",
-        copy: bool = False,
-    ) -> Union["BooleanNetworkLike", None]:
-        """Deprecated alias for `convert_boolean_network()`."""
-
-        return self.convert_boolean_network(
-            bn,
-            input_type=input_type,
-            output_type=output_type,
-            copy=copy,
-        )
-
     def to_dataframe(self) -> DataFrame:
         """Return gene identifiers and metadata as a DataFrame.
 
@@ -1059,183 +959,6 @@ class GeneSynonyms:
         )
         dataframe.index.name = "gene_id"
         return dataframe
-
-    @_deprecated(replacement="`GeneSynonyms.convert_sequence()`")
-    def standardize_sequence(
-        self,
-        genes: Sequence[str],
-        *,
-        keep_if_missing: bool = True,
-    ) -> Sequence[str]:
-        """
-        Standardize a sequence of gene names to gene symbols.
-
-        Parameters
-        ----------
-        genes: Sequence[str]
-            Gene names to standardize.
-        keep_if_missing: bool (default: True)
-            If `True`, keep the original gene identifier when no correspondence
-            is found.
-
-        Returns
-        -------
-        Sequence[str]
-            Sequence of gene symbols, preserving the input sequence type
-            when possible.
-        """
-
-        return self.convert_sequence(
-            genes=genes,
-            keep_if_missing=keep_if_missing,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.convert_hypercube()`")
-    def standardize_hypercube(
-        self,
-        hypercube: "Hypercube",
-        *,
-        copy: bool = True,
-    ) -> Union["Hypercube", None]:
-        """
-        Standardize hypercube component names to gene symbols.
-
-        Parameters
-        ----------
-        hypercube: Hypercube
-            Hypercube whose explicitly specified components are standardized.
-        copy: bool (default: True)
-            Return a copy instead of modifying `hypercube`.
-
-        Returns
-        -------
-        Hypercube or None
-            Standardized hypercube if `copy=True`; otherwise None.
-        """
-
-        return self.convert_hypercube(
-            hypercube=hypercube,
-            copy=copy,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.convert_interaction_list()`")
-    def standardize_interaction_list(
-        self,
-        interaction_list: InteractionList,
-        *,
-        keep_if_missing: bool = True,
-    ) -> InteractionList:
-        """
-        Standardize source and target identifiers in an interaction list.
-
-        Parameters
-        ----------
-        interaction_list: Sequence[Tuple[str, str, Dict[str, int]]]
-            Sequence of `(source, target, attributes)` interactions.
-        keep_if_missing: bool (default: True)
-            If `True`, keep the original gene identifier when no correspondence
-            is found.
-
-        Returns
-        -------
-        InteractionList
-            Interaction list with source and target identifiers standardized to
-            gene symbols.
-        """
-
-        return self.convert_interaction_list(
-            interaction_list=interaction_list,
-            keep_if_missing=keep_if_missing,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.convert_dataframe()`")
-    def standardize_df(
-        self,
-        df: DataFrame,
-        *,
-        axis: Axis = 0,
-        copy: bool = True,
-    ) -> Union[DataFrame, None]:
-        """
-        Standardize gene names in a DataFrame index or columns.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-            DataFrame whose gene identifiers are standardized.
-        axis: {0, 1, "index", "columns"} (default: 0)
-            If 0 or `"index"`, standardize `df.index`. If 1 or `"columns"`,
-            standardize `df.columns`.
-        copy: bool (default: True)
-            Return a copy instead of modifying `df`.
-
-        Returns
-        -------
-        DataFrame or None
-            Standardized DataFrame if `copy=True`; otherwise None.
-        """
-
-        return self.convert_dataframe(
-            df,
-            axis=axis,
-            copy=copy,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.convert_graph()`")
-    def standardize_graph(
-        self,
-        graph: Graph[Any],
-        *,
-        copy: bool = True,
-    ) -> Union[Graph[Any], None]:
-        """
-        Standardize gene names in graph node labels.
-
-        Parameters
-        ----------
-        graph: nx.Graph
-            Graph whose node identifiers are standardized.
-        copy: bool (default: True)
-            Return a copy instead of modifying `graph`.
-
-        Returns
-        -------
-        Graph or None
-            Standardized graph if `copy=True`; otherwise None.
-        """
-
-        return self.convert_graph(
-            graph=graph,
-            copy=copy,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.convert_boolean_network()`")
-    def standardize_bn(
-        self,
-        bn: "BooleanNetworkLike",
-        *,
-        copy: bool = False,
-    ) -> Union["BooleanNetworkLike", None]:
-        """
-        Standardize gene names in Boolean network components and rules.
-
-        Parameters
-        ----------
-        bn: BooleanNetworkLike
-            BooleanNetworkLike object whose component identifiers are standardized.
-        copy: bool (default: False)
-            Return a copy instead of modifying `bn`.
-
-        Returns
-        -------
-        BooleanNetworkLike or None
-            Standardized BooleanNetworkLike object if `copy=True`; otherwise None.
-        """
-
-        return self.convert_boolean_network(
-            bn,
-            copy=copy,
-        )
 
     def reset(
         self,
@@ -1368,12 +1091,12 @@ class GeneSynonyms:
 
         Examples
         --------
-        >>> gene_synonyms = genesyn(organism="mouse")
-        >>> gene_synonyms.contains("Trp53")
+        >>> gene_identifiers = identifiers(organism="mouse")
+        >>> gene_identifiers.contains("Trp53")
         [True]
-        >>> gene_synonyms.contains("Trp53", "not-a-gene")
+        >>> gene_identifiers.contains("Trp53", "not-a-gene")
         [True, False]
-        >>> gene_synonyms.contains("22059", identifier_type="gene_id")
+        >>> gene_identifiers.contains("22059", identifier_type="gene_id")
         [True]
 
         Parameters
@@ -1426,10 +1149,10 @@ class GeneSynonyms:
 
         Examples
         --------
-        >>> gene_synonyms = genesyn(organism="mouse")
-        >>> gene_synonyms.find("Trp53", "not-a-gene", "Myc")
+        >>> gene_identifiers = identifiers(organism="mouse")
+        >>> gene_identifiers.find("Trp53", "not-a-gene", "Myc")
         ['Trp53', 'Myc']
-        >>> gene_synonyms.find("22059", "bad-id", identifier_type="gene_id")
+        >>> gene_identifiers.find("22059", "bad-id", identifier_type="gene_id")
         ['22059']
 
         Parameters
@@ -1461,7 +1184,6 @@ class GeneSynonyms:
             if found
         ]
 
-    @support_legacy_gene_synonyms_args
     def get_gene_id(
         self,
         gene: str,
@@ -1520,7 +1242,6 @@ class GeneSynonyms:
             )
         return None
 
-    @support_legacy_gene_synonyms_args
     def get_ncbi_symbol(
         self,
         gene: str,
@@ -1558,7 +1279,6 @@ class GeneSynonyms:
             )
         return None
 
-    @support_legacy_gene_synonyms_args
     def get_symbol(
         self,
         gene: str,
@@ -1597,35 +1317,6 @@ class GeneSynonyms:
             )
         return None
 
-    @_deprecated(replacement="`GeneSynonyms.get_ncbi_symbol()`")
-    @support_legacy_gene_synonyms_args
-    def get_ncbi_name(
-        self,
-        gene: str,
-        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
-    ) -> Optional[str]:
-        """Return the NCBI symbol for a gene identifier."""
-
-        return self.get_ncbi_symbol(
-            gene,
-            input_type=input_type,
-        )
-
-    @_deprecated(replacement="`GeneSynonyms.get_symbol()`")
-    @support_legacy_gene_synonyms_args
-    def get_official_name(
-        self,
-        gene: str,
-        input_type: Union[Literal["name", "gene_id", "ensembl_id"], str] = "name",
-    ) -> Optional[str]:
-        """Return the nomenclature symbol for a gene identifier."""
-
-        return self.get_symbol(
-            gene,
-            input_type=input_type,
-        )
-
-    @support_legacy_gene_synonyms_args
     def get_ensembl_id(
         self,
         gene: str,
@@ -1662,7 +1353,6 @@ class GeneSynonyms:
             )
         return None
 
-    @support_legacy_gene_synonyms_args
     def get_alias_from_database(
         self,
         gene: str,
@@ -2035,19 +1725,6 @@ class GeneSynonyms:
         `valid_output_identifier_types`.
         """
 
-        deprecated_output_types = {
-            "official_name": "symbol",
-            "ncbi_name": "ncbi_symbol",
-        }
-        replacement = deprecated_output_types.get(output_type)
-        if replacement is not None:
-            _warn_deprecated(
-                f"`output_type={output_type!r}`",
-                replacement=f"`output_type={replacement!r}`",
-                stacklevel=5,
-            )
-            output_type = replacement
-
         builtin_output_types = (
             "gene_id",
             "symbol",
@@ -2241,14 +1918,13 @@ def _is_interaction(item: Any) -> bool:
     )
 
 
-@_deprecated(replacement="`bt.resources.ncbi.identifiers()`")
-def genesyn(
+def identifiers(
     organism: str = "mouse",
     version: GeneInfoVersion = "bundled",
     show_warnings: bool = False,
-) -> GeneSynonyms:
+) -> GeneIdentifiers:
     """
-    Create a deprecated GeneSynonyms converter.
+    Create a GeneIdentifiers converter.
 
     Parameters
     ----------
@@ -2261,20 +1937,13 @@ def genesyn(
 
     Returns
     -------
-    GeneSynonyms
+    GeneIdentifiers
         Converter for gene identifier resolution, conversion and
         standardisation.
     """
 
-    global _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING
-
-    previous = _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING
-    _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = True
-    try:
-        return GeneSynonyms(
-            organism=organism,
-            version=version,
-            show_warnings=show_warnings,
-        )
-    finally:
-        _SUPPRESS_GENE_SYNONYMS_CONSTRUCTOR_WARNING = previous
+    return GeneIdentifiers(
+        organism=organism,
+        version=version,
+        show_warnings=show_warnings,
+    )

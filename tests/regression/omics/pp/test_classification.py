@@ -13,7 +13,7 @@ def test_gene_classification_marks_variable_names(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_identifiers", fake_gene_synonyms_cls)
     mini_adata.var_names = ["mt-Co1", "Rps1", "Other"]
 
     bt.omics.pp.mitochondrial_genes(mini_adata, key="mt")
@@ -28,7 +28,7 @@ def test_gene_classification_uses_requested_organism(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_identifiers", fake_gene_synonyms_cls)
     mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
 
     bt.omics.pp.mitochondrial_genes(mini_adata, key="mt", organism="human")
@@ -47,7 +47,7 @@ def test_gene_classification_reuses_gene_synonyms(
     def raise_if_called(**_):
         raise AssertionError("gene synonym converter should be reused")
 
-    monkeypatch.setattr(_classification, "create_gene_synonyms", raise_if_called)
+    monkeypatch.setattr(_classification, "create_identifiers", raise_if_called)
     genesyn = fake_gene_synonyms_cls(organism="human")
     mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
 
@@ -73,7 +73,7 @@ def test_ribosomal_gene_classification_uses_official_symbols(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_identifiers", fake_gene_synonyms_cls)
     mini_adata.var_names = ["Rps1", "Mrpl56", "Lactb"]
 
     bt.omics.pp.ribosomal_genes(mini_adata, key="rps")
@@ -86,7 +86,7 @@ def test_gene_classification_marks_observation_names(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_identifiers", fake_gene_synonyms_cls)
     obs_adata = mini_adata.copy()
     obs_adata.obs_names = ["mt-Co1", "Rps1", "Other1", "Other2"]
 
@@ -102,7 +102,7 @@ def test_gene_classification_warns_on_deprecated_integer_axis(
     mini_adata,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_classification, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_classification, "create_identifiers", fake_gene_synonyms_cls)
     obs_adata = mini_adata.copy()
     obs_adata.obs_names = ["mt-Co1", "Rps1", "Other1", "Other2"]
 
@@ -129,7 +129,7 @@ def test_gene_classification_keeps_deprecated_tools_aliases(
 
     monkeypatch.setattr(
         tools_classification,
-        "create_gene_synonyms",
+        "create_identifiers",
         fake_gene_synonyms_cls,
     )
     mini_adata.var_names = ["mt-Co1", "Rps1", "Other"]

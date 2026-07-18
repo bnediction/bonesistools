@@ -15,8 +15,6 @@ from ...resources.ncbi._genesyn import support_legacy_gene_synonyms_args
 from ...resources.ncbi._typing import InputIdentifierType, OutputIdentifierType
 from ..input_output import _influence_graph
 
-GeneSynonyms = _influence_graph.GeneSynonyms
-
 
 @support_legacy_gene_synonyms_args
 def read_influence_graph(
@@ -28,20 +26,14 @@ def read_influence_graph(
     sep: str = ",",
     **kwargs: Any,
 ) -> nx.MultiDiGraph[Any]:
-    original_gene_synonyms = _influence_graph.GeneSynonyms
-    _influence_graph.GeneSynonyms = GeneSynonyms
-
-    try:
-        return _influence_graph.read_influence_graph(
-            file,
-            genesyn=genesyn,
-            input_type=input_type,
-            output_type=output_type,
-            sep=sep,
-            **kwargs,
-        )
-    finally:
-        _influence_graph.GeneSynonyms = original_gene_synonyms
+    return _influence_graph.read_influence_graph(
+        file,
+        genesyn=genesyn,
+        input_type=input_type,
+        output_type=output_type,
+        sep=sep,
+        **kwargs,
+    )
 
 
 __all__ = ["read_influence_graph"]

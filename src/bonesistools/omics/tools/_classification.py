@@ -6,7 +6,7 @@ from anndata import AnnData
 
 from ..._compat import Literal
 from ..._warnings import _warn_deprecated
-from ...resources.ncbi import genesyn as create_gene_synonyms
+from ...resources.ncbi import identifiers as create_identifiers
 from ...resources.ncbi._typing import InputIdentifierType
 from .._typing import AnnDataAxisWithInteger
 
@@ -71,9 +71,9 @@ def mitochondrial_genes(
         replacement="`bt.omics.pp.mitochondrial_genes`",
         stacklevel=2,
     )
-    original_create_gene_synonyms = _preprocessing_classification.create_gene_synonyms
+    original_create_identifiers = _preprocessing_classification.create_identifiers
     try:
-        _preprocessing_classification.create_gene_synonyms = create_gene_synonyms
+        _preprocessing_classification.create_identifiers = create_identifiers
         return _preprocessing_classification.mitochondrial_genes(
             adata,
             index_type=index_type,
@@ -84,9 +84,7 @@ def mitochondrial_genes(
             genesyn=genesyn,
         )
     finally:
-        _preprocessing_classification.create_gene_synonyms = (
-            original_create_gene_synonyms
-        )
+        _preprocessing_classification.create_identifiers = original_create_identifiers
 
 
 @overload
@@ -149,9 +147,9 @@ def ribosomal_genes(
         replacement="`bt.omics.pp.ribosomal_genes`",
         stacklevel=2,
     )
-    original_create_gene_synonyms = _preprocessing_classification.create_gene_synonyms
+    original_create_identifiers = _preprocessing_classification.create_identifiers
     try:
-        _preprocessing_classification.create_gene_synonyms = create_gene_synonyms
+        _preprocessing_classification.create_identifiers = create_identifiers
         return _preprocessing_classification.ribosomal_genes(
             adata,
             index_type=index_type,
@@ -162,6 +160,4 @@ def ribosomal_genes(
             genesyn=genesyn,
         )
     finally:
-        _preprocessing_classification.create_gene_synonyms = (
-            original_create_gene_synonyms
-        )
+        _preprocessing_classification.create_identifiers = original_create_identifiers

@@ -17,7 +17,7 @@ def test_convert_gene_identifiers_copy_and_axis_validation(
     monkeypatch,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_genename, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_genename, "create_identifiers", fake_gene_synonyms_cls)
 
     adata = ad.AnnData(
         X=np.ones((2, 2)),
@@ -45,7 +45,7 @@ def test_standardize_gene_identifiers_is_deprecated(
     monkeypatch,
     fake_gene_synonyms_cls,
 ):
-    monkeypatch.setattr(_genename, "create_gene_synonyms", fake_gene_synonyms_cls)
+    monkeypatch.setattr(_genename, "create_identifiers", fake_gene_synonyms_cls)
     adata = ad.AnnData(
         X=np.ones((1, 1)),
         var=pd.DataFrame(index=["Tp53"]),
@@ -66,7 +66,7 @@ def _dense_list(value: object) -> list:
 
 
 def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
-    class FakeGeneSynonyms:
+    class FakeGeneIdentifiers:
         def __init__(self):
             self.calls = []
 
@@ -74,7 +74,7 @@ def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
             self.calls.append((df, kwargs))
             df.index = ["Trp53", "Myc"]
 
-    genesyn = FakeGeneSynonyms()
+    genesyn = FakeGeneIdentifiers()
     adata = ad.AnnData(
         X=np.ones((1, 2)),
         obs=pd.DataFrame(index=["cell"]),

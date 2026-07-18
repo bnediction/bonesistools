@@ -1,25 +1,27 @@
 #!/usr/bin/env python
 
 """
-Utilities for NCBI-based gene nomenclature and synonym handling.
+Interfaces to NCBI Gene information resources.
 
-The `ncbi` sub-package provides tools for resolving gene aliases,
-standardising gene identifiers and handling ambiguous nomenclature
-across heterogeneous biological resources.
+The `ncbi` sub-package provides organism-specific gene metadata and tools for
+resolving and converting gene identifiers.
 """
 
 from typing import List as _List
 
 from ._genesyn import GeneSynonyms as GeneSynonyms
-from ._genesyn import genesyn
+from ._genesyn import genesyn as genesyn
+from ._identifiers import GeneIdentifiers as GeneIdentifiers
+from ._identifiers import identifiers
 
 __all__ = [
-    "genesyn",
+    "GeneIdentifiers",
+    "identifiers",
 ]
 
 
 def __dir__() -> _List[str]:
-    hidden = {"GeneSynonyms"}
+    hidden = {"GeneSynonyms", "genesyn"}
     return sorted(
         name for name in (set(globals()) | set(__all__)) - hidden if name[0] != "_"
     )

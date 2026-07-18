@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-from bonesistools.resources.ncbi import _genesyn
+from bonesistools.resources.ncbi import _identifiers
 
 GENE_IDS = [
     "20375",
@@ -59,13 +59,88 @@ class CopyableBooleanNetworkLike(dict):
 
 
 @pytest.fixture(scope="module")
-def mouse_genesyn():
-    return bt.resources.ncbi.genesyn(organism="mouse")
+def mouse_identifiers():
+    return bt.resources.ncbi.identifiers(organism="mouse")
 
 
-def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_symbols(mouse_genesyn):
+@pytest.fixture(scope="module")
+def mouse_gene_synonyms():
+    legacy_factory = getattr(bt.resources.ncbi, "genesyn")
+    with pytest.warns(FutureWarning, match="genesyn.*identifiers"):
+        return legacy_factory(organism="mouse")
 
-    converted = mouse_genesyn.convert_sequence(
+
+def test_ncbi_identifiers_public_and_deprecated_constructors():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        gene_identifiers = bt.resources.ncbi.identifiers(organism="mouse")
+
+    assert type(gene_identifiers) is bt.resources.ncbi.GeneIdentifiers
+    assert {"GeneIdentifiers", "identifiers"} <= set(dir(bt.resources.ncbi))
+    assert "GeneInfo" not in dir(bt.resources.ncbi)
+    assert "gene_info" not in dir(bt.resources.ncbi)
+
+    with pytest.raises(AttributeError):
+        getattr(bt.resources.ncbi, "GeneInfo")
+    with pytest.raises(AttributeError):
+        getattr(bt.resources.ncbi, "gene_info")
+
+    legacy_factory = getattr(bt.resources.ncbi, "genesyn")
+    legacy_class = getattr(bt.resources.ncbi, "GeneSynonyms")
+
+    with pytest.warns(FutureWarning, match="genesyn.*identifiers"):
+        legacy_identifiers = legacy_factory(organism="mouse")
+    with pytest.warns(FutureWarning, match="GeneSynonyms.*GeneIdentifiers"):
+        legacy_instance = legacy_class(organism="mouse")
+
+    assert type(legacy_identifiers) is legacy_class
+    assert type(legacy_instance) is legacy_class
+
+
+def test_gene_identifiers_exposes_no_deprecated_api(mouse_identifiers):
+    deprecated_methods = {
+        "convert_bn",
+        "convert_df",
+        "get_ncbi_name",
+        "get_official_name",
+        "standardize_bn",
+        "standardize_df",
+        "standardize_graph",
+        "standardize_hypercube",
+        "standardize_interaction_list",
+        "standardize_sequence",
+    }
+
+    assert deprecated_methods.isdisjoint(dir(mouse_identifiers))
+
+    with pytest.raises(TypeError):
+        cast(Any, mouse_identifiers.conversion)(
+            "Tp53",
+            input_identifier_type="name",
+        )
+
+    with pytest.raises(AttributeError, match="get_official_name"):
+        mouse_identifiers.conversion("Tp53", output_type="official_name")
+
+
+def test_deprecated_gene_synonyms_matches_gene_identifiers(
+    mouse_identifiers,
+    mouse_gene_synonyms,
+):
+    genes = ["Tp53", "Myc", "not-a-gene"]
+
+    assert mouse_gene_synonyms.convert_sequence(genes) == (
+        mouse_identifiers.convert_sequence(genes)
+    )
+    pd.testing.assert_frame_equal(
+        mouse_gene_synonyms.to_dataframe(),
+        mouse_identifiers.to_dataframe(),
+    )
+
+
+def test_mouse_gene_identifiers_convert_gene_ids_to_ncbi_symbols(mouse_identifiers):
+
+    converted = mouse_identifiers.convert_sequence(
         GENE_IDS,
         input_type="gene_id",
         output_type="ncbi_symbol",
@@ -74,9 +149,9 @@ def test_mouse_gene_synonyms_convert_gene_ids_to_ncbi_symbols(mouse_genesyn):
     assert converted == NCBI_SYMBOLS
 
 
-def test_mouse_gene_synonyms_convert_gene_names_to_ncbi_symbols(mouse_genesyn):
+def test_mouse_gene_identifiers_convert_gene_names_to_ncbi_symbols(mouse_identifiers):
 
-    converted = mouse_genesyn.convert_sequence(
+    converted = mouse_identifiers.convert_sequence(
         GENE_NAMES,
         input_type="name",
         output_type="ncbi_symbol",
@@ -85,42 +160,46 @@ def test_mouse_gene_synonyms_convert_gene_names_to_ncbi_symbols(mouse_genesyn):
     assert converted == NCBI_SYMBOLS
 
 
-def test_gene_synonyms_contains_and_find(mouse_genesyn):
-    assert mouse_genesyn.contains() == []
-    assert mouse_genesyn.contains("Tp53") == [True]
-    assert mouse_genesyn.contains("Tp53", "not-a-gene") == [True, False]
-    assert mouse_genesyn.contains("22059", identifier_type="gene_id") == [True]
-    assert mouse_genesyn.contains(
+def test_gene_identifiers_contains_and_find(mouse_identifiers):
+    assert mouse_identifiers.contains() == []
+    assert mouse_identifiers.contains("Tp53") == [True]
+    assert mouse_identifiers.contains("Tp53", "not-a-gene") == [True, False]
+    assert mouse_identifiers.contains("22059", identifier_type="gene_id") == [True]
+    assert mouse_identifiers.contains(
         "ENSMUSG00000022346", identifier_type="ensembl_id"
     ) == [True]
-    assert mouse_genesyn.contains("MGI:97250", identifier_type="MGI") == [True]
-    assert mouse_genesyn.contains("bad-id", identifier_type="MGI") == [False]
-    assert mouse_genesyn.find() == []
-    assert mouse_genesyn.find("Tp53", "not-a-gene", "Myc") == ["Tp53", "Myc"]
-    assert mouse_genesyn.find("22059", "bad-id", identifier_type="gene_id") == ["22059"]
-    assert mouse_genesyn.find("bad-id", identifier_type="MGI") == []
+    assert mouse_identifiers.contains("MGI:97250", identifier_type="MGI") == [True]
+    assert mouse_identifiers.contains("bad-id", identifier_type="MGI") == [False]
+    assert mouse_identifiers.find() == []
+    assert mouse_identifiers.find("Tp53", "not-a-gene", "Myc") == ["Tp53", "Myc"]
+    assert mouse_identifiers.find("22059", "bad-id", identifier_type="gene_id") == [
+        "22059"
+    ]
+    assert mouse_identifiers.find("bad-id", identifier_type="MGI") == []
 
     with pytest.raises(
         ValueError, match="invalid argument value for 'identifier_type'"
     ):
-        mouse_genesyn.contains("Tp53", identifier_type="bad")
+        mouse_identifiers.contains("Tp53", identifier_type="bad")
 
     with pytest.raises(
         ValueError, match="invalid argument value for 'identifier_type'"
     ):
-        mouse_genesyn.find("Tp53", identifier_type="bad")
+        mouse_identifiers.find("Tp53", identifier_type="bad")
 
 
-def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
-    assert mouse_genesyn.get_gene_id("NF-kappaB") == "18033"
-    assert mouse_genesyn.get_gene_id("ENSMUSG00000022346", "ensembl_id") == "17869"
-    assert mouse_genesyn.get_gene_id("MGI:97250", "MGI") == "17869"
-    assert mouse_genesyn.get_symbol("Tp53") == "Trp53"
-    assert mouse_genesyn.get_ncbi_symbol("22059", "gene_id") == "Trp53"
-    assert mouse_genesyn.get_ensembl_id("Myc") == "ENSMUSG00000022346"
-    assert mouse_genesyn.get_alias_from_database("Myc", database="MGI") == "MGI:97250"
+def test_gene_identifiers_lookups_and_database_aliases(mouse_identifiers):
+    assert mouse_identifiers.get_gene_id("NF-kappaB") == "18033"
+    assert mouse_identifiers.get_gene_id("ENSMUSG00000022346", "ensembl_id") == "17869"
+    assert mouse_identifiers.get_gene_id("MGI:97250", "MGI") == "17869"
+    assert mouse_identifiers.get_symbol("Tp53") == "Trp53"
+    assert mouse_identifiers.get_ncbi_symbol("22059", "gene_id") == "Trp53"
+    assert mouse_identifiers.get_ensembl_id("Myc") == "ENSMUSG00000022346"
     assert (
-        mouse_genesyn.conversion(
+        mouse_identifiers.get_alias_from_database("Myc", database="MGI") == "MGI:97250"
+    )
+    assert (
+        mouse_identifiers.conversion(
             "22059",
             input_type="gene_id",
             output_type="gene_id",
@@ -128,7 +207,7 @@ def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
         == "22059"
     )
     assert (
-        mouse_genesyn.conversion(
+        mouse_identifiers.conversion(
             "MGI:97250",
             input_type="MGI",
             output_type="ensembl_id",
@@ -136,19 +215,19 @@ def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
         == "ENSMUSG00000022346"
     )
     assert (
-        mouse_genesyn.conversion(
+        mouse_identifiers.conversion(
             "Myc",
             output_type="MGI",
         )
         == "MGI:97250"
     )
-    assert mouse_genesyn.convert_sequence(
+    assert mouse_identifiers.convert_sequence(
         ["Myc"],
         output_type="MGI",
     ) == ["MGI:97250"]
 
-    assert mouse_genesyn.get_gene_id("not-a-gene") is None
-    assert mouse_genesyn.convert_sequence(
+    assert mouse_identifiers.get_gene_id("not-a-gene") is None
+    assert mouse_identifiers.convert_sequence(
         ["not-a-gene"],
         output_type="symbol",
         keep_if_missing=False,
@@ -162,15 +241,15 @@ def test_gene_synonyms_identifier_lookups_and_database_aliases(mouse_genesyn):
         ("get_ncbi_name", "get_ncbi_symbol"),
     ],
 )
-def test_gene_synonyms_deprecated_getters_warn(
-    mouse_genesyn,
+def test_deprecated_gene_synonyms_getters_warn(
+    mouse_gene_synonyms,
     deprecated,
     replacement,
 ):
     with pytest.warns(FutureWarning, match=deprecated):
-        result = getattr(mouse_genesyn, deprecated)("Tp53")
+        result = getattr(mouse_gene_synonyms, deprecated)("Tp53")
 
-    assert result == getattr(mouse_genesyn, replacement)("Tp53")
+    assert result == getattr(mouse_gene_synonyms, replacement)("Tp53")
 
 
 @pytest.mark.parametrize(
@@ -180,18 +259,18 @@ def test_gene_synonyms_deprecated_getters_warn(
         ("ncbi_name", "ncbi_symbol"),
     ],
 )
-def test_gene_synonyms_deprecated_output_types_warn(
-    mouse_genesyn,
+def test_deprecated_gene_synonyms_output_types_warn(
+    mouse_gene_synonyms,
     deprecated,
     replacement,
 ):
     with pytest.warns(FutureWarning, match=deprecated):
-        result = mouse_genesyn.conversion(
+        result = mouse_gene_synonyms.conversion(
             "Tp53",
             output_type=deprecated,
         )
 
-    assert result == mouse_genesyn.conversion(
+    assert result == mouse_gene_synonyms.conversion(
         "Tp53",
         output_type=replacement,
     )
@@ -204,8 +283,8 @@ def test_gene_synonyms_deprecated_output_types_warn(
         ("output_identifier_type", "output_type", "Tp53", "gene_id", "22059"),
     ],
 )
-def test_gene_synonyms_deprecated_identifier_argument_names_warn(
-    mouse_genesyn,
+def test_deprecated_gene_synonyms_identifier_argument_names_warn(
+    mouse_gene_synonyms,
     deprecated,
     replacement,
     gene,
@@ -213,18 +292,18 @@ def test_gene_synonyms_deprecated_identifier_argument_names_warn(
     expected,
 ):
     with pytest.warns(FutureWarning, match=f"{deprecated}.*{replacement}"):
-        result = mouse_genesyn.conversion(gene, **{deprecated: value})
+        result = mouse_gene_synonyms.conversion(gene, **{deprecated: value})
 
     assert result == expected
-    assert mouse_genesyn.conversion(gene, **{replacement: value}) == expected
+    assert mouse_gene_synonyms.conversion(gene, **{replacement: value}) == expected
 
 
-def test_gene_synonyms_rejects_deprecated_and_current_argument_names(
-    mouse_genesyn,
+def test_deprecated_gene_synonyms_rejects_conflicting_argument_names(
+    mouse_gene_synonyms,
 ):
     with pytest.warns(FutureWarning, match="input_identifier_type.*input_type"):
         with pytest.raises(TypeError, match="use either 'input_identifier_type'"):
-            mouse_genesyn.conversion(
+            mouse_gene_synonyms.conversion(
                 "Tp53",
                 input_type="name",
                 **{"input_identifier_type": "name"},
@@ -250,15 +329,15 @@ def test_gene_synonyms_rejects_deprecated_and_current_argument_names(
         ("MGI", "MGI:97250"),
     ],
 )
-def test_gene_synonyms_conversion_supports_all_identifier_pairs(
-    mouse_genesyn,
+def test_gene_identifiers_conversion_supports_all_identifier_pairs(
+    mouse_identifiers,
     input_type,
     gene,
     output_type,
     expected,
 ):
     assert (
-        mouse_genesyn.conversion(
+        mouse_identifiers.conversion(
             gene,
             input_type=input_type,
             output_type=output_type,
@@ -280,20 +359,20 @@ def test_gene_synonyms_conversion_supports_all_identifier_pairs(
         ("gene_aliases_mapping", {}),
     ],
 )
-def test_gene_synonyms_configuration_is_read_only(
-    mouse_genesyn,
+def test_gene_identifiers_configuration_is_read_only(
+    mouse_identifiers,
     attribute,
     value,
 ):
     with pytest.raises(AttributeError, match="read-only"):
-        setattr(mouse_genesyn, attribute, value)
+        setattr(mouse_identifiers, attribute, value)
 
-    assert isinstance(mouse_genesyn.databases, frozenset)
+    assert isinstance(mouse_identifiers.databases, frozenset)
     with pytest.raises(AttributeError):
-        getattr(mouse_genesyn, "gene_aliases_mapping")
+        getattr(mouse_identifiers, "gene_aliases_mapping")
 
 
-def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path):
+def test_gene_identifiers_parse_bundled_gene_info_and_resolve_conflicts(tmp_path):
     gene_info = tmp_path / "gene_info.tsv"
     gene_info.write_text(
         "\t".join(
@@ -353,7 +432,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
         encoding="utf-8",
     )
 
-    genesyn = object.__new__(_genesyn.GeneSynonyms)
+    genesyn = object.__new__(_identifiers.GeneIdentifiers)
     genesyn._organism = "mouse"
     genesyn._version = "bundled"
     genesyn._ncbi_file = gene_info
@@ -429,7 +508,7 @@ def test_gene_synonyms_parses_bundled_gene_info_and_resolves_conflicts(tmp_path)
     assert not Path(f"{gene_info}_cut").exists()
 
 
-def test_gene_synonyms_reduces_full_gene_info_without_shell_tools(tmp_path):
+def test_gene_identifiers_reduce_full_gene_info_without_shell_tools(tmp_path):
     full_gene_info = tmp_path / "full_gene_info.tsv"
     bundled_gene_info = tmp_path / "bundled_gene_info.tsv.gz"
     full_gene_info.write_text(
@@ -468,8 +547,8 @@ def test_gene_synonyms_reduces_full_gene_info_without_shell_tools(tmp_path):
         encoding="utf-8",
     )
 
-    genesyn = object.__new__(_genesyn.GeneSynonyms)
-    getattr(genesyn, "_GeneSynonyms__write_bundled_gene_info_file")(
+    genesyn = object.__new__(_identifiers.GeneIdentifiers)
+    getattr(genesyn, "_GeneIdentifiers__write_bundled_gene_info_file")(
         full_gene_info,
         bundled_gene_info,
     )
@@ -500,7 +579,7 @@ def test_gene_synonyms_reduces_full_gene_info_without_shell_tools(tmp_path):
     assert not Path(f"{bundled_gene_info}.tmp").exists()
 
 
-def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_path):
+def test_gene_identifiers_parse_latest_gene_info_and_remove_temporary_files(tmp_path):
     gene_info = tmp_path / "latest.tsv"
     gene_info.write_text(
         "\t".join(
@@ -540,7 +619,7 @@ def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_p
     gzip_file = Path(f"{gene_info}.gz")
     gzip_file.write_text("partial", encoding="utf-8")
 
-    genesyn = object.__new__(_genesyn.GeneSynonyms)
+    genesyn = object.__new__(_identifiers.GeneIdentifiers)
     genesyn._organism = "mouse"
     genesyn._version = "latest"
     genesyn._ncbi_file = gene_info
@@ -562,14 +641,14 @@ def test_gene_synonyms_parses_latest_gene_info_and_removes_temporary_files(tmp_p
     assert not gzip_file.exists()
 
 
-def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
+def test_gene_identifiers_convert_dataframe_graph_and_interactions(mouse_identifiers):
     df = pd.DataFrame(
         [[1, 2], [3, 4]],
         index=["Tp53", "Myc"],
         columns=["NF-kappaB", "unknown"],
     )
-    converted_index = mouse_genesyn.convert_dataframe(df, axis="index", copy=True)
-    converted_columns = mouse_genesyn.convert_dataframe(
+    converted_index = mouse_identifiers.convert_dataframe(df, axis="index", copy=True)
+    converted_columns = mouse_identifiers.convert_dataframe(
         df,
         axis="columns",
         copy=True,
@@ -578,53 +657,53 @@ def test_gene_synonyms_convert_dataframe_graph_and_interactions(mouse_genesyn):
     assert converted_index.index.tolist() == ["Trp53", "Myc"]
     assert converted_columns.columns.tolist() == ["Nfkb1", "unknown"]
     assert df.index.tolist() == ["Tp53", "Myc"]
-    assert mouse_genesyn(df, axis="index").index.tolist() == ["Trp53", "Myc"]
+    assert mouse_identifiers(df, axis="index").index.tolist() == ["Trp53", "Myc"]
 
     in_place_df = df.copy()
-    assert mouse_genesyn.convert_dataframe(in_place_df, axis=1, copy=False) is None
+    assert mouse_identifiers.convert_dataframe(in_place_df, axis=1, copy=False) is None
     assert in_place_df.columns.tolist() == ["Nfkb1", "unknown"]
 
     graph = nx.MultiDiGraph()
     graph.add_edge("Tp53", "NF-kappaB", sign=-1)
 
-    converted_graph = mouse_genesyn.convert_graph(graph, copy=True)
+    converted_graph = mouse_identifiers.convert_graph(graph, copy=True)
     assert set(converted_graph.nodes) == {"Trp53", "Nfkb1"}
     assert set(graph.nodes) == {"Tp53", "NF-kappaB"}
-    assert set(mouse_genesyn(graph, copy=True).nodes) == {"Trp53", "Nfkb1"}
+    assert set(mouse_identifiers(graph, copy=True).nodes) == {"Trp53", "Nfkb1"}
 
-    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+    assert mouse_identifiers.convert_graph(graph, copy=False) is None
     assert set(graph.nodes) == {"Trp53", "Nfkb1"}
 
     interactions = [("Tp53", "NF-kappaB", {"sign": -1})]
-    assert mouse_genesyn.convert_interaction_list(interactions) == [
+    assert mouse_identifiers.convert_interaction_list(interactions) == [
         ("Trp53", "Nfkb1", {"sign": -1})
     ]
 
-    assert mouse_genesyn([]) == []
-    assert mouse_genesyn(interactions) == [("Trp53", "Nfkb1", {"sign": -1})]
-    assert list(mouse_genesyn(("Tp53", "unknown"))) == ["Trp53", "unknown"]
+    assert mouse_identifiers([]) == []
+    assert mouse_identifiers(interactions) == [("Trp53", "Nfkb1", {"sign": -1})]
+    assert list(mouse_identifiers(("Tp53", "unknown"))) == ["Trp53", "unknown"]
 
     hypercube = bt.logic.ba.Hypercube({"Tp53": 1, "NF-kappaB": 0, "unknown": "*"})
-    converted_hypercube = mouse_genesyn.convert_hypercube(hypercube, copy=True)
+    converted_hypercube = mouse_identifiers.convert_hypercube(hypercube, copy=True)
     assert isinstance(converted_hypercube, bt.logic.ba.Hypercube)
     assert converted_hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
     assert hypercube == {"Tp53": 1, "NF-kappaB": 0, "unknown": "*"}
 
-    dispatched_hypercube = mouse_genesyn(hypercube)
+    dispatched_hypercube = mouse_identifiers(hypercube)
     assert isinstance(dispatched_hypercube, bt.logic.ba.Hypercube)
     assert dispatched_hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
 
-    assert mouse_genesyn.convert_hypercube(hypercube, copy=False) is None
+    assert mouse_identifiers.convert_hypercube(hypercube, copy=False) is None
     assert hypercube == {"Trp53": 1, "Nfkb1": 0, "unknown": "*"}
 
 
-def test_gene_synonyms_convert_influence_graph_preserves_opposite_signs(
-    mouse_genesyn,
+def test_gene_identifiers_convert_influence_graph_preserves_opposite_signs(
+    mouse_identifiers,
     monkeypatch,
 ):
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__conversion_function",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__conversion_function",
         lambda *args, **kwargs: lambda gene, **_kwargs: {"c": "b"}.get(gene, gene),
     )
 
@@ -632,7 +711,7 @@ def test_gene_synonyms_convert_influence_graph_preserves_opposite_signs(
     graph.add_edge("a", "b", sign=1)
     graph.add_edge("a", "c", sign=-1)
 
-    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+    assert mouse_identifiers.convert_graph(graph, copy=False) is None
 
     assert sorted((s, t, d["sign"]) for s, t, d in graph.edges(data=True)) == [
         ("a", "b", -1),
@@ -640,13 +719,13 @@ def test_gene_synonyms_convert_influence_graph_preserves_opposite_signs(
     ]
 
 
-def test_gene_synonyms_convert_influence_graph_ignores_duplicate_edges_after_relabel(
-    mouse_genesyn,
+def test_gene_identifiers_ignore_duplicate_edges_after_graph_relabel(
+    mouse_identifiers,
     monkeypatch,
 ):
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__conversion_function",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__conversion_function",
         lambda *args, **kwargs: lambda gene, **_kwargs: {"c": "b"}.get(gene, gene),
     )
 
@@ -655,7 +734,7 @@ def test_gene_synonyms_convert_influence_graph_ignores_duplicate_edges_after_rel
     graph.add_edge("a", "c", sign=1)
     graph.add_edge("c", "d", sign=1)
 
-    assert mouse_genesyn.convert_graph(graph, copy=False) is None
+    assert mouse_identifiers.convert_graph(graph, copy=False) is None
 
     assert sorted((s, t, d["sign"]) for s, t, d in graph.edges(data=True)) == [
         ("a", "b", 1),
@@ -663,13 +742,13 @@ def test_gene_synonyms_convert_influence_graph_ignores_duplicate_edges_after_rel
     ]
 
 
-def test_gene_synonyms_convert_aggregated_influence_graph_preserves_total_and_counts(
-    mouse_genesyn,
+def test_gene_identifiers_preserve_aggregated_graph_total_and_counts(
+    mouse_identifiers,
 ):
     graph = bt.logic.ig.AggregatedInfluenceGraph(total=4)
     graph.add_edge("Tp53", "Myc", sign=1, count=3)
 
-    converted = mouse_genesyn.convert_graph(graph, copy=True)
+    converted = mouse_identifiers.convert_graph(graph, copy=True)
 
     assert isinstance(converted, bt.logic.ig.AggregatedInfluenceGraph)
     assert converted.total == 4
@@ -678,41 +757,45 @@ def test_gene_synonyms_convert_aggregated_influence_graph_preserves_total_and_co
     assert graph.edge_count("Tp53", "Myc") == 3
 
 
-def test_gene_synonyms_convert_hypercube_rejects_component_merges(
-    mouse_genesyn,
+def test_gene_identifiers_convert_hypercube_rejects_component_merges(
+    mouse_identifiers,
     monkeypatch,
 ):
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__conversion_function",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__conversion_function",
         lambda *args, **kwargs: lambda gene, **_kwargs: {"a": "x", "b": "x"}[gene],
     )
 
     hypercube = bt.logic.ba.Hypercube({"a": 0, "b": 1})
 
     with pytest.raises(ValueError, match="merge hypercube components"):
-        mouse_genesyn.convert_hypercube(hypercube)
+        mouse_identifiers.convert_hypercube(hypercube)
 
 
-def test_gene_synonyms_short_conversion_aliases_are_deprecated(mouse_genesyn):
+def test_deprecated_gene_synonyms_short_conversion_aliases_warn(
+    mouse_gene_synonyms,
+):
     dataframe = pd.DataFrame([[1]], index=["Tp53"])
     with pytest.warns(FutureWarning, match="convert_df.*convert_dataframe"):
-        converted_dataframe = mouse_genesyn.convert_df(dataframe)
+        converted_dataframe = mouse_gene_synonyms.convert_df(dataframe)
     assert converted_dataframe.index.tolist() == ["Trp53"]
 
     network = bt.logic.bn.BooleanNetwork({"Tp53": "Myc", "Myc": "Tp53"})
     with pytest.warns(FutureWarning, match="convert_bn.*convert_boolean_network"):
-        converted_network = mouse_genesyn.convert_bn(network, copy=True)
+        converted_network = mouse_gene_synonyms.convert_bn(network, copy=True)
     assert isinstance(converted_network, bt.logic.bn.BooleanNetwork)
     assert converted_network.rules == {"Trp53": "Myc", "Myc": "Trp53"}
 
 
-def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
+def test_deprecated_gene_synonyms_standardize_wrappers_and_arguments(
+    mouse_gene_synonyms,
+):
     def deprecated(old_name, new_name):
         return pytest.warns(FutureWarning, match=f"{old_name}.*{new_name}")
 
     with deprecated("standardize_sequence", "convert_sequence"):
-        standardized_sequence = mouse_genesyn.standardize_sequence(
+        standardized_sequence = mouse_gene_synonyms.standardize_sequence(
             ["Tp53", "NF-kappaB"]
         )
     assert standardized_sequence == [
@@ -721,66 +804,69 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     ]
 
     bn = bt.logic.bn.BooleanNetwork({"Tp53": "Myc", "Myc": "Tp53"})
-    converted_bn = mouse_genesyn.convert_boolean_network(bn, copy=True)
+    converted_bn = mouse_gene_synonyms.convert_boolean_network(bn, copy=True)
     assert isinstance(converted_bn, bt.logic.bn.BooleanNetwork)
     assert converted_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
     assert bn.rules == {"Tp53": "Myc", "Myc": "Tp53"}
 
-    dispatched_bn = mouse_genesyn(bn, copy=True)
+    dispatched_bn = mouse_gene_synonyms(bn, copy=True)
     assert isinstance(dispatched_bn, bt.logic.bn.BooleanNetwork)
     assert dispatched_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
 
     with deprecated("standardize_bn", "convert_boolean_network"):
-        standardized_bn = mouse_genesyn.standardize_bn(bn, copy=True)
+        standardized_bn = mouse_gene_synonyms.standardize_bn(bn, copy=True)
     assert isinstance(standardized_bn, bt.logic.bn.BooleanNetwork)
     assert standardized_bn.rules == {"Trp53": "Myc", "Myc": "Trp53"}
 
     mapping_bn = {"Tp53": "Myc", "Myc": "Tp53"}
     with deprecated("standardize_bn", "convert_boolean_network"):
-        converted_mapping_bn = mouse_genesyn.standardize_bn(mapping_bn, copy=True)
+        converted_mapping_bn = mouse_gene_synonyms.standardize_bn(mapping_bn, copy=True)
     assert type(converted_mapping_bn) is type(mapping_bn)
     assert converted_mapping_bn == {"Trp53": "Myc", "Myc": "Trp53"}
     assert mapping_bn == {"Tp53": "Myc", "Myc": "Tp53"}
 
     copyable_bn = CopyableBooleanNetworkLike({"Tp53": "Myc", "Myc": "Tp53"})
     with deprecated("standardize_bn", "convert_boolean_network"):
-        converted_copyable_bn = mouse_genesyn.standardize_bn(copyable_bn, copy=True)
+        converted_copyable_bn = mouse_gene_synonyms.standardize_bn(
+            copyable_bn,
+            copy=True,
+        )
     assert type(converted_copyable_bn) is type(copyable_bn)
     assert converted_copyable_bn == {"Trp53": "Myc", "Myc": "Trp53"}
     assert isinstance(copyable_bn.copy(), CopyableBooleanNetworkLike)
 
     with deprecated("standardize_bn", "convert_boolean_network"):
         with pytest.raises(TypeError, match="requires a 'rename' method"):
-            mouse_genesyn.standardize_bn(mapping_bn, copy=False)
+            mouse_gene_synonyms.standardize_bn(mapping_bn, copy=False)
 
     with deprecated("standardize_bn", "convert_boolean_network"):
         with pytest.raises(TypeError, match="Boolean network-like"):
-            mouse_genesyn.standardize_bn({"Tp53": object()}, copy=True)
+            mouse_gene_synonyms.standardize_bn({"Tp53": object()}, copy=True)
 
     with pytest.raises(AttributeError, match="no attribute 'get_bad'"):
-        mouse_genesyn.convert_boolean_network(bn, output_type="bad", copy=True)
+        mouse_gene_synonyms.convert_boolean_network(bn, output_type="bad", copy=True)
 
     df = pd.DataFrame([[1]], index=["Tp53"], columns=["NF-kappaB"])
     with deprecated("standardize_df", "convert_dataframe"):
-        standardized_df = mouse_genesyn.standardize_df(df)
+        standardized_df = mouse_gene_synonyms.standardize_df(df)
     assert standardized_df.index.tolist() == ["Trp53"]
 
     graph = nx.Graph()
     graph.add_edge("Tp53", "NF-kappaB")
     with deprecated("standardize_graph", "convert_graph"):
-        standardized_graph = mouse_genesyn.standardize_graph(graph)
+        standardized_graph = mouse_gene_synonyms.standardize_graph(graph)
     assert set(standardized_graph.nodes) == {"Trp53", "Nfkb1"}
 
     interactions = [("Tp53", "NF-kappaB", {"sign": 1})]
     with deprecated("standardize_interaction_list", "convert_interaction_list"):
-        standardized_interactions = mouse_genesyn.standardize_interaction_list(
+        standardized_interactions = mouse_gene_synonyms.standardize_interaction_list(
             interactions
         )
     assert standardized_interactions == [("Trp53", "Nfkb1", {"sign": 1})]
 
     hypercube = bt.logic.ba.Hypercube({"Tp53": 1, "NF-kappaB": 0})
     with deprecated("standardize_hypercube", "convert_hypercube"):
-        standardized_hypercube = mouse_genesyn.standardize_hypercube(hypercube)
+        standardized_hypercube = mouse_gene_synonyms.standardize_hypercube(hypercube)
     assert standardized_hypercube == {
         "Trp53": 1,
         "Nfkb1": 0,
@@ -788,23 +874,23 @@ def test_gene_synonyms_standardize_wrappers_and_legacy_arguments(mouse_genesyn):
     assert hypercube == {"Tp53": 1, "NF-kappaB": 0}
 
     with pytest.warns(FutureWarning):
-        assert mouse_genesyn.get_gene_id("Tp53", gene_type="name") == "22059"
+        assert mouse_gene_synonyms.get_gene_id("Tp53", gene_type="name") == "22059"
 
     with pytest.warns(FutureWarning):
-        assert mouse_genesyn.convert_sequence(["Tp53"], alias_gene="gene_id") == [
+        assert mouse_gene_synonyms.convert_sequence(["Tp53"], alias_gene="gene_id") == [
             "22059"
         ]
 
     with pytest.warns(FutureWarning):
         with pytest.raises(TypeError):
-            mouse_genesyn.get_gene_id(
+            mouse_gene_synonyms.get_gene_id(
                 "Tp53",
                 gene_type="name",
                 input_type="name",
             )
 
 
-def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch):
+def test_gene_identifiers_reset_configuration_without_download(monkeypatch):
     calls = []
 
     def fake_download(genesyn):
@@ -815,17 +901,17 @@ def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch)
         genesyn._show_warnings = show_warnings
 
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__download_gene_info",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__download_gene_info",
         fake_download,
     )
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
+        _identifiers.GeneIdentifiers,
         "_initialize_mappings",
         fake_initialize,
     )
 
-    genesyn = object.__new__(_genesyn.GeneSynonyms)
+    genesyn = object.__new__(_identifiers.GeneIdentifiers)
     genesyn.reset(
         organism="mouse",
         show_warnings=False,
@@ -841,8 +927,8 @@ def test_gene_synonyms_reset_updates_configuration_without_download(monkeypatch)
     ]
 
 
-def test_gene_synonyms_reset_restores_state_after_failure(monkeypatch):
-    genesyn = object.__new__(_genesyn.GeneSynonyms)
+def test_gene_identifiers_reset_restores_state_after_failure(monkeypatch):
+    genesyn = object.__new__(_identifiers.GeneIdentifiers)
     original_mapping = {"name": {"MYC": "17869"}}
     genesyn._organism = "mouse"
     genesyn._version = "bundled"
@@ -854,8 +940,8 @@ def test_gene_synonyms_reset_restores_state_after_failure(monkeypatch):
     genesyn._valid_output_identifier_types = ("symbol", "MGI")
 
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__download_gene_info",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__download_gene_info",
         lambda self: None,
     )
 
@@ -865,7 +951,7 @@ def test_gene_synonyms_reset_restores_state_after_failure(monkeypatch):
         raise RuntimeError("invalid gene_info")
 
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
+        _identifiers.GeneIdentifiers,
         "_initialize_mappings",
         fail_after_mutation,
     )
@@ -883,7 +969,7 @@ def test_gene_synonyms_reset_restores_state_after_failure(monkeypatch):
     assert genesyn.valid_output_identifier_types == ("symbol", "MGI")
 
 
-def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
+def test_gene_identifiers_support_bundled_latest_and_local_dated_versions(
     monkeypatch,
     tmp_path,
 ):
@@ -897,10 +983,14 @@ def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
     bundled_file.write_text("bundled\n")
     version_file.write_text("version\n")
 
-    monkeypatch.setattr(_genesyn, "NCBI_DIR", data_dir)
-    monkeypatch.setattr(_genesyn, "NCBI_GENE_INFO_VERSION_DIR", data_dir / "versions")
+    monkeypatch.setattr(_identifiers, "NCBI_DIR", data_dir)
     monkeypatch.setattr(
-        _genesyn,
+        _identifiers,
+        "NCBI_GENE_INFO_VERSION_DIR",
+        data_dir / "versions",
+    )
+    monkeypatch.setattr(
+        _identifiers,
         "NCBI_GENE_INFO_FILES",
         {"mouse": bundled_file},
     )
@@ -913,19 +1003,19 @@ def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
         genesyn._show_warnings = show_warnings
 
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
-        "_GeneSynonyms__download_gene_info",
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__download_gene_info",
         fake_download,
     )
     monkeypatch.setattr(
-        _genesyn.GeneSynonyms,
+        _identifiers.GeneIdentifiers,
         "_initialize_mappings",
         fake_initialize,
     )
 
-    bundled = bt.resources.ncbi.genesyn(organism="mouse", version="bundled")
-    latest = bt.resources.ncbi.genesyn(organism="mouse", version="latest")
-    dated = bt.resources.ncbi.genesyn(organism="mouse", version="2024-01-01")
+    bundled = bt.resources.ncbi.identifiers(organism="mouse", version="bundled")
+    latest = bt.resources.ncbi.identifiers(organism="mouse", version="latest")
+    dated = bt.resources.ncbi.identifiers(organism="mouse", version="2024-01-01")
 
     assert bundled.version == "bundled"
     assert bundled.ncbi_file == bundled_file
@@ -944,21 +1034,21 @@ def test_gene_synonyms_supports_bundled_latest_and_local_dated_versions(
     ]
 
 
-def test_gene_synonyms_validation_errors_and_missing_warnings(
-    mouse_genesyn, monkeypatch
+def test_gene_identifiers_validation_errors_and_missing_warnings(
+    mouse_identifiers, monkeypatch
 ):
     with pytest.raises(ValueError, match="invalid argument value for 'organism'"):
-        bt.resources.ncbi.genesyn(organism="rat")
+        bt.resources.ncbi.identifiers(organism="rat")
 
     with pytest.raises(
         TypeError, match="unsupported argument type for 'show_warnings'"
     ):
-        bt.resources.ncbi.genesyn(show_warnings=cast(Any, "yes"))
+        bt.resources.ncbi.identifiers(show_warnings=cast(Any, "yes"))
 
     with pytest.raises(TypeError, match="unsupported argument type for 'version'"):
-        bt.resources.ncbi.genesyn(version=cast(Any, object()))
+        bt.resources.ncbi.identifiers(version=cast(Any, object()))
 
-    genesyn = mouse_genesyn
+    genesyn = mouse_identifiers
     monkeypatch.setattr(genesyn, "_show_warnings", True)
 
     with pytest.raises(ValueError, match="invalid argument value for 'organism'"):

@@ -213,6 +213,7 @@ def test_load_interactions_version_translates_non_human_organisms(monkeypatch):
     }
     assert calls[1][1] == {
         "columns": ["source", "target"],
+        "on_unmapped": "drop",
         "one_to_many": 5,
     }
     assert result[["source", "target", "sign"]].to_dict("records") == [
@@ -275,6 +276,7 @@ def test_load_interactions_version_uses_requested_hcop_version(monkeypatch):
     }
     assert calls[1][1] == {
         "columns": ["source", "target"],
+        "on_unmapped": "drop",
         "one_to_many": 5,
     }
     assert result[["source", "target", "sign"]].to_dict("records") == [
@@ -646,8 +648,8 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
     ]
 
 
-def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
-    class FakeGeneSynonyms:
+def test_collectri_uses_omnipath_archive_version_and_identifiers(monkeypatch):
+    class FakeGeneIdentifiers:
         def __init__(self):
             self.calls = []
 
@@ -667,14 +669,13 @@ def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
             }
         )
 
-    genesyn = FakeGeneSynonyms()
+    identifiers = FakeGeneIdentifiers()
     monkeypatch.setattr(_collectri, "load_interactions_version", load_version)
-    monkeypatch.setattr(_collectri, "GeneSynonyms", FakeGeneSynonyms)
 
     grn = _collectri.collectri(
         organism="mouse",
-        genesyn=genesyn,
-        gene_identifier_type="ensembl_id",
+        identifiers=identifiers,
+        identifier_type="ensembl_id",
         version="2024-01-01",
     )
 
@@ -683,7 +684,7 @@ def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
     assert list(grn.edges(data=True)) == [
         ("TfA", "GeneA", {"sign": 1, "version": "20240101"})
     ]
-    assert genesyn.calls == [
+    assert identifiers.calls == [
         (
             grn,
             {
@@ -693,6 +694,93 @@ def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
             },
         )
     ]
+
+
+def test_dorothea_uses_gene_identifiers(monkeypatch):
+    class FakeGeneIdentifiers:
+        def __init__(self):
+            self.calls = []
+
+        def __call__(self, graph, **kwargs):
+            self.calls.append((graph, kwargs))
+
+    monkeypatch.setattr(
+        _dorothea,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+                "confidence": ["A"],
+            }
+        ),
+    )
+    identifiers = FakeGeneIdentifiers()
+
+    graph = _dorothea.dorothea(
+        identifiers=identifiers,
+        identifier_type="ensembl_id",
+        version="2024-01-01",
+    )
+
+    assert identifiers.calls == [
+        (
+            graph,
+            {
+                "input_type": "name",
+                "output_type": "ensembl_id",
+                "copy": False,
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize("module", [_collectri, _dorothea])
+def test_omnipath_loaders_accept_deprecated_identifier_arguments(
+    module,
+    monkeypatch,
+):
+    class FakeGeneIdentifiers:
+        def __call__(self, graph, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        module,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+                "confidence": ["A"],
+            }
+        ),
+    )
+    loader = cast(Any, module.collectri if module is _collectri else module.dorothea)
+
+    with pytest.warns(FutureWarning) as warnings:
+        graph = loader(
+            genesyn=FakeGeneIdentifiers(),
+            gene_identifier_type="ensembl_id",
+            version="2024-01-01",
+        )
+
+    assert isinstance(graph, InfluenceGraph)
+    messages = [str(record.message) for record in warnings]
+    assert any(
+        "`genesyn`" in message and "`identifiers`" in message for message in messages
+    )
+    assert any(
+        "`gene_identifier_type`" in message and "`identifier_type`" in message
+        for message in messages
+    )
+
+
+@pytest.mark.parametrize("loader", [_collectri.collectri, _dorothea.dorothea])
+def test_omnipath_loader_options_are_keyword_only(loader):
+    with pytest.raises(TypeError):
+        cast(Any, loader)("mouse", None)
 
 
 def test_collectri_ignores_missing_weights_instead_of_inventing_signs(monkeypatch):
@@ -755,8 +843,8 @@ def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
     with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
         _dorothea.dorothea(organism=cast(Any, object()))
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _dorothea.dorothea(genesyn=cast(Any, object()), version="latest")
+    with pytest.raises(TypeError, match="unsupported argument type for 'identifiers'"):
+        _dorothea.dorothea(identifiers=cast(Any, object()), version="latest")
 
     with pytest.raises(
         TypeError,
@@ -785,8 +873,8 @@ def test_omnipath_loaders_reject_invalid_arguments(monkeypatch):
     with pytest.raises(TypeError, match="unsupported argument type for 'organism'"):
         _collectri.collectri(organism=cast(Any, object()))
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        _collectri.collectri(genesyn=cast(Any, object()), version="latest")
+    with pytest.raises(TypeError, match="unsupported argument type for 'identifiers'"):
+        _collectri.collectri(identifiers=cast(Any, object()), version="latest")
 
     with pytest.raises(ValueError, match="support human, mouse and rat"):
         _archive.load_interactions_version(

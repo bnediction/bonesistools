@@ -6,7 +6,7 @@ import pandas as pd
 from anndata import AnnData
 
 from ..._compat import Literal
-from ...resources.ncbi import genesyn as create_gene_synonyms
+from ...resources.ncbi import identifiers as create_identifiers
 from ...resources.ncbi._typing import InputIdentifierType
 from .._typing import (
     AnnDataAxisWithInteger,
@@ -87,9 +87,9 @@ def mitochondrial_genes(
         Return a copy instead of modifying `adata`.
     organism: str (default: "mouse")
         Organism used to resolve gene identifiers and mitochondrial aliases.
-    genesyn: GeneSynonyms, optional
-        Existing gene synonym converter. If provided, `organism` is ignored.
-        If `None`, a converter is created for `organism`.
+    genesyn: GeneIdentifiers, optional
+        Existing NCBI gene information converter. If provided, `organism` is
+        ignored. If `None`, a converter is created for `organism`.
 
     Returns
     -------
@@ -108,7 +108,7 @@ def mitochondrial_genes(
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
     gene_synonyms: Any = (
-        create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+        create_identifiers(organism=organism) if genesyn is None else genesyn
     )
 
     if axis == "obs":
@@ -204,9 +204,9 @@ def ribosomal_genes(
     organism: str (default: "mouse")
         Organism used to resolve gene identifiers and ribosomal official
         symbols.
-    genesyn: GeneSynonyms, optional
-        Existing gene synonym converter. If provided, `organism` is ignored.
-        If `None`, a converter is created for `organism`.
+    genesyn: GeneIdentifiers, optional
+        Existing NCBI gene information converter. If provided, `organism` is
+        ignored. If `None`, a converter is created for `organism`.
 
     Returns
     -------
@@ -225,7 +225,7 @@ def ribosomal_genes(
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
     gene_synonyms: Any = (
-        create_gene_synonyms(organism=organism) if genesyn is None else genesyn
+        create_identifiers(organism=organism) if genesyn is None else genesyn
     )
 
     if axis == "obs":

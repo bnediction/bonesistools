@@ -627,6 +627,7 @@ def _translate_hcop(
     ).translate_dataframe(
         net,
         columns=["source", "target"],
+        on_unmapped="drop",
         one_to_many=5,
     )
     return cast(pd.DataFrame, translated)

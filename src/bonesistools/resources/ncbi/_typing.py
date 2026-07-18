@@ -15,7 +15,7 @@ OutputIdentifierType = Literal[
 ]
 
 
-class GeneSynonymsLike(Protocol):
+class GeneIdentifiersLike(Protocol):
     """
     Structural interface for objects that convert gene identifiers in place.
     """

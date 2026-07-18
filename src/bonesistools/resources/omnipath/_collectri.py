@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any, List, Optional, Union
 
 from ..._validation import _as_boolean
-from ..._warnings import _warn_deprecated
+from ..._warnings import _rename_deprecated_arguments, _warn_deprecated
 from ...logic.influence_graph import InfluenceGraph
-from ..ncbi._genesyn import GeneSynonyms
-from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
+from ..ncbi._identifiers import GeneIdentifiers
+from ..ncbi._typing import GeneIdentifiersLike, OutputIdentifierType
 from ._archive import (
     OmnipathVersion,
     _normalize_signed_weights,
@@ -17,12 +17,17 @@ from ._archive import (
 )
 
 
+@_rename_deprecated_arguments(
+    genesyn="identifiers",
+    gene_identifier_type="identifier_type",
+)
 def collectri(
     organism: Union[str, int] = "mouse",
+    *,
     split_complexes: bool = False,
     remove_pmid: bool = False,
-    genesyn: Optional[GeneSynonymsLike] = None,
-    gene_identifier_type: OutputIdentifierType = "symbol",
+    identifiers: Optional[GeneIdentifiersLike] = None,
+    identifier_type: OutputIdentifierType = "symbol",
     version: OmnipathVersion = "latest",
 ) -> InfluenceGraph:
     """
@@ -39,10 +44,10 @@ def collectri(
         Whether to split regulatory complexes into subunits.
     remove_pmid: bool (default: False)
         Whether to remove publication-reference edge attributes.
-    genesyn: GeneSynonyms, optional
-        GeneSynonyms object used to convert graph node identifiers.
-    gene_identifier_type: OutputIdentifierType (default: "symbol")
-        Output gene identifier type used when `genesyn` is provided.
+    identifiers: GeneIdentifiers, optional
+        GeneIdentifiers object used to convert graph node identifiers.
+    identifier_type: OutputIdentifierType (default: "symbol")
+        Output gene identifier type used when `identifiers` is provided.
     version: str or date (default: "latest")
         OmniPath resource version to load. `"latest"` uses the current OmniPath
         interactions endpoint; dates load archived OmniPath interaction dumps.
@@ -67,6 +72,12 @@ def collectri(
         )
     split_complexes = _as_boolean(split_complexes, "split_complexes")
     remove_pmid = _as_boolean(remove_pmid, "remove_pmid")
+    if identifiers is not None and not callable(identifiers):
+        raise TypeError(
+            f"unsupported argument type for 'identifiers': "
+            f"expected {GeneIdentifiers} or compatible callable "
+            f"but received {type(identifiers)}"
+        )
 
     collectri_db = load_interactions_version(
         "collectri",
@@ -83,26 +94,17 @@ def collectri(
             if column in collectri_db.columns
         ]
         collectri_db = collectri_db.drop(columns=reference_columns)
-    collectri_db["sign"] = _normalize_signed_weights(
-        collectri_db["sign"].to_numpy()
-    )
+    collectri_db["sign"] = _normalize_signed_weights(collectri_db["sign"].to_numpy())
 
     grn = InfluenceGraph.from_dataframe(collectri_db)
 
-    if genesyn is None:
+    if identifiers is None:
         return grn
 
-    if not callable(genesyn):
-        raise TypeError(
-            f"unsupported argument type for 'genesyn': "
-            f"expected {GeneSynonyms} or compatible callable "
-            f"but received {type(genesyn)}"
-        )
-
-    genesyn(
+    identifiers(
         grn,
         input_type="name",
-        output_type=gene_identifier_type,
+        output_type=identifier_type,
         copy=False,
     )
     return grn

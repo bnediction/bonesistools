@@ -7,7 +7,6 @@ import networkx as nx
 import pytest
 
 import bonesistools as bt
-from bonesistools.logic.input_output import _influence_graph
 
 
 def _edge_data(graph, source, target, key=0):
@@ -85,8 +84,8 @@ def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
         bt.logic.io.read_influence_graph(infile, genesyn=cast(Any, object()))
 
 
-def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
-    class FakeGeneSynonyms:
+def test_read_influence_graph_applies_genesyn(tmp_path):
+    class FakeGeneIdentifiers:
         def __init__(self):
             self.calls = []
 
@@ -95,9 +94,7 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
 
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
-    genesyn = FakeGeneSynonyms()
-
-    monkeypatch.setattr(_influence_graph, "GeneSynonyms", FakeGeneSynonyms)
+    genesyn = FakeGeneIdentifiers()
 
     graph = bt.logic.io.read_influence_graph(
         infile,
@@ -119,17 +116,15 @@ def test_read_influence_graph_applies_genesyn(monkeypatch, tmp_path):
 
 
 def test_read_influence_graph_accepts_deprecated_identifier_arguments(
-    monkeypatch,
     tmp_path,
 ):
-    class FakeGeneSynonyms:
+    class FakeGeneIdentifiers:
         def __call__(self, graph, **kwargs):
             self.kwargs = kwargs
 
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
-    genesyn = FakeGeneSynonyms()
-    monkeypatch.setattr(_influence_graph, "GeneSynonyms", FakeGeneSynonyms)
+    genesyn = FakeGeneIdentifiers()
 
     with pytest.warns(FutureWarning) as warning_records:
         cast(Any, bt.logic.io.read_influence_graph)(

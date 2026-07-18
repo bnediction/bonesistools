@@ -10,10 +10,10 @@ import pandas as pd
 
 from ..._compat import Literal
 from ..._validation import _as_boolean
-from ..._warnings import _warn_deprecated
+from ..._warnings import _rename_deprecated_arguments, _warn_deprecated
 from ...logic.influence_graph import InfluenceGraph
-from ..ncbi._genesyn import GeneSynonyms
-from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
+from ..ncbi._identifiers import GeneIdentifiers
+from ..ncbi._typing import GeneIdentifiersLike, OutputIdentifierType
 from ._archive import (
     DorotheaFlavor,
     HcopVersion,
@@ -34,11 +34,16 @@ OMNIPATH_INTERACTIONS_URL = "https://omnipathdb.org/interactions/?genesymbols=1&
 DorotheaWrapper = Literal["op", "get"]
 
 
+@_rename_deprecated_arguments(
+    genesyn="identifiers",
+    gene_identifier_type="identifier_type",
+)
 def dorothea(
     organism: Union[str, int] = "mouse",
+    *,
     levels: Optional[List[str]] = None,
-    genesyn: Optional[GeneSynonymsLike] = None,
-    gene_identifier_type: OutputIdentifierType = "symbol",
+    identifiers: Optional[GeneIdentifiersLike] = None,
+    identifier_type: OutputIdentifierType = "symbol",
     version: OmnipathVersion = "latest",
     hcop_version: HcopVersion = "latest",
     compatibility: bool = False,
@@ -59,10 +64,10 @@ def dorothea(
         bonesistools HCOP translator using decoupler-compatible expansion.
     levels: list of str, optional
         DoRothEA confidence levels to keep. If `None`, use `["A", "B", "C"]`.
-    genesyn: GeneSynonyms, optional
-        GeneSynonyms object used to convert graph node identifiers.
-    gene_identifier_type: OutputIdentifierType (default: "symbol")
-        Output gene identifier type used when `genesyn` is provided.
+    identifiers: GeneIdentifiers, optional
+        GeneIdentifiers object used to convert graph node identifiers.
+    identifier_type: OutputIdentifierType (default: "symbol")
+        Output gene identifier type used when `identifiers` is provided.
     version: str or date (default: "latest")
         OmniPath resource version to load. `"latest"` uses the current OmniPath
         interactions endpoint with decoupler-compatible post-processing; dates
@@ -114,6 +119,12 @@ def dorothea(
         )
 
     compatibility = _as_boolean(compatibility, "compatibility")
+    if identifiers is not None and not callable(identifiers):
+        raise TypeError(
+            f"unsupported argument type for 'identifiers': "
+            f"expected {GeneIdentifiers} or compatible callable "
+            f"but received {type(identifiers)}"
+        )
 
     if wrapper is not None:
         if wrapper == "op":
@@ -190,26 +201,17 @@ def dorothea(
         )
     if "weight" in dorothea_db:
         dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
-    dorothea_db["sign"] = _normalize_signed_weights(
-        dorothea_db["sign"].to_numpy()
-    )
+    dorothea_db["sign"] = _normalize_signed_weights(dorothea_db["sign"].to_numpy())
 
     grn = InfluenceGraph.from_dataframe(dorothea_db)
 
-    if genesyn is None:
+    if identifiers is None:
         return grn
 
-    if not callable(genesyn):
-        raise TypeError(
-            f"unsupported argument type for 'genesyn': "
-            f"expected {GeneSynonyms} or compatible callable "
-            f"but received {type(genesyn)}"
-        )
-
-    genesyn(
+    identifiers(
         grn,
         input_type="name",
-        output_type=gene_identifier_type,
+        output_type=identifier_type,
         copy=False,
     )
     return grn

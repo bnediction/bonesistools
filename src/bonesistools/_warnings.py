@@ -50,3 +50,28 @@ def _deprecated(*, replacement: Optional[str] = None) -> Callable[[_F], _F]:
         return cast(_F, wrapped)
 
     return decorator
+
+
+def _rename_deprecated_arguments(**replacements: str) -> Callable[[_F], _F]:
+    """Accept deprecated keyword names while exposing the current signature."""
+
+    def decorator(function: _F) -> _F:
+        @wraps(function)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            for old_name, new_name in replacements.items():
+                if old_name not in kwargs:
+                    continue
+
+                _warn_deprecated_argument(old_name, new_name, stacklevel=4)
+                if new_name in kwargs:
+                    raise TypeError(
+                        "invalid argument combination: use either "
+                        f"'{old_name}' or '{new_name}', not both"
+                    )
+                kwargs[new_name] = kwargs.pop(old_name)
+
+            return function(*args, **kwargs)
+
+        return cast(_F, wrapped)
+
+    return decorator
