@@ -18,6 +18,8 @@ from ._conversion import anndata_to_dataframe as anndata_to_dataframe
 from ._conversion import to_dataframe
 from ._embedding import pca, spectral, tsne, umap
 from ._graph import paga
+from ._knnsc import KNNSC
+from ._knnsc import Knnbs as Knnbs
 from ._markers import calculate_logfoldchanges as calculate_logfoldchanges
 from ._markers import (
     dea,
@@ -26,14 +28,12 @@ from ._markers import (
     smirnov_tests,
 )
 from ._maths import barycenters, pairwise_distances
+from ._neighbors import kneighbors_graph as kneighbors_graph
 from ._neighbors import (
-    KNNSC,
     knn_graph,
     neighbors,
     shared_neighbors,
 )
-from ._neighbors import Knnbs as Knnbs
-from ._neighbors import kneighbors_graph as kneighbors_graph
 from ._regress import regress_out
 from ._stats import welch_tests, wilcoxon_tests
 from ._utils import get_expression, get_pairwise, get_representation

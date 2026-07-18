@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any, List, Optional, Union
 
-import networkx as nx
-import pandas as pd
-
 from ..._validation import _as_boolean
 from ..._warnings import _warn_deprecated
 from ...logic.influence_graph import InfluenceGraph
@@ -14,6 +11,7 @@ from ..ncbi._genesyn import GeneSynonyms
 from ..ncbi._typing import GeneSynonymsLike, OutputIdentifierType
 from ._archive import (
     OmnipathVersion,
+    _normalize_signed_weights,
     list_interactions_versions,
     load_interactions_version,
 )
@@ -84,31 +82,12 @@ def collectri(
             for column in ("PMID", "references")
             if column in collectri_db.columns
         ]
-        remaining_columns = [
-            column for column in collectri_db.columns if column not in reference_columns
-        ]
-        collectri_db = pd.DataFrame.from_records(
-            (
-                {
-                    column: value
-                    for column, value in row.items()
-                    if column in remaining_columns
-                }
-                for row in collectri_db.to_dict("records")
-            ),
-            columns=remaining_columns,
-        )
-    collectri_db["sign"] = collectri_db["sign"].apply(lambda x: -1 if x < 0 else 1)
-
-    grn = InfluenceGraph(
-        nx.from_pandas_edgelist(
-            df=collectri_db,
-            source="source",
-            target="target",
-            edge_attr=True,
-            create_using=nx.MultiDiGraph,
-        )
+        collectri_db = collectri_db.drop(columns=reference_columns)
+    collectri_db["sign"] = _normalize_signed_weights(
+        collectri_db["sign"].to_numpy()
     )
+
+    grn = InfluenceGraph.from_dataframe(collectri_db)
 
     if genesyn is None:
         return grn

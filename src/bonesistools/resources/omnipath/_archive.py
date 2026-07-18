@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union, cast
 from urllib.request import urlopen
 
+import numpy as np
 import pandas as pd
+from pandas.api.types import is_bool_dtype
 
 from ..._compat import Literal
 from ..hcop import orthologs as hcop_orthologs
@@ -18,6 +20,7 @@ OmnipathDateString = str
 OmnipathVersion = Union[Literal["latest"], OmnipathDateString, date]
 DorotheaFlavor = Literal["modern", "legacy"]
 HcopVersion = Union[Literal["bundled", "latest"], str, Path]
+_EvidenceSummary = Tuple[bool, bool, bool, bool, bool, str, str]
 
 OMNIPATH_ARCHIVE_URL = "https://archive.omnipathdb.org"
 OMNIPATH_INTERACTIONS_PREFIX = "omnipath_webservice_interactions__"
@@ -61,7 +64,7 @@ def resolve_interactions_archive(
 
     if version_label == "latest":
         return (
-            f"{OMNIPATH_ARCHIVE_URL}/" f"{OMNIPATH_INTERACTIONS_PREFIX}latest.tsv.gz",
+            f"{OMNIPATH_ARCHIVE_URL}/{OMNIPATH_INTERACTIONS_PREFIX}latest.tsv.gz",
             "latest",
         )
 
@@ -165,11 +168,9 @@ def load_interactions_version(
     if resource == "dorothea":
         return _deduplicate_dorothea(result, compatibility=compatibility)
 
-    return (
-        result.drop_duplicates()
-        .drop_duplicates(subset=["source", "target", "sign"])
-        .reset_index(drop=True)
-    )
+    return result.drop_duplicates(
+        subset=["source", "target", "sign"]
+    ).reset_index(drop=True)
 
 
 def _format_signed_interactions(
@@ -199,7 +200,7 @@ def _format_signed_interactions(
         {
             "source": interactions[source_column],
             "target": interactions[target_column],
-            "sign": stimulation.map(lambda value: 1 if value else -1),
+            "sign": np.where(stimulation.to_numpy(), 1, -1),
             "version": version_label,
         }
     )
@@ -231,20 +232,11 @@ def _format_dorothea(
     inhibition = _truthy(interactions["is_inhibition"])
     consensus_stimulation = _truthy(interactions["consensus_stimulation"])
 
-    signs = []
-    for is_stimulation, is_inhibition, is_consensus_stimulation in zip(
-        stimulation,
-        inhibition,
-        consensus_stimulation,
-    ):
-        if is_stimulation and is_inhibition:
-            signs.append(1 if is_consensus_stimulation else -1)
-        elif is_stimulation:
-            signs.append(1)
-        elif is_inhibition:
-            signs.append(-1)
-        else:
-            signs.append(1)
+    signs = np.where(
+        inhibition & ~(stimulation & consensus_stimulation),
+        -1,
+        1,
+    )
 
     result = pd.DataFrame(
         {
@@ -288,11 +280,7 @@ def _deduplicate_dorothea(
             dorothea.sort_values(sort_columns, kind="mergesort"),
         )
 
-    return (
-        dorothea.drop_duplicates()
-        .drop_duplicates(subset=duplicate_subset)
-        .reset_index(drop=True)
-    )
+    return dorothea.drop_duplicates(subset=duplicate_subset).reset_index(drop=True)
 
 
 def _copy_optional_columns(
@@ -350,73 +338,88 @@ def _filter_dataset_evidences(
     if "evidences" not in interactions:
         return interactions
 
-    interactions = interactions.copy()
-    filtered_evidences = [
-        _filter_evidences(_parse_evidences(evidences), dataset=dataset)
-        for evidences in interactions["evidences"]
-    ]
-    evidence_rows = [_flatten_evidences(evidences) for evidences in filtered_evidences]
-    keep = [bool(evidences) for evidences in evidence_rows]
+    keep: List[bool] = []
+    is_directed: List[bool] = []
+    is_stimulation: List[bool] = []
+    is_inhibition: List[bool] = []
+    consensus_stimulation: List[bool] = []
+    consensus_inhibition: List[bool] = []
+    sources: List[str] = []
+    references: List[str] = []
+
+    for evidences in interactions["evidences"]:
+        summary = _summarize_dataset_evidences(evidences, dataset=dataset)
+        keep.append(summary is not None)
+        if summary is None:
+            continue
+
+        (
+            directed_value,
+            stimulation_value,
+            inhibition_value,
+            consensus_stimulation_value,
+            consensus_inhibition_value,
+            source_value,
+            reference_value,
+        ) = summary
+        is_directed.append(directed_value)
+        is_stimulation.append(stimulation_value)
+        is_inhibition.append(inhibition_value)
+        consensus_stimulation.append(consensus_stimulation_value)
+        consensus_inhibition.append(consensus_inhibition_value)
+        sources.append(source_value)
+        references.append(reference_value)
 
     interactions = cast(pd.DataFrame, interactions.loc[keep]).copy()
-    filtered_evidences = [
-        evidences for evidences, keep_row in zip(filtered_evidences, keep) if keep_row
-    ]
-    evidence_rows = [
-        evidences for evidences, keep_row in zip(evidence_rows, keep) if keep_row
-    ]
-
-    positive = [
-        _flatten_evidences(evidences.get("positive", []))
-        for evidences in filtered_evidences
-    ]
-    negative = [
-        _flatten_evidences(evidences.get("negative", []))
-        for evidences in filtered_evidences
-    ]
-    directed = [
-        _flatten_evidences(evidences.get("directed", []))
-        for evidences in filtered_evidences
-    ]
-
-    positive_effort = [_curation_effort(evidences) for evidences in positive]
-    negative_effort = [_curation_effort(evidences) for evidences in negative]
-
-    interactions["is_directed"] = [bool(evidences) for evidences in directed]
-    interactions["is_stimulation"] = [bool(evidences) for evidences in positive]
-    interactions["is_inhibition"] = [bool(evidences) for evidences in negative]
-    interactions["consensus_stimulation"] = [
-        pos >= neg for pos, neg in zip(positive_effort, negative_effort)
-    ]
-    interactions["consensus_inhibition"] = [
-        pos <= neg for pos, neg in zip(positive_effort, negative_effort)
-    ]
-    interactions["sources"] = [
-        _resources_from(evidences) for evidences in evidence_rows
-    ]
-    interactions["references"] = [
-        _references_from(evidences) for evidences in evidence_rows
-    ]
+    interactions["is_directed"] = is_directed
+    interactions["is_stimulation"] = is_stimulation
+    interactions["is_inhibition"] = is_inhibition
+    interactions["consensus_stimulation"] = consensus_stimulation
+    interactions["consensus_inhibition"] = consensus_inhibition
+    interactions["sources"] = sources
+    interactions["references"] = references
 
     return interactions
 
 
-def _filter_evidences(evidences: Any, dataset: str) -> Any:
+def _summarize_dataset_evidences(
+    evidences: Any,
+    dataset: str,
+) -> Optional[_EvidenceSummary]:
 
-    if isinstance(evidences, dict):
-        if "dataset" in evidences and "resource" in evidences:
-            return evidences if evidences.get("dataset") == dataset else []
-        return {
-            key: _filter_evidences(value, dataset=dataset)
-            for key, value in evidences.items()
-        }
+    parsed_evidences = _parse_evidences(evidences)
+    evidence_rows: List[dict] = []
+    positive: List[dict] = []
+    negative: List[dict] = []
+    directed: List[dict] = []
 
-    if isinstance(evidences, list):
-        return [
-            evidence for evidence in evidences if evidence.get("dataset") == dataset
-        ]
+    if isinstance(parsed_evidences, dict) and not _is_evidence(parsed_evidences):
+        for group, values in parsed_evidences.items():
+            group_evidences = _dataset_evidences(values, dataset=dataset)
+            evidence_rows.extend(group_evidences)
+            if group == "positive":
+                positive.extend(group_evidences)
+            elif group == "negative":
+                negative.extend(group_evidences)
+            elif group == "directed":
+                directed.extend(group_evidences)
+    else:
+        evidence_rows = _dataset_evidences(parsed_evidences, dataset=dataset)
 
-    return evidences
+    if not evidence_rows:
+        return None
+
+    positive_effort = _curation_effort(positive)
+    negative_effort = _curation_effort(negative)
+    return (
+        bool(directed),
+        bool(positive),
+        bool(negative),
+        positive_effort >= negative_effort,
+        positive_effort <= negative_effort,
+        _resources_from(evidence_rows),
+        _references_from(evidence_rows),
+    )
 
 
 def _parse_evidences(evidences: Any) -> Any:
@@ -424,23 +427,30 @@ def _parse_evidences(evidences: Any) -> Any:
     return json.loads(evidences) if isinstance(evidences, str) else evidences
 
 
-def _flatten_evidences(evidences: Any) -> List[dict]:
+def _dataset_evidences(evidences: Any, dataset: str) -> List[dict]:
 
     if isinstance(evidences, dict):
-        if "dataset" in evidences and "resource" in evidences:
-            return [evidences]
+        if _is_evidence(evidences):
+            return [evidences] if evidences.get("dataset") == dataset else []
         return [
             evidence
             for values in evidences.values()
-            for evidence in _flatten_evidences(values)
+            for evidence in _dataset_evidences(values, dataset=dataset)
         ]
 
     if isinstance(evidences, list):
         return [
-            evidence for value in evidences for evidence in _flatten_evidences(value)
+            evidence
+            for value in evidences
+            for evidence in _dataset_evidences(value, dataset=dataset)
         ]
 
     return []
+
+
+def _is_evidence(value: Any) -> bool:
+
+    return isinstance(value, dict) and "dataset" in value and "resource" in value
 
 
 def _curation_effort(evidences: Iterable[dict]) -> int:
@@ -624,4 +634,18 @@ def _translate_hcop(
 
 def _truthy(values: Any) -> pd.Series:
 
-    return pd.Series(values).astype(str).str.lower().isin(["true", "1", "yes"])
+    values = values if isinstance(values, pd.Series) else pd.Series(values)
+    if is_bool_dtype(values.dtype):
+        return values.fillna(False).astype(bool)
+
+    return values.astype(str).str.lower().isin(["true", "1", "yes"])
+
+
+def _normalize_signed_weights(values: Any) -> np.ndarray:
+    """Normalize signed numeric weights while preserving missing values."""
+
+    weights = np.asarray(values)
+    missing = pd.isna(weights)
+    normalized = np.full(weights.shape, np.nan)
+    normalized[~missing] = np.where(weights[~missing] < 0, -1, 1)
+    return normalized

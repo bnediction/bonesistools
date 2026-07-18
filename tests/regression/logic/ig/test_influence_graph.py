@@ -6,6 +6,7 @@ from types import ModuleType
 from typing import Any, cast
 
 import networkx as nx
+import pandas as pd
 import pytest
 
 import bonesistools as bt
@@ -79,6 +80,117 @@ def test_influence_graph_constructor_validates_existing_graph():
     duplicate_sign.add_edge("A", "B", sign="+")
     with pytest.raises(ValueError, match="duplicated edge sign"):
         bt.logic.ig.InfluenceGraph(duplicate_sign)
+
+
+def test_influence_graph_from_dataframe_preserves_edge_attributes():
+    dataframe = pd.DataFrame(
+        {
+            "source": ["A", "B"],
+            "target": ["B", "C"],
+            "sign": ["+", "negative"],
+            "confidence": ["high", "medium"],
+            "evidence": [2, 1],
+        }
+    )
+    original = dataframe.copy()
+
+    graph = bt.logic.ig.InfluenceGraph.from_dataframe(dataframe)
+
+    assert list(graph.edges(keys=True, data=True)) == [
+        (
+            "A",
+            "B",
+            0,
+            {"sign": 1, "confidence": "high", "evidence": 2},
+        ),
+        (
+            "B",
+            "C",
+            0,
+            {"sign": -1, "confidence": "medium", "evidence": 1},
+        ),
+    ]
+    pd.testing.assert_frame_equal(dataframe, original)
+
+
+def test_influence_graph_from_dataframe_supports_custom_columns():
+    dataframe = pd.DataFrame(
+        {
+            "regulator": ["A"],
+            "regulated": ["B"],
+            "effect": [-1],
+            "resource": ["curated"],
+        }
+    )
+
+    graph = bt.logic.ig.InfluenceGraph.from_dataframe(
+        dataframe,
+        source="regulator",
+        target="regulated",
+        sign="effect",
+    )
+
+    assert list(graph.edges(data=True)) == [
+        ("A", "B", {"sign": -1, "resource": "curated"})
+    ]
+
+
+def test_influence_graph_from_dataframe_ignores_missing_signs_once():
+    dataframe = pd.DataFrame(
+        {
+            "source": ["A", "B", "C", "D"],
+            "target": ["B", "C", "D", "E"],
+            "sign": [1, float("nan"), pd.NA, -1],
+        }
+    )
+
+    with pytest.warns(UserWarning, match="ignored 2 influence.*missing signs"):
+        graph = bt.logic.ig.InfluenceGraph.from_dataframe(dataframe)
+
+    assert list(graph.edges(data="sign")) == [
+        ("A", "B", 1),
+        ("D", "E", -1),
+    ]
+
+
+def test_influence_graph_from_dataframe_validates_input():
+    with pytest.raises(TypeError, match="argument type for 'dataframe'"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(cast(Any, []))
+
+    with pytest.raises(ValueError, match="missing columns"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(
+            pd.DataFrame({"source": ["A"], "target": ["B"]})
+        )
+
+    with pytest.raises(ValueError, match="must refer to distinct columns"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(
+            pd.DataFrame({"node": ["A"], "sign": [1]}),
+            source="node",
+            target="node",
+        )
+
+    with pytest.raises(ValueError, match="duplicated column names"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(
+            pd.DataFrame(
+                [["A", "B", 1, 2]], columns=["source", "target", "sign", "sign"]
+            )
+        )
+
+    with pytest.raises(ValueError, match="unsupported edge sign"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(
+            pd.DataFrame({"source": ["A"], "target": ["B"], "sign": [0]})
+        )
+
+    with pytest.raises(ValueError, match="duplicated edge sign"):
+        bt.logic.ig.InfluenceGraph.from_dataframe(
+            pd.DataFrame(
+                {
+                    "source": ["A", "A"],
+                    "target": ["B", "B"],
+                    "sign": [1, "+"],
+                }
+            )
+        )
 
 
 def test_influence_graph_add_edges_from_is_transactional():

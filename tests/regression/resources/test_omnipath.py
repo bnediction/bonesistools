@@ -557,6 +557,32 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
     ]
 
 
+def test_dorothea_ignores_missing_weights_instead_of_inventing_signs(monkeypatch):
+    monkeypatch.setattr(
+        _dorothea,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source": ["TfA", "TfB", "TfC"],
+                "target": ["GeneA", "GeneB", "GeneC"],
+                "weight": [0.5, float("nan"), -0.5],
+                "confidence": ["A", "A", "A"],
+            }
+        ),
+    )
+
+    with pytest.warns(UserWarning, match="ignored 1 influence.*missing signs"):
+        graph = _dorothea.dorothea(
+            levels=["A"],
+            version="2024-01-01",
+        )
+
+    assert list(graph.edges(data="sign")) == [
+        ("TfA", "GeneA", 1),
+        ("TfC", "GeneC", -1),
+    ]
+
+
 def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
     calls = []
 
@@ -666,6 +692,28 @@ def test_collectri_uses_omnipath_archive_version_and_genesyn(monkeypatch):
                 "copy": False,
             },
         )
+    ]
+
+
+def test_collectri_ignores_missing_weights_instead_of_inventing_signs(monkeypatch):
+    monkeypatch.setattr(
+        _collectri,
+        "load_interactions_version",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "source": ["TfA", "TfB", "TfC"],
+                "target": ["GeneA", "GeneB", "GeneC"],
+                "weight": [1.0, pd.NA, -1.0],
+            }
+        ),
+    )
+
+    with pytest.warns(UserWarning, match="ignored 1 influence.*missing signs"):
+        graph = _collectri.collectri(version="2024-01-01")
+
+    assert list(graph.edges(data="sign")) == [
+        ("TfA", "GeneA", 1),
+        ("TfC", "GeneC", -1),
     ]
 
 

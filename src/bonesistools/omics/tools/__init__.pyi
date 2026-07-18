@@ -8,6 +8,7 @@ from bonesistools.omics.tools._embedding import spectral as spectral
 from bonesistools.omics.tools._embedding import tsne as tsne
 from bonesistools.omics.tools._embedding import umap as umap
 from bonesistools.omics.tools._graph import paga as paga
+from bonesistools.omics.tools._knnsc import KNNSC as KNNSC
 from bonesistools.omics.tools._markers import dea as dea
 from bonesistools.omics.tools._markers import logfoldchanges as logfoldchanges
 from bonesistools.omics.tools._markers import ora as ora
@@ -16,7 +17,6 @@ from bonesistools.omics.tools._maths import barycenters as barycenters
 from bonesistools.omics.tools._maths import (
     pairwise_distances as pairwise_distances,
 )
-from bonesistools.omics.tools._neighbors import KNNSC as KNNSC
 from bonesistools.omics.tools._neighbors import knn_graph as knn_graph
 from bonesistools.omics.tools._neighbors import neighbors as neighbors
 from bonesistools.omics.tools._neighbors import (

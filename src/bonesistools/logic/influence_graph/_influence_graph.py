@@ -20,12 +20,15 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
+    TypeVar,
     Union,
     cast,
     overload,
 )
 
 import networkx as nx
+import pandas as pd
 
 from ..._compat import Literal
 from ..._validation import (
@@ -77,6 +80,8 @@ if TYPE_CHECKING:
     _MultiDiGraphBase = nx.MultiDiGraph[Any]
 else:
     _MultiDiGraphBase = nx.MultiDiGraph
+
+_InfluenceGraphT = TypeVar("_InfluenceGraphT", bound="InfluenceGraph")
 
 
 class InfluenceGraph(_MultiDiGraphBase):
@@ -145,6 +150,171 @@ class InfluenceGraph(_MultiDiGraphBase):
         )
 
     __repr__ = __str__
+
+    @classmethod
+    def from_dataframe(
+        cls: Type[_InfluenceGraphT],
+        dataframe: pd.DataFrame,
+        *,
+        source: str = "source",
+        target: str = "target",
+        sign: str = "sign",
+    ) -> _InfluenceGraphT:
+        """
+        Create a signed influence graph from a tabular edge list.
+
+        Every row defines one signed influence. Columns other than `source`,
+        `target` and `sign` are preserved as edge attributes. Rows with a
+        missing sign are ignored and reported together in one warning.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> interactions = pd.DataFrame(
+        ...     {
+        ...         "source": ["A", "B"],
+        ...         "target": ["B", "C"],
+        ...         "sign": [1, -1],
+        ...         "confidence": ["high", "medium"],
+        ...     }
+        ... )
+        >>> graph = InfluenceGraph.from_dataframe(interactions)
+        >>> sorted(graph.edges(data="sign"))
+        [('A', 'B', 1), ('B', 'C', -1)]
+        >>> graph["A"]["B"][0]["confidence"]
+        'high'
+
+        Parameters
+        ----------
+        dataframe: pandas.DataFrame
+            Tabular edge list.
+        source: str (default: "source")
+            Column containing source nodes.
+        target: str (default: "target")
+            Column containing target nodes.
+        sign: str (default: "sign")
+            Column containing influence signs.
+
+        Returns
+        -------
+        InfluenceGraph
+            Signed influence graph containing the tabular interactions.
+
+        Raises
+        ------
+        TypeError
+            If `dataframe` is not a DataFrame or column names are not strings.
+        ValueError
+            If required columns are missing or ambiguous, or if an interaction
+            has an invalid or duplicated sign.
+
+        Warns
+        -----
+        UserWarning
+            If one or more rows with missing signs are ignored.
+        """
+
+        if not isinstance(dataframe, pd.DataFrame):
+            raise TypeError(
+                "unsupported argument type for 'dataframe': "
+                f"expected {pd.DataFrame} but received {type(dataframe)}"
+            )
+
+        for argument, column in (
+            ("source", source),
+            ("target", target),
+            ("sign", sign),
+        ):
+            if not isinstance(column, str):
+                raise TypeError(
+                    f"unsupported argument type for '{argument}': "
+                    f"expected {str} but received {type(column)}"
+                )
+
+        required_columns = {source, target, sign}
+        if len(required_columns) != 3:
+            raise ValueError(
+                "invalid column mapping: 'source', 'target' and 'sign' "
+                "must refer to distinct columns"
+            )
+
+        if not dataframe.columns.is_unique:
+            raise ValueError("invalid dataframe: duplicated column names")
+
+        missing_columns = required_columns - set(dataframe.columns)
+        if missing_columns:
+            raise ValueError(
+                f"invalid dataframe: missing columns {sorted(missing_columns)}"
+            )
+
+        columns: List[str] = []
+        for column in dataframe.columns:
+            if not isinstance(column, str):
+                raise TypeError(
+                    "unsupported dataframe column type: "
+                    f"expected {str} but received {type(column)}"
+                )
+            columns.append(column)
+
+        attribute_columns = [
+            column for column in columns if column not in required_columns
+        ]
+        if "sign" in attribute_columns:
+            raise ValueError(
+                "invalid dataframe: edge attribute 'sign' conflicts with "
+                f"the selected sign column {sign!r}"
+            )
+
+        source_index = columns.index(source)
+        target_index = columns.index(target)
+        sign_index = columns.index(sign)
+        attribute_indices = [columns.index(column) for column in attribute_columns]
+        missing_signs = dataframe[sign].isna().tolist()
+
+        graph = cls()
+        missing_edge_count = 0
+        missing_edge_examples: List[Tuple[Any, Any]] = []
+        for row, missing_sign in zip(
+            dataframe.itertuples(index=False, name=None),
+            missing_signs,
+        ):
+            if missing_sign:
+                missing_edge_count += 1
+                if len(missing_edge_examples) < 5:
+                    missing_edge_examples.append(
+                        (row[source_index], row[target_index])
+                    )
+                continue
+
+            graph.add_edge(
+                row[source_index],
+                row[target_index],
+                sign=row[sign_index],
+                **{
+                    column: row[index]
+                    for column, index in zip(
+                        attribute_columns,
+                        attribute_indices,
+                    )
+                },
+            )
+
+        if missing_edge_count:
+            displayed_edges = ", ".join(
+                f"{edge_source!r} -> {edge_target!r}"
+                for edge_source, edge_target in missing_edge_examples
+            )
+            if missing_edge_count > 5:
+                displayed_edges += f", ... ({missing_edge_count - 5} more)"
+
+            warnings.warn(
+                f"ignored {missing_edge_count} influence(s) with missing "
+                f"signs: {displayed_edges}",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        return graph
 
     def copy(self, as_view: bool = False) -> "InfluenceGraph":
         """
@@ -830,7 +1000,6 @@ class InfluenceGraph(_MultiDiGraphBase):
         feedback_nodes = self.feedback_nodes() if preserve_feedback else set()
 
         for node in self.nodes():
-
             if node in feedback_nodes:
                 continue
 
@@ -846,7 +1015,6 @@ class InfluenceGraph(_MultiDiGraphBase):
             )
 
             if include_successors:
-
                 successors = frozenset(
                     (
                         successor,
@@ -1177,7 +1345,6 @@ class InfluenceGraph(_MultiDiGraphBase):
         sign = 1
 
         for source, target in zip(path, path[1:]):
-
             edge_sign = self.edge_sign(
                 source,
                 target,
@@ -1431,7 +1598,6 @@ class InfluenceGraph(_MultiDiGraphBase):
                             )
 
                         for path in paths:
-
                             path_sign = self.path_sign(path)
 
                             if sign is None or path_sign == sign:
@@ -1443,7 +1609,6 @@ class InfluenceGraph(_MultiDiGraphBase):
                                 )
 
                     if candidate_paths:
-
                         min_length = min(
                             len(record["path"]) for record in candidate_paths
                         )
@@ -1830,7 +1995,6 @@ class InfluenceGraph(_MultiDiGraphBase):
         )
 
         for source, target, edge_data in graph.edges(data=True):
-
             sign = self._normalize_sign(
                 edge_data.get("sign", 1),
             )

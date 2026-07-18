@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import Any, List, Optional, Union, cast
 
-import networkx as nx
+import numpy as np
 import pandas as pd
 
 from ..._compat import Literal
@@ -22,6 +22,7 @@ from ._archive import (
     _filter_dataset_evidences,
     _format_dorothea,
     _normalize_organism,
+    _normalize_signed_weights,
     _tax_id,
     _translate_hcop,
     _truthy,
@@ -183,28 +184,17 @@ def dorothea(
         )
 
     if "confidence" in dorothea_db:
-        dorothea_columns = list(dorothea_db.columns)
-        dorothea_db = pd.DataFrame.from_records(
-            (
-                row
-                for row in dorothea_db.to_dict("records")
-                if row["confidence"] in levels
-            ),
-            columns=dorothea_columns,
+        dorothea_db = cast(
+            pd.DataFrame,
+            dorothea_db.loc[dorothea_db["confidence"].isin(levels)],
         )
     if "weight" in dorothea_db:
         dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
-    dorothea_db["sign"] = dorothea_db["sign"].apply(lambda x: -1 if x < 0 else 1)
-
-    grn = InfluenceGraph(
-        nx.from_pandas_edgelist(
-            df=dorothea_db,
-            source="source",
-            target="target",
-            edge_attr=True,
-            create_using=nx.MultiDiGraph,
-        )
+    dorothea_db["sign"] = _normalize_signed_weights(
+        dorothea_db["sign"].to_numpy()
     )
+
+    grn = InfluenceGraph.from_dataframe(dorothea_db)
 
     if genesyn is None:
         return grn
@@ -315,20 +305,11 @@ def _load_latest_modern_dorothea(
     inhibition = _truthy(dorothea_db["is_inhibition"])
     consensus_stimulation = _truthy(dorothea_db["consensus_stimulation"])
 
-    signs = []
-    for is_stimulation, is_inhibition, is_consensus_stimulation in zip(
-        stimulation,
-        inhibition,
-        consensus_stimulation,
-    ):
-        if is_stimulation and is_inhibition:
-            signs.append(1 if is_consensus_stimulation else -1)
-        elif is_stimulation:
-            signs.append(1)
-        elif is_inhibition:
-            signs.append(-1)
-        else:
-            signs.append(1)
+    signs = np.where(
+        inhibition & ~(stimulation & consensus_stimulation),
+        -1,
+        1,
+    )
 
     dorothea_db = pd.DataFrame(
         {
