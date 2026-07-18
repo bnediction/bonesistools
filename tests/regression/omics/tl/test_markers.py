@@ -770,3 +770,127 @@ def test_smirnov_tests_copy_returns_dataframe(mini_adata):
     assert isinstance(result, pd.DataFrame)
     assert "pvals_adj" in result
     assert "smirnov_tests" not in mini_adata.uns
+
+
+@pytest.mark.parametrize("alternative", ["two-sided", "less", "greater"])
+def test_smirnov_tests_scalar_and_legacy_paths_are_exact(
+    monkeypatch,
+    alternative,
+):
+    from bonesistools.omics.tools import _markers
+
+    adata = _toy_smirnov_adata()
+    expected = bt.omics.tl.smirnov_tests(
+        adata,
+        groupby="cluster",
+        reference="rest",
+        alternative=alternative,
+        copy=True,
+    )
+
+    if _markers._KS_RETURNS_DETAILS:
+        monkeypatch.setattr(_markers, "_KS_SUPPORTS_AXIS", False)
+        scalar = bt.omics.tl.smirnov_tests(
+            adata,
+            groupby="cluster",
+            reference="rest",
+            alternative=alternative,
+            copy=True,
+        )
+        pd.testing.assert_frame_equal(expected, scalar, check_exact=True)
+
+    monkeypatch.setattr(_markers, "_KS_SUPPORTS_AXIS", False)
+    monkeypatch.setattr(_markers, "_KS_RETURNS_DETAILS", False)
+    legacy = bt.omics.tl.smirnov_tests(
+        adata,
+        groupby="cluster",
+        reference="rest",
+        alternative=alternative,
+        copy=True,
+    )
+    pd.testing.assert_frame_equal(expected, legacy, check_exact=True)
+
+
+def test_smirnov_tests_legacy_path_resolves_tied_statistic_location(monkeypatch):
+    from bonesistools.omics.tools import _markers
+
+    sample = [1, 2, 2, 2, 2, 3, 3, 3, 3, 4]
+    reference = [0, 0, 0, 1, 2, 3, 3, 3, 3, 3]
+    adata = ad.AnnData(
+        X=np.asarray(sample + reference, dtype=np.float32)[:, None],
+        obs=pd.DataFrame(
+            {"cluster": pd.Categorical(["sample"] * 10 + ["reference"] * 10)},
+            index=[f"c{index}" for index in range(20)],
+        ),
+        var=pd.DataFrame(index=["gene"]),
+    )
+    monkeypatch.setattr(_markers, "_KS_SUPPORTS_AXIS", False)
+    monkeypatch.setattr(_markers, "_KS_RETURNS_DETAILS", False)
+
+    result = bt.omics.tl.smirnov_tests(
+        adata,
+        groupby="cluster",
+        groups=["sample"],
+        reference="reference",
+        copy=True,
+    ).iloc[0]
+
+    assert result["statistics"] == pytest.approx(0.3)
+    assert result["locations"] == 0
+    assert result["signs"] == -1
+
+
+def test_smirnov_tests_vectorizes_over_genes_when_supported(monkeypatch):
+    from bonesistools.omics.tools import _markers
+
+    if not _markers._KS_SUPPORTS_AXIS:
+        pytest.skip("installed SciPy does not support vectorized KS tests")
+
+    axes = []
+    ks_2samp = _markers.ks_2samp
+
+    def tracked_ks_2samp(*args, **kwargs):
+        axes.append(kwargs.get("axis"))
+        return ks_2samp(*args, **kwargs)
+
+    monkeypatch.setattr(_markers, "ks_2samp", tracked_ks_2samp)
+    bt.omics.tl.smirnov_tests(
+        _toy_smirnov_adata(),
+        groupby="cluster",
+        copy=True,
+    )
+
+    assert axes
+    assert 0 in axes
+    assert all(axis in (None, 0) for axis in axes)
+
+
+def test_smirnov_tests_preserves_duplicate_gene_name_semantics():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        adata = ad.AnnData(
+            X=np.array(
+                [
+                    [0.0, 1.0],
+                    [0.0, 1.0],
+                    [1.0, 0.0],
+                    [1.0, 0.0],
+                ]
+            ),
+            obs=pd.DataFrame(
+                {"cluster": pd.Categorical(["A", "A", "B", "B"])},
+                index=["c1", "c2", "c3", "c4"],
+            ),
+            var=pd.DataFrame(index=["duplicated", "duplicated"]),
+        )
+
+        result = bt.omics.tl.smirnov_tests(
+            adata,
+            groupby="cluster",
+            groups=["A"],
+            reference="B",
+            copy=True,
+        )
+
+    assert result["names"].tolist() == ["duplicated", "duplicated"]
+    assert result["statistics"].tolist() == [0.0, 0.0]

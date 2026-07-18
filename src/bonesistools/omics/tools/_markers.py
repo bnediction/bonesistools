@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Collection as CollectionInstance
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as Seq
+from inspect import signature
 from typing import (
     Any,
     Callable,
@@ -12,6 +13,7 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    NamedTuple,
     Optional,
     Sequence,
     Set,
@@ -25,12 +27,13 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from numpy import log2
-from scipy.stats import hypergeom
+from scipy.sparse import issparse
+from scipy.stats import hypergeom, ks_2samp
 
 from ..._compat import Literal
 from ..._validation import _as_boolean, _as_callable, _as_literal, _as_probability
 from ..._warnings import _warn_deprecated
-from .._typing import VarSubset, anndata_checker
+from .._typing import Matrix, VarSubset, anndata_checker
 from ._conversion import to_dataframe
 from ._stats import (
     CORRECTION_METHODS,
@@ -41,7 +44,7 @@ from ._stats import (
     welch_tests,
     wilcoxon_tests,
 )
-from ._utils import _get_expression_with_gene_names
+from ._utils import _as_dense_matrix_chunk, _get_expression_with_gene_names
 
 _CorrMethod = Literal["benjamini-hochberg", "bonferroni"]
 _Alternatives = Literal["two-sided", "less", "greater"]
@@ -55,6 +58,46 @@ DEA_METHODS: Tuple[DEAMethod, ...] = (
     "welch_overestimate",
     "wilcoxon",
 )
+_SMIRNOV_CHUNK_SIZE = 64
+
+
+class _SmirnovInputs(NamedTuple):
+    expression_mtx: Matrix
+    gene_names: np.ndarray
+    groups: Tuple[Any, ...]
+    group_indices: Tuple[np.ndarray, ...]
+    reference_indices: Tuple[np.ndarray, ...]
+    unique_gene_names: bool
+
+
+class _SmirnovResults(NamedTuple):
+    statistics: np.ndarray
+    locations: np.ndarray
+    signs: np.ndarray
+    pvals: np.ndarray
+
+
+def _ks_supports_axis() -> bool:
+    """Return whether the installed SciPy supports vectorized KS tests."""
+
+    try:
+        return "axis" in signature(ks_2samp).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _ks_returns_details() -> bool:
+    """Return whether KS results include statistic location and sign."""
+
+    result = ks_2samp(np.asarray([0.0]), np.asarray([1.0]))
+    return hasattr(result, "statistic_location") and hasattr(
+        result,
+        "statistic_sign",
+    )
+
+
+_KS_SUPPORTS_AXIS = _ks_supports_axis()
+_KS_RETURNS_DETAILS = _ks_returns_details()
 
 
 @anndata_checker
@@ -674,6 +717,344 @@ def _as_signature_items(
     return resolved
 
 
+def _prepare_smirnov_inputs(
+    adata: AnnData,
+    groupby: str,
+    groups: Sequence[Any],
+    reference: str,
+    layer: Optional[str],
+) -> _SmirnovInputs:
+    """Prepare expression data and observation indices for KS tests."""
+
+    expression_mtx = adata.layers[layer] if layer is not None else adata.X
+    if issparse(expression_mtx):
+        expression_mtx = cast(
+            Matrix,
+            cast(Any, expression_mtx).tocsc(copy=True),
+        )
+        cast(Any, expression_mtx).eliminate_zeros()
+    else:
+        expression_mtx = cast(Matrix, np.asarray(expression_mtx))
+
+    labels = adata.obs[groupby].to_numpy()
+    resolved_groups = tuple(groups)
+    group_indices = tuple(np.flatnonzero(labels == group) for group in resolved_groups)
+    if reference == "rest":
+        reference_indices = tuple(
+            np.flatnonzero(labels != group) for group in resolved_groups
+        )
+    else:
+        fixed_reference = np.flatnonzero(labels == reference)
+        reference_indices = (fixed_reference,) * len(resolved_groups)
+
+    return _SmirnovInputs(
+        expression_mtx=expression_mtx,
+        gene_names=np.asarray(adata.var_names),
+        groups=resolved_groups,
+        group_indices=group_indices,
+        reference_indices=reference_indices,
+        unique_gene_names=adata.var_names.is_unique,
+    )
+
+
+def _empty_smirnov_results(inputs: _SmirnovInputs) -> _SmirnovResults:
+    """Allocate arrays for one KS result per gene and group."""
+
+    shape = (inputs.gene_names.size, len(inputs.groups))
+    matrix_dtype = np.dtype(cast(Any, inputs.expression_mtx).dtype)
+    has_empty_sample = any(
+        indices.size == 0 for indices in inputs.group_indices + inputs.reference_indices
+    )
+    probe_dtype = (
+        np.dtype(float)
+        if has_empty_sample and not np.issubdtype(matrix_dtype, np.floating)
+        else matrix_dtype
+    )
+    probe = cast(
+        Any,
+        ks_2samp(
+            np.asarray([0], dtype=probe_dtype),
+            np.asarray([1], dtype=probe_dtype),
+        ),
+    )
+    location = getattr(
+        probe,
+        "statistic_location",
+        np.asarray(0, dtype=probe_dtype),
+    )
+    return _SmirnovResults(
+        statistics=np.empty(shape, dtype=np.asarray(probe.statistic).dtype),
+        locations=np.empty(shape, dtype=np.asarray(location).dtype),
+        signs=np.empty(shape, dtype=float),
+        pvals=np.empty(shape, dtype=np.asarray(probe.pvalue).dtype),
+    )
+
+
+def _finalize_smirnov_results(results: _SmirnovResults) -> _SmirnovResults:
+    """Use SciPy's compact integer dtype when all KS signs are defined."""
+
+    signs = results.signs
+    if signs.size and not np.isnan(signs).any():
+        signs = signs.astype(np.int8)
+    return _SmirnovResults(
+        statistics=results.statistics,
+        locations=results.locations,
+        signs=signs,
+        pvals=results.pvals,
+    )
+
+
+def _vectorized_smirnov_results(
+    inputs: _SmirnovInputs,
+    alternative: _Alternatives,
+) -> _SmirnovResults:
+    """Compute KS tests by vectorizing over contiguous gene chunks."""
+
+    results = _empty_smirnov_results(inputs)
+    n_genes = inputs.gene_names.size
+    for start in range(0, n_genes, _SMIRNOV_CHUNK_SIZE):
+        end = min(start + _SMIRNOV_CHUNK_SIZE, n_genes)
+        values = _as_dense_matrix_chunk(inputs.expression_mtx, start, end)
+        for group_index, (sample_indices, reference_indices) in enumerate(
+            zip(inputs.group_indices, inputs.reference_indices)
+        ):
+            ks = cast(
+                Any,
+                ks_2samp(
+                    values[sample_indices],
+                    values[reference_indices],
+                    alternative=alternative,
+                    axis=0,
+                ),
+            )
+            results.statistics[start:end, group_index] = ks.statistic
+            results.locations[start:end, group_index] = ks.statistic_location
+            results.signs[start:end, group_index] = ks.statistic_sign
+            results.pvals[start:end, group_index] = ks.pvalue
+
+    return _finalize_smirnov_results(results)
+
+
+def _smirnov_gene_indices(inputs: _SmirnovInputs) -> Tuple[np.ndarray, ...]:
+    """Return source columns represented by each output gene name."""
+
+    if inputs.unique_gene_names:
+        return tuple(
+            np.asarray([gene_index], dtype=int)
+            for gene_index in range(inputs.gene_names.size)
+        )
+
+    indices_by_name = {}
+    for gene_index, gene_name in enumerate(inputs.gene_names):
+        indices_by_name.setdefault(gene_name, []).append(gene_index)
+    return tuple(
+        np.asarray(indices_by_name[gene_name], dtype=int)
+        for gene_name in inputs.gene_names
+    )
+
+
+def _smirnov_gene_values(
+    inputs: _SmirnovInputs,
+    gene_indices: np.ndarray,
+) -> np.ndarray:
+    """Extract all observation values associated with one gene name."""
+
+    values = cast(Any, inputs.expression_mtx)[:, gene_indices]
+    if issparse(values):
+        values = values.toarray()
+    return np.asarray(values)
+
+
+def _scalar_smirnov_results(
+    inputs: _SmirnovInputs,
+    alternative: _Alternatives,
+) -> _SmirnovResults:
+    """Compute detailed KS results one gene and group at a time."""
+
+    results = _empty_smirnov_results(inputs)
+    for gene_index, source_indices in enumerate(_smirnov_gene_indices(inputs)):
+        values = _smirnov_gene_values(inputs, source_indices)
+        for group_index, (sample_indices, reference_indices) in enumerate(
+            zip(inputs.group_indices, inputs.reference_indices)
+        ):
+            ks = cast(
+                Any,
+                ks_2samp(
+                    values[sample_indices].reshape(-1),
+                    values[reference_indices].reshape(-1),
+                    alternative=alternative,
+                ),
+            )
+            results.statistics[gene_index, group_index] = ks.statistic
+            results.locations[gene_index, group_index] = ks.statistic_location
+            results.signs[gene_index, group_index] = ks.statistic_sign
+            results.pvals[gene_index, group_index] = ks.pvalue
+
+    return _finalize_smirnov_results(results)
+
+
+def _legacy_smirnov_details(
+    sample: np.ndarray,
+    reference: np.ndarray,
+    statistic: float,
+    alternative: _Alternatives,
+) -> Tuple[Any, Union[int, float]]:
+    """Recover the KS statistic location and sign for older SciPy releases."""
+
+    if sample.size == 0 or reference.size == 0 or np.isnan(statistic):
+        return np.nan, np.nan
+
+    sample = np.sort(sample)
+    reference = np.sort(reference)
+    pooled = np.concatenate((sample, reference))
+    values = np.sort(pooled)
+    ranks = np.searchsorted(values, pooled, side="left") + 1
+    total_size = pooled.size
+    sample_counts = np.diff(
+        np.concatenate(([1], ranks[: sample.size], [total_size + 1]))
+    )
+    reference_counts = np.diff(
+        np.concatenate(([1], ranks[sample.size :], [total_size + 1]))
+    )
+    probability_dtype = np.result_type(sample.dtype, reference.dtype, np.float32)
+    sample_cdf = np.repeat(
+        np.linspace(0, 1, sample.size + 1, dtype=probability_dtype),
+        sample_counts,
+    )
+    reference_cdf = np.repeat(
+        np.linspace(0, 1, reference.size + 1, dtype=probability_dtype),
+        reference_counts,
+    )
+    differences = sample_cdf - reference_cdf
+    minimum_index = int(np.argmin(differences))
+    maximum_index = int(np.argmax(differences))
+    minimum = float(np.clip(-differences[minimum_index], 0, 1))
+    maximum = float(differences[maximum_index])
+
+    if alternative == "less" or (alternative == "two-sided" and minimum > maximum):
+        return values[minimum_index], -1
+    return values[maximum_index], 1
+
+
+def _legacy_smirnov_results(
+    inputs: _SmirnovInputs,
+    alternative: _Alternatives,
+) -> _SmirnovResults:
+    """Compute KS tests and reconstruct details missing from older SciPy."""
+
+    results = _empty_smirnov_results(inputs)
+    for gene_index, source_indices in enumerate(_smirnov_gene_indices(inputs)):
+        values = _smirnov_gene_values(inputs, source_indices)
+        for group_index, (sample_indices, reference_indices) in enumerate(
+            zip(inputs.group_indices, inputs.reference_indices)
+        ):
+            sample = values[sample_indices].reshape(-1)
+            reference = values[reference_indices].reshape(-1)
+            ks = cast(
+                Any,
+                ks_2samp(
+                    sample,
+                    reference,
+                    alternative=alternative,
+                ),
+            )
+            location, sign = _legacy_smirnov_details(
+                sample,
+                reference,
+                float(ks.statistic),
+                alternative,
+            )
+            results.statistics[gene_index, group_index] = ks.statistic
+            results.locations[gene_index, group_index] = location
+            results.signs[gene_index, group_index] = sign
+            results.pvals[gene_index, group_index] = ks.pvalue
+
+    return _finalize_smirnov_results(results)
+
+
+def _format_smirnov_results(
+    inputs: _SmirnovInputs,
+    results: _SmirnovResults,
+    corr_method: _CorrMethod,
+    pval_cutoff: Optional[float],
+) -> pd.DataFrame:
+    """Build, sort and adjust the public Smirnov result table."""
+
+    n_genes = inputs.gene_names.size
+    if n_genes == 0 or not inputs.groups:
+        dataframe = pd.DataFrame(
+            columns=cast(
+                Any,
+                [
+                    "group",
+                    "names",
+                    "statistics",
+                    "locations",
+                    "signs",
+                    "pvals",
+                ],
+            )
+        )
+    else:
+        flattened = (
+            results.statistics.reshape(-1),
+            results.locations.reshape(-1),
+            results.signs.reshape(-1),
+            results.pvals.reshape(-1),
+        )
+        has_nan = any(
+            np.issubdtype(values.dtype, np.floating) and np.isnan(values).any()
+            for values in flattened
+        )
+        numeric_values = (
+            tuple(pd.Series(values.tolist(), dtype=object) for values in flattened)
+            if has_nan
+            else flattened
+        )
+        dataframe = pd.DataFrame(
+            {
+                "group": np.tile(np.asarray(inputs.groups), n_genes),
+                "names": np.repeat(inputs.gene_names, len(inputs.groups)),
+                "statistics": numeric_values[0],
+                "locations": numeric_values[1],
+                "signs": numeric_values[2],
+                "pvals": numeric_values[3],
+            }
+        )
+
+    dataframe.sort_values(
+        by=["statistics"],
+        ascending=False,
+        inplace=True,
+        ignore_index=True,
+    )
+
+    if corr_method == "benjamini-hochberg":
+        pvals = dataframe["pvals"].to_numpy(dtype=float)
+        if pvals.size:
+            order = np.argsort(pvals)
+            ranks = np.arange(1, pvals.size + 1)
+            adjusted = pvals[order] * pvals.size / ranks
+            adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+            pvals_adj = np.empty_like(adjusted)
+            pvals_adj[order] = np.minimum(adjusted, 1.0)
+            dataframe["pvals_adj"] = pvals_adj
+        else:
+            dataframe["pvals_adj"] = []
+    elif corr_method == "bonferroni":
+        dataframe["pvals_adj"] = np.minimum(
+            dataframe["pvals"] * n_genes,
+            1.0,
+        )
+
+    if pval_cutoff is not None:
+        dataframe = cast(
+            pd.DataFrame,
+            dataframe[dataframe["pvals_adj"] < pval_cutoff],
+        )
+    return dataframe
+
+
 @overload
 def smirnov_tests(
     adata: AnnData,
@@ -781,9 +1162,6 @@ def smirnov_tests(
 
     """
 
-    from scipy.sparse import issparse
-    from scipy.stats import kstest
-
     adata = adata.copy() if copy else adata
 
     if groups == "all":
@@ -813,78 +1191,27 @@ def smirnov_tests(
         "corr_method": corr_method,
     }
 
-    if layer is not None:
-        expression_mtx = adata.layers[layer]
-    else:
-        expression_mtx = adata.X
-
-    if issparse(expression_mtx):
-        cast(Any, expression_mtx).eliminate_zeros()
-
-    def get_gene_values(obs_mask, gene_name):
-        obs_indices = np.where(np.asarray(obs_mask))[0]
-        var_indices = np.where(np.asarray(adata.var.index == gene_name))[0]
-        if issparse(expression_mtx):
-            values = cast(Any, expression_mtx)[obs_indices][:, var_indices].toarray()
-        else:
-            values = cast(np.ndarray, expression_mtx)[np.ix_(obs_indices, var_indices)]
-        return np.asarray(values).reshape(-1)
-
-    df = pd.DataFrame(
-        columns=cast(
-            Any,
-            ["group", "names", "statistics", "locations", "signs", "pvals"],
-        )
+    inputs = _prepare_smirnov_inputs(
+        adata,
+        groupby,
+        groups,
+        reference,
+        layer,
     )
-    index = 0
-
-    for name in adata.var_names:
-        reference_sample = (
-            get_gene_values(adata.obs[groupby] == reference, name)
-            if reference != "rest"
-            else None
-        )
-
-        for group in groups:
-            if reference == "rest":
-                ref_sample = get_gene_values(adata.obs[groupby] != group, name)
-            else:
-                assert reference_sample is not None
-                ref_sample = reference_sample
-            sample = get_gene_values(adata.obs[groupby] == group, name)
-            ks = kstest(sample, ref_sample, alternative=alternative)
-            df.loc[index] = [
-                group,
-                name,
-                ks.statistic,
-                ks.statistic_location,
-                ks.statistic_sign,
-                ks.pvalue,
-            ]
-            index += 1
-
-    df.sort_values(by=["statistics"], ascending=False, inplace=True, ignore_index=True)
-
-    if corr_method == "benjamini-hochberg":
-        pvals = df["pvals"].to_numpy(dtype=float)
-        if pvals.size:
-            order = np.argsort(pvals)
-            ranks = np.arange(1, pvals.size + 1)
-            adjusted = pvals[order] * pvals.size / ranks
-            adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-            pvals_adj = np.empty_like(adjusted)
-            pvals_adj[order] = np.minimum(adjusted, 1.0)
-            df["pvals_adj"] = pvals_adj
-        else:
-            df["pvals_adj"] = []
-    elif corr_method == "bonferroni":
-        n_genes = adata.var.shape[0]
-        df["pvals_adj"] = np.minimum(df["pvals"] * n_genes, 1.0)
-
-    if pval_cutoff is not None:
-        df = cast(pd.DataFrame, df[df["pvals_adj"] < pval_cutoff])
+    if _KS_SUPPORTS_AXIS and _KS_RETURNS_DETAILS and inputs.unique_gene_names:
+        results = _vectorized_smirnov_results(inputs, alternative)
+    elif _KS_RETURNS_DETAILS:
+        results = _scalar_smirnov_results(inputs, alternative)
+    else:
+        results = _legacy_smirnov_results(inputs, alternative)
+    dataframe = _format_smirnov_results(
+        inputs,
+        results,
+        corr_method,
+        pval_cutoff,
+    )
 
     if copy:
-        return df
+        return dataframe
     else:
-        adata.uns[key_added]["results"] = df
+        adata.uns[key_added]["results"] = dataframe
