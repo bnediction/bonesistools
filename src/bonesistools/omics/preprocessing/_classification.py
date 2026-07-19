@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
-from typing import Any, Optional, cast, overload
+from typing import Optional, cast, overload
 
 import pandas as pd
 from anndata import AnnData
 
 from ..._compat import Literal
+from ..._warnings import _rename_deprecated_arguments
 from ...resources.ncbi import identifiers as create_identifiers
+from ...resources.ncbi._identifiers import GeneIdentifiers
 from ...resources.ncbi._typing import InputIdentifierType
 from .._typing import (
     AnnDataAxisWithInteger,
@@ -24,7 +26,7 @@ def mitochondrial_genes(
     copy: Literal[False] = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> None: ...
 
 
@@ -37,7 +39,7 @@ def mitochondrial_genes(
     *,
     copy: Literal[True],
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> AnnData: ...
 
 
@@ -50,10 +52,11 @@ def mitochondrial_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]: ...
 
 
+@_rename_deprecated_arguments(genesyn="identifiers")
 @anndata_checker
 def mitochondrial_genes(
     adata: AnnData,  # type: ignore
@@ -63,7 +66,7 @@ def mitochondrial_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding mitochondrial proteins.
@@ -87,7 +90,7 @@ def mitochondrial_genes(
         Return a copy instead of modifying `adata`.
     organism: str (default: "mouse")
         Organism used to resolve gene identifiers and mitochondrial aliases.
-    genesyn: GeneIdentifiers, optional
+    identifiers: GeneIdentifiers, optional
         Existing NCBI gene information converter. If provided, `organism` is
         ignored. If `None`, a converter is created for `organism`.
 
@@ -107,8 +110,8 @@ def mitochondrial_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    gene_synonyms: Any = (
-        create_identifiers(organism=organism) if genesyn is None else genesyn
+    gene_identifiers = (
+        create_identifiers(organism=organism) if identifiers is None else identifiers
     )
 
     if axis == "obs":
@@ -118,13 +121,13 @@ def mitochondrial_genes(
 
     mt_id = {
         gene_id
-        for gene_id, identifiers in gene_synonyms._iter_gene_identifiers()
-        if identifiers.chromosome == "MT"
+        for gene_id, gene in gene_identifiers._iter_gene_identifiers()
+        if gene.chromosome == "MT"
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = gene_synonyms.get_gene_id(gene=index, input_type=index_type)
+        gene_id = gene_identifiers.get_gene_id(gene=index, input_type=index_type)
         if gene_id in mt_id:
             annotations.at[index, key] = True
 
@@ -140,7 +143,7 @@ def ribosomal_genes(
     copy: Literal[False] = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> None: ...
 
 
@@ -153,7 +156,7 @@ def ribosomal_genes(
     *,
     copy: Literal[True],
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> AnnData: ...
 
 
@@ -166,10 +169,11 @@ def ribosomal_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]: ...
 
 
+@_rename_deprecated_arguments(genesyn="identifiers")
 @anndata_checker
 def ribosomal_genes(
     adata: AnnData,  # type: ignore
@@ -179,7 +183,7 @@ def ribosomal_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]:  # type: ignore
     """
     Annotate genes encoding ribosomal proteins.
@@ -204,7 +208,7 @@ def ribosomal_genes(
     organism: str (default: "mouse")
         Organism used to resolve gene identifiers and ribosomal official
         symbols.
-    genesyn: GeneIdentifiers, optional
+    identifiers: GeneIdentifiers, optional
         Existing NCBI gene information converter. If provided, `organism` is
         ignored. If `None`, a converter is created for `organism`.
 
@@ -224,8 +228,8 @@ def ribosomal_genes(
 
     axis = _as_anndata_axis(axis, allow_integer=True)
     adata = adata.copy() if copy else adata
-    gene_synonyms: Any = (
-        create_identifiers(organism=organism) if genesyn is None else genesyn
+    gene_identifiers = (
+        create_identifiers(organism=organism) if identifiers is None else identifiers
     )
 
     if axis == "obs":
@@ -235,15 +239,15 @@ def ribosomal_genes(
 
     rps_id = {
         gene_id
-        for gene_id, identifiers in gene_synonyms._iter_gene_identifiers()
-        if getattr(identifiers, "symbol", "")
+        for gene_id, gene in gene_identifiers._iter_gene_identifiers()
+        if getattr(gene, "symbol", "")
         .lower()
         .startswith(("rps", "rpl", "mrps", "mrpl"))
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
     for index in annotations.index:
-        gene_id = gene_synonyms.get_gene_id(gene=index, input_type=index_type)
+        gene_id = gene_identifiers.get_gene_id(gene=index, input_type=index_type)
         if gene_id in rps_id:
             annotations.at[index, key] = True
 

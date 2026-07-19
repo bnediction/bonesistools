@@ -12,7 +12,7 @@ from typing import (
 import networkx as nx
 import pandas as pd
 
-from ...resources.ncbi._genesyn import support_legacy_gene_synonyms_args
+from ..._warnings import _rename_deprecated_arguments
 from ...resources.ncbi._typing import (
     GeneIdentifiersLike,
     InputIdentifierType,
@@ -20,11 +20,17 @@ from ...resources.ncbi._typing import (
 )
 
 
-@support_legacy_gene_synonyms_args
+@_rename_deprecated_arguments(
+    genesyn="identifiers",
+    gene_type="input_type",
+    alias_gene="output_type",
+    input_identifier_type="input_type",
+    output_identifier_type="output_type",
+)
 def read_influence_graph(
     file: Union[str, Path],
     *,
-    genesyn: Optional[GeneIdentifiersLike] = None,
+    identifiers: Optional[GeneIdentifiersLike] = None,
     input_type: InputIdentifierType = "name",
     output_type: OutputIdentifierType = "symbol",
     sep: str = ",",
@@ -40,7 +46,7 @@ def read_influence_graph(
     ----------
     file: str | Path
         Path to the tabular file containing the influence graph.
-    genesyn: GeneIdentifiers, optional
+    identifiers: GeneIdentifiers, optional
         GeneIdentifiers object used to convert graph node identifiers.
     input_type: 'name' | 'gene_id' | 'ensembl_id' | <database>
         (default: 'name')
@@ -69,7 +75,7 @@ def read_influence_graph(
         If the input file is missing required columns or contains unsupported
         sign values.
     TypeError
-        If `genesyn` is neither None nor a GeneIdentifiers object.
+        If `identifiers` is neither None nor a GeneIdentifiers object.
 
     Notes
     -----
@@ -109,11 +115,11 @@ def read_influence_graph(
         create_using=nx.MultiDiGraph,
     )
 
-    if genesyn is None:
+    if identifiers is None:
         return grn
 
-    if callable(genesyn):
-        genesyn(
+    if callable(identifiers):
+        identifiers(
             grn,
             input_type=input_type,
             output_type=output_type,
@@ -122,6 +128,7 @@ def read_influence_graph(
         return grn
 
     raise TypeError(
-        f"unsupported argument type for 'genesyn': "
-        f"expected a GeneIdentifiers-compatible callable but received {type(genesyn)}"
+        f"unsupported argument type for 'identifiers': "
+        "expected a GeneIdentifiers-compatible callable but received "
+        f"{type(identifiers)}"
     )

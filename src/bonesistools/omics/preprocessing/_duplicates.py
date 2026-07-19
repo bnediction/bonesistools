@@ -281,6 +281,9 @@ def _var_group_matrix(
 
 def _sum_var_groups(matrix: Any, group_matrix: csc_matrix) -> Any:
 
+    if matrix is None:
+        return None
+
     if issparse(matrix):
         return (matrix @ group_matrix).tocsr()
     return np.asarray(matrix) @ group_matrix.toarray()

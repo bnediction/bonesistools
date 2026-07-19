@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
-from typing import Any, Optional, overload
+from typing import Optional, overload
 
 from anndata import AnnData
 
 from ..._compat import Literal
-from ..._warnings import _warn_deprecated
+from ..._warnings import _rename_deprecated_arguments, _warn_deprecated
 from ...resources.ncbi import identifiers as create_identifiers
+from ...resources.ncbi._identifiers import GeneIdentifiers
 from ...resources.ncbi._typing import InputIdentifierType
 from .._typing import AnnDataAxisWithInteger
 
@@ -20,7 +21,7 @@ def mitochondrial_genes(
     copy: Literal[False] = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> None: ...
 
 
@@ -33,7 +34,7 @@ def mitochondrial_genes(
     *,
     copy: Literal[True],
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> AnnData: ...
 
 
@@ -46,10 +47,11 @@ def mitochondrial_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]: ...
 
 
+@_rename_deprecated_arguments(genesyn="identifiers")
 def mitochondrial_genes(
     adata: AnnData,
     index_type: InputIdentifierType = "name",
@@ -58,7 +60,7 @@ def mitochondrial_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]:
     """
     Deprecated alias for `bt.omics.pp.mitochondrial_genes`.
@@ -81,7 +83,7 @@ def mitochondrial_genes(
             axis=axis,
             copy=copy,
             organism=organism,
-            genesyn=genesyn,
+            identifiers=identifiers,
         )
     finally:
         _preprocessing_classification.create_identifiers = original_create_identifiers
@@ -96,7 +98,7 @@ def ribosomal_genes(
     copy: Literal[False] = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> None: ...
 
 
@@ -109,7 +111,7 @@ def ribosomal_genes(
     *,
     copy: Literal[True],
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> AnnData: ...
 
 
@@ -122,10 +124,11 @@ def ribosomal_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]: ...
 
 
+@_rename_deprecated_arguments(genesyn="identifiers")
 def ribosomal_genes(
     adata: AnnData,
     index_type: InputIdentifierType = "name",
@@ -134,7 +137,7 @@ def ribosomal_genes(
     copy: bool = False,
     *,
     organism: str = "mouse",
-    genesyn: Optional[Any] = None,
+    identifiers: Optional[GeneIdentifiers] = None,
 ) -> Optional[AnnData]:
     """
     Deprecated alias for `bt.omics.pp.ribosomal_genes`.
@@ -157,7 +160,7 @@ def ribosomal_genes(
             axis=axis,
             copy=copy,
             organism=organism,
-            genesyn=genesyn,
+            identifiers=identifiers,
         )
     finally:
         _preprocessing_classification.create_identifiers = original_create_identifiers

@@ -46,9 +46,6 @@ jobs:
   reproducibility:
     name: reproducibility
     runs-on: ubuntu-22.04
-    env:
-      # Preserve the OpenBLAS rounding used by the historical omics references.
-      OPENBLAS_CORETYPE: HASWELL
 
     steps:
       - uses: actions/checkout@v6
@@ -76,9 +73,6 @@ jobs:
   golden:
     name: golden
     runs-on: ubuntu-22.04
-    env:
-      # Preserve the OpenBLAS rounding used by the historical omics references.
-      OPENBLAS_CORETYPE: HASWELL
 
     steps:
       - uses: actions/checkout@v6

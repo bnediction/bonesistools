@@ -194,12 +194,6 @@ def neighbors(
 
     Notes
     -----
-    UMAP typically relies on fuzzy graph connectivities, whereas spectral
-    embedding methods are commonly applied to binary nearest-neighbor graphs.
-
-    For spectral embedding workflows, `connectivity_method="binary"` is
-    therefore recommended.
-
     PyNNDescent is approximate. Its recall can decrease substantially as the
     embedding dimensionality increases. For PCA representations with many
     components (e.g. 50 PCs or more), the exact backend may be preferable even
@@ -604,12 +598,17 @@ def _umap_connectivities_from_knn(
     n_obs: int,
 ) -> csr_matrix:
 
+    knn_indices = knn_indices.astype(np.int32, copy=False)
     knn_distances = knn_distances.astype(np.float32, copy=False)
+    knn_distances = _zero_self_distances(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+    )
     n_neighbors = knn_indices.shape[1]
     sigmas, rhos = _umap_smooth_knn_distances(knn_distances, n_neighbors)
 
     rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
-    columns = knn_indices.astype(np.int32, copy=False).ravel()
+    columns = knn_indices.ravel()
     shifted_distances = knn_distances - rhos[:, None]
     with np.errstate(over="ignore"):
         values = np.exp(-(shifted_distances / sigmas[:, None]))
@@ -693,6 +692,10 @@ def _sort_knn_arrays(
     knn_distances: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
 
+    knn_distances = _zero_self_distances(
+        knn_indices=knn_indices,
+        knn_distances=knn_distances,
+    )
     rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
     self_order = np.where(knn_indices == rows, 0, 1)
     order = np.lexsort(
@@ -707,6 +710,22 @@ def _sort_knn_arrays(
         np.take_along_axis(knn_indices, order, axis=1),
         np.take_along_axis(knn_distances, order, axis=1),
     )
+
+
+def _zero_self_distances(
+    knn_indices: np.ndarray,
+    knn_distances: np.ndarray,
+) -> np.ndarray:
+    """Set numerical self-distances to exact zeros."""
+
+    rows = np.arange(knn_indices.shape[0], dtype=knn_indices.dtype)[:, None]
+    non_zero_self = (knn_indices == rows) & (knn_distances != 0.0)
+    if not np.any(non_zero_self):
+        return knn_distances
+
+    knn_distances = knn_distances.copy()
+    knn_distances[non_zero_self] = 0.0
+    return knn_distances
 
 
 def _umap_smooth_knn_distances(
@@ -1084,8 +1103,7 @@ def _get_neighbor_distances(
     else:
         distances = csr_matrix(source)
     distances.sum_duplicates()
-    distances.setdiag(0)
-    distances.eliminate_zeros()
+    _remove_csr_self_loops(distances)
     distances.sort_indices()
     if np.any(~np.isfinite(distances.data)) or np.any(distances.data < 0):
         raise ValueError("invalid KNN distance graph: expected finite distances >= 0")
@@ -1117,8 +1135,11 @@ def _shared_neighbor_counts(
         neighborhood_graph @ neighborhood_graph.transpose(),
     )
     counts = counts.tocsr()
-    counts.setdiag(0)
-    counts.eliminate_zeros()
+    if np.all(np.diff(neighborhood_graph.indptr) > 0):
+        counts.setdiag(0)
+        counts.eliminate_zeros()
+    else:
+        _remove_csr_self_loops(counts)
     if prune_threshold:
         counts.data[counts.data <= prune_threshold] = 0
         counts.eliminate_zeros()
@@ -1209,8 +1230,7 @@ def _shared_neighborhood_weights(
     else:
         weights = csr_matrix(source)
     weights.sum_duplicates()
-    weights.setdiag(0)
-    weights.eliminate_zeros()
+    _remove_csr_self_loops(weights)
     if np.any(~np.isfinite(weights.data)) or np.any(weights.data < 0):
         raise ValueError("invalid KNN connectivity graph: expected finite weights >= 0")
     weights = cast(csr_matrix, weights.multiply(neighborhood_graph).tocsr())
@@ -1427,3 +1447,12 @@ def _csr_rows(matrix: csr_matrix) -> np.ndarray:
         np.arange(n_rows, dtype=matrix.indices.dtype),
         np.diff(matrix.indptr),
     )
+
+
+def _remove_csr_self_loops(matrix: csr_matrix) -> None:
+    """Remove existing diagonal entries without inserting new CSR elements."""
+
+    if np.any(matrix.diagonal() != 0):
+        diagonal = matrix.indices == _csr_rows(matrix)
+        matrix.data[diagonal] = 0
+    matrix.eliminate_zeros()

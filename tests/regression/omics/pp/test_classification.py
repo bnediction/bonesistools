@@ -39,33 +39,52 @@ def test_gene_classification_uses_requested_organism(
     assert mini_adata.var["rps"].tolist() == [False, True, False]
 
 
-def test_gene_classification_reuses_gene_synonyms(
+def test_gene_classification_reuses_identifiers(
     monkeypatch,
     mini_adata,
     fake_gene_synonyms_cls,
 ):
     def raise_if_called(**_):
-        raise AssertionError("gene synonym converter should be reused")
+        raise AssertionError("gene identifier converter should be reused")
 
     monkeypatch.setattr(_classification, "create_identifiers", raise_if_called)
-    genesyn = fake_gene_synonyms_cls(organism="human")
+    identifiers = fake_gene_synonyms_cls(organism="human")
     mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
 
     bt.omics.pp.mitochondrial_genes(
         mini_adata,
         key="mt",
         organism="mouse",
-        genesyn=genesyn,
+        identifiers=identifiers,
     )
     bt.omics.pp.ribosomal_genes(
         mini_adata,
         key="rps",
         organism="mouse",
-        genesyn=genesyn,
+        identifiers=identifiers,
     )
 
     assert mini_adata.var["mt"].tolist() == [True, False, False]
     assert mini_adata.var["rps"].tolist() == [False, True, False]
+
+
+@pytest.mark.parametrize("function_name", ["mitochondrial_genes", "ribosomal_genes"])
+def test_gene_classification_accepts_deprecated_genesyn(
+    monkeypatch,
+    mini_adata,
+    fake_gene_synonyms_cls,
+    function_name,
+):
+    def raise_if_called(**_):
+        raise AssertionError("gene identifier converter should be reused")
+
+    monkeypatch.setattr(_classification, "create_identifiers", raise_if_called)
+    identifiers = fake_gene_synonyms_cls(organism="human")
+    mini_adata.var_names = ["MT-ND1", "RPS1", "Other"]
+    function = getattr(bt.omics.pp, function_name)
+
+    with pytest.warns(FutureWarning, match="genesyn.*identifiers"):
+        function(mini_adata, genesyn=identifiers)
 
 
 def test_ribosomal_gene_classification_uses_official_symbols(

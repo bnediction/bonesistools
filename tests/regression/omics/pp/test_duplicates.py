@@ -82,6 +82,29 @@ def test_merge_duplicate_vars_preserves_axis_mappings_and_metadata():
     assert merged.uns == {"pipeline": {"step": "normalization"}}
 
 
+def test_merge_duplicate_vars_preserves_absent_x_and_merges_layers_in_place():
+    adata = _duplicated_adata(
+        X=None,
+        obs=pd.DataFrame(index=["c1", "c2"]),
+        var=pd.DataFrame(index=["g1", "g1", "g2"]),
+        layers={
+            "counts": np.array(
+                [
+                    [1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0],
+                ]
+            )
+        },
+    )
+
+    result = bt.omics.pp.merge_duplicate_vars(adata, copy=False)
+
+    assert result is None
+    assert adata.X is None
+    assert adata.var_names.tolist() == ["g1", "g2"]
+    assert _dense_list(adata.layers["counts"]) == [[3.0, 3.0], [9.0, 6.0]]
+
+
 def test_merge_duplicate_vars_consensus_treats_matching_nan_as_consensus():
     adata = _duplicated_adata(
         X=np.array([[1.0, 2.0, 3.0]]),

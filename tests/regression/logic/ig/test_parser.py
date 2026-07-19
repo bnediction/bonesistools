@@ -76,15 +76,15 @@ def test_read_influence_graph_validates_file_columns_and_signs(tmp_path):
         bt.logic.io.read_influence_graph(invalid_sign)
 
 
-def test_read_influence_graph_rejects_invalid_genesyn(tmp_path):
+def test_read_influence_graph_rejects_invalid_identifiers(tmp_path):
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
 
-    with pytest.raises(TypeError, match="unsupported argument type for 'genesyn'"):
-        bt.logic.io.read_influence_graph(infile, genesyn=cast(Any, object()))
+    with pytest.raises(TypeError, match="unsupported argument type for 'identifiers'"):
+        bt.logic.io.read_influence_graph(infile, identifiers=cast(Any, object()))
 
 
-def test_read_influence_graph_applies_genesyn(tmp_path):
+def test_read_influence_graph_applies_identifiers(tmp_path):
     class FakeGeneIdentifiers:
         def __init__(self):
             self.calls = []
@@ -94,16 +94,16 @@ def test_read_influence_graph_applies_genesyn(tmp_path):
 
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
-    genesyn = FakeGeneIdentifiers()
+    identifiers = FakeGeneIdentifiers()
 
     graph = bt.logic.io.read_influence_graph(
         infile,
-        genesyn=cast(Any, genesyn),
+        identifiers=cast(Any, identifiers),
         input_type="gene_id",
         output_type="ensembl_id",
     )
 
-    assert genesyn.calls == [
+    assert identifiers.calls == [
         (
             graph,
             {
@@ -124,20 +124,23 @@ def test_read_influence_graph_accepts_deprecated_identifier_arguments(
 
     infile = tmp_path / "graph.csv"
     infile.write_text("source,target,sign\nA,B,1\n")
-    genesyn = FakeGeneIdentifiers()
+    identifiers = FakeGeneIdentifiers()
 
     with pytest.warns(FutureWarning) as warning_records:
         cast(Any, bt.logic.io.read_influence_graph)(
             infile,
-            genesyn=cast(Any, genesyn),
+            genesyn=cast(Any, identifiers),
             input_identifier_type="gene_id",
             output_identifier_type="ensembl_id",
         )
 
     messages = [str(record.message) for record in warning_records]
+    assert any(
+        "genesyn" in message and "identifiers" in message for message in messages
+    )
     assert any("input_identifier_type" in message for message in messages)
     assert any("output_identifier_type" in message for message in messages)
-    assert genesyn.kwargs == {
+    assert identifiers.kwargs == {
         "input_type": "gene_id",
         "output_type": "ensembl_id",
         "copy": False,

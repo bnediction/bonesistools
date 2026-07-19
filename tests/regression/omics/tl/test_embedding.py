@@ -10,18 +10,35 @@ import pytest
 from anndata import AnnData
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA, TruncatedSVD
-from sklearn.manifold import TSNE, SpectralEmbedding
+from sklearn.manifold import TSNE, spectral_embedding
 
 import bonesistools as bt
 
 
-def test_spectral_stores_graph_embedding_and_metadata(mini_adata):
-    expected = SpectralEmbedding(
+def _spectral_reference(
+    graph,
+    random_state,
+    *,
+    eigen_solver="arpack",
+    eigen_tolerance=0.0,
+):
+
+    if eigen_solver == "lobpcg":
+        graph = graph.astype(np.float64)
+    return spectral_embedding(
+        graph,
         n_components=2,
-        affinity="precomputed",
+        random_state=random_state,
+        eigen_solver=eigen_solver,
+        eigen_tol=eigen_tolerance,
+    )
+
+
+def test_spectral_stores_graph_embedding_and_metadata(mini_adata):
+    expected = _spectral_reference(
+        mini_adata.obsp["connectivities"],
         random_state=0,
-        n_jobs=1,
-    ).fit_transform(mini_adata.obsp["connectivities"])
+    )
 
     result = bt.omics.tl.spectral(
         mini_adata,
@@ -40,7 +57,8 @@ def test_spectral_stores_graph_embedding_and_metadata(mini_adata):
         "n_neighbors": 3,
         "metric": None,
         "seed": 0,
-        "eigen_solver": None,
+        "eigen_solver": "arpack",
+        "eigen_tolerance": "auto",
         "n_jobs": 1,
     }
 
@@ -72,12 +90,10 @@ def test_spectral_wrapper_stores_spectral_embedding(mini_adata):
 
 
 def test_spectral_accepts_random_state_object(mini_adata):
-    expected = SpectralEmbedding(
-        n_components=2,
-        affinity="precomputed",
+    expected = _spectral_reference(
+        mini_adata.obsp["connectivities"],
         random_state=np.random.RandomState(7),
-        n_jobs=1,
-    ).fit_transform(mini_adata.obsp["connectivities"])
+    )
 
     bt.omics.tl.spectral(
         mini_adata,
@@ -92,12 +108,10 @@ def test_spectral_accepts_random_state_object(mini_adata):
 
 def test_spectral_accepts_numpy_random_module(mini_adata):
     np.random.seed(2)
-    expected = SpectralEmbedding(
-        n_components=2,
-        affinity="precomputed",
+    expected = _spectral_reference(
+        mini_adata.obsp["connectivities"],
         random_state=np.random.mtrand._rand,
-        n_jobs=1,
-    ).fit_transform(mini_adata.obsp["connectivities"])
+    )
 
     np.random.seed(2)
     bt.omics.tl.spectral(
@@ -120,6 +134,96 @@ def test_spectral_validates_neighbors_and_seed(mini_adata):
 
     with pytest.raises(ValueError, match="invalid argument value for 'seed'"):
         bt.omics.tl.spectral(mini_adata, seed=cast(Any, "bad"))
+
+    with pytest.raises(TypeError, match="unsupported argument type for 'eigen_solver'"):
+        bt.omics.tl.spectral(mini_adata, eigen_solver=cast(Any, None))
+
+    with pytest.raises(
+        ValueError,
+        match="invalid argument value for 'eigen_tolerance'",
+    ):
+        bt.omics.tl.spectral(mini_adata, eigen_tolerance=cast(Any, "invalid"))
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported argument type for 'eigen_tolerance'",
+    ):
+        bt.omics.tl.spectral(mini_adata, eigen_tolerance=cast(Any, None))
+
+    with pytest.raises(
+        ValueError,
+        match="invalid argument value for 'eigen_tolerance'",
+    ):
+        bt.omics.tl.spectral(mini_adata, eigen_tolerance=-1.0)
+
+    with pytest.raises(ValueError, match="expected finite value"):
+        bt.omics.tl.spectral(mini_adata, eigen_tolerance=np.nan)
+
+
+def test_spectral_resolves_solver_tolerances(monkeypatch):
+    observation_number = 20
+    graph = csr_matrix(
+        (observation_number, observation_number),
+        dtype=np.float32,
+    )
+    adata = AnnData(np.zeros((observation_number, 1), dtype=np.float32))
+    adata.obsp["connectivities"] = graph
+    adata.uns["neighbors"] = {"connectivities_key": "connectivities"}
+
+    parameters: Dict[str, Any] = {}
+
+    def fake_spectral_embedding(
+        matrix,
+        *,
+        n_components,
+        eigen_solver,
+        random_state,
+        eigen_tol,
+    ):
+        parameters.update(
+            {
+                "n_components": n_components,
+                "random_state": random_state,
+                "eigen_solver": eigen_solver,
+                "eigen_tol": eigen_tol,
+                "dtype": matrix.dtype,
+            }
+        )
+        return np.zeros((matrix.shape[0], n_components))
+
+    monkeypatch.setattr(
+        "sklearn.manifold.spectral_embedding",
+        fake_spectral_embedding,
+    )
+
+    bt.omics.tl.spectral(adata, seed=0)
+
+    assert parameters["eigen_solver"] == "arpack"
+    assert parameters["eigen_tol"] == 0.0
+    assert parameters["dtype"] == np.dtype(np.float32)
+    assert adata.uns["X_se"]["eigen_solver"] == "arpack"
+    assert adata.uns["X_se"]["eigen_tolerance"] == "auto"
+
+    bt.omics.tl.spectral(
+        adata,
+        eigen_solver="lobpcg",
+        eigen_tolerance="auto",
+        seed=0,
+    )
+
+    assert parameters["eigen_solver"] == "lobpcg"
+    assert parameters["eigen_tol"] is None
+    assert parameters["dtype"] == np.dtype(np.float64)
+
+    bt.omics.tl.spectral(
+        adata,
+        eigen_solver="lobpcg",
+        eigen_tolerance=1e-10,
+        seed=0,
+    )
+
+    assert parameters["eigen_tol"] == 1e-10
+    assert adata.uns["X_se"]["eigen_tolerance"] == 1e-10
 
 
 def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):

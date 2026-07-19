@@ -15,6 +15,7 @@ from ..._typing import RandomStateSeed
 from ..._validation import (
     _as_boolean,
     _as_literal,
+    _as_non_negative_number,
     _as_positive_integer,
     _as_positive_number,
     _as_seed,
@@ -26,6 +27,7 @@ from .._validation import _as_var_subset
 from ._utils import get_expression, get_representation
 
 EigenSolver = Literal["arpack", "lobpcg", "amg"]
+EigenTolerance = Union[Literal["auto"], float]
 PCASolver = Literal["auto", "full", "arpack", "randomized"]
 TruncatedSVDSolver = Literal["arpack", "randomized"]
 
@@ -238,7 +240,8 @@ def spectral(
     adata: AnnData,
     n_components: int = 2,
     neighbors_key: str = "neighbors",
-    eigen_solver: Optional[EigenSolver] = None,
+    eigen_solver: EigenSolver = "arpack",
+    eigen_tolerance: EigenTolerance = "auto",
     key_added: Optional[str] = None,
     seed: RandomStateSeed = None,
     n_jobs: int = 1,
@@ -251,6 +254,21 @@ def spectral(
     the eigenvectors of a graph Laplacian constructed from local neighborhood
     relationships.
 
+    Examples
+    --------
+    For constructing a spectral embedding from a binary nearest-neighbor
+    graph:
+
+    >>> bt.omics.tl.pca(adata, n_components=50)
+    >>> bt.omics.tl.neighbors(adata, connectivity_method="binary")
+    >>> bt.omics.tl.spectral(adata)
+
+    Or for preserving fuzzy neighborhood affinities:
+
+    >>> bt.omics.tl.pca(adata, n_components=50)
+    >>> bt.omics.tl.neighbors(adata, connectivity_method="fuzzy")
+    >>> bt.omics.tl.spectral(adata)
+
     Parameters
     ----------
     adata: AnnData
@@ -261,8 +279,11 @@ def spectral(
         Key in `adata.uns` describing the precomputed neighborhood graph.
         Spectral embedding reads the graph from
         `adata.obsp[adata.uns[neighbors_key]["connectivities_key"]]`.
-    eigen_solver: {'arpack', 'lobpcg', 'amg'}, optional
-        Eigen solver passed to `sklearn.manifold.SpectralEmbedding`.
+    eigen_solver: {'arpack', 'lobpcg', 'amg'} (default: 'arpack')
+        Eigen solver used to compute the embedding.
+    eigen_tolerance: {'auto'} or float (default: 'auto')
+        Non-negative stopping tolerance used by the eigen solver. `auto` uses
+        the solver's native default.
     key_added: str, optional
         Key used to store the embedding in `adata.obsm`. Defaults to `X_se`.
     seed: int, np.random.RandomState, np.random or None, optional
@@ -271,12 +292,6 @@ def spectral(
         Number of threads allocated to the spectral embedding computation.
     copy: bool (default: False)
         Return a copy instead of modifying `adata`.
-
-    Examples
-    --------
-    >>> bt.omics.tl.pca(adata, n_components=50)
-    >>> bt.omics.tl.neighbors(adata, representation="X_pca")
-    >>> bt.omics.tl.spectral(adata)
 
     Returns
     -------
@@ -289,13 +304,22 @@ def spectral(
         - `adata.obsm[key_added]`: cell coordinates;
         - `adata.uns[key_added]`: embedding metadata.
 
+    Notes
+    -----
+    Spectral embedding accepts both binary nearest-neighbor graphs and
+    symmetric, non-negative weighted affinity graphs. Binary connectivities
+    give every retained neighbor equal importance, whereas fuzzy
+    connectivities preserve the relative strength of local relationships.
+    The choice therefore changes the graph Laplacian and the resulting
+    embedding; neither method is universally preferable.
+
     References
     ----------
     Belkin and Niyogi (2003). Laplacian Eigenmaps for Dimensionality
     Reduction and Data Representation. Neural Computation, 15(6), 1373-1396.
     """
 
-    from sklearn.manifold import SpectralEmbedding
+    from sklearn.manifold import spectral_embedding
     from threadpoolctl import threadpool_limits
 
     n_components = _as_positive_integer(n_components, "n_components")
@@ -307,7 +331,10 @@ def spectral(
         eigen_solver,
         choices=EIGEN_SOLVERS,
         name="eigen_solver",
-        allow_none=True,
+    )
+    resolved_eigen_tolerance = _resolve_eigen_tolerance(
+        eigen_tolerance,
+        eigen_solver,
     )
 
     neighbors_key = _as_string(neighbors_key, "neighbors_key")
@@ -323,16 +350,19 @@ def spectral(
         neighbors_key,
     )
 
+    if eigen_solver == "lobpcg":
+        graph = graph.astype(np.float64, copy=False)
+
     with threadpool_limits(limits=n_jobs):
         embedding = cast(
             np.ndarray,
-            SpectralEmbedding(
+            spectral_embedding(
+                graph,
                 n_components=n_components,
-                affinity="precomputed",
-                random_state=resolved_random_state,
                 eigen_solver=eigen_solver,
-                n_jobs=n_jobs,
-            ).fit_transform(graph),
+                random_state=resolved_random_state,
+                eigen_tol=cast(Any, resolved_eigen_tolerance),
+            ),
         )
 
     adata.obsm[key_added] = embedding
@@ -345,10 +375,34 @@ def spectral(
         "metric": neighbor_params.get("metric"),
         "seed": _format_random_state(seed),
         "eigen_solver": eigen_solver,
+        "eigen_tolerance": eigen_tolerance,
         "n_jobs": n_jobs,
     }
 
     return adata if copy else None
+
+
+def _resolve_eigen_tolerance(
+    eigen_tolerance: EigenTolerance,
+    eigen_solver: EigenSolver,
+) -> Optional[float]:
+    """Resolve a public tolerance to the selected solver's native value."""
+
+    if isinstance(eigen_tolerance, str):
+        _as_literal(
+            eigen_tolerance,
+            choices=("auto",),
+            name="eigen_tolerance",
+        )
+        return 0.0 if eigen_solver == "arpack" else None
+
+    resolved = _as_non_negative_number(eigen_tolerance, "eigen_tolerance")
+    if not np.isfinite(resolved):
+        raise ValueError(
+            "invalid argument value for 'eigen_tolerance': "
+            f"expected finite value but received {resolved!r}"
+        )
+    return resolved
 
 
 @anndata_checker

@@ -65,7 +65,7 @@ def _dense_list(value: object) -> list:
     return np.asarray(matrix).tolist()
 
 
-def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
+def test_convert_gene_identifiers_accepts_explicit_identifiers():
     class FakeGeneIdentifiers:
         def __init__(self):
             self.calls = []
@@ -74,7 +74,7 @@ def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
             self.calls.append((df, kwargs))
             df.index = ["Trp53", "Myc"]
 
-    genesyn = FakeGeneIdentifiers()
+    identifiers = FakeGeneIdentifiers()
     adata = ad.AnnData(
         X=np.ones((1, 2)),
         obs=pd.DataFrame(index=["cell"]),
@@ -84,14 +84,14 @@ def test_convert_gene_identifiers_accepts_explicit_gene_synonyms():
     result = bt.omics.pp.convert_gene_identifiers(
         adata,
         axis="var",
-        genesyn=genesyn,
+        identifiers=identifiers,
         copy=False,
     )
 
     assert result is None
     assert adata.var_names.tolist() == ["Trp53", "Myc"]
-    assert len(genesyn.calls) == 1
-    called_df, kwargs = genesyn.calls[0]
+    assert len(identifiers.calls) == 1
+    called_df, kwargs = identifiers.calls[0]
     assert called_df is adata.var
     assert kwargs == {
         "axis": "index",
@@ -118,6 +118,9 @@ def test_convert_gene_identifiers_accepts_deprecated_identifier_arguments(
         )
 
     messages = [str(record.message) for record in warning_records]
+    assert any(
+        "genesyn" in message and "identifiers" in message for message in messages
+    )
     assert any("input_identifier_type" in message for message in messages)
     assert any("output_identifier_type" in message for message in messages)
     assert adata.var_names.tolist() == ["Trp53"]
