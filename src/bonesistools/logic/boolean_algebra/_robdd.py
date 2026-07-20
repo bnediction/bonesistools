@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, Dict, Optional, Tuple, Union
+from heapq import heappop, heappush
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import networkx as nx
 from boolean import BooleanAlgebra, Expression
+from boolean.boolean import _FALSE, _TRUE
 
 from ._configuration import ConfigurationSet
 from ._hypercube import Hypercube
@@ -56,6 +58,31 @@ class ROBDD:
     >>> robdd.can_take_value({"A": 0}, 1)
     True
 
+    Suppose `left` and `right` represent functions `f` and `g`. Operators
+    return new diagrams without modifying their operands:
+
+    >>> left = ROBDD("A")
+    >>> right = ROBDD("B")
+    >>> (left & right).configurations().enumerate()
+    ({'A': 1, 'B': 1},)
+    >>> (left | right).count()
+    3
+    >>> (left ^ right).configurations().enumerate()
+    ({'A': 0, 'B': 1}, {'A': 1, 'B': 0})
+    >>> (~left).configurations().enumerate()
+    ({'A': 0},)
+
+    Supported operators
+    -------------------
+    ==================  ===========================================================
+    Expression          Meaning
+    ==================  ===========================================================
+    `left & right`      ROBDD representing the conjunction of `f` and `g`
+    `left | right`      ROBDD representing the disjunction of `f` and `g`
+    `left ^ right`      ROBDD representing the exclusive disjunction of `f` and `g`
+    `~left`             ROBDD representing the negation of `f`
+    ==================  ===========================================================
+
     Parameters
     ----------
     rule: boolean.Expression, bool, int or str
@@ -63,6 +90,12 @@ class ROBDD:
     order: Iterable[str], optional
         Variable order. It must contain every variable exactly once. If None,
         use lexicographic order.
+
+    Notes
+    -----
+    Binary operations merge compatible operand orders deterministically.
+    Explicit orders imposing contradictory relative positions cannot be
+    combined.
     """
 
     def __init__(
@@ -78,6 +111,34 @@ class ROBDD:
         """Return a compact representation."""
 
         return f"ROBDD(variables={self.variables!r}, n_nodes={self.n_nodes})"
+
+    def __invert__(self) -> "ROBDD":
+        """Return the Boolean negation of this diagram."""
+
+        result = ROBDD._from_variables(self._variables)
+        result._root = result._import_root(self, negate=True)
+        return result
+
+    def __and__(self, other: object) -> "ROBDD":
+        """Return the Boolean conjunction with another ROBDD."""
+
+        if not isinstance(other, ROBDD):
+            return NotImplemented
+        return self._combine(other, operation="and")
+
+    def __or__(self, other: object) -> "ROBDD":
+        """Return the Boolean disjunction with another ROBDD."""
+
+        if not isinstance(other, ROBDD):
+            return NotImplemented
+        return self._combine(other, operation="or")
+
+    def __xor__(self, other: object) -> "ROBDD":
+        """Return the Boolean exclusive disjunction with another ROBDD."""
+
+        if not isinstance(other, ROBDD):
+            return NotImplemented
+        return self._combine(other, operation="xor")
 
     def configurations(
         self,
@@ -374,6 +435,52 @@ class ROBDD:
 
         return False
 
+    def _combine(self, other: "ROBDD", *, operation: str) -> "ROBDD":
+        """Combine two diagrams in a deterministic common variable order."""
+
+        variables = _merge_variable_orders(self._variables, other._variables)
+        result = ROBDD._from_variables(variables)
+        left = result._import_root(self)
+        right = result._import_root(other)
+        result._root = result._apply(operation, left, right)
+        return result
+
+    def _import_root(self, source: "ROBDD", *, negate: bool = False) -> int:
+        """Import a compatible diagram root into this node table."""
+
+        terminal_nodes = {0: int(negate), 1: int(not negate)}
+        cache = dict(terminal_nodes)
+
+        def import_node(node: int) -> int:
+            if node in cache:
+                return cache[node]
+
+            variable, low, high = source._nodes[node]
+            variable_name = source._variables[variable]
+            imported = self._make_node(
+                self._variable_indices[variable_name],
+                import_node(low),
+                import_node(high),
+            )
+            cache[node] = imported
+            return imported
+
+        return import_node(source._root)
+
+    def _initialize_storage(self, variables: Tuple[str, ...]) -> None:
+        """Initialize empty canonical node storage for one variable order."""
+
+        self._variables = variables
+        self._variable_indices = {
+            variable: index for index, variable in enumerate(self._variables)
+        }
+        self._nodes: Dict[int, Tuple[int, int, int]] = {}
+        self._unique_nodes: Dict[Tuple[int, int, int], int] = {}
+        self._expression_cache: Dict[Expression, int] = {}
+        self._apply_cache: Dict[Tuple[str, int, int], int] = {}
+        self._negation_cache: Dict[int, int] = {0: 1, 1: 0}
+        self._root = 0
+
     def _initialize(
         self,
         rule: Union[Expression, bool, int, str],
@@ -395,16 +502,16 @@ class ROBDD:
         """Initialize directly from a trusted compatible expression."""
 
         variables = tuple(sorted(str(symbol) for symbol in expression.symbols))
-        self._variables = _validate_variable_order(variables, order)
-        self._variable_indices = {
-            variable: index for index, variable in enumerate(self._variables)
-        }
-        self._nodes: Dict[int, Tuple[int, int, int]] = {}
-        self._unique_nodes: Dict[Tuple[int, int, int], int] = {}
-        self._expression_cache: Dict[Expression, int] = {}
-        self._apply_cache: Dict[Tuple[str, int, int], int] = {}
-        self._negation_cache: Dict[int, int] = {0: 1, 1: 0}
+        self._initialize_storage(_validate_variable_order(variables, order))
         self._root = self._build(expression, ba)
+
+    @classmethod
+    def _from_variables(cls, variables: Tuple[str, ...]) -> "ROBDD":
+        """Create an empty diagram workspace for a validated variable order."""
+
+        robdd = cls.__new__(cls)
+        robdd._initialize_storage(variables)
+        return robdd
 
     @classmethod
     def _from_rule(
@@ -472,9 +579,9 @@ class ROBDD:
 
         expression_any: Any = expression
 
-        if expression is ba.FALSE:
+        if isinstance(expression_any, _FALSE):
             root = 0
-        elif expression is ba.TRUE:
+        elif isinstance(expression_any, _TRUE):
             root = 1
         elif isinstance(expression_any, ba.Symbol):
             variable = str(expression_any.obj)
@@ -586,6 +693,15 @@ class ROBDD:
                 result = left
             else:
                 result = self._apply_nodes(operation, left, right)
+        elif operation == "xor":
+            if left == 0:
+                result = right
+            elif left == right:
+                result = 0
+            elif left == 1:
+                result = self._negate(right)
+            else:
+                result = self._apply_nodes(operation, left, right)
         else:
             raise ValueError(f"unsupported ROBDD operation: {operation!r}")
 
@@ -614,6 +730,43 @@ class ROBDD:
             self._apply(operation, left_low, right_low),
             self._apply(operation, left_high, right_high),
         )
+
+
+def _merge_variable_orders(
+    left: Tuple[str, ...],
+    right: Tuple[str, ...],
+) -> Tuple[str, ...]:
+    """Return a deterministic common extension of two variable orders."""
+
+    variables = set(left) | set(right)
+    successors: Dict[str, Set[str]] = {variable: set() for variable in variables}
+    indegrees = {variable: 0 for variable in variables}
+
+    for order in (left, right):
+        for source, target in zip(order, order[1:]):
+            if target in successors[source]:
+                continue
+            successors[source].add(target)
+            indegrees[target] += 1
+
+    available: List[str] = []
+    for variable, indegree in indegrees.items():
+        if indegree == 0:
+            heappush(available, variable)
+
+    merged = []
+    while available:
+        variable = heappop(available)
+        merged.append(variable)
+        for successor in sorted(successors[variable]):
+            indegrees[successor] -= 1
+            if indegrees[successor] == 0:
+                heappush(available, successor)
+
+    if len(merged) != len(variables):
+        raise ValueError("ROBDD operands use incompatible variable orders")
+
+    return tuple(merged)
 
 
 def _validate_variable_order(

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from itertools import product
 from typing import Any, cast
 
 import pytest
@@ -80,6 +81,77 @@ def test_robdd_variable_order_changes_structure():
     assert lexicographic.n_nodes == 3
     assert reordered.n_nodes == 4
     assert lexicographic.count() == reordered.count() == 4
+
+
+def test_robdd_boolean_operators_combine_independent_diagrams():
+    left = bt.logic.ba.ROBDD("A")
+    right = bt.logic.ba.ROBDD("B")
+    conjunction = left & right
+    disjunction = left | right
+    exclusive_disjunction = left ^ right
+    negation = ~left
+
+    assert conjunction.variables == ("A", "B")
+    assert disjunction.variables == ("A", "B")
+    assert exclusive_disjunction.variables == ("A", "B")
+    assert negation.variables == ("A",)
+
+    for a, b in product((0, 1), repeat=2):
+        configuration = {"A": a, "B": b}
+        assert conjunction.evaluate(configuration) is bool(a and b)
+        assert disjunction.evaluate(configuration) is bool(a or b)
+        assert exclusive_disjunction.evaluate(configuration) is bool(a ^ b)
+        assert negation.evaluate(configuration) is (not bool(a))
+
+
+def test_robdd_boolean_operators_are_immutable_and_reduced():
+    left = bt.logic.ba.ROBDD("A | B")
+    right = bt.logic.ba.ROBDD("A & B")
+    left_representation = repr(left)
+    right_representation = repr(right)
+
+    contradiction = left ^ left
+    tautology = left | ~left
+    _ = (left & right) | (left ^ right)
+
+    assert repr(left) == left_representation
+    assert repr(right) == right_representation
+    assert contradiction.variables == ("A", "B")
+    assert contradiction.n_nodes == 0
+    assert contradiction.count(0) == 4
+    assert tautology.variables == ("A", "B")
+    assert tautology.n_nodes == 0
+    assert tautology.count(1) == 4
+
+
+def test_robdd_boolean_operators_handle_constants():
+    variable = bt.logic.ba.ROBDD("A")
+    false = bt.logic.ba.ROBDD(False)
+    true = bt.logic.ba.ROBDD(True)
+
+    assert (variable & true).configurations().enumerate() == ({"A": 1},)
+    assert (variable | false).configurations().enumerate() == ({"A": 1},)
+    assert (variable ^ true).configurations().enumerate() == ({"A": 0},)
+    assert (~false).configurations().enumerate() == ({},)
+
+
+def test_robdd_boolean_operators_merge_compatible_custom_orders():
+    left = bt.logic.ba.ROBDD("A | C", order=("C", "A"))
+    right = bt.logic.ba.ROBDD("A & B", order=("B", "A"))
+    result = left ^ right
+
+    assert result.variables == ("B", "C", "A")
+    for a, b, c in product((0, 1), repeat=3):
+        configuration = {"A": a, "B": b, "C": c}
+        assert result.evaluate(configuration) is bool((a or c) ^ (a and b))
+
+
+def test_robdd_boolean_operators_reject_incompatible_custom_orders():
+    left = bt.logic.ba.ROBDD("A & B", order=("A", "B"))
+    right = bt.logic.ba.ROBDD("A | B", order=("B", "A"))
+
+    with pytest.raises(ValueError, match="incompatible variable orders"):
+        left & right
 
 
 def test_robdd_accepts_boolean_expression():

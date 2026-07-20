@@ -13,9 +13,11 @@ from typing import Union as _Union
 from typing_extensions import TypeAlias as _TypeAlias
 from typing_extensions import TypeGuard as _TypeGuard
 
+from ..._compat import Literal as _Literal
 from ..boolean_algebra._typing import BooleanRule, is_boolean_rule_like
 
 BooleanNetworkLike: _TypeAlias = _Mapping[str, BooleanRule]
+BooleanNetworkMetric: _TypeAlias = _Literal["equivalence", "hamming"]
 
 if _TYPE_CHECKING:
     from dd.autoref import BDD as _AutoRefBDD

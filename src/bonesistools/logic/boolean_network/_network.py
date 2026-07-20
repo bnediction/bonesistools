@@ -26,6 +26,7 @@ from typing import (
     overload,
 )
 
+import numpy as np
 from boolean.boolean import (
     _FALSE,
     _TRUE,
@@ -83,7 +84,11 @@ from ._most_permissive import (
     _smallest_closed_hypercube,
 )
 from ._symbolic import SymbolicTransitionSystem
-from ._typing import BooleanNetworkLike, is_boolean_network_like
+from ._typing import (
+    BooleanNetworkLike,
+    BooleanNetworkMetric,
+    is_boolean_network_like,
+)
 
 if TYPE_CHECKING:
     from ..input_output._executable_model import ExecutableModel
@@ -2610,6 +2615,56 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
                 component_implicants[component].append(cache[rule])
 
         return component_implicants
+
+    def distance(
+        self,
+        *,
+        metric: BooleanNetworkMetric = "hamming",
+    ) -> np.ndarray:
+        """
+        Return pairwise semantic distances between the Boolean networks.
+
+        Rows and columns follow the sequence order of the ensemble. The result
+        is symmetric and its diagonal is zero.
+
+        Examples
+        --------
+        >>> ensemble = BooleanNetworkEnsemble(
+        ...     {"A": "A", "B": "B"},
+        ...     {"A": "A & B", "B": "B"},
+        ... )
+        >>> ensemble.distance(metric="hamming").tolist()
+        [[0.0, 0.125], [0.125, 0.0]]
+        >>> ensemble.distance(metric="equivalence").tolist()
+        [[0.0, 0.5], [0.5, 0.0]]
+
+        Parameters
+        ----------
+        metric: {"equivalence", "hamming"} (default: "hamming")
+            Semantic comparison metric. `equivalence` measures the proportion
+            of non-equivalent update functions. `hamming` measures their mean
+            functional disagreement.
+
+        Returns
+        -------
+        numpy.ndarray
+            Square `float64` distance matrix with shape `(n, n)`, where `n` is
+            the number of Boolean networks. An empty ensemble returns an array
+            with shape `(0, 0)`.
+
+        Raises
+        ------
+        ValueError
+            If `metric` is unsupported or the ensemble no longer contains a
+            consistent component set.
+        """
+
+        from ._distances import _pairwise_distance_matrix
+
+        return _pairwise_distance_matrix(
+            self._networks,
+            metric=metric,
+        )
 
     def regulator_counts(self) -> Dict[str, Dict[str, Dict[bool, int]]]:
         """

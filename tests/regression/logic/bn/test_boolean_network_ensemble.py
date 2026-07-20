@@ -7,6 +7,7 @@ import sys
 from textwrap import dedent
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
 import bonesistools as bt
@@ -159,6 +160,92 @@ def test_boolean_network_ensemble_simplify_reduces_all_rules_in_place():
 
     assert ensemble.simplify() is None
     assert [bn.rule("A") for bn in ensemble] == ["B", "B"]
+
+
+def test_boolean_network_ensemble_distance_returns_expected_matrices():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(
+        {"A": "A", "B": "B"},
+        {"A": "A & B", "B": "B"},
+        {"A": "~A", "B": "B"},
+    )
+
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="hamming"),
+        np.array(
+            [
+                [0.0, 1 / 8, 1 / 2],
+                [1 / 8, 0.0, 3 / 8],
+                [1 / 2, 3 / 8, 0.0],
+            ]
+        ),
+    )
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="equivalence"),
+        np.array(
+            [
+                [0.0, 1 / 2, 1 / 2],
+                [1 / 2, 0.0, 1 / 2],
+                [1 / 2, 1 / 2, 0.0],
+            ]
+        ),
+    )
+
+
+def test_boolean_network_ensemble_distance_is_semantic():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(
+        {"A": "A", "B": "B"},
+        {"A": "A | (A & B)", "B": "B"},
+    )
+
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="hamming"),
+        np.zeros((2, 2)),
+    )
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="equivalence"),
+        np.zeros((2, 2)),
+    )
+
+
+@pytest.mark.parametrize("metric", ["equivalence", "hamming"])
+def test_boolean_network_ensemble_distance_matches_pairwise_function(
+    bnet_ensemble,
+    metric,
+):
+    matrix = bnet_ensemble.distance(metric=metric)
+
+    assert matrix.dtype == np.float64
+    assert matrix.shape == (len(bnet_ensemble), len(bnet_ensemble))
+    for left_index, left in enumerate(bnet_ensemble):
+        for right_index, right in enumerate(bnet_ensemble):
+            assert matrix[left_index, right_index] == bt.logic.bn.distance(
+                left,
+                right,
+                metric=metric,
+            )
+
+
+def test_boolean_network_ensemble_distance_handles_empty_and_singleton_ensembles():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(components=("A",))
+    empty = ensemble.distance()
+
+    assert isinstance(empty, np.ndarray)
+    assert empty.dtype == np.float64
+    assert empty.shape == (0, 0)
+    assert empty.size == 0
+
+    ensemble.insert(0, {"A": "A"})
+    np.testing.assert_array_equal(
+        ensemble.distance(),
+        np.array([[0.0]]),
+    )
+
+
+def test_boolean_network_ensemble_distance_rejects_unsupported_metric():
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(components=("A",))
+
+    with pytest.raises(ValueError, match="unsupported Boolean-network"):
+        ensemble.distance(metric=cast(Any, "unsupported"))
 
 
 def test_boolean_network_ensemble_regulator_counts(bnet_ensemble):

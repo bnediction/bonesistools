@@ -11,6 +11,7 @@ from typing import Any as _Any
 from typing import List as _List
 
 from ..._warnings import _warn_deprecated
+from ._distances import distance, similarity
 from ._network import (
     BooleanNetwork,
     BooleanNetworkEnsemble,
@@ -22,6 +23,8 @@ __all__ = [
     "BooleanNetworkEnsemble",
     "SymbolicTransitionSystem",
     "SymbolicConfigurationSet",
+    "distance",
+    "similarity",
 ]
 
 
