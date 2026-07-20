@@ -989,22 +989,32 @@ def _batch_rank_summary(
 
 def _weighted_nanmedian(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
 
-    medians = np.full(values.shape[1], np.nan, dtype=np.float64)
-    for index in range(values.shape[1]):
-        valid = ~np.isnan(values[:, index])
-        if not np.any(valid):
-            continue
+    if values.shape[0] == 0:
+        return np.full(values.shape[1], np.nan, dtype=np.float64)
 
-        valid_values = values[valid, index]
-        valid_weights = weights[valid]
-        order = np.argsort(valid_values, kind="mergesort")
-        sorted_values = valid_values[order]
-        cumulative_weights = np.cumsum(valid_weights[order])
-        cutoff = 0.5 * cumulative_weights[-1]
-        median_index = np.searchsorted(cumulative_weights, cutoff, side="left")
-        medians[index] = sorted_values[median_index]
+    valid = ~np.isnan(values)
+    order = np.argsort(values, axis=0, kind="stable")
+    sorted_values = np.take_along_axis(values, order, axis=0)
+    sorted_valid = np.take_along_axis(valid, order, axis=0)
+    sorted_weights = weights[order]
+    cumulative_weights = np.cumsum(
+        np.where(sorted_valid, sorted_weights, 0.0),
+        axis=0,
+    )
+    cutoffs = 0.5 * cumulative_weights[-1]
+    median_indices = np.argmax(
+        cumulative_weights >= cutoffs[np.newaxis, :],
+        axis=0,
+    )
 
-    return medians
+    return np.asarray(
+        np.take_along_axis(
+            sorted_values,
+            median_indices[np.newaxis, :],
+            axis=0,
+        )[0],
+        dtype=np.float64,
+    )
 
 
 def _as_cutoff_interval(

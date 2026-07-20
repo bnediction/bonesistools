@@ -187,7 +187,14 @@ class BooleanNetwork(Dict[str, Expression]):
 
         if rules is not None:
             for component, rule in rules.items():
-                self[component] = self._coerce_rule(rule)
+                expression = self._coerce_rule(rule)
+                if not isinstance(component, str):
+                    raise TypeError(
+                        f"unsupported argument type for 'component': "
+                        f"expected {str} but received {type(component)}"
+                    )
+
+                super().__setitem__(component, expression)
 
         if check:
             self.validate()
@@ -302,8 +309,17 @@ class BooleanNetwork(Dict[str, Expression]):
             return False
 
         for component in self:
-            rule1 = self._coerce_rule(self[component])
-            rule2 = self._coerce_rule(other[component])
+            current_rule = self[component]
+            other_rule = other[component]
+            if (
+                isinstance(current_rule, Expression)
+                and isinstance(other_rule, Expression)
+                and current_rule == other_rule
+            ):
+                continue
+
+            rule1 = self._coerce_rule(current_rule)
+            rule2 = self._coerce_rule(other_rule)
 
             if not equivalence(
                 rule1,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Optional, cast, overload
+from typing import AbstractSet, Optional, cast, overload
 
 import pandas as pd
 from anndata import AnnData
@@ -114,11 +114,6 @@ def mitochondrial_genes(
         create_identifiers(organism=organism) if identifiers is None else identifiers
     )
 
-    if axis == "obs":
-        adata.obs[key] = False
-    elif axis == "var":
-        adata.var[key] = False
-
     mt_id = {
         gene_id
         for gene_id, gene in gene_identifiers._iter_gene_identifiers()
@@ -126,10 +121,13 @@ def mitochondrial_genes(
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
-    for index in annotations.index:
-        gene_id = gene_identifiers.get_gene_id(gene=index, input_type=index_type)
-        if gene_id in mt_id:
-            annotations.at[index, key] = True
+    _annotate_gene_id_set(
+        annotations,
+        key=key,
+        gene_identifiers=gene_identifiers,
+        index_type=index_type,
+        target_gene_ids=mt_id,
+    )
 
     return adata if copy else None
 
@@ -232,11 +230,6 @@ def ribosomal_genes(
         create_identifiers(organism=organism) if identifiers is None else identifiers
     )
 
-    if axis == "obs":
-        adata.obs[key] = False
-    elif axis == "var":
-        adata.var[key] = False
-
     rps_id = {
         gene_id
         for gene_id, gene in gene_identifiers._iter_gene_identifiers()
@@ -246,9 +239,38 @@ def ribosomal_genes(
     }
 
     annotations = cast(pd.DataFrame, adata.obs if axis == "obs" else adata.var)
-    for index in annotations.index:
-        gene_id = gene_identifiers.get_gene_id(gene=index, input_type=index_type)
-        if gene_id in rps_id:
-            annotations.at[index, key] = True
+    _annotate_gene_id_set(
+        annotations,
+        key=key,
+        gene_identifiers=gene_identifiers,
+        index_type=index_type,
+        target_gene_ids=rps_id,
+    )
 
     return adata if copy else None
+
+
+def _annotate_gene_id_set(
+    annotations: pd.DataFrame,
+    *,
+    key: str,
+    gene_identifiers: GeneIdentifiers,
+    index_type: InputIdentifierType,
+    target_gene_ids: AbstractSet[str],
+) -> None:
+    """Annotate whether index entries resolve to selected NCBI gene IDs."""
+
+    convert_sequence = getattr(gene_identifiers, "convert_sequence", None)
+    if convert_sequence is None:
+        gene_ids = [
+            gene_identifiers.get_gene_id(gene=gene, input_type=index_type)
+            for gene in annotations.index
+        ]
+    else:
+        gene_ids = convert_sequence(
+            annotations.index.tolist(),
+            input_type=index_type,
+            output_type="gene_id",
+            keep_if_missing=False,
+        )
+    annotations[key] = [gene_id in target_gene_ids for gene_id in gene_ids]

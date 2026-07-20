@@ -423,6 +423,26 @@ def test_hvg_batch_rank_summary_supports_cell_count_weighting():
     np.testing.assert_allclose(summary, np.array([20.0, 2.0, 1.0]))
 
 
+def test_hvg_weighted_nanmedian_preserves_left_cutoff_and_missing_values():
+    values = np.array(
+        [
+            [3.0, np.nan, 5.0, 0.0],
+            [1.0, np.nan, 5.0, -np.inf],
+            [2.0, np.nan, 7.0, np.inf],
+            [np.nan, np.nan, 9.0, np.nan],
+        ]
+    )
+    weights = np.array([2.0, 1.0, 3.0, 4.0])
+
+    summary = _hvg._weighted_nanmedian(values, weights)
+
+    assert np.array_equal(
+        summary,
+        np.array([2.0, np.nan, 7.0, 0.0]),
+        equal_nan=True,
+    )
+
+
 def test_hvg_binning_scores_match_mean_binned_dispersion_formula():
     matrix = np.array(
         [

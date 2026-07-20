@@ -6,7 +6,7 @@ import pytest
 from boolean import BooleanAlgebra, Expression
 
 import bonesistools as bt
-from bonesistools.logic.boolean_network import _typing
+from bonesistools.logic.boolean_network import _network, _typing
 
 
 def _edge_data(graph, source, target, key=0):
@@ -68,6 +68,25 @@ def test_boolean_network_accepts_boolean_algebra_constants():
 
     assert bn["A"] is ba.TRUE
     assert bn["B"] is ba.FALSE
+
+
+def test_boolean_network_constructor_coerces_each_rule_once(monkeypatch):
+    calls = []
+    original = bt.logic.bn.BooleanNetwork._coerce_rule
+
+    def record_coercion(self, rule):
+        calls.append(rule)
+        return original(self, rule)
+
+    monkeypatch.setattr(
+        bt.logic.bn.BooleanNetwork,
+        "_coerce_rule",
+        record_coercion,
+    )
+
+    bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
+
+    assert calls == ["B", 1]
 
 
 def test_boolean_network_rejects_invalid_rule_type():
@@ -470,6 +489,18 @@ def test_boolean_network_exact_logical_equality():
             "C": 1,
         }
     )
+
+    assert bn1 == bn2
+
+
+def test_boolean_network_equality_shortcuts_identical_expressions(monkeypatch):
+    bn1 = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
+    bn2 = bt.logic.bn.BooleanNetwork({"A": "B", "B": 1})
+
+    def reject_equivalence_call(*args, **kwargs):
+        raise AssertionError("equivalence should not be recomputed")
+
+    monkeypatch.setattr(_network, "equivalence", reject_equivalence_call)
 
     assert bn1 == bn2
 

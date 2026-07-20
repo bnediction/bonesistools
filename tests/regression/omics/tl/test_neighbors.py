@@ -8,7 +8,6 @@ import networkx as nx
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
-from sklearn.neighbors import kneighbors_graph
 
 import bonesistools as bt
 from bonesistools.omics.tools import _neighbors
@@ -70,22 +69,17 @@ def test_neighbors_stores_distances_connectivities_and_metadata(mini_adata):
     assert np.all(np.asarray(mini_adata.obsp["connectivities"].sum(axis=1)) > 0)
 
 
-def test_neighbors_binary_connectivities_match_sklearn_spectral_graph(mini_adata):
+def test_neighbors_binary_connectivities_reuse_exact_neighbors(mini_adata):
     representation = mini_adata.obsm["X_pca"][:, :2]
-    expected_connectivities = cast(
-        csr_matrix,
-        kneighbors_graph(
-            representation,
-            n_neighbors=3,
-            mode="connectivity",
-            metric="euclidean",
-            include_self=True,
-            n_jobs=1,
-        ),
+    knn_indices, _ = _neighbors._exact_knn_arrays(
+        representation_mtx=representation,
+        n_neighbors=3,
+        metric="euclidean",
+        n_jobs=1,
     )
-    expected_connectivities = cast(
-        csr_matrix,
-        0.5 * (expected_connectivities + expected_connectivities.T),
+    expected_connectivities = _neighbors._binary_connectivities_from_knn(
+        knn_indices=knn_indices,
+        n_obs=mini_adata.n_obs,
     )
 
     bt.omics.tl.neighbors(
@@ -101,6 +95,42 @@ def test_neighbors_binary_connectivities_match_sklearn_spectral_graph(mini_adata
     np.testing.assert_array_equal(
         mini_adata.obsp["connectivities"].toarray(),
         expected_connectivities.toarray(),
+    )
+
+
+def test_neighbors_binary_connectivities_reuse_brute_neighbors_with_ties():
+    axis = np.arange(10, dtype=np.float32)
+    representation = np.stack(np.meshgrid(axis, axis), axis=-1).reshape(-1, 2)
+    adata = ad.AnnData(np.zeros((representation.shape[0], 1), dtype=np.float32))
+    adata.obsm["X_grid"] = representation
+
+    knn_indices, _ = _neighbors._exact_knn_arrays(
+        representation_mtx=representation,
+        n_neighbors=3,
+        metric="euclidean",
+        n_jobs=1,
+    )
+    expected = np.zeros(
+        (representation.shape[0], representation.shape[0]),
+        dtype=np.float64,
+    )
+    expected[
+        np.repeat(np.arange(representation.shape[0]), knn_indices.shape[1]),
+        knn_indices.ravel(),
+    ] = 1.0
+    expected = 0.5 * (expected + expected.T)
+
+    bt.omics.tl.neighbors(
+        adata,
+        n_neighbors=3,
+        representation="X_grid",
+        connectivity_method="binary",
+        n_jobs=1,
+    )
+
+    np.testing.assert_array_equal(
+        adata.obsp["connectivities"].toarray(),
+        expected,
     )
 
 
@@ -138,9 +168,11 @@ def test_neighbors_custom_keys_and_copy(mini_adata):
     assert derived.uns["derived"]["connectivities_key"] == "derived_connectivities"
 
 
+@pytest.mark.parametrize("connectivity_method", ["fuzzy", "binary"])
 def test_neighbors_uses_pynndescent_backend_with_sparse_transformer_output(
     mini_adata,
     monkeypatch,
+    connectivity_method,
 ):
     class FakePyNNDescentTransformer(object):
         calls = []
@@ -220,6 +252,7 @@ def test_neighbors_uses_pynndescent_backend_with_sparse_transformer_output(
         representation="X_pca",
         n_pcs=2,
         backend="pynndescent",
+        connectivity_method=connectivity_method,
         metric="euclidean",
         seed=10,
         n_jobs=2,
@@ -248,11 +281,17 @@ def test_neighbors_uses_pynndescent_backend_with_sparse_transformer_output(
         expected_distances,
         mini_adata.n_obs,
     )
-    expected_connectivities = _neighbors._umap_connectivities_from_knn(
-        expected_indices,
-        expected_distances,
-        mini_adata.n_obs,
-    )
+    if connectivity_method == "binary":
+        expected_connectivities = _neighbors._binary_connectivities_from_knn(
+            expected_indices,
+            mini_adata.n_obs,
+        )
+    else:
+        expected_connectivities = _neighbors._umap_connectivities_from_knn(
+            expected_indices,
+            expected_distances,
+            mini_adata.n_obs,
+        )
 
     assert mini_adata.uns["neighbors"]["params"]["backend"] == "pynndescent"
     assert mini_adata.uns["neighbors"]["params"]["seed"] == 10
@@ -369,14 +408,6 @@ def test_neighbors_validates_arguments(mini_adata):
 
     with pytest.raises(ValueError):
         bt.omics.tl.neighbors(mini_adata, n_neighbors=3, backend=cast(Any, "bad"))
-
-    with pytest.raises(ValueError):
-        bt.omics.tl.neighbors(
-            mini_adata,
-            n_neighbors=3,
-            backend="pynndescent",
-            connectivity_method="binary",
-        )
 
     with pytest.raises(TypeError, match="unsupported argument type for 'n_jobs'"):
         bt.omics.tl.neighbors(
@@ -841,6 +872,29 @@ def test_shared_neighbors_metrics_match_dense_definitions():
             rtol=1e-6,
         )
         assert distances.nnz == np.count_nonzero(expected)
+
+
+def test_shared_neighbor_ranks_vectorize_uniform_neighborhoods_with_ties():
+    source_distances = csr_matrix(
+        (
+            np.array(
+                [0.2, 0.1, 0.1, 0.4, 0.2, 0.3, 0.1, 0.3, 0.2],
+                dtype=np.float32,
+            ),
+            np.array([1, 2, 3, 0, 2, 3, 0, 1, 3], dtype=np.int32),
+            np.array([0, 3, 6, 9], dtype=np.int32),
+        ),
+        shape=(3, 4),
+    )
+
+    ranks = _neighbors._shared_neighbor_rank_matrix(source_distances)
+
+    np.testing.assert_array_equal(ranks.indptr, source_distances.indptr)
+    np.testing.assert_array_equal(ranks.indices, source_distances.indices)
+    np.testing.assert_array_equal(
+        ranks.data,
+        np.array([3, 1, 2, 3, 1, 2, 1, 3, 2], dtype=np.float32),
+    )
 
 
 def test_shared_neighbors_supports_more_than_127_neighbors():

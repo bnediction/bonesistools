@@ -65,15 +65,16 @@ _SHARED_SCORE_CHUNK_SIZE = 500_000
 @overload
 def neighbors(
     scdata: ScData,
+    *,
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
-    backend: NeighborBackend = "exact",
     connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    backend: NeighborBackend = "exact",
     seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: Literal[False] = False,
@@ -83,18 +84,18 @@ def neighbors(
 @overload
 def neighbors(
     scdata: ScData,
+    *,
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
-    backend: NeighborBackend = "exact",
     connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    backend: NeighborBackend = "exact",
     seed: RandomStateSeed = 0,
     n_jobs: int = 1,
-    *,
     copy: Literal[True],
 ) -> ScData: ...
 
@@ -102,15 +103,16 @@ def neighbors(
 @overload
 def neighbors(
     scdata: ScData,
+    *,
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
-    backend: NeighborBackend = "exact",
     connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    backend: NeighborBackend = "exact",
     seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: bool = False,
@@ -120,15 +122,16 @@ def neighbors(
 @anndata_or_mudata_checker
 def neighbors(
     scdata: ScData,  # type: ignore
+    *,
     n_neighbors: int = 15,
     representation: Optional[str] = "X_pca",
     n_pcs: Optional[int] = None,
-    backend: NeighborBackend = "exact",
     connectivity_method: NeighborConnectivityMethod = "fuzzy",
     metric: Metric = "euclidean",
     key_added: str = "neighbors",
     distances_key: Optional[str] = None,
     connectivities_key: Optional[str] = None,
+    backend: NeighborBackend = "exact",
     seed: RandomStateSeed = 0,
     n_jobs: int = 1,
     copy: bool = False,
@@ -147,10 +150,6 @@ def neighbors(
     n_pcs: int, optional
         Number of representation dimensions to use. If `None`, use all
         dimensions in `representation`.
-    backend: {'exact', 'pynndescent'} (default: 'exact')
-        Neighbor-search backend. If `"exact"`, use scikit-learn brute-force
-        exact nearest neighbors. If `"pynndescent"`, use approximate
-        PyNNDescent neighbors.
     connectivity_method: {'fuzzy', 'binary'} (default: 'fuzzy')
         Method used to convert nearest neighbors into graph connectivities. If
         `"fuzzy"`, use UMAP fuzzy simplicial-set connectivities. If
@@ -167,6 +166,10 @@ def neighbors(
         Key used to store connectivities in `scdata.obsp`. Defaults to
         `"connectivities"` when `key_added="neighbors"` and
         `f"{key_added}_connectivities"` otherwise.
+    backend: {'exact', 'pynndescent'} (default: 'exact')
+        Neighbor-search backend. If `"exact"`, use scikit-learn brute-force
+        exact nearest neighbors. If `"pynndescent"`, use approximate
+        PyNNDescent neighbors.
     seed: int, np.random.RandomState, np.random or None (default: 0)
         Random seed or random state used by approximate neighbor-search
         backends.
@@ -226,11 +229,6 @@ def neighbors(
         choices=get_args(NeighborConnectivityMethod),
         name="connectivity_method",
     )
-    if connectivity_method == "binary" and backend != "exact":
-        raise ValueError(
-            "invalid argument combination: "
-            "connectivity_method='binary' requires backend='exact'"
-        )
     representation = (
         "X_pca"
         if representation is None
@@ -474,20 +472,10 @@ def _kneighbors_graph_matrices(
         n_obs=scdata.n_obs,
     )
     if connectivity_method == "binary":
-        from sklearn import neighbors as sklearn_neighbors
-
-        connectivities = cast(
-            csr_matrix,
-            sklearn_neighbors.kneighbors_graph(
-                X=representation_mtx,
-                n_neighbors=n_neighbors,
-                mode="connectivity",
-                metric=metric,
-                include_self=True,
-                n_jobs=n_jobs,
-            ),
+        connectivities = _binary_connectivities_from_knn(
+            knn_indices=knn_indices,
+            n_obs=scdata.n_obs,
         )
-        connectivities = cast(csr_matrix, 0.5 * (connectivities + connectivities.T))
         return distances, connectivities
 
     connectivities = _umap_connectivities_from_knn(
@@ -590,6 +578,27 @@ def _sparse_distances_from_knn(
     )
     distances.eliminate_zeros()
     return distances
+
+
+def _binary_connectivities_from_knn(
+    knn_indices: np.ndarray,
+    n_obs: int,
+) -> csr_matrix:
+    """Build symmetric binary connectivities from directed KNN indices."""
+
+    n_neighbors = knn_indices.shape[1]
+    rows = np.repeat(
+        np.arange(n_obs, dtype=knn_indices.dtype),
+        n_neighbors,
+    )
+    connectivities = csr_matrix(
+        (
+            np.ones(rows.size, dtype=np.float64),
+            (rows, knn_indices.ravel()),
+        ),
+        shape=(n_obs, n_obs),
+    )
+    return cast(csr_matrix, 0.5 * (connectivities + connectivities.T))
 
 
 def _umap_connectivities_from_knn(
@@ -1285,6 +1294,25 @@ def _shared_neighbor_rank_matrix(source_distances: csr_matrix) -> csr_matrix:
 
     ranks = _binary_neighborhood_graph(source_distances).astype(np.float32)
     n_rows = cast(Tuple[int, int], source_distances.shape)[0]
+    row_sizes = np.diff(source_distances.indptr)
+    if row_sizes.size and row_sizes[0] and np.all(row_sizes == row_sizes[0]):
+        row_size = int(row_sizes[0])
+        shape = (n_rows, row_size)
+        distances = source_distances.data.reshape(shape)
+        indices = source_distances.indices.reshape(shape)
+        order = np.lexsort((indices, distances), axis=1)
+        rank_values = np.broadcast_to(
+            np.arange(1, row_size + 1, dtype=np.float32),
+            shape,
+        )
+        np.put_along_axis(
+            ranks.data.reshape(shape),
+            order,
+            rank_values,
+            axis=1,
+        )
+        return ranks
+
     for row in range(n_rows):
         start = source_distances.indptr[row]
         end = source_distances.indptr[row + 1]
