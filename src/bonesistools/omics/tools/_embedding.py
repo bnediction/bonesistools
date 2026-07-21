@@ -551,10 +551,18 @@ def umap(
     if a is None or b is None:
         a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
 
-    if isinstance(init_pos, str) and init_pos in adata.obsm:
-        init = np.asarray(adata.obsm[init_pos], dtype=np.float32)
-    else:
-        init = init_pos
+    init, graph = _umap_initialization(
+        init_pos=init_pos,
+        adata=adata,
+        data=representation_mtx,
+        graph=graph,
+        n_components=n_components,
+        n_epochs=n_iter,
+        random_state=resolved_random_state,
+        metric=graph_metric,
+        metric_kwds=graph_metric_kwargs,
+        umap_module=umap_umap_module,
+    )
 
     embedding, _ = cast(
         Tuple[np.ndarray, Any],
@@ -603,6 +611,76 @@ def umap(
     return adata if copy else None
 
 
+def _umap_initialization(
+    *,
+    init_pos: Union[str, np.ndarray],
+    adata: AnnData,
+    data: Any,
+    graph: Any,
+    n_components: int,
+    n_epochs: int,
+    random_state: np.random.RandomState,
+    metric: str,
+    metric_kwds: Dict[str, Any],
+    umap_module: Any,
+) -> Tuple[Union[str, np.ndarray], Any]:
+
+    if isinstance(init_pos, str) and init_pos in adata.obsm:
+        return np.asarray(adata.obsm[init_pos], dtype=np.float32), graph
+
+    if not isinstance(init_pos, str) or init_pos != "spectral":
+        return init_pos, graph
+
+    spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
+    noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
+    prepared_graph = _prepare_umap_graph_for_embedding(graph, n_epochs)
+    layout = cast(
+        np.ndarray,
+        spectral_layout(
+            data,
+            prepared_graph,
+            n_components,
+            random_state,
+            metric=metric,
+            metric_kwds=metric_kwds,
+        ),
+    )
+    layout = _orient_umap_spectral_layout(layout)
+    return (
+        cast(
+            np.ndarray,
+            noisy_scale_coords(layout, random_state, max_coord=10, noise=0.0001),
+        ),
+        prepared_graph,
+    )
+
+
+def _prepare_umap_graph_for_embedding(graph: Any, n_epochs: int) -> Any:
+
+    prepared_graph = graph.tocoo(copy=True)
+    prepared_graph.sum_duplicates()
+
+    default_epochs = 500 if prepared_graph.shape[0] <= 10000 else 200
+    threshold_epochs = n_epochs if n_epochs > 10 else default_epochs
+    if prepared_graph.data.size > 0:
+        cutoff = prepared_graph.data.max() / float(threshold_epochs)
+        prepared_graph.data[prepared_graph.data < cutoff] = 0.0
+    prepared_graph.eliminate_zeros()
+    return prepared_graph
+
+
+def _orient_umap_spectral_layout(layout: np.ndarray) -> np.ndarray:
+
+    oriented = np.asarray(layout).copy()
+    for dimension in range(oriented.shape[1]):
+        column = oriented[:, dimension]
+        pivot = int(np.argmax(np.abs(column)))
+        if column[pivot] > 0.0:
+            oriented[:, dimension] *= -1.0
+
+    return oriented
+
+
 def _neighbors_graph(
     adata: AnnData,
     neighbors_key: str,
@@ -617,7 +695,7 @@ def _neighbors_graph(
     neighbors = cast(Dict[str, Any], adata.uns[neighbors_key])
     if "connectivities_key" not in neighbors:
         raise KeyError(
-            f"key 'connectivities_key' not found in " f"adata.uns[{neighbors_key!r}]"
+            f"key 'connectivities_key' not found in adata.uns[{neighbors_key!r}]"
         )
 
     connectivities_key = _as_string(
