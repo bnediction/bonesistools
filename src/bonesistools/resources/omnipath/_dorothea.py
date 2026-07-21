@@ -23,6 +23,7 @@ from ._archive import (
     _format_dorothea,
     _normalize_organism,
     _normalize_signed_weights,
+    _read_omnipath_query,
     _tax_id,
     _translate_hcop,
     _truthy,
@@ -101,6 +102,13 @@ def dorothea(
     -------
     InfluenceGraph
         Signed regulatory network.
+
+    Notes
+    -----
+    Current OmniPath responses are reused for up to 72 hours, while dated
+    archives remain cached until removed. Non-human translations may also use
+    cached HCOP files. Use `bt.resources.cache.clear("omnipath", "hcop")` to
+    remove both caches.
 
     References
     ----------
@@ -271,7 +279,7 @@ def _load_latest_modern_dorothea(
         + f"datasets=dorothea&dorothea_levels={','.join(levels)}"
         + "&fields=dorothea_level&license=academic"
     )
-    dorothea_db = pd.read_csv(url, sep="\t", low_memory=False)
+    dorothea_db = _read_omnipath_query(url)
     dorothea_db = cast(
         pd.DataFrame,
         dorothea_db[
@@ -356,7 +364,7 @@ def _load_latest_legacy_dorothea(
         "&genesymbols=1"
         f"&organisms={_tax_id(organism_name)}"
     )
-    dorothea_db = pd.read_csv(url, sep="\t", low_memory=False)
+    dorothea_db = _read_omnipath_query(url)
     dorothea_db = _filter_dataset_evidences(dorothea_db, dataset="dorothea")
     dorothea_db = _format_dorothea(
         dorothea_db,

@@ -25,10 +25,7 @@ if TYPE_CHECKING:
 import gzip
 import inspect
 import re
-import shutil
 import tempfile
-import urllib.error
-import urllib.request
 import warnings
 from collections.abc import Mapping as MappingInstance
 from collections.abc import Sequence as SequenceInstance
@@ -45,6 +42,7 @@ from typing_extensions import Literal
 from ..._compat import get_args
 from ..._validation import _as_boolean, _as_dataframe_axis
 from ..._warnings import _deprecated, _warn_deprecated, _warn_deprecated_argument
+from ._download import _download_gene_info
 from ._typing import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -1805,25 +1803,11 @@ class GeneSynonyms:
     def __download_full_gene_info(self, outfile: Path) -> None:
 
         url = FTP_GENE_INFO[self.organism]
-        outfile.parent.mkdir(parents=True, exist_ok=True)
-        temporary_gzip = Path(f"{outfile}.gz.tmp")
-        temporary_outfile = Path(f"{outfile}.tmp")
-
-        try:
-            with urllib.request.urlopen(url) as response:
-                with open(temporary_gzip, "wb") as file:
-                    shutil.copyfileobj(response, file)
-
-            with gzip.open(temporary_gzip, "rb") as compressed_file:
-                with open(temporary_outfile, "wb") as file:
-                    shutil.copyfileobj(compressed_file, file)
-
-            temporary_outfile.replace(outfile)
-        except (OSError, urllib.error.URLError) as e:
-            raise RuntimeError("failed to download NCBI gene_info file") from e
-        finally:
-            self.__unlink_if_exists(temporary_gzip)
-            self.__unlink_if_exists(temporary_outfile)
+        _download_gene_info(
+            url,
+            outfile,
+            cache_latest=self.version == "latest",
+        )
 
     def __write_bundled_gene_info_file(self, infile: Path, outfile: Path) -> None:
 

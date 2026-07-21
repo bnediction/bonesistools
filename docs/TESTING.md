@@ -32,10 +32,13 @@ The GitHub CI separates fast local checks from live reproducibility checks:
 - `regression (3.10)`;
 - `regression (3.11)`;
 - `regression (3.12)`;
-- `regression (3.13)`.
+- `regression (3.13)`;
+- `compatibility (macOS ARM64)`;
+- `compatibility (Windows x64)`.
 
 Python 3.7 to 3.9 are import-only jobs because they mainly protect runtime
-compatibility. Full tests run on newer Python versions.
+compatibility. Regression tests run on newer Python versions under Linux and on
+Python 3.13 under macOS and Windows.
 
 ## Reproducibility tests
 

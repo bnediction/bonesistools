@@ -58,6 +58,13 @@ def collectri(
     InfluenceGraph
         Signed regulatory network.
 
+    Notes
+    -----
+    Current OmniPath responses are reused for up to 72 hours, while dated
+    archives remain cached until removed. Non-human translations may also use
+    cached HCOP files. Use `bt.resources.cache.clear("omnipath", "hcop")` to
+    remove both caches.
+
     References
     ----------
     Müller-Dott et al. (2023). Expanding the coverage of regulons from

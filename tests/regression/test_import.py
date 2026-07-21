@@ -30,6 +30,7 @@ def test_version_matches_pyproject():
 
 def test_root_namespace_exposes_short_aliases_only():
     assert {"omics", "logic", "resources"} <= set(dir(bt))
+    assert {"cache", "hcop", "ncbi", "omnipath"} <= set(dir(bt.resources))
 
     for name in ["sct", "bpy", "dbs", "sctools", "boolpy", "databases"]:
         assert name not in dir(bt)

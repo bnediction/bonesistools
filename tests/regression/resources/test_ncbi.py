@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-from bonesistools.resources.ncbi import _identifiers
+from bonesistools.resources.ncbi import _download, _identifiers
 
 GENE_IDS = [
     "20375",
@@ -639,6 +639,40 @@ def test_gene_identifiers_parse_latest_gene_info_and_remove_temporary_files(tmp_
     )
     assert not gene_info.exists()
     assert not gzip_file.exists()
+
+
+def test_latest_gene_info_download_uses_raw_local_cache(tmp_path, monkeypatch):
+    cached_file = tmp_path / "Mus_musculus.gene_info.gz"
+    with gzip.open(cached_file, "wb") as file:
+        file.write(b"#tax_id\tGeneID\n10090\t10\n")
+    calls = []
+
+    def cached_download(url, **kwargs):
+        calls.append((url, kwargs))
+        return cached_file
+
+    monkeypatch.setattr(_download, "_cached_download", cached_download)
+    outfile = tmp_path / "latest.tsv"
+
+    _download._download_gene_info(
+        "ftp://example.test/Mus_musculus.gene_info.gz",
+        outfile,
+        cache_latest=True,
+    )
+
+    assert calls == [
+        (
+            "ftp://example.test/Mus_musculus.gene_info.gz",
+            {
+                "resource": "ncbi",
+                "category": "gene_info",
+                "max_age": 72 * 60 * 60,
+                "suffix": ".gene_info.gz",
+            },
+        )
+    ]
+    assert outfile.read_bytes() == b"#tax_id\tGeneID\n10090\t10\n"
+    assert cached_file.exists()
 
 
 def test_gene_identifiers_convert_dataframe_graph_and_interactions(mouse_identifiers):

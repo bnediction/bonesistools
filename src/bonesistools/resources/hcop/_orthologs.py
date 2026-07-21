@@ -37,6 +37,7 @@ from ..._warnings import (
     _warn_deprecated,
     _warn_deprecated_argument,
 )
+from ..cache import _cached_download
 
 if TYPE_CHECKING:
     from ...logic.boolean_algebra import Hypercube
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
 InteractionList = Sequence[Tuple[str, str, Dict[str, int]]]
 HcopVersion = Union[Literal["bundled", "latest"], str, Path]
 HCOP_DIR = Path(__file__).resolve().parent / "data"
+_LATEST_CACHE_MAX_AGE = 72 * 60 * 60
 _F = TypeVar("_F", bound=Callable[..., Any])
 _HypercubeLikeT = TypeVar("_HypercubeLikeT", bound="HypercubeLike")
 
@@ -1964,10 +1966,18 @@ class Orthologs:
         output_organism: str, version: HcopVersion = "bundled"
     ) -> pd.DataFrame:
 
+        version_label = Orthologs._normalize_version(version)
         source = Orthologs._resolve_hcop_table_source(
             output_organism=output_organism,
-            version=Orthologs._normalize_version(version),
+            version=version_label,
         )
+        if version_label == "latest":
+            source = _cached_download(
+                source,
+                resource="hcop",
+                category="tables",
+                max_age=_LATEST_CACHE_MAX_AGE,
+            )
         return pd.read_csv(
             source,
             sep="\t",
@@ -2057,6 +2067,12 @@ def _orthologs(
     ValueError
         If `output_organism` is unsupported, `min_evidence` is not positive, or
         the HCOP table is invalid.
+
+    Notes
+    -----
+    HCOP `latest` files are reused for up to 72 hours. Bundled files are read
+    directly from the package and are not copied into the cache. Use
+    `bt.resources.cache.clear("hcop")` to remove cached files.
     """
 
     if target_organism is not None:

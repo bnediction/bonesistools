@@ -7,13 +7,14 @@ import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union, cast
-from urllib.request import urlopen
+from urllib.parse import urlsplit
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
 from ..._compat import Literal
+from ..cache import _cached_download
 from ..hcop import orthologs as hcop_orthologs
 
 OmnipathDateString = str
@@ -27,6 +28,7 @@ OMNIPATH_INTERACTIONS_PREFIX = "omnipath_webservice_interactions__"
 OMNIPATH_INTERACTIONS_PATTERN = re.compile(
     r"omnipath_webservice_interactions__([0-9]{8})-([0-9]{8})[.]tsv[.]xz"
 )
+_LATEST_CACHE_MAX_AGE = 72 * 60 * 60
 
 ORGANISM_NAMES = {
     "human": "human",
@@ -551,8 +553,14 @@ def _format_archive_date(version_label: str) -> str:
 
 def _list_interactions_archives() -> List[Tuple[str, str, str]]:
 
-    with urlopen(f"{OMNIPATH_ARCHIVE_URL}/") as response:
-        index = response.read().decode("utf-8")
+    index_file = _cached_download(
+        f"{OMNIPATH_ARCHIVE_URL}/",
+        resource="omnipath",
+        category="queries",
+        max_age=_LATEST_CACHE_MAX_AGE,
+        suffix=".html",
+    )
+    index = index_file.read_text(encoding="utf-8")
 
     archives = [
         (match.group(1), match.group(2), match.group(0))
@@ -582,13 +590,38 @@ def _read_interactions_archive(url: str) -> pd.DataFrame:
         "ncbi_tax_id_target",
     }
 
-    return pd.read_csv(
+    filename = Path(urlsplit(url).path).name
+    max_age = (
+        _LATEST_CACHE_MAX_AGE
+        if filename == f"{OMNIPATH_INTERACTIONS_PREFIX}latest.tsv.gz"
+        else None
+    )
+    archive = _cached_download(
         url,
+        resource="omnipath",
+        category="archives",
+        max_age=max_age,
+    )
+
+    return pd.read_csv(
+        archive,
         sep="\t",
         compression="infer",
         usecols=lambda column: column in columns,
         low_memory=False,
     )
+
+
+def _read_omnipath_query(url: str) -> pd.DataFrame:
+
+    response = _cached_download(
+        url,
+        resource="omnipath",
+        category="queries",
+        max_age=_LATEST_CACHE_MAX_AGE,
+        suffix=".tsv",
+    )
+    return pd.read_csv(response, sep="\t", low_memory=False)
 
 
 def _normalize_organism(organism: Union[str, int]) -> str:

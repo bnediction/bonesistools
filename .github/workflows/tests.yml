@@ -146,4 +146,37 @@ jobs:
 
       - name: Run tests
         if: matrix.test-mode == 'test'
-        run: pytest
+        run: pytest tests/regression -q
+
+  compatibility:
+    name: compatibility (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS ARM64
+          - os: windows-2022
+            label: Windows x64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install package with all extras
+        run: pip install -e ".[all]"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Check package import
+        run: python -c "import bonesistools"
+
+      - name: Run regression tests
+        run: pytest tests/regression -q

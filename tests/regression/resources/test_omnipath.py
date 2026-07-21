@@ -69,6 +69,75 @@ def test_resolve_interactions_archive_rejects_current_and_default():
             _archive.resolve_interactions_archive(version)
 
 
+def test_archive_reader_uses_permanent_cache_for_dated_archives(
+    monkeypatch,
+    tmp_path,
+):
+    archive = tmp_path / "archive.tsv"
+    archive.write_text(
+        "source_genesymbol\ttarget_genesymbol\tdorothea\nTfA\tGeneA\tTrue\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def cached_download(url, **kwargs):
+        calls.append((url, kwargs))
+        return archive
+
+    monkeypatch.setattr(_archive, "_cached_download", cached_download)
+
+    result = _archive._read_interactions_archive(
+        "https://example.test/"
+        "omnipath_webservice_interactions__20230101-20230501.tsv.xz"
+    )
+
+    assert calls == [
+        (
+            "https://example.test/"
+            "omnipath_webservice_interactions__20230101-20230501.tsv.xz",
+            {
+                "resource": "omnipath",
+                "category": "archives",
+                "max_age": None,
+            },
+        )
+    ]
+    assert result.to_dict("records") == [
+        {
+            "source_genesymbol": "TfA",
+            "target_genesymbol": "GeneA",
+            "dorothea": True,
+        }
+    ]
+
+
+def test_archive_reader_expires_latest_archive_after_one_day(
+    monkeypatch,
+    tmp_path,
+):
+    archive = tmp_path / "archive.tsv"
+    archive.write_text("source\ttarget\nA\tB\n", encoding="utf-8")
+    calls = []
+
+    def cached_download(url, **kwargs):
+        calls.append(kwargs)
+        return archive
+
+    monkeypatch.setattr(_archive, "_cached_download", cached_download)
+
+    _archive._read_interactions_archive(
+        "https://example.test/omnipath_webservice_interactions__latest.tsv.gz"
+    )
+
+    assert calls == [
+        {
+            "resource": "omnipath",
+            "category": "archives",
+            "max_age": 72 * 60 * 60,
+        },
+    ]
+
+
 def test_dorothea_versions_lists_available_archive_ranges(monkeypatch):
     monkeypatch.setattr(
         _archive,
@@ -458,8 +527,8 @@ def test_deduplicate_dorothea_can_reproduce_decoupler_compatibility():
 
 def test_latest_modern_dorothea_keeps_opposite_signs(monkeypatch):
     monkeypatch.setattr(
-        _dorothea.pd,
-        "read_csv",
+        _dorothea,
+        "_read_omnipath_query",
         lambda *args, **kwargs: pd.DataFrame(
             {
                 "source_genesymbol": ["TfA", "TfA", "TfA"],
@@ -486,8 +555,8 @@ def test_latest_modern_dorothea_keeps_opposite_signs(monkeypatch):
 
 def test_latest_modern_dorothea_can_reproduce_decoupler_compatibility(monkeypatch):
     monkeypatch.setattr(
-        _dorothea.pd,
-        "read_csv",
+        _dorothea,
+        "_read_omnipath_query",
         lambda *args, **kwargs: pd.DataFrame(
             {
                 "source_genesymbol": ["TfA", "TfA", "TfA"],

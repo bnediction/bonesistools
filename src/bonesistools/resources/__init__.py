@@ -18,9 +18,10 @@ omnipath
 
 from typing import List as _List
 
-from . import hcop, ncbi, omnipath
+from . import cache, hcop, ncbi, omnipath
 
 __all__ = [
+    "cache",
     "hcop",
     "ncbi",
     "omnipath",

@@ -961,6 +961,45 @@ def test_hcop_orthologs_loads_custom_file(tmp_path):
     assert orthologs.translate("A") == ["A_mouse"]
 
 
+def test_hcop_latest_table_uses_local_download_cache(tmp_path, monkeypatch):
+    latest_file = tmp_path / "human_mouse_hcop.tsv"
+    latest_file.write_text(
+        "human_symbol\tmouse_symbol\tsupport\nA\tA_mouse\tEnsembl,HGNC,MGI\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def cached_download(url, **kwargs):
+        calls.append((url, kwargs))
+        return latest_file
+
+    monkeypatch.setattr(_hcop_orthologs, "_cached_download", cached_download)
+
+    table = _hcop_orthologs.Orthologs._read_hcop_table(
+        "mouse",
+        version="latest",
+    )
+
+    assert calls == [
+        (
+            "https://storage.googleapis.com/public-download-files/hcop/"
+            "human_mouse_hcop_fifteen_column.txt.gz",
+            {
+                "resource": "hcop",
+                "category": "tables",
+                "max_age": 72 * 60 * 60,
+            },
+        )
+    ]
+    assert table.to_dict("records") == [
+        {
+            "human_symbol": "A",
+            "mouse_symbol": "A_mouse",
+            "support": "Ensembl,HGNC,MGI",
+        }
+    ]
+
+
 def test_hcop_non_human_mapping_rejects_single_custom_hcop_file(tmp_path):
     hcop_file = tmp_path / "custom_hcop.tsv"
     hcop_file.write_text(

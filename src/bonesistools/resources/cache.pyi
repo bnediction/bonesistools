@@ -1,0 +1,17 @@
+from pathlib import Path
+from typing import List as _List
+from typing import Optional
+
+__all__: _List[str]
+
+def path(resource: Optional[str] = ...) -> Path: ...
+def clear(*resources: str) -> None: ...
+def __dir__() -> _List[str]: ...
+def _cached_download(
+    url: str,
+    *,
+    resource: str,
+    category: str,
+    max_age: Optional[float],
+    suffix: Optional[str] = ...,
+) -> Path: ...
