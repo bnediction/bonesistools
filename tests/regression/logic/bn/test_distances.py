@@ -2,6 +2,7 @@
 
 from typing import Any, cast
 
+import numpy as np
 import pytest
 from boolean import BooleanAlgebra, Expression
 from boolean.boolean import _FALSE
@@ -202,6 +203,22 @@ def test_hamming_distance_handles_reduced_constant_subexpressions():
 
     assert bt.logic.bn.distance(bn1, bn2) == 1 / 32
     assert bt.logic.bn.similarity(bn1, bn2) == 31 / 32
+
+
+def test_hamming_comparisons_do_not_materialize_robdd_xor(monkeypatch):
+
+    def fail(*args, **kwargs):
+        raise AssertionError("Hamming comparison materialized a ROBDD XOR")
+
+    monkeypatch.setattr(bt.logic.ba.ROBDD, "__xor__", fail)
+    bn1 = bt.logic.bn.BooleanNetwork({"A": "B & C", "B": "B", "C": "C"})
+    bn2 = bt.logic.bn.BooleanNetwork({"A": "B", "B": "B", "C": "C"})
+
+    assert bt.logic.bn.distance(bn1, bn2, metric="hamming") == 1 / 12
+    np.testing.assert_array_equal(
+        bt.logic.bn.BooleanNetworkEnsemble(bn1, bn2).distance(metric="hamming"),
+        np.array([[0.0, 1 / 12], [1 / 12, 0.0]]),
+    )
 
 
 def test_hamming_distance_is_invariant_to_ignored_variables():

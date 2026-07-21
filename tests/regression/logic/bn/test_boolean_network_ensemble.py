@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 import bonesistools as bt
+from bonesistools.logic.boolean_network import _distances
 
 
 @pytest.fixture
@@ -205,6 +206,63 @@ def test_boolean_network_ensemble_distance_is_semantic():
         ensemble.distance(metric="equivalence"),
         np.zeros((2, 2)),
     )
+
+
+def test_boolean_network_ensemble_distance_preserves_invariant_denominator():
+    variables = tuple(f"X{index}" for index in range(63))
+    invariant_rules = {variable: variable for variable in variables}
+    ensemble = bt.logic.bn.BooleanNetworkEnsemble(
+        {
+            **invariant_rules,
+            "T": " & ".join(variables),
+        },
+        {
+            **invariant_rules,
+            "T": 0,
+        },
+    )
+
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="equivalence"),
+        np.array([[0.0, 1 / 64], [1 / 64, 0.0]]),
+    )
+    np.testing.assert_array_equal(
+        ensemble.distance(metric="hamming"),
+        np.array([[0.0, 1 / (64 * 2**63)], [1 / (64 * 2**63), 0.0]]),
+    )
+
+
+@pytest.mark.parametrize("metric", ["equivalence", "hamming"])
+def test_boolean_network_ensemble_sparse_distance_matches_dense(
+    bnet_ensemble,
+    metric,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        _distances,
+        "_use_sparse_equivalence_matrix",
+        lambda *args, **kwargs: False,
+    )
+    monkeypatch.setattr(
+        _distances,
+        "_use_sparse_hamming_matrix",
+        lambda *args, **kwargs: False,
+    )
+    dense = bnet_ensemble.distance(metric=metric)
+
+    monkeypatch.setattr(
+        _distances,
+        "_use_sparse_equivalence_matrix",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        _distances,
+        "_use_sparse_hamming_matrix",
+        lambda *args, **kwargs: True,
+    )
+    sparse = bnet_ensemble.distance(metric=metric)
+
+    np.testing.assert_array_equal(sparse, dense)
 
 
 @pytest.mark.parametrize("metric", ["equivalence", "hamming"])

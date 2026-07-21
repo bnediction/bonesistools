@@ -16,6 +16,7 @@ from typing import (
 import numpy as np
 from boolean import BooleanAlgebra, Expression
 from boolean.boolean import _FALSE, _TRUE
+from scipy.sparse import block_diag, csr_matrix
 
 from ..boolean_algebra import ROBDD, equivalence
 from ._network import BooleanNetwork
@@ -24,6 +25,9 @@ from ._typing import (
     BooleanNetworkMetric,
     is_boolean_network_like,
 )
+
+_ROBDDNodeTable = Dict[int, Tuple[str, int, int]]
+_ROBDDStructure = Tuple[int, _ROBDDNodeTable]
 
 
 def distance(
@@ -218,15 +222,23 @@ def _pairwise_distance_matrix(
         return np.zeros((n_networks, n_networks), dtype=np.float64)
 
     rule_groups = _component_rule_groups(networks, components)
+    varying_rule_groups = tuple(
+        rule_group for rule_group in rule_groups if len(rule_group[1]) > 1
+    )
+    if not varying_rule_groups:
+        return np.zeros((n_networks, n_networks), dtype=np.float64)
+
     if metric == "equivalence":
         return _equivalence_distance_matrix(
             networks,
-            rule_groups,
+            varying_rule_groups,
+            n_components=len(components),
         )
 
     return _hamming_distance_matrix(
         networks,
-        rule_groups,
+        varying_rule_groups,
+        n_components=len(components),
     )
 
 
@@ -257,39 +269,114 @@ def _component_rule_groups(
 def _equivalence_distance_matrix(
     networks: Sequence[BooleanNetwork],
     rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
+    *,
+    n_components: int,
 ) -> np.ndarray:
     """Return pairwise proportions of non-equivalent update functions."""
 
     n_networks = len(networks)
-    changed_counts = np.zeros((n_networks, n_networks), dtype=np.int64)
+    rule_classes = tuple(
+        rule_class
+        for rule_class in _equivalence_rule_classes(
+            rule_groups,
+            ba=networks[0].ba,
+        )
+        if rule_class[1] > 1
+    )
+    if not rule_classes:
+        return np.zeros((n_networks, n_networks), dtype=np.float64)
+
+    if _use_sparse_equivalence_matrix(n_networks, rule_classes):
+        changed_counts = _sparse_equivalence_counts(n_networks, rule_classes)
+    else:
+        changed_counts = _dense_equivalence_counts(n_networks, rule_classes)
+
+    return changed_counts.astype(np.float64) / n_components
+
+
+def _equivalence_rule_classes(
+    rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
+    *,
+    ba: BooleanAlgebra,
+) -> List[Tuple[np.ndarray, int]]:
+    """Group semantically equivalent rules for every varying component."""
+
     comparison_cache: Dict[FrozenSet[Expression], bool] = {}
-    ba = networks[0].ba
+    class_groups = []
 
     for indices, rules in rule_groups:
-        local_changes = np.zeros((len(rules), len(rules)), dtype=np.int64)
+        representatives = []
+        rule_classes = np.empty(len(rules), dtype=np.intp)
 
-        for left_index, left in enumerate(rules):
-            for right_index in range(left_index + 1, len(rules)):
-                right = rules[right_index]
-                key = frozenset((left, right))
+        for rule_index, rule in enumerate(rules):
+            for class_index, representative in enumerate(representatives):
+                key = frozenset((rule, representative))
                 if key not in comparison_cache:
-                    comparison_cache[key] = not equivalence(left, right, ba=ba)
+                    comparison_cache[key] = equivalence(rule, representative, ba=ba)
                 if comparison_cache[key]:
-                    local_changes[left_index, right_index] = 1
-                    local_changes[right_index, left_index] = 1
+                    rule_classes[rule_index] = class_index
+                    break
+            else:
+                rule_classes[rule_index] = len(representatives)
+                representatives.append(rule)
 
-        changed_counts += local_changes[indices[:, None], indices]
+        class_groups.append((rule_classes[indices], len(representatives)))
 
-    return changed_counts.astype(np.float64) / len(rule_groups)
+    return class_groups
+
+
+def _use_sparse_equivalence_matrix(
+    n_networks: int,
+    rule_classes: Sequence[Tuple[np.ndarray, int]],
+) -> bool:
+    """Select sparse assembly from its estimated work relative to dense."""
+
+    n_groups = len(rule_classes)
+    agreement_entries = 0
+    for indices, n_classes in rule_classes:
+        frequencies = np.bincount(indices, minlength=n_classes)
+        agreement_entries += sum(int(frequency) ** 2 for frequency in frequencies)
+
+    dense_work = n_groups * n_networks * n_networks
+    estimated_sparse_ratio = (
+        1 / n_networks + 1 / n_groups + agreement_entries / dense_work
+    )
+    return estimated_sparse_ratio < 0.13
+
+
+def _dense_equivalence_counts(
+    n_networks: int,
+    rule_classes: Sequence[Tuple[np.ndarray, int]],
+) -> np.ndarray:
+    """Accumulate non-equivalent rule counts in a dense matrix."""
+
+    changed_counts = np.zeros((n_networks, n_networks), dtype=np.int64)
+    for indices, _ in rule_classes:
+        changed_counts += indices[:, None] != indices
+    return changed_counts
+
+
+def _sparse_equivalence_counts(
+    n_networks: int,
+    rule_classes: Sequence[Tuple[np.ndarray, int]],
+) -> np.ndarray:
+    """Accumulate non-equivalent rule counts through sparse agreements."""
+
+    encoded = _rule_class_indicator_matrix(n_networks, rule_classes)
+    agreement_counts = (encoded @ encoded.T).toarray()
+    return len(rule_classes) - agreement_counts
 
 
 def _hamming_distance_matrix(
     networks: Sequence[BooleanNetwork],
     rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
+    *,
+    n_components: int,
 ) -> np.ndarray:
     """Return mean pairwise functional disagreement proportions."""
 
     robdd_cache: Dict[Expression, ROBDD] = {}
+    robdd_structure_cache: Dict[ROBDD, _ROBDDStructure] = {}
     comparison_cache: Dict[FrozenSet[Expression], Tuple[int, int]] = {}
     ba = networks[0].ba
     max_variables = 0
@@ -302,17 +389,35 @@ def _hamming_distance_matrix(
                     right,
                     ba=ba,
                     robdd_cache=robdd_cache,
+                    robdd_structure_cache=robdd_structure_cache,
                     comparison_cache=comparison_cache,
                 )
                 max_variables = max(max_variables, n_variables)
 
-    denominator = len(rule_groups) * (1 << max_variables)
+    denominator = n_components * (1 << max_variables)
     if denominator <= np.iinfo(np.int64).max:
-        return _scaled_hamming_distance_matrix(
-            len(networks),
+        local_counts, weight_entries, expanded_entries = _scaled_hamming_local_counts(
             rule_groups,
             comparison_cache=comparison_cache,
             max_variables=max_variables,
+        )
+        if _use_sparse_hamming_matrix(
+            len(networks),
+            len(rule_groups),
+            weight_entries=weight_entries,
+            expanded_entries=expanded_entries,
+        ):
+            return _sparse_scaled_hamming_distance_matrix(
+                len(networks),
+                rule_groups,
+                local_counts,
+                denominator=denominator,
+            )
+
+        return _dense_scaled_hamming_distance_matrix(
+            len(networks),
+            rule_groups,
+            local_counts,
             denominator=denominator,
         )
 
@@ -320,6 +425,8 @@ def _hamming_distance_matrix(
         len(networks),
         rule_groups,
         comparison_cache=comparison_cache,
+        max_variables=max_variables,
+        denominator=denominator,
     )
 
 
@@ -329,6 +436,7 @@ def _robdd_disagreement_counts(
     *,
     ba: BooleanAlgebra,
     robdd_cache: Dict[Expression, ROBDD],
+    robdd_structure_cache: Dict[ROBDD, _ROBDDStructure],
     comparison_cache: Dict[FrozenSet[Expression], Tuple[int, int]],
 ) -> Tuple[int, int]:
     """Return disagreement and variable counts for two compiled functions."""
@@ -341,26 +449,100 @@ def _robdd_disagreement_counts(
         if function not in robdd_cache:
             robdd_cache[function] = ROBDD._from_expression(function, ba=ba)
 
-    disagreement = robdd_cache[function1] ^ robdd_cache[function2]
-    disagreement_count = disagreement.count(1)
-    n_variables = len(disagreement.variables) if disagreement_count else 0
+    robdd1 = robdd_cache[function1]
+    robdd2 = robdd_cache[function2]
+    disagreement_count = _count_robdd_disagreements(
+        robdd1,
+        robdd2,
+        structure_cache=robdd_structure_cache,
+    )
+    n_variables = (
+        len(set(robdd1.variables) | set(robdd2.variables)) if disagreement_count else 0
+    )
     comparison_cache[key] = disagreement_count, n_variables
     return comparison_cache[key]
 
 
-def _scaled_hamming_distance_matrix(
-    n_networks: int,
+def _count_robdd_disagreements(
+    robdd1: ROBDD,
+    robdd2: ROBDD,
+    *,
+    structure_cache: Dict[ROBDD, _ROBDDStructure],
+) -> int:
+    """Count assignments on which two compiled functions disagree."""
+
+    variables = tuple(sorted(set(robdd1.variables) | set(robdd2.variables)))
+    variable_indices = {variable: index for index, variable in enumerate(variables)}
+    root1, nodes1 = _robdd_structure(robdd1, cache=structure_cache)
+    root2, nodes2 = _robdd_structure(robdd2, cache=structure_cache)
+    n_variables = len(variables)
+    count_cache: Dict[Tuple[int, int, int], int] = {}
+
+    def count(node1: int, node2: int, next_variable: int) -> int:
+        key = node1, node2, next_variable
+        if key in count_cache:
+            return count_cache[key]
+
+        if node1 <= 1 and node2 <= 1:
+            result = 1 << (n_variables - next_variable) if node1 != node2 else 0
+            count_cache[key] = result
+            return result
+
+        variable1 = variable_indices[nodes1[node1][0]] if node1 > 1 else n_variables
+        variable2 = variable_indices[nodes2[node2][0]] if node2 > 1 else n_variables
+        variable = min(variable1, variable2)
+
+        if variable1 == variable:
+            _, low1, high1 = nodes1[node1]
+        else:
+            low1 = high1 = node1
+
+        if variable2 == variable:
+            _, low2, high2 = nodes2[node2]
+        else:
+            low2 = high2 = node2
+
+        result = (1 << (variable - next_variable)) * (
+            count(low1, low2, variable + 1) + count(high1, high2, variable + 1)
+        )
+        count_cache[key] = result
+        return result
+
+    return count(root1, root2, 0)
+
+
+def _robdd_structure(
+    robdd: ROBDD,
+    *,
+    cache: Dict[ROBDD, _ROBDDStructure],
+) -> _ROBDDStructure:
+    """Return cached decision nodes indexed by their identifiers."""
+
+    if robdd not in cache:
+        cache[robdd] = (
+            robdd._root_id,
+            {
+                node: (variable, low, high)
+                for node, variable, low, high in robdd._iter_nodes()
+            },
+        )
+    return cache[robdd]
+
+
+def _scaled_hamming_local_counts(
     rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
     *,
     comparison_cache: Dict[FrozenSet[Expression], Tuple[int, int]],
     max_variables: int,
-    denominator: int,
-) -> np.ndarray:
-    """Accumulate Hamming numerators in a bounded integer matrix."""
+) -> Tuple[List[np.ndarray], int, int]:
+    """Build scaled local counts and sparse-work statistics."""
 
-    disagreement_counts = np.zeros((n_networks, n_networks), dtype=np.int64)
+    local_matrices = []
+    weight_entries = 0
+    expanded_entries = 0
 
     for indices, rules in rule_groups:
+        frequencies = np.bincount(indices, minlength=len(rules))
         local_counts = np.zeros((len(rules), len(rules)), dtype=np.int64)
         for left_index, left in enumerate(rules):
             for right_index in range(left_index + 1, len(rules)):
@@ -369,10 +551,96 @@ def _scaled_hamming_distance_matrix(
                 scaled_count = count << (max_variables - n_variables)
                 local_counts[left_index, right_index] = scaled_count
                 local_counts[right_index, left_index] = scaled_count
+                if scaled_count:
+                    weight_entries += 2
+                    expanded_entries += int(
+                        frequencies[left_index] + frequencies[right_index]
+                    )
 
-        disagreement_counts += local_counts[indices[:, None], indices]
+        local_matrices.append(local_counts)
+
+    return local_matrices, weight_entries, expanded_entries
+
+
+def _use_sparse_hamming_matrix(
+    n_networks: int,
+    n_groups: int,
+    *,
+    weight_entries: int,
+    expanded_entries: int,
+) -> bool:
+    """Select sparse assembly from its estimated work relative to dense."""
+
+    dense_work = n_groups * n_networks * n_networks
+    estimated_sparse_ratio = (
+        60 / n_networks
+        + 1 / n_groups
+        + weight_entries / dense_work
+        + expanded_entries / dense_work
+    )
+    return estimated_sparse_ratio < 0.25
+
+
+def _dense_scaled_hamming_distance_matrix(
+    n_networks: int,
+    rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
+    local_counts: Sequence[np.ndarray],
+    *,
+    denominator: int,
+) -> np.ndarray:
+    """Accumulate Hamming numerators in a bounded integer matrix."""
+
+    disagreement_counts = np.zeros((n_networks, n_networks), dtype=np.int64)
+
+    for (indices, _), component_counts in zip(rule_groups, local_counts):
+        disagreement_counts += component_counts[indices[:, None], indices]
 
     return disagreement_counts.astype(np.float64) / denominator
+
+
+def _sparse_scaled_hamming_distance_matrix(
+    n_networks: int,
+    rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
+    local_counts: Sequence[np.ndarray],
+    *,
+    denominator: int,
+) -> np.ndarray:
+    """Accumulate Hamming numerators through sparse matrix products."""
+
+    rule_classes = tuple((indices, len(rules)) for indices, rules in rule_groups)
+    encoded = _rule_class_indicator_matrix(n_networks, rule_classes)
+    weights = block_diag(
+        (csr_matrix(local_counts[0]), *local_counts[1:]),
+        format="csr",
+        dtype=np.int64,
+    )
+    disagreement_counts = (encoded @ weights @ encoded.T).toarray()
+    return disagreement_counts.astype(np.float64) / denominator
+
+
+def _rule_class_indicator_matrix(
+    n_networks: int,
+    rule_classes: Sequence[Tuple[np.ndarray, int]],
+) -> csr_matrix:
+    """Encode one selected rule class per component and network."""
+
+    n_groups = len(rule_classes)
+    class_counts = [n_classes for _, n_classes in rule_classes]
+    offsets = np.cumsum(
+        np.array([0, *class_counts[:-1]], dtype=np.intp),
+    )
+    columns = (
+        np.column_stack([indices for indices, _ in rule_classes]) + offsets[None, :]
+    ).ravel()
+    rows = np.repeat(np.arange(n_networks), n_groups)
+    return csr_matrix(
+        (
+            np.ones(rows.size, dtype=np.int64),
+            (rows, columns),
+        ),
+        shape=(n_networks, sum(class_counts)),
+        dtype=np.int64,
+    )
 
 
 def _unbounded_hamming_distance_matrix(
@@ -380,6 +648,8 @@ def _unbounded_hamming_distance_matrix(
     rule_groups: Sequence[Tuple[np.ndarray, Tuple[Expression, ...]]],
     *,
     comparison_cache: Dict[FrozenSet[Expression], Tuple[int, int]],
+    max_variables: int,
+    denominator: int,
 ) -> np.ndarray:
     """Accumulate exact Hamming counts without fixed-width integers."""
 
@@ -387,20 +657,17 @@ def _unbounded_hamming_distance_matrix(
 
     for left_index in range(n_networks):
         for right_index in range(left_index + 1, n_networks):
-            local_counts = []
+            disagreement_count = 0
             for indices, rules in rule_groups:
                 left = rules[indices[left_index]]
                 right = rules[indices[right_index]]
                 if left == right:
-                    local_counts.append((1, 0))
                     continue
 
                 disagreement, n_variables = comparison_cache[frozenset((left, right))]
-                assignment_count = 1 << n_variables
-                local_counts.append((assignment_count - disagreement, disagreement))
+                disagreement_count += disagreement << (max_variables - n_variables)
 
-            agreement, disagreement = _normalize_local_counts(local_counts)
-            distance = disagreement / (agreement + disagreement)
+            distance = disagreement_count / denominator
             distances[left_index, right_index] = distance
             distances[right_index, left_index] = distance
 
@@ -461,6 +728,8 @@ def _network_comparison_counts(
 
     if metric == "hamming":
         expression_cache: Dict[Expression, Expression] = {}
+        robdd_cache: Dict[Expression, ROBDD] = {}
+        robdd_structure_cache: Dict[ROBDD, _ROBDDStructure] = {}
         local_counts = [
             _function_comparison_counts(
                 bn1[component],
@@ -468,6 +737,8 @@ def _network_comparison_counts(
                 ba=bn1.ba,
                 other_ba=bn2.ba,
                 expression_cache=expression_cache,
+                robdd_cache=robdd_cache,
+                robdd_structure_cache=robdd_structure_cache,
             )
             for component in components
         ]
@@ -483,6 +754,8 @@ def _function_comparison_counts(
     ba: BooleanAlgebra,
     other_ba: BooleanAlgebra,
     expression_cache: Dict[Expression, Expression],
+    robdd_cache: Dict[Expression, ROBDD],
+    robdd_structure_cache: Dict[ROBDD, _ROBDDStructure],
 ) -> Tuple[int, int]:
     """Return exact agreement and disagreement counts for two functions."""
 
@@ -497,27 +770,22 @@ def _function_comparison_counts(
             cache=expression_cache,
         )
 
-    disagreement = cast(
-        Expression,
-        ba.OR(
-            ba.AND(function1, ba.NOT(function2)),
-            ba.AND(ba.NOT(function1), function2),
-        ).simplify(),
-    )
+    for function in (function1, function2):
+        if function not in robdd_cache:
+            robdd_cache[function] = ROBDD._from_expression(function, ba=ba)
 
-    if disagreement == ba.FALSE:
+    robdd1 = robdd_cache[function1]
+    robdd2 = robdd_cache[function2]
+    disagreement_count = _count_robdd_disagreements(
+        robdd1,
+        robdd2,
+        structure_cache=robdd_structure_cache,
+    )
+    if disagreement_count == 0:
         return 1, 0
-    if disagreement == ba.TRUE:
-        return 0, 1
 
-    variables = tuple(sorted(str(symbol) for symbol in disagreement.symbols))
-    robdd = ROBDD._from_expression(
-        disagreement,
-        order=variables,
-        ba=ba,
-    )
-    assignment_count = 1 << len(variables)
-    disagreement_count = robdd.count(1)
+    n_variables = len(set(robdd1.variables) | set(robdd2.variables))
+    assignment_count = 1 << n_variables
 
     return assignment_count - disagreement_count, disagreement_count
 
