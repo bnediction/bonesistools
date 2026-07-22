@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from functools import lru_cache
+from functools import lru_cache, wraps
 from types import FunctionType
-from typing import Any, Dict, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, Optional, Tuple, Union, cast
 
 import numpy as np
 from anndata import AnnData
@@ -458,7 +458,9 @@ def umap(
     init_pos: str or ndarray (default: 'random')
         Initialization used by UMAP. Random initialization is reproducible
         across numerical backends when a seed is provided. Spectral
-        initialization remains available with ``init_pos="spectral"``.
+        initialization remains available with ``init_pos="spectral"``; its
+        coordinates are canonicalized, although numerical eigensolvers can
+        still vary across platforms.
     a: float, optional
         UMAP curve parameter. If `None`, UMAP determines it from `min_dist` and
         `spread`.
@@ -673,6 +675,11 @@ def _reproducible_umap_embedding(umap_module: Any) -> Any:
 
     embedding_globals = dict(embedding.__globals__)
     embedding_globals["optimize_layout_euclidean"] = strict_optimizer
+    spectral_layout = embedding_globals.get("spectral_layout")
+    if callable(spectral_layout):
+        embedding_globals["spectral_layout"] = _wrap_umap_spectral_layout(
+            cast(Callable[..., np.ndarray], spectral_layout)
+        )
     return _clone_function(
         embedding,
         embedding_globals,
@@ -695,6 +702,28 @@ def _clone_function(
     )
     cloned.__kwdefaults__ = function.__kwdefaults__
     return cloned
+
+
+def _wrap_umap_spectral_layout(
+    spectral_layout: Callable[..., np.ndarray],
+) -> Callable[..., np.ndarray]:
+    """Wrap a spectral layout with deterministic precision and orientation."""
+
+    @wraps(spectral_layout)
+    def stabilized_layout(*args: Any, **kwargs: Any) -> np.ndarray:
+        layout = np.asarray(
+            spectral_layout(*args, **kwargs),
+            dtype=np.float32,
+        ).copy()
+        for dimension in range(layout.shape[1]):
+            column = layout[:, dimension]
+            pivot = int(np.argmax(np.abs(column)))
+            if column[pivot] > 0.0:
+                column *= -1.0
+
+        return layout
+
+    return stabilized_layout
 
 
 def _neighbors_graph(

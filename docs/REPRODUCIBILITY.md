@@ -80,9 +80,11 @@ that UMAP has a unique mathematical embedding. UMAP's own
 explains the role of seeds and serial execution; bonesistools additionally
 stabilizes numerical boundaries needed for cross-runner golden tests.
 
-Spectral initialization remains available explicitly. Because it relies on a
-numerical eigensolver, it can produce mathematically equivalent but non-bitwise
-initial coordinates across platforms.
+Spectral initialization remains available explicitly. Bonesistools converts
+its coordinates to the embedding precision and fixes arbitrary eigenvector
+orientations before optimization. This reduces backend variability, but the
+underlying numerical eigensolver can still produce mathematically equivalent
+yet non-bitwise initial coordinates across platforms.
 
 For a UMAP-related golden failure, compare outputs in this order:
 

@@ -13,6 +13,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.manifold import TSNE, spectral_embedding
 
 import bonesistools as bt
+from bonesistools.omics.tools._embedding import _wrap_umap_spectral_layout
 
 
 def _spectral_reference(
@@ -352,6 +353,44 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         "b": 0.9,
         "n_jobs": 2,
     }
+
+
+def test_umap_spectral_initialization_is_canonicalized():
+    source = np.asarray(
+        [
+            [2.0, -1.0],
+            [-0.5, 4.0],
+            [1.0, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    spectral_layout = _wrap_umap_spectral_layout(lambda: source)
+
+    result = spectral_layout()
+
+    assert result.dtype == np.float32
+    assert np.array_equal(
+        result,
+        np.asarray(
+            [
+                [-2.0, 1.0],
+                [0.5, -4.0],
+                [-1.0, -0.5],
+            ],
+            dtype=np.float32,
+        ),
+    )
+    assert np.array_equal(
+        source,
+        np.asarray(
+            [
+                [2.0, -1.0],
+                [-0.5, 4.0],
+                [1.0, 0.5],
+            ],
+            dtype=np.float64,
+        ),
+    )
 
 
 def test_umap_requires_neighbors_graph_by_default(mini_adata):
