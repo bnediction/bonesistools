@@ -636,12 +636,6 @@ def _umap_initialization(
     spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
     noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
     prepared_graph = _prepare_umap_graph_for_embedding(graph, n_epochs)
-    spectral_kwargs = {
-        "metric": metric,
-        "metric_kwds": metric_kwds,
-    }
-    if "tol" in inspect.signature(spectral_layout).parameters:
-        spectral_kwargs["tol"] = 1e-12
     layout = cast(
         np.ndarray,
         spectral_layout(
@@ -649,9 +643,11 @@ def _umap_initialization(
             prepared_graph,
             n_components,
             random_state,
-            **spectral_kwargs,
+            metric=metric,
+            metric_kwds=metric_kwds,
         ),
     )
+    layout = layout.astype(np.float32, copy=False)
     layout = _orient_umap_spectral_layout(layout)
     return (
         cast(

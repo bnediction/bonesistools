@@ -66,8 +66,8 @@ The reproducible UMAP path therefore:
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
 - uses the supplied seed throughout initialization and optimization;
-- computes spectral initialization to a strict tolerance and fixes arbitrary
-  eigenvector orientations;
+- converts spectral vectors to the embedding precision before scaling them and
+  fixes arbitrary eigenvector orientations;
 - uses serial, strict floating-point arithmetic for the Euclidean optimization
   path rather than relaxed `fastmath` transformations;
 - limits native numerical thread pools according to `n_jobs`, whose default is
