@@ -11,8 +11,21 @@ from typing import (
     Optional,
 )
 
+from ..._compat import Literal
+
 if TYPE_CHECKING:
     from graphviz import Digraph  # pyright: ignore[reportMissingImports]
+
+GraphvizProgram = Literal[
+    "dot",
+    "neato",
+    "fdp",
+    "sfdp",
+    "circo",
+    "twopi",
+    "osage",
+    "patchwork",
+]
 
 
 def _graphviz_attributes(
@@ -41,7 +54,7 @@ def _graph_attributes(
 
 
 def _new_graphviz_digraph(
-    program: str,
+    program: GraphvizProgram,
     graph_attr: Optional[Mapping[str, Any]] = None,
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
@@ -77,7 +90,7 @@ def _new_graphviz_digraph(
 
 def _set_pydot_defaults(
     dot: Any,
-    program: str = "dot",
+    program: GraphvizProgram = "dot",
     graph_attr: Optional[Mapping[str, Any]] = None,
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
@@ -101,7 +114,7 @@ def _set_pydot_defaults(
 
 def _networkx_to_graphviz(
     networkx_graph: Any,
-    program: str = "dot",
+    program: GraphvizProgram = "dot",
     graph_attr: Optional[Mapping[str, Any]] = None,
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
@@ -139,7 +152,7 @@ def _networkx_to_graphviz(
 def _externalize_orthogonal_edge_labels(
     networkx_graph: Any,
     *,
-    program: str,
+    program: GraphvizProgram,
     graph_attr: Optional[Mapping[str, Any]] = None,
     **kwargs: Any,
 ) -> None:
@@ -159,7 +172,7 @@ def _externalize_orthogonal_edge_labels(
 
 
 def _uses_orthogonal_dot_edges(
-    program: str,
+    program: GraphvizProgram,
     graph_attributes: Mapping[str, Any],
 ) -> bool:
 

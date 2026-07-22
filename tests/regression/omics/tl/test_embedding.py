@@ -299,12 +299,14 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         *,
         metric,
         metric_kwds,
+        tol=0.0,
     ):
         FakeUMAP.parameters["spectral_layout"] = {
             "shape": graph.shape,
             "n_components": n_components,
             "metric": metric,
             "metric_kwds": metric_kwds,
+            "tol": tol,
         }
         return np.asarray(
             [
@@ -360,6 +362,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
     assert FakeUMAP.parameters["gamma"] == 1.25
     assert FakeUMAP.parameters["negative_sample_rate"] == 7
     assert FakeUMAP.parameters["n_epochs"] == 17
+    assert FakeUMAP.parameters["spectral_layout"]["tol"] == 1e-12
     assert np.array_equal(
         FakeUMAP.parameters["oriented_layout"],
         np.asarray(

@@ -502,6 +502,8 @@ def umap(
             f"expected {int} but received {type(n_jobs)}"
         )
 
+    from threadpoolctl import threadpool_limits
+
     resolved_random_state = _as_seed(seed)
 
     neighbors_key = _as_string(neighbors_key, "neighbors_key")
@@ -547,44 +549,45 @@ def umap(
 
     find_ab_params = cast(Any, getattr(umap_umap_module, "find_ab_params"))
     simplicial_set_embedding = _reproducible_umap_embedding(umap_umap_module)
-    if a is None or b is None:
-        a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
+    with threadpool_limits(limits=n_jobs):
+        if a is None or b is None:
+            a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
 
-    init, graph = _umap_initialization(
-        init_pos=init_pos,
-        adata=adata,
-        data=representation_mtx,
-        graph=graph,
-        n_components=n_components,
-        n_epochs=n_iter,
-        random_state=resolved_random_state,
-        metric=graph_metric,
-        metric_kwds=graph_metric_kwargs,
-        umap_module=umap_umap_module,
-    )
-
-    embedding, _ = cast(
-        Tuple[np.ndarray, Any],
-        simplicial_set_embedding(
+        init, graph = _umap_initialization(
+            init_pos=init_pos,
+            adata=adata,
             data=representation_mtx,
             graph=graph,
             n_components=n_components,
-            initial_alpha=alpha,
-            a=a,
-            b=b,
-            gamma=gamma,
-            negative_sample_rate=negative_sample_rate,
             n_epochs=n_iter,
-            init=init,
             random_state=resolved_random_state,
             metric=graph_metric,
             metric_kwds=graph_metric_kwargs,
-            densmap=False,
-            densmap_kwds={},
-            output_dens=False,
-            verbose=False,
-        ),
-    )
+            umap_module=umap_umap_module,
+        )
+
+        embedding, _ = cast(
+            Tuple[np.ndarray, Any],
+            simplicial_set_embedding(
+                data=representation_mtx,
+                graph=graph,
+                n_components=n_components,
+                initial_alpha=alpha,
+                a=a,
+                b=b,
+                gamma=gamma,
+                negative_sample_rate=negative_sample_rate,
+                n_epochs=n_iter,
+                init=init,
+                random_state=resolved_random_state,
+                metric=graph_metric,
+                metric_kwds=graph_metric_kwargs,
+                densmap=False,
+                densmap_kwds={},
+                output_dens=False,
+                verbose=False,
+            ),
+        )
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {
@@ -633,6 +636,12 @@ def _umap_initialization(
     spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
     noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
     prepared_graph = _prepare_umap_graph_for_embedding(graph, n_epochs)
+    spectral_kwargs = {
+        "metric": metric,
+        "metric_kwds": metric_kwds,
+    }
+    if "tol" in inspect.signature(spectral_layout).parameters:
+        spectral_kwargs["tol"] = 1e-12
     layout = cast(
         np.ndarray,
         spectral_layout(
@@ -640,8 +649,7 @@ def _umap_initialization(
             prepared_graph,
             n_components,
             random_state,
-            metric=metric,
-            metric_kwds=metric_kwds,
+            **spectral_kwargs,
         ),
     )
     layout = _orient_umap_spectral_layout(layout)

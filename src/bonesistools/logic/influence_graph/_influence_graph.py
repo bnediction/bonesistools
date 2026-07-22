@@ -38,6 +38,7 @@ from ..._validation import (
 )
 from ..._warnings import _warn_deprecated
 from ._graphviz import (
+    GraphvizProgram,
     _externalize_orthogonal_edge_labels,
     _graphviz_attributes,
     _networkx_to_graphviz,
@@ -1890,7 +1891,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def to_graphviz(
         self,
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
         edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ) -> "Digraph":
@@ -1904,7 +1905,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program assigned to the resulting graph.
         edge_style: Callable, optional
             Edge styling strategy.
@@ -1958,7 +1960,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def to_pydot(
         self,
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
         edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         **kwargs: Any,
     ) -> "Dot":
@@ -1970,7 +1972,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
         edge_style: Callable, optional
             Edge styling strategy.
@@ -2034,7 +2037,7 @@ class InfluenceGraph(_MultiDiGraphBase):
 
     def show(
         self,
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
         edge_style: Optional[Callable[..., Mapping[str, Any]]] = None,
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
@@ -2048,7 +2051,8 @@ class InfluenceGraph(_MultiDiGraphBase):
 
         Parameters
         ----------
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program used for rendering.
         edge_style: Callable, optional
             Edge styling strategy.
@@ -3200,7 +3204,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
     ) -> "Digraph":
         """
         Convert the aggregated influence graph to a native graphviz Digraph.
@@ -3286,7 +3290,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             the callable must return graphviz edge attributes.
 
             If `None`, no frequency-based edge styling is applied.
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program assigned to the resulting graph.
         Returns
         -------
@@ -3339,7 +3344,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
     ) -> "Dot":
         """
         Convert the aggregated influence graph to a pydot graph.
@@ -3433,7 +3438,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             the callable must return pydot edge attributes.
 
             If `None`, no frequency-based edge styling is applied.
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program assigned to the resulting pydot graph.
         Returns
         -------
@@ -3499,7 +3505,7 @@ class AggregatedInfluenceGraph(InfluenceGraph):
         edge_label: Optional[str] = "count",
         edge_attr: Optional[Mapping[str, Any]] = None,
         edge_style: AggregatedEdgeStyle = "frequency",
-        program: str = "dot",
+        program: GraphvizProgram = "dot",
         width: Optional[SvgLength] = None,
         height: Optional[SvgLength] = None,
     ) -> None:
@@ -3597,7 +3603,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             the callable must return pydot edge attributes.
 
             If `None`, no frequency-based edge styling is applied.
-        program: str (default: "dot")
+        program: {"dot", "neato", "fdp", "sfdp", "circo", "twopi",
+            "osage", "patchwork"} (default: "dot")
             Graphviz layout program used for rendering.
         width: str or int or float, optional
             Display width assigned to the rendered SVG root. Integers and floats
