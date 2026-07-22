@@ -418,7 +418,7 @@ def umap(
     alpha: float = 1.0,
     gamma: float = 1.0,
     negative_sample_rate: int = 5,
-    init_pos: Union[str, np.ndarray] = "spectral",
+    init_pos: Union[str, np.ndarray] = "random",
     a: Optional[float] = None,
     b: Optional[float] = None,
     key_added: Optional[str] = None,
@@ -455,8 +455,10 @@ def umap(
         Negative sample weighting.
     negative_sample_rate: int (default: 5)
         Number of negative samples per positive sample.
-    init_pos: str or ndarray (default: 'spectral')
-        Initialization used by UMAP.
+    init_pos: str or ndarray (default: 'random')
+        Initialization used by UMAP. Random initialization is reproducible
+        across numerical backends when a seed is provided. Spectral
+        initialization remains available with ``init_pos="spectral"``.
     a: float, optional
         UMAP curve parameter. If `None`, UMAP determines it from `min_dist` and
         `spread`.
@@ -553,17 +555,9 @@ def umap(
         if a is None or b is None:
             a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
 
-        init, graph = _umap_initialization(
+        init = _resolve_umap_initialization(
             init_pos=init_pos,
             adata=adata,
-            data=representation_mtx,
-            graph=graph,
-            n_components=n_components,
-            n_epochs=n_iter,
-            random_state=resolved_random_state,
-            metric=graph_metric,
-            metric_kwds=graph_metric_kwargs,
-            umap_module=umap_umap_module,
         )
 
         embedding, _ = cast(
@@ -613,49 +607,16 @@ def umap(
     return adata if copy else None
 
 
-def _umap_initialization(
+def _resolve_umap_initialization(
     *,
     init_pos: Union[str, np.ndarray],
     adata: AnnData,
-    data: Any,
-    graph: Any,
-    n_components: int,
-    n_epochs: int,
-    random_state: np.random.RandomState,
-    metric: str,
-    metric_kwds: Dict[str, Any],
-    umap_module: Any,
-) -> Tuple[Union[str, np.ndarray], Any]:
+) -> Union[str, np.ndarray]:
 
     if isinstance(init_pos, str) and init_pos in adata.obsm:
-        return np.asarray(adata.obsm[init_pos], dtype=np.float32), graph
+        return np.asarray(adata.obsm[init_pos], dtype=np.float32)
 
-    if not isinstance(init_pos, str) or init_pos != "spectral":
-        return init_pos, graph
-
-    spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
-    noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
-    prepared_graph = _prepare_umap_graph_for_embedding(graph, n_epochs)
-    layout = cast(
-        np.ndarray,
-        spectral_layout(
-            data,
-            prepared_graph,
-            n_components,
-            random_state,
-            metric=metric,
-            metric_kwds=metric_kwds,
-        ),
-    )
-    layout = layout.astype(np.float32, copy=False)
-    layout = _orient_umap_spectral_layout(layout)
-    return (
-        cast(
-            np.ndarray,
-            noisy_scale_coords(layout, random_state, max_coord=10, noise=0.0001),
-        ),
-        prepared_graph,
-    )
+    return init_pos
 
 
 @lru_cache(maxsize=4)
@@ -734,32 +695,6 @@ def _clone_function(
     )
     cloned.__kwdefaults__ = function.__kwdefaults__
     return cloned
-
-
-def _prepare_umap_graph_for_embedding(graph: Any, n_epochs: int) -> Any:
-
-    prepared_graph = graph.tocoo(copy=True)
-    prepared_graph.sum_duplicates()
-
-    default_epochs = 500 if prepared_graph.shape[0] <= 10000 else 200
-    threshold_epochs = n_epochs if n_epochs > 10 else default_epochs
-    if prepared_graph.data.size > 0:
-        cutoff = prepared_graph.data.max() / float(threshold_epochs)
-        prepared_graph.data[prepared_graph.data < cutoff] = 0.0
-    prepared_graph.eliminate_zeros()
-    return prepared_graph
-
-
-def _orient_umap_spectral_layout(layout: np.ndarray) -> np.ndarray:
-
-    oriented = np.asarray(layout).copy()
-    for dimension in range(oriented.shape[1]):
-        column = oriented[:, dimension]
-        pivot = int(np.argmax(np.abs(column)))
-        if column[pivot] > 0.0:
-            oriented[:, dimension] *= -1.0
-
-    return oriented
 
 
 def _neighbors_graph(

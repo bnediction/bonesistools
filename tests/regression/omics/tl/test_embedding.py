@@ -291,36 +291,6 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         FakeUMAP.parameters["find_ab_params"] = (spread, min_dist)
         return 1.7, 0.9
 
-    def fake_spectral_layout(
-        data,
-        graph,
-        n_components,
-        random_state,
-        *,
-        metric,
-        metric_kwds,
-        tol=0.0,
-    ):
-        FakeUMAP.parameters["spectral_layout"] = {
-            "shape": graph.shape,
-            "n_components": n_components,
-            "metric": metric,
-            "metric_kwds": metric_kwds,
-            "tol": tol,
-        }
-        return np.asarray(
-            [
-                [2.0, -1.0],
-                [-0.5, 4.0],
-                [1.0, 0.5],
-            ]
-        )
-
-    def fake_noisy_scale_coords(coords, random_state, *, max_coord, noise):
-        FakeUMAP.parameters["oriented_layout"] = coords.copy()
-        FakeUMAP.parameters["noise"] = (max_coord, noise)
-        return coords.astype(np.float32)
-
     def fake_simplicial_set_embedding(**kwargs):
         FakeUMAP.parameters.update(kwargs)
         FakeUMAP.input_matrix = kwargs["data"].copy()
@@ -331,8 +301,6 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
     setattr(module, "__path__", [])
     umap_module = ModuleType("umap.umap_")
     setattr(umap_module, "find_ab_params", fake_find_ab_params)
-    setattr(umap_module, "spectral_layout", fake_spectral_layout)
-    setattr(umap_module, "noisy_scale_coords", fake_noisy_scale_coords)
     setattr(umap_module, "simplicial_set_embedding", fake_simplicial_set_embedding)
     monkeypatch.setitem(sys.modules, "umap", module)
     monkeypatch.setitem(sys.modules, "umap.umap_", umap_module)
@@ -362,20 +330,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
     assert FakeUMAP.parameters["gamma"] == 1.25
     assert FakeUMAP.parameters["negative_sample_rate"] == 7
     assert FakeUMAP.parameters["n_epochs"] == 17
-    assert FakeUMAP.parameters["oriented_layout"].dtype == np.float32
-    assert np.array_equal(
-        FakeUMAP.parameters["oriented_layout"],
-        np.asarray(
-            [
-                [-2.0, 1.0],
-                [0.5, -4.0],
-                [-1.0, -0.5],
-            ]
-        ),
-    )
-    assert np.array_equal(
-        FakeUMAP.parameters["init"], FakeUMAP.parameters["oriented_layout"]
-    )
+    assert FakeUMAP.parameters["init"] == "random"
     assert FakeUMAP.parameters["metric"] == "euclidean"
     assert np.allclose(mini_adata.obsm["X_umap"], 2.0)
     assert mini_adata.uns["X_umap"] == {
@@ -392,7 +347,7 @@ def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
         "alpha": 0.75,
         "gamma": 1.25,
         "negative_sample_rate": 7,
-        "init_pos": "spectral",
+        "init_pos": "random",
         "a": 1.7,
         "b": 0.9,
         "n_jobs": 2,

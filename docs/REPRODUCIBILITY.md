@@ -53,21 +53,22 @@ UMAP combines several numerically sensitive stages:
 
 1. construction of the nearest-neighbor graph;
 2. estimation of local scales from neighbor distances;
-3. spectral initialization;
+3. initialization;
 4. stochastic nonlinear optimization.
 
 An epsilon-valued self-distance can change the local connectivity scale, and a
-small spectral difference can lead the nonlinear optimizer to a different
-embedding. In the golden omics workflow, that embedding is also consumed by
-KNNSC, so one UMAP divergence can produce failures in both reference outputs.
+small initialization difference can lead the nonlinear optimizer to a
+different embedding. In the golden omics workflow, that embedding is also
+consumed by KNNSC, so one UMAP divergence can produce failures in both
+reference outputs.
 
 The reproducible UMAP path therefore:
 
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
 - uses the supplied seed throughout initialization and optimization;
-- converts spectral vectors to the embedding precision before scaling them and
-  fixes arbitrary eigenvector orientations;
+- uses random initialization by default, avoiding platform-dependent numerical
+  eigensolvers;
 - uses serial, strict floating-point arithmetic for the Euclidean optimization
   path rather than relaxed `fastmath` transformations;
 - limits native numerical thread pools according to `n_jobs`, whose default is
@@ -79,12 +80,16 @@ that UMAP has a unique mathematical embedding. UMAP's own
 explains the role of seeds and serial execution; bonesistools additionally
 stabilizes numerical boundaries needed for cross-runner golden tests.
 
+Spectral initialization remains available explicitly. Because it relies on a
+numerical eigensolver, it can produce mathematically equivalent but non-bitwise
+initial coordinates across platforms.
+
 For a UMAP-related golden failure, compare outputs in this order:
 
 1. PCA coordinates;
 2. neighbor indices and distances;
 3. fuzzy connectivities;
-4. spectral initialization;
+4. initialization;
 5. final UMAP coordinates;
 6. analyses that consume the embedding, such as KNNSC.
 
