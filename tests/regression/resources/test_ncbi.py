@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import gzip
+import pickle
 import warnings
 from pathlib import Path
 from typing import Any, cast
@@ -10,7 +11,12 @@ import pandas as pd
 import pytest
 
 import bonesistools as bt
-from bonesistools.resources.ncbi import _download, _identifiers
+from bonesistools.resources.ncbi import (
+    _download,
+    _genesyn,
+    _identifiers,
+    _mapping_cache,
+)
 
 GENE_IDS = [
     "20375",
@@ -673,6 +679,208 @@ def test_latest_gene_info_download_uses_raw_local_cache(tmp_path, monkeypatch):
     ]
     assert outfile.read_bytes() == b"#tax_id\tGeneID\n10090\t10\n"
     assert cached_file.exists()
+
+
+def test_latest_gene_identifiers_load_cached_mappings_without_reparsing(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    archive = tmp_path / "Mus_musculus.gene_info.gz"
+    with gzip.open(archive, "wt", encoding="utf-8") as file:
+        file.write(
+            "\t".join(
+                [
+                    "#tax_id",
+                    "GeneID",
+                    "Symbol",
+                    "LocusTag",
+                    "Synonyms",
+                    "dbXrefs",
+                    "chromosome",
+                    "map_location",
+                    "description",
+                    "type_of_gene",
+                    "Symbol_from_nomenclature_authority",
+                ]
+            )
+            + "\n"
+            + "\t".join(
+                [
+                    "10090",
+                    "10",
+                    "RefA",
+                    "-",
+                    "AliasA",
+                    "Ensembl:ENSMUSG00000000010|MGI:MGI10",
+                    "1",
+                    "-",
+                    "-",
+                    "protein-coding",
+                    "OfficialA",
+                ]
+            )
+            + "\n"
+        )
+
+    monkeypatch.setattr(
+        _identifiers,
+        "_cached_gene_info_archive",
+        lambda url: archive,
+    )
+    first = bt.resources.ncbi.identifiers(organism="mouse", version="latest")
+    assert first.get_symbol("10", input_type="gene_id") == "OfficialA"
+
+    def fail_if_parsed(self, gene_info_file):
+        pytest.fail("latest gene_info should not be parsed when mappings are cached")
+
+    monkeypatch.setattr(
+        _identifiers.GeneIdentifiers,
+        "_GeneIdentifiers__parse_ncbi_gene_info",
+        fail_if_parsed,
+    )
+    second = bt.resources.ncbi.identifiers(organism="mouse", version="latest")
+
+    assert second.get_symbol("10", input_type="gene_id") == "OfficialA"
+    assert archive.exists()
+
+    monkeypatch.setattr(
+        _genesyn,
+        "_cached_gene_info_archive",
+        lambda url: archive,
+    )
+
+    def fail_if_legacy_parsed(self, gene_info_file):
+        pytest.fail("GeneSynonyms should reuse the GeneIdentifiers cache")
+
+    monkeypatch.setattr(
+        _genesyn.GeneSynonyms,
+        "_GeneSynonyms__parse_ncbi_gene_info",
+        fail_if_legacy_parsed,
+    )
+    with pytest.warns(FutureWarning, match="GeneSynonyms.*GeneIdentifiers"):
+        legacy = _genesyn.GeneSynonyms(organism="mouse", version="latest")
+
+    assert legacy.get_symbol("10", input_type="gene_id") == "OfficialA"
+
+
+def test_latest_identifier_mappings_are_reused_from_serialized_cache(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    source_file = tmp_path / "gene_info.gz"
+    source_file.write_bytes(b"ncbi-source")
+    source_key = "ftp://example.test/Mus_musculus.gene_info.gz"
+    mappings = {
+        "gene_id": {"10": ("Gene",)},
+        "name": {"GENE": "10"},
+        "ensembl_id": {},
+        "databases": {},
+    }
+    calls = []
+
+    def factory():
+        calls.append("build")
+        return mappings
+
+    first = _mapping_cache._cached_identifier_mappings(
+        source_file,
+        source_key=source_key,
+        factory=factory,
+    )
+    second = _mapping_cache._cached_identifier_mappings(
+        source_file,
+        source_key=source_key,
+        factory=lambda: pytest.fail("the cached mappings should be reused"),
+    )
+
+    assert first == mappings
+    assert second == mappings
+    assert calls == ["build"]
+    assert _mapping_cache._mapping_cache_file(source_key).suffixes == [
+        ".pickle",
+        ".gz",
+    ]
+
+
+def test_obsolete_identifier_cache_warns_before_rebuilding(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    source_file = tmp_path / "gene_info.gz"
+    source_file.write_bytes(b"first-source")
+    source_key = "ftp://example.test/Homo_sapiens.gene_info.gz"
+    first = {
+        "gene_id": {"1": ("First",)},
+        "name": {},
+        "ensembl_id": {},
+        "databases": {},
+    }
+    second = {
+        "gene_id": {"2": ("Second",)},
+        "name": {},
+        "ensembl_id": {},
+        "databases": {},
+    }
+    _mapping_cache._cached_identifier_mappings(
+        source_file,
+        source_key=source_key,
+        factory=lambda: first,
+    )
+    source_file.write_bytes(b"second-source")
+
+    with pytest.warns(
+        UserWarning,
+        match="removing incompatible, corrupt, or obsolete NCBI identifier cache",
+    ):
+        result = _mapping_cache._cached_identifier_mappings(
+            source_file,
+            source_key=source_key,
+            factory=lambda: second,
+        )
+
+    assert result == second
+
+
+@pytest.mark.parametrize("failure", ["corrupt", "schema"])
+def test_invalid_identifier_cache_warns_before_rebuilding(
+    failure,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
+    source_file = tmp_path / "gene_info.gz"
+    source_file.write_bytes(b"ncbi-source")
+    source_key = "ftp://example.test/Escherichia_coli.gene_info.gz"
+    mappings = {
+        "gene_id": {},
+        "name": {},
+        "ensembl_id": {},
+        "databases": {},
+    }
+    _mapping_cache._cached_identifier_mappings(
+        source_file,
+        source_key=source_key,
+        factory=lambda: mappings,
+    )
+    cache_file = _mapping_cache._mapping_cache_file(source_key)
+
+    if failure == "corrupt":
+        cache_file.write_bytes(b"not-a-gzip-pickle")
+    else:
+        with gzip.open(cache_file, "wb") as handle:
+            pickle.dump({"schema": -1}, handle, protocol=4)
+
+    with pytest.warns(
+        UserWarning,
+        match="removing incompatible, corrupt, or obsolete NCBI identifier cache",
+    ):
+        result = _mapping_cache._cached_identifier_mappings(
+            source_file,
+            source_key=source_key,
+            factory=lambda: mappings,
+        )
+
+    assert result == mappings
 
 
 def test_gene_identifiers_convert_dataframe_graph_and_interactions(mouse_identifiers):

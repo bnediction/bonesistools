@@ -40,7 +40,8 @@ from typing_extensions import Literal
 
 from ..._compat import get_args
 from ..._validation import _as_boolean, _as_dataframe_axis
-from ._download import _download_gene_info
+from ._download import _cached_gene_info_archive, _download_gene_info
+from ._mapping_cache import _cached_identifier_mappings
 from ._typing import (
     InputIdentifierType,
     OutputIdentifierType,
@@ -328,6 +329,7 @@ class GeneIdentifiers:
     _valid_input_identifier_types: Tuple[str, ...]
     _valid_output_identifier_types: Tuple[str, ...]
     _gene_aliases_mapping: Dict[str, Any]
+    _latest_gene_info_archive: Optional[Path]
 
     _READ_ONLY_ATTRIBUTES: FrozenSet[str] = frozenset(
         {
@@ -361,6 +363,7 @@ class GeneIdentifiers:
         self._organism = organism
         self._version = self.__normalize_gene_info_version(version)
         self._ncbi_file = self.__resolve_gene_info_file(self._version)
+        self._latest_gene_info_archive = None
 
         self.__download_gene_info()
         self._initialize_mappings(show_warnings=show_warnings)
@@ -1011,6 +1014,7 @@ class GeneIdentifiers:
             "_organism",
             "_version",
             "_ncbi_file",
+            "_latest_gene_info_archive",
             "_show_warnings",
             "_gene_aliases_mapping",
             "_databases",
@@ -1026,6 +1030,7 @@ class GeneIdentifiers:
             self._organism = organism
             self._version = self.__normalize_gene_info_version(resolved_version)
             self._ncbi_file = self.__resolve_gene_info_file(self._version)
+            self._latest_gene_info_archive = None
             self.__download_gene_info()
             self._initialize_mappings(show_warnings=show_warnings)
         except Exception:
@@ -1482,12 +1487,9 @@ class GeneIdentifiers:
             return
 
         if self.version == "latest":
-            try:
-                self.__download_full_gene_info(self.ncbi_file)
-            except RuntimeError:
-                self.__unlink_if_exists(self.ncbi_file)
-                self.__unlink_if_exists(Path(f"{self.ncbi_file}.gz"))
-                raise
+            self._latest_gene_info_archive = _cached_gene_info_archive(
+                FTP_GENE_INFO[self.organism]
+            )
             return
 
     def __download_full_gene_info(self, outfile: Path) -> None:
@@ -1643,7 +1645,17 @@ class GeneIdentifiers:
 
         self._show_warnings = show_warnings
         try:
-            self._gene_aliases_mapping = self.__parse_ncbi_gene_info(self.ncbi_file)
+            latest_archive = getattr(self, "_latest_gene_info_archive", None)
+            if self.version == "latest" and latest_archive is not None:
+                self._gene_aliases_mapping = _cached_identifier_mappings(
+                    latest_archive,
+                    source_key=FTP_GENE_INFO[self.organism],
+                    factory=lambda: self.__parse_ncbi_gene_info(latest_archive),
+                )
+            else:
+                self._gene_aliases_mapping = self.__parse_ncbi_gene_info(
+                    self.ncbi_file
+                )
         finally:
             if self.version == "latest":
                 self.__unlink_if_exists(self.ncbi_file)
@@ -1927,9 +1939,10 @@ def identifiers(
 
     Notes
     -----
-    NCBI `latest` files are reused for up to 72 hours. Bundled files are read
-    directly from the package and are not copied into the cache. Use
-    `bt.resources.cache.clear("ncbi")` to remove cached files.
+    NCBI `latest` files are reused for up to 72 hours, and their derived
+    identifier mappings are cached between Python sessions. Bundled files are
+    read directly from the package and are not copied into the cache. Use
+    `bt.resources.cache.clear("ncbi")` to remove cached files and mappings.
     """
 
     return GeneIdentifiers(

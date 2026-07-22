@@ -13,6 +13,18 @@ from ..cache import _cached_download
 _LATEST_CACHE_MAX_AGE = 72 * 60 * 60
 
 
+def _cached_gene_info_archive(url: str) -> Path:
+    """Return the locally cached compressed NCBI gene_info archive."""
+
+    return _cached_download(
+        url,
+        resource="ncbi",
+        category="gene_info",
+        max_age=_LATEST_CACHE_MAX_AGE,
+        suffix=".gene_info.gz",
+    )
+
+
 def _download_gene_info(
     url: str,
     outfile: Path,
@@ -27,13 +39,7 @@ def _download_gene_info(
 
     try:
         if cache_latest:
-            compressed_file = _cached_download(
-                url,
-                resource="ncbi",
-                category="gene_info",
-                max_age=_LATEST_CACHE_MAX_AGE,
-                suffix=".gene_info.gz",
-            )
+            compressed_file = _cached_gene_info_archive(url)
         else:
             with urllib.request.urlopen(url) as response:
                 with open(temporary_gzip, "wb") as file:
