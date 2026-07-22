@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from ..._validation import _as_boolean
@@ -11,9 +12,17 @@ from ..ncbi._identifiers import GeneIdentifiers
 from ..ncbi._typing import GeneIdentifiersLike, OutputIdentifierType
 from ._archive import (
     OmnipathVersion,
+    _normalize_organism,
     _normalize_signed_weights,
+    _normalize_version,
     list_interactions_versions,
     load_interactions_version,
+)
+from ._graph_cache import (
+    _cache_source_identity,
+    _cached_graph,
+    _GraphBuild,
+    _snapshot_from_dataframe,
 )
 
 
@@ -60,10 +69,9 @@ def collectri(
 
     Notes
     -----
-    Current OmniPath responses are reused for up to 72 hours, while dated
-    archives remain cached until removed. Non-human translations may also use
-    cached HCOP files. Use `bt.resources.cache.clear("omnipath", "hcop")` to
-    remove both caches.
+    Loaded networks remain cached until explicitly removed. Non-human
+    translations may also use cached HCOP files. Use
+    `bt.resources.cache.clear("omnipath", "hcop")` to remove both caches.
 
     References
     ----------
@@ -86,24 +94,30 @@ def collectri(
             f"but received {type(identifiers)}"
         )
 
-    collectri_db = load_interactions_version(
-        "collectri",
-        version=version,
-        organism=organism,
+    organism_name = _normalize_organism(organism)
+    version_label = _normalize_version(version)
+    snapshot = _cached_graph(
+        {
+            "resource": "collectri",
+            "organism": organism_name,
+            "version": version_label,
+            "hcop": (
+                None
+                if organism_name == "human"
+                else _cache_source_identity("latest")
+            ),
+        },
+        lambda: _build_canonical_collectri(
+            organism=organism,
+            version=version,
+        ),
     )
+    grn = snapshot.graph
 
-    if "weight" in collectri_db:
-        collectri_db = collectri_db.rename(columns={"weight": "sign"})
     if remove_pmid:
-        reference_columns = [
-            column
-            for column in ("PMID", "references")
-            if column in collectri_db.columns
-        ]
-        collectri_db = collectri_db.drop(columns=reference_columns)
-    collectri_db["sign"] = _normalize_signed_weights(collectri_db["sign"].to_numpy())
-
-    grn = InfluenceGraph.from_dataframe(collectri_db)
+        for _source, _target, data in grn.edges(data=True):
+            data.pop("PMID", None)
+            data.pop("references", None)
 
     if identifiers is None:
         return grn
@@ -115,6 +129,25 @@ def collectri(
         copy=False,
     )
     return grn
+
+
+def _build_canonical_collectri(
+    *,
+    organism: Union[str, int],
+    version: OmnipathVersion,
+) -> _GraphBuild:
+
+    downloads: List[Path] = []
+    collectri_db = load_interactions_version(
+        "collectri",
+        version=version,
+        organism=organism,
+        _downloads=downloads,
+    )
+    if "weight" in collectri_db:
+        collectri_db = collectri_db.rename(columns={"weight": "sign"})
+    collectri_db["sign"] = _normalize_signed_weights(collectri_db["sign"].to_numpy())
+    return _snapshot_from_dataframe(collectri_db, downloads=downloads)
 
 
 def _collectri_versions() -> List[str]:

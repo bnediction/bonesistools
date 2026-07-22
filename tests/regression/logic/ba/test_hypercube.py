@@ -134,6 +134,61 @@ def test_hypercube_identical_and_different():
 
     assert hc1.identical(hc2) == {"A", "C"}
     assert hc1.different(hc2) == {"B", "D"}
+    assert hc1.identical(
+        hc2,
+        components={"A", "B", "E"},
+    ) == {"A", "E"}
+    assert hc1.different(
+        hc2,
+        components={"A", "B", "E"},
+    ) == {"B"}
+
+
+def test_hypercube_changes_classifies_and_filters_components():
+
+    source = bt.logic.ba.Hypercube(
+        {
+            "flip": 0,
+            "stabilized": "*",
+            "destabilized": 1,
+            "excluded": 0,
+        }
+    )
+    target = bt.logic.ba.Hypercube(
+        {
+            "flip": 1,
+            "stabilized": 0,
+            "destabilized": "*",
+            "excluded": 1,
+        }
+    )
+
+    changes = source.changes(
+        target,
+        components={"flip", "stabilized", "destabilized"},
+    )
+
+    assert changes == bt.logic.ba.HypercubeChanges(
+        flips=frozenset({"flip"}),
+        stabilizations=frozenset({"stabilized"}),
+        destabilizations=frozenset({"destabilized"}),
+    )
+    flips, stabilizations, destabilizations = changes
+    assert flips == frozenset({"flip"})
+    assert stabilizations == frozenset({"stabilized"})
+    assert destabilizations == frozenset({"destabilized"})
+
+
+def test_hypercube_changes_uses_union_and_implicit_free_values():
+
+    source = bt.logic.ba.Hypercube({"fixed": 1})
+    target = bt.logic.ba.Hypercube({"newly_fixed": 0})
+
+    assert source.changes(target) == bt.logic.ba.HypercubeChanges(
+        flips=frozenset(),
+        stabilizations=frozenset({"newly_fixed"}),
+        destabilizations=frozenset({"fixed"}),
+    )
 
 
 def test_hypercube_invalid_values():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import Any, List, Optional, Union, cast
 
 import numpy as np
@@ -23,6 +24,7 @@ from ._archive import (
     _format_dorothea,
     _normalize_organism,
     _normalize_signed_weights,
+    _normalize_version,
     _read_omnipath_query,
     _tax_id,
     _translate_hcop,
@@ -30,9 +32,19 @@ from ._archive import (
     list_interactions_versions,
     load_interactions_version,
 )
+from ._graph_cache import (
+    _cache_source_identity,
+    _cached_graph,
+    _edge_data,
+    _GraphBuild,
+    _GraphSnapshot,
+    _ordered_subgraph,
+    _snapshot_from_dataframe,
+)
 
 OMNIPATH_INTERACTIONS_URL = "https://omnipathdb.org/interactions/?genesymbols=1&"
 DorotheaWrapper = Literal["op", "get"]
+_DOROTHEA_LEVELS = ("A", "B", "C", "D", "E")
 
 
 @_rename_deprecated_arguments(
@@ -105,10 +117,9 @@ def dorothea(
 
     Notes
     -----
-    Current OmniPath responses are reused for up to 72 hours, while dated
-    archives remain cached until removed. Non-human translations may also use
-    cached HCOP files. Use `bt.resources.cache.clear("omnipath", "hcop")` to
-    remove both caches.
+    Loaded networks remain cached until explicitly removed. Non-human
+    translations may also use cached HCOP files. Use
+    `bt.resources.cache.clear("omnipath", "hcop")` to remove both caches.
 
     References
     ----------
@@ -183,35 +194,35 @@ def dorothea(
             stacklevel=3,
         )
 
-    if isinstance(version, str) and version.strip().lower() in ["", "latest"]:
-        dorothea_db = _load_latest_dorothea(
+    organism_name = _normalize_organism(organism)
+    version_label = _normalize_version(version)
+    hcop_identity = (
+        None
+        if organism_name == "human"
+        or (version_label == "latest" and flavor == "legacy")
+        else _cache_source_identity(hcop_version)
+    )
+    snapshot = _cached_graph(
+        {
+            "resource": "dorothea",
+            "organism": organism_name,
+            "version": version_label,
+            "flavor": flavor,
+            "hcop": hcop_identity,
+        },
+        lambda: _build_canonical_dorothea(
             organism=organism,
-            levels=levels,
-            hcop_version=hcop_version,
-            flavor=flavor,
-            compatibility=compatibility,
-        )
-    else:
-        dorothea_db = load_interactions_version(
-            "dorothea",
             version=version,
-            organism=organism,
-            levels=levels,
-            flavor=flavor,
+            version_label=version_label,
             hcop_version=hcop_version,
-            compatibility=compatibility,
-        )
-
-    if "confidence" in dorothea_db:
-        dorothea_db = cast(
-            pd.DataFrame,
-            dorothea_db.loc[dorothea_db["confidence"].isin(levels)],
-        )
-    if "weight" in dorothea_db:
-        dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
-    dorothea_db["sign"] = _normalize_signed_weights(dorothea_db["sign"].to_numpy())
-
-    grn = InfluenceGraph.from_dataframe(dorothea_db)
+            flavor=flavor,
+        ),
+    )
+    grn = _filter_dorothea_graph(
+        snapshot,
+        levels=levels,
+        compatibility=compatibility,
+    )
 
     if identifiers is None:
         return grn
@@ -249,6 +260,7 @@ def _load_latest_dorothea(
     hcop_version: HcopVersion,
     flavor: DorotheaFlavor,
     compatibility: bool = False,
+    _downloads: Optional[List[Path]] = None,
 ) -> pd.DataFrame:
 
     if flavor == "legacy":
@@ -256,6 +268,7 @@ def _load_latest_dorothea(
             organism=organism,
             levels=levels,
             compatibility=compatibility,
+            _downloads=_downloads,
         )
 
     return _load_latest_modern_dorothea(
@@ -263,6 +276,7 @@ def _load_latest_dorothea(
         levels=levels,
         hcop_version=hcop_version,
         compatibility=compatibility,
+        _downloads=_downloads,
     )
 
 
@@ -271,6 +285,7 @@ def _load_latest_modern_dorothea(
     levels: List[str],
     hcop_version: HcopVersion,
     compatibility: bool = False,
+    _downloads: Optional[List[Path]] = None,
 ) -> pd.DataFrame:
 
     organism_name = _normalize_organism(organism)
@@ -279,7 +294,7 @@ def _load_latest_modern_dorothea(
         + f"datasets=dorothea&dorothea_levels={','.join(levels)}"
         + "&fields=dorothea_level&license=academic"
     )
-    dorothea_db = _read_omnipath_query(url)
+    dorothea_db = _read_omnipath_query(url, _downloads=_downloads)
     dorothea_db = cast(
         pd.DataFrame,
         dorothea_db[
@@ -351,6 +366,7 @@ def _load_latest_legacy_dorothea(
     organism: Union[str, int],
     levels: List[str],
     compatibility: bool = False,
+    _downloads: Optional[List[Path]] = None,
 ) -> pd.DataFrame:
 
     organism_name = _normalize_organism(organism)
@@ -364,7 +380,7 @@ def _load_latest_legacy_dorothea(
         "&genesymbols=1"
         f"&organisms={_tax_id(organism_name)}"
     )
-    dorothea_db = _read_omnipath_query(url)
+    dorothea_db = _read_omnipath_query(url, _downloads=_downloads)
     dorothea_db = _filter_dataset_evidences(dorothea_db, dataset="dorothea")
     dorothea_db = _format_dorothea(
         dorothea_db,
@@ -374,6 +390,81 @@ def _load_latest_legacy_dorothea(
         levels=levels,
     )
     return _deduplicate_dorothea(dorothea_db, compatibility=compatibility)
+
+
+def _build_canonical_dorothea(
+    *,
+    organism: Union[str, int],
+    version: OmnipathVersion,
+    version_label: str,
+    hcop_version: HcopVersion,
+    flavor: DorotheaFlavor,
+) -> _GraphBuild:
+
+    downloads: List[Path] = []
+    if version_label == "latest":
+        dorothea_db = _load_latest_dorothea(
+            organism=organism,
+            levels=list(_DOROTHEA_LEVELS),
+            hcop_version=hcop_version,
+            flavor=flavor,
+            compatibility=False,
+            _downloads=downloads,
+        )
+    else:
+        dorothea_db = load_interactions_version(
+            "dorothea",
+            version=version,
+            organism=organism,
+            levels=None,
+            flavor=flavor,
+            hcop_version=hcop_version,
+            compatibility=False,
+            _downloads=downloads,
+        )
+
+    if "weight" in dorothea_db:
+        dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
+    dorothea_db["sign"] = _normalize_signed_weights(dorothea_db["sign"].to_numpy())
+    return _snapshot_from_dataframe(dorothea_db, downloads=downloads)
+
+
+def _filter_dorothea_graph(
+    snapshot: _GraphSnapshot,
+    *,
+    levels: List[str],
+    compatibility: bool,
+) -> InfluenceGraph:
+
+    selected_levels = set(levels)
+    selected = []
+    for edge in snapshot.edge_order:
+        data = _edge_data(snapshot.graph, *edge)
+        confidence = data.get("confidence")
+        if "confidence" not in data or confidence in selected_levels:
+            selected.append((edge, confidence))
+
+    if compatibility:
+        selected.sort(
+            key=lambda item: (
+                item[0][0],
+                item[0][1],
+                item[1] or "",
+                item[0][2],
+            )
+        )
+        deduplicated = []
+        seen = set()
+        for edge, _confidence in selected:
+            pair = edge[:2]
+            if pair not in seen:
+                deduplicated.append(edge)
+                seen.add(pair)
+        selected_edges = deduplicated
+    else:
+        selected_edges = [edge for edge, _confidence in selected]
+
+    return _ordered_subgraph(snapshot, selected_edges)
 
 
 def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:

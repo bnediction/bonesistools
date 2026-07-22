@@ -7,6 +7,7 @@ from collections.abc import (
     Iterator,
     Mapping,
 )
+from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
@@ -26,6 +27,43 @@ from ._typing import (
     PartialBooleanLike,
     is_hypercube_like,
 )
+
+
+@dataclass(frozen=True)
+class HypercubeChanges:
+    """
+    Component changes between two Boolean hypercubes.
+
+    Results can be unpacked as flips, stabilizations and destabilizations, in
+    that order.
+
+    Parameters
+    ----------
+    flips: frozenset[str]
+        Components changing between fixed values 0 and 1.
+    stabilizations: frozenset[str]
+        Components changing from a free value to a fixed value.
+    destabilizations: frozenset[str]
+        Components changing from a fixed value to a free value.
+    """
+
+    flips: FrozenSet[str]
+    stabilizations: FrozenSet[str]
+    destabilizations: FrozenSet[str]
+
+    def __iter__(self) -> Iterator[FrozenSet[str]]:
+        """
+        Iterate over flips, stabilizations and destabilizations.
+
+        Returns
+        -------
+        Iterator[frozenset[str]]
+            Change groups in their documented order.
+        """
+
+        yield self.flips
+        yield self.stabilizations
+        yield self.destabilizations
 
 
 class Hypercube(MutableMapping[str, PartialBoolean]):
@@ -657,11 +695,18 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
 
         return other <= self
 
-    def identical(self, other: object) -> Set[str]:
+    def identical(
+        self,
+        other: object,
+        *,
+        components: Optional[Iterable[str]] = None,
+    ) -> Set[str]:
         """
         Return components sharing identical values.
 
-        Missing components are interpreted as free values.
+        Missing components are interpreted as free values. An explicit
+        component domain can restrict or expand the components represented by
+        the two hypercubes.
 
         Examples
         --------
@@ -669,11 +714,16 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         >>> hc2 = Hypercube({"A": 0, "C": "*"})
         >>> sorted(hc1.identical(hc2))
         ['A', 'B', 'C']
+        >>> sorted(hc1.identical(hc2, components={"A", "B", "C", "D"}))
+        ['A', 'B', 'C', 'D']
 
         Parameters
         ----------
         other: object
             Hypercube-like object to compare.
+        components: Iterable[str], optional
+            Components to compare. If `None`, use the union of components
+            explicitly represented by both hypercubes.
 
         Returns
         -------
@@ -689,20 +739,32 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         """
 
         other = self._coerce_hypercube(other)
+        selected_components = (
+            self.components | other.components
+            if components is None
+            else set(components)
+        )
 
         identical = set()
 
-        for component in self.components | other.components:
+        for component in selected_components:
             if self._get_value(component) == other._get_value(component):
                 identical.add(component)
 
         return identical
 
-    def different(self, other: object) -> Set[str]:
+    def different(
+        self,
+        other: object,
+        *,
+        components: Optional[Iterable[str]] = None,
+    ) -> Set[str]:
         """
         Return components with different values.
 
-        Missing components are interpreted as free values.
+        Missing components are interpreted as free values. An explicit
+        component domain can restrict or expand the components represented by
+        the two hypercubes.
 
         Examples
         --------
@@ -710,11 +772,16 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         >>> hc2 = Hypercube({"A": 0, "B": "*", "C": 1})
         >>> sorted(hc1.different(hc2))
         ['B', 'C']
+        >>> sorted(hc1.different(hc2, components={"A", "B", "D"}))
+        ['B']
 
         Parameters
         ----------
         other: object
             Hypercube-like object to compare.
+        components: Iterable[str], optional
+            Components to compare. If `None`, use the union of components
+            explicitly represented by both hypercubes.
 
         Returns
         -------
@@ -730,14 +797,96 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         """
 
         other = self._coerce_hypercube(other)
+        selected_components = (
+            self.components | other.components
+            if components is None
+            else set(components)
+        )
 
         different = set()
 
-        for component in self.components | other.components:
+        for component in selected_components:
             if self._get_value(component) != other._get_value(component):
                 different.add(component)
 
         return different
+
+    def changes(
+        self,
+        other: HypercubeLike,
+        *,
+        components: Optional[Iterable[str]] = None,
+    ) -> HypercubeChanges:
+        """
+        Classify component changes from this hypercube to another one.
+
+        Missing components are interpreted as free values. A change between
+        fixed values is a flip, a change from free to fixed is a
+        stabilization, and a change from fixed to free is a destabilization.
+
+        Examples
+        --------
+        >>> source = Hypercube({"A": 0, "B": "*", "C": 1})
+        >>> target = Hypercube({"A": 1, "B": 0, "C": "*"})
+        >>> changes = source.changes(target)
+        >>> changes.flips
+        frozenset({'A'})
+        >>> changes.stabilizations
+        frozenset({'B'})
+        >>> changes.destabilizations
+        frozenset({'C'})
+
+        Parameters
+        ----------
+        other: HypercubeLike
+            Target hypercube.
+        components: Iterable[str], optional
+            Components to compare. If `None`, use the union of components
+            explicitly represented by both hypercubes.
+
+        Returns
+        -------
+        HypercubeChanges
+            Components grouped by their type of change.
+
+        Raises
+        ------
+        TypeError
+            If `other` cannot be interpreted as a hypercube.
+        ValueError
+            If `other` contains unsupported PartialBoolean values.
+        """
+
+        other_hypercube = self._coerce_hypercube(other)
+        selected_components = (
+            self.components | other_hypercube.components
+            if components is None
+            else set(components)
+        )
+
+        flips: Set[str] = set()
+        stabilizations: Set[str] = set()
+        destabilizations: Set[str] = set()
+
+        for component in selected_components:
+            source_value = self._get_value(component)
+            target_value = other_hypercube._get_value(component)
+
+            if source_value == target_value:
+                continue
+
+            if source_value.is_fixed and target_value.is_fixed:
+                flips.add(component)
+            elif source_value.is_free:
+                stabilizations.add(component)
+            else:
+                destabilizations.add(component)
+
+        return HypercubeChanges(
+            flips=frozenset(flips),
+            stabilizations=frozenset(stabilizations),
+            destabilizations=frozenset(destabilizations),
+        )
 
     def is_smaller_than(self, other: object) -> bool:
         """

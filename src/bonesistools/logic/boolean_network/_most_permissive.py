@@ -522,7 +522,7 @@ def _validate_initial_hypercube(
     if len(configurations._hypercubes) != 1:
         raise ValueError("invalid initial configuration representation")
 
-    return configurations._as_hypercubes()[0]
+    return configurations.hypercubes()[0]
 
 
 def _trap_spaces_asp_program(

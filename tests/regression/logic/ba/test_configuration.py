@@ -33,7 +33,7 @@ def test_configuration_set_iterates_internal_configuration_bitsets():
     assert set(configurations._iter_configuration_bits()) == {0b001, 0b011}
 
 
-def test_configuration_set_adds_subspaces_without_public_hypercube_semantics():
+def test_configuration_set_adds_subspaces():
 
     configurations = bt.logic.ba.ConfigurationSet(["A", "B"])
     configurations.add({"A": "*", "B": 0})
@@ -43,6 +43,22 @@ def test_configuration_set_adds_subspaces_without_public_hypercube_semantics():
     assert {"A": 1, "B": 0} in configurations
     assert {"A": 0, "B": 1} not in configurations
     assert {"B": 0} in configurations
+
+
+def test_configuration_set_returns_independent_hypercubes():
+
+    configurations = bt.logic.ba.ConfigurationSet(
+        ["A", "B"],
+        [{"B": 0}],
+    )
+
+    hypercubes = configurations.hypercubes()
+
+    assert hypercubes == (bt.logic.ba.Hypercube({"B": 0}),)
+
+    hypercubes[0]["B"] = 1
+
+    assert configurations.hypercubes() == (bt.logic.ba.Hypercube({"B": 0}),)
 
 
 def test_configuration_set_replaces_redundant_specific_subspaces():

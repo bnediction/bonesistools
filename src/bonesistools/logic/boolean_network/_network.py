@@ -361,6 +361,11 @@ class BooleanNetwork(Dict[str, Expression]):
 
         return not eq
 
+    def __reduce__(self) -> Tuple[Any, Tuple[Dict[str, str], BooleanAlgebra, bool]]:
+        """Return the constructor arguments used to serialize this network."""
+
+        return type(self), (self.rules, self.ba, False)
+
     def copy(self) -> "BooleanNetwork":
         """
         Return a shallow BooleanNetwork copy.
@@ -1309,20 +1314,13 @@ class BooleanNetwork(Dict[str, Expression]):
         >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
         [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
 
-        A partial initial configuration is interpreted as the set of all
-        compatible complete configurations:
+        Under most-permissive semantics, each returned attractor contains
+        exactly one hypercube corresponding to a reachable minimal trap space:
 
-        >>> bn = BooleanNetwork({"A": "B", "B": "A"})
-        >>> attractors = bn.attractors({"A": 0})
-        >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
-        [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
-
-        If no initial configuration is provided, all configurations are
-        considered initial:
-
-        >>> attractors = bn.attractors()
-        >>> sorted((attractor.enumerate() for attractor in attractors), key=repr)
-        [({'A': 0, 'B': 0},), ({'A': 1, 'B': 1},)]
+        >>> bn = BooleanNetwork({"A": "~A", "B": 1})
+        >>> (attractor,) = bn.attractors(update="most-permissive")
+        >>> attractor.hypercubes()
+        (Hypercube(B=1),)
 
         Parameters
         ----------
@@ -1347,7 +1345,9 @@ class BooleanNetwork(Dict[str, Expression]):
         -------
         tuple of ConfigurationSet
             Reachable attractors. Each `ConfigurationSet` is an exact set of
-            complete Boolean configurations.
+            complete Boolean configurations. Under most-permissive semantics,
+            each returned set has exactly one `Hypercube`, corresponding to a
+            reachable minimal trap space.
 
         Raises
         ------

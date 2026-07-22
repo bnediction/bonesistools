@@ -18,7 +18,7 @@ from ._algebra import (
 )
 from ._boolean import PartialBoolean
 from ._configuration import ConfigurationSet
-from ._hypercube import Hypercube, HypercubeCollection
+from ._hypercube import Hypercube, HypercubeChanges, HypercubeCollection
 from ._kleene import (
     KleeneValue,
     diff,
@@ -39,6 +39,7 @@ __all__ = [
     "KleeneValue",
     "ConfigurationSet",
     "Hypercube",
+    "HypercubeChanges",
     "HypercubeCollection",
     "ROBDD",
     "diff",

@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List
 
 from anndata import AnnData
@@ -22,7 +22,7 @@ _PBMC3K_URL = (
     "pbmc3k_filtered_gene_bc_matrices.tar.gz"
 )
 _PBMC3K_ARCHIVE = "pbmc3k_filtered_gene_bc_matrices.tar.gz"
-_PBMC3K_10X_DIR = Path("filtered_gene_bc_matrices") / "hg19"
+_PBMC3K_10X_DIR = PurePosixPath("filtered_gene_bc_matrices") / "hg19"
 
 
 def _load_pbmc3k(

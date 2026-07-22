@@ -94,6 +94,35 @@ def test_to_graphviz_can_force_frequency_edge_labels_on_exact_graph(fake_graphvi
     ]
 
 
+def test_to_graphviz_externalizes_labels_for_orthogonal_edges(fake_graphviz):
+    graph = _single_edge_graph()
+
+    rendered = cast(
+        Any,
+        graph.to_graphviz(
+            edge_label="frequency",
+            graph_attr={"splines": "ortho"},
+        ),
+    )
+    edge_attributes = rendered.edges[0][2]
+
+    assert edge_attributes["xlabel"] == "0.75"
+    assert "label" not in edge_attributes
+
+
+def test_to_pydot_externalizes_labels_for_orthogonal_edges():
+    graph = _single_edge_graph()
+
+    rendered = graph.to_pydot(
+        edge_label="frequency",
+        graph_attr={"splines": "ortho"},
+    )
+    edge = rendered.get_edges()[0]
+
+    assert cast(Any, edge).get_attributes()["xlabel"] == "0.75"
+    assert cast(Any, edge).get_label() is None
+
+
 def test_to_graphviz_can_label_edges_from_custom_attribute(fake_graphviz):
     graph = _single_edge_graph()
     cast(Any, graph["A"]["B"])[0]["support"] = "manual"

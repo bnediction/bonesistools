@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 
+import os
 from typing import Any, cast
 
 import pandas as pd
 import pytest
 
 from bonesistools.logic.influence_graph import InfluenceGraph
+from bonesistools.resources import cache as resource_cache
 from bonesistools.resources.omnipath import _archive, _collectri, _dorothea
+
+
+@pytest.fixture(autouse=True)
+def isolated_omnipath_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        resource_cache,
+        "_user_cache_path",
+        lambda: tmp_path / "cache",
+    )
 
 
 def test_resolve_interactions_archive_supports_latest_and_dates(monkeypatch):
@@ -592,6 +603,7 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
         flavor="modern",
         hcop_version="latest",
         compatibility=False,
+        _downloads=None,
     ):
         calls.append(
             (resource, version, organism, levels, flavor, hcop_version, compatibility)
@@ -616,7 +628,7 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
     )
 
     assert calls == [
-        ("dorothea", "2024-01-01", 9606, ["B"], "modern", "bundled", False)
+        ("dorothea", "2024-01-01", 9606, None, "modern", "bundled", False)
     ]
     assert isinstance(grn, InfluenceGraph)
     assert list(grn.edges(data=True)) == [
@@ -665,6 +677,7 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
         flavor="modern",
         hcop_version="latest",
         compatibility=False,
+        _downloads=None,
     ):
         calls.append(
             (resource, version, organism, levels, flavor, hcop_version, compatibility)
@@ -691,7 +704,7 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
             "dorothea",
             "2024-01-01",
             "mouse",
-            ["A", "B", "C"],
+            None,
             "legacy",
             "latest",
             False,
@@ -700,16 +713,7 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
             "dorothea",
             "2024-01-01",
             "mouse",
-            ["A", "B", "C"],
-            "legacy",
-            "latest",
-            False,
-        ),
-        (
-            "dorothea",
-            "2024-01-01",
-            "mouse",
-            ["A", "B", "C"],
+            None,
             "modern",
             "latest",
             False,
@@ -727,7 +731,7 @@ def test_collectri_uses_omnipath_archive_version_and_identifiers(monkeypatch):
 
     calls = []
 
-    def load_version(resource, version, organism):
+    def load_version(resource, version, organism, _downloads=None):
         calls.append((resource, version, organism))
         return pd.DataFrame(
             {
@@ -763,6 +767,172 @@ def test_collectri_uses_omnipath_archive_version_and_identifiers(monkeypatch):
             },
         )
     ]
+
+
+def test_dorothea_reuses_one_canonical_graph_across_level_filters(monkeypatch):
+    calls = []
+
+    def load_version(
+        resource,
+        version,
+        organism,
+        levels=None,
+        flavor="modern",
+        hcop_version="latest",
+        compatibility=False,
+        _downloads=None,
+    ):
+        calls.append((resource, levels, compatibility))
+        return pd.DataFrame(
+            {
+                "source": ["TfB", "TfA"],
+                "target": ["GeneB", "GeneA"],
+                "sign": [-1, 1],
+                "confidence": ["B", "A"],
+            }
+        )
+
+    monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
+
+    level_a = _dorothea.dorothea(
+        organism="human",
+        levels=["A"],
+        version="2024-01-01",
+    )
+    level_a["TfA"]["GeneA"][0]["confidence"] = "changed"
+    level_b = _dorothea.dorothea(
+        organism="human",
+        levels=["B"],
+        version="2024-01-01",
+    )
+    restored_a = _dorothea.dorothea(
+        organism="human",
+        levels=["A"],
+        version="2024-01-01",
+    )
+
+    assert calls == [("dorothea", None, False)]
+    assert list(level_b.edges(data="confidence")) == [("TfB", "GeneB", "B")]
+    assert list(restored_a.edges(data="confidence")) == [("TfA", "GeneA", "A")]
+    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
+
+
+def test_dorothea_compatibility_does_not_create_another_cache(monkeypatch):
+    calls = []
+
+    def load_version(*args, **kwargs):
+        calls.append((args, kwargs))
+        return pd.DataFrame(
+            {
+                "source": ["TfA", "TfA"],
+                "target": ["GeneA", "GeneA"],
+                "sign": [1, -1],
+                "confidence": ["A", "A"],
+            }
+        )
+
+    monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
+
+    complete = _dorothea.dorothea(
+        organism="human",
+        levels=["A"],
+        compatibility=False,
+        version="2024-01-01",
+    )
+    compatible = _dorothea.dorothea(
+        organism="human",
+        levels=["A"],
+        compatibility=True,
+        version="2024-01-01",
+    )
+
+    assert list(complete.edges(data="sign")) == [
+        ("TfA", "GeneA", 1),
+        ("TfA", "GeneA", -1),
+    ]
+    assert list(compatible.edges(data="sign")) == [("TfA", "GeneA", -1)]
+    assert len(calls) == 1
+    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
+
+
+def test_collectri_removes_references_after_reusing_canonical_graph(monkeypatch):
+    calls = []
+
+    def load_version(*args, **kwargs):
+        calls.append((args, kwargs))
+        return pd.DataFrame(
+            {
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+                "PMID": ["123"],
+                "references": ["CollecTRI:123"],
+            }
+        )
+
+    monkeypatch.setattr(_collectri, "load_interactions_version", load_version)
+
+    without_references = _collectri.collectri(
+        organism="human",
+        remove_pmid=True,
+        version="2024-01-01",
+    )
+    complete = _collectri.collectri(
+        organism="human",
+        remove_pmid=False,
+        version="2024-01-01",
+    )
+
+    assert complete["TfA"]["GeneA"][0]["PMID"] == "123"
+    assert "PMID" not in without_references["TfA"]["GeneA"][0]
+    assert "references" not in without_references["TfA"]["GeneA"][0]
+    assert complete["TfA"]["GeneA"][0]["references"] == "CollecTRI:123"
+    assert len(calls) == 1
+    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
+
+
+def test_serialized_graph_replaces_download_and_does_not_expire(monkeypatch):
+    calls = []
+
+    def load_version(*args, **kwargs):
+        calls.append((args, kwargs))
+        archive = resource_cache.path("omnipath") / "archives" / "source.tsv"
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive.write_text("source\ttarget\nTfA\tGeneA\n", encoding="utf-8")
+        archive.with_name(f"{archive.name}.json").write_text(
+            "{}",
+            encoding="utf-8",
+        )
+        kwargs["_downloads"].append(archive)
+        return pd.DataFrame(
+            {
+                "source": ["TfA"],
+                "target": ["GeneA"],
+                "sign": [1],
+            }
+        )
+
+    monkeypatch.setattr(_collectri, "load_interactions_version", load_version)
+
+    first = _collectri.collectri(
+        organism="human",
+        version="2024-01-01",
+    )
+    graph_file = next(resource_cache.path("omnipath").glob("graphs/*.pickle"))
+    os.utime(str(graph_file), (0, 0))
+    second = _collectri.collectri(
+        organism="human",
+        version="2024-01-01",
+    )
+
+    assert list(first.edges(data="sign")) == [("TfA", "GeneA", 1)]
+    assert list(second.edges(data="sign")) == [("TfA", "GeneA", 1)]
+    assert len(calls) == 1
+    assert not (resource_cache.path("omnipath") / "archives" / "source.tsv").exists()
+    assert not (
+        resource_cache.path("omnipath") / "archives" / "source.tsv.json"
+    ).exists()
+    assert list(graph_file.parent.glob("*.tmp")) == []
 
 
 def test_dorothea_uses_gene_identifiers(monkeypatch):

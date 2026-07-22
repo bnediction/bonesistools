@@ -277,6 +277,17 @@ def _write_response(cache_file: Path, response: _DownloadResponse) -> None:
         _unlink(temporary_file)
 
 
+def _discard_cached_download(cache_file: Path) -> None:
+    """Remove a downloaded response after its derived cache is committed."""
+
+    metadata_file = cache_file.with_name(f"{cache_file.name}.json")
+    for file in (cache_file, metadata_file):
+        try:
+            _unlink(file)
+        except OSError:
+            pass
+
+
 def _content_length(response: _DownloadResponse) -> Optional[int]:
 
     value = response.headers.get("Content-Length")

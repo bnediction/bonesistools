@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import pickle
 from typing import Any, cast
 
 import pytest
@@ -227,6 +228,21 @@ def test_boolean_network_copy_preserves_type_algebra_and_unchecked_rules():
     assert copied.ba is bn.ba
     assert copied["A"] is bn["A"]
     assert copied.undefined_symbols == {"B"}
+
+
+def test_boolean_network_pickle_roundtrip_preserves_unchecked_rules():
+    bn = bt.logic.bn.BooleanNetwork({"A": "B"}, check=False)
+
+    restored = pickle.loads(pickle.dumps(bn))
+
+    assert isinstance(restored, bt.logic.bn.BooleanNetwork)
+    assert restored.rules == bn.rules
+    assert restored.undefined_symbols == {"B"}
+    assert restored is not bn
+
+    restored["B"] = 1
+    assert restored.rules == {"A": "B", "B": "1"}
+    assert bn.rules == {"A": "B"}
 
 
 def test_is_boolean_network_like_validates_mapping_rules():

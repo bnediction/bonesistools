@@ -38,6 +38,7 @@ from ..._validation import (
 )
 from ..._warnings import _warn_deprecated
 from ._graphviz import (
+    _externalize_orthogonal_edge_labels,
     _graphviz_attributes,
     _networkx_to_graphviz,
     _set_pydot_defaults,
@@ -2017,6 +2018,11 @@ class InfluenceGraph(_MultiDiGraphBase):
                     )
                 )
 
+        _externalize_orthogonal_edge_labels(
+            graph,
+            program=program,
+            graph_attr=kwargs,
+        )
         dot = _networkx_to_pydot(graph)
 
         dot.set_prog(program)
@@ -3264,7 +3270,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             counts. `"frequency"` displays the occurrence frequency
             `count / total`, or the average edge frequency after family
             collapse. Any other string is interpreted as an edge attribute
-            name.
+            name. With `program="dot"` and `splines="ortho"`, labels are
+            placed externally near their edges.
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
@@ -3410,7 +3417,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             counts. `"frequency"` displays the occurrence frequency
             `count / total`, or the average edge frequency after family
             collapse. Any other string is interpreted as an edge attribute
-            name.
+            name. With `program="dot"` and `splines="ortho"`, labels are
+            placed externally near their edges.
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.
@@ -3456,12 +3464,18 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             node_attr=node_attr,
             edge_attr=edge_attr,
         )
+        _externalize_orthogonal_edge_labels(
+            graph,
+            program=program,
+            graph_attr=graph_attr,
+        )
         dot = _networkx_to_pydot(graph)
 
         dot.set_prog(program)
 
         _set_pydot_defaults(
             dot,
+            program=program,
             graph_attr=graph_attr,
             node_attr=node_attr,
             edge_attr=edge_attr,
@@ -3567,7 +3581,8 @@ class AggregatedInfluenceGraph(InfluenceGraph):
             counts. `"frequency"` displays the occurrence frequency
             `count / total`, or the average edge frequency after family
             collapse. Any other string is interpreted as an edge attribute
-            name.
+            name. With `program="dot"` and `splines="ortho"`, labels are
+            placed externally near their edges.
         edge_attr: Mapping[str, Any], optional
             Global edge attributes applied unless overridden on individual
             edges.

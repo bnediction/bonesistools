@@ -75,12 +75,12 @@ def test_boolean_network_trap_spaces_match_unrestricted_mp_attractors():
         }
     )
 
-    trap_space_attractors = tuple(
-        bt.logic.ba.ConfigurationSet(tuple(bn), [trap_space])
-        for trap_space in bn.trap_spaces()
-    )
+    trap_spaces = bn.trap_spaces()
+    attractors = bn.attractors(update="most-permissive")
 
-    assert trap_space_attractors == bn.attractors(update="most-permissive")
+    assert tuple(attractor.hypercubes() for attractor in attractors) == tuple(
+        (trap_space,) for trap_space in trap_spaces
+    )
 
 
 def test_boolean_network_trap_spaces_rejects_invalid_kind():
@@ -394,7 +394,7 @@ def test_boolean_network_attractors_evaluates_non_unate_rules_exactly():
     attractors = bn.attractors(update="most-permissive")
 
     assert len(attractors) == 1
-    assert attractors[0]._as_hypercubes() == (
+    assert attractors[0].hypercubes() == (
         bt.logic.ba.Hypercube({"always": 1, "never": 0}),
     )
 
@@ -409,7 +409,7 @@ def test_boolean_network_attractors_preserves_incomparable_minima():
 
     attractors = bn.attractors(update="most-permissive")
 
-    assert tuple(attractor._as_hypercubes() for attractor in attractors) == (
+    assert tuple(attractor.hypercubes() for attractor in attractors) == (
         (bt.logic.ba.Hypercube({"A": 0}),),
         (bt.logic.ba.Hypercube({"A": 1, "B": 1}),),
     )

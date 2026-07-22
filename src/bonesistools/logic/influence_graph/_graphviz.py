@@ -62,6 +62,8 @@ def _new_graphviz_digraph(
     graph_attributes = _graph_attributes(graph_attr, kwargs)
     node_attributes = _graphviz_attributes(node_attr)
     edge_attributes = _graphviz_attributes(edge_attr)
+    if _uses_orthogonal_dot_edges(program, graph_attributes):
+        edge_attributes = _externalized_edge_attributes(edge_attributes)
 
     if graph_attributes:
         graph.attr(**graph_attributes)
@@ -75,17 +77,21 @@ def _new_graphviz_digraph(
 
 def _set_pydot_defaults(
     dot: Any,
+    program: str = "dot",
     graph_attr: Optional[Mapping[str, Any]] = None,
     node_attr: Optional[Mapping[str, Any]] = None,
     edge_attr: Optional[Mapping[str, Any]] = None,
     **kwargs: Any,
 ) -> None:
 
-    for key, value in _graph_attributes(graph_attr, kwargs).items():
+    graph_attributes = _graph_attributes(graph_attr, kwargs)
+    for key, value in graph_attributes.items():
         dot.set(key, value)
 
     node_attributes = _graphviz_attributes(node_attr)
     edge_attributes = _graphviz_attributes(edge_attr)
+    if _uses_orthogonal_dot_edges(program, graph_attributes):
+        edge_attributes = _externalized_edge_attributes(edge_attributes)
 
     if node_attributes:
         dot.set_node_defaults(**node_attributes)
@@ -101,6 +107,13 @@ def _networkx_to_graphviz(
     edge_attr: Optional[Mapping[str, Any]] = None,
     **kwargs: Any,
 ) -> "Digraph":
+
+    _externalize_orthogonal_edge_labels(
+        networkx_graph,
+        program=program,
+        graph_attr=graph_attr,
+        **kwargs,
+    )
 
     graphviz_graph = _new_graphviz_digraph(
         program=program,
@@ -121,3 +134,47 @@ def _networkx_to_graphviz(
         )
 
     return graphviz_graph
+
+
+def _externalize_orthogonal_edge_labels(
+    networkx_graph: Any,
+    *,
+    program: str,
+    graph_attr: Optional[Mapping[str, Any]] = None,
+    **kwargs: Any,
+) -> None:
+    """Use external labels when dot routes edges orthogonally."""
+
+    graph_attributes = _graph_attributes(graph_attr, kwargs)
+    if not _uses_orthogonal_dot_edges(program, graph_attributes):
+        return
+
+    for _source, _target, data in networkx_graph.edges(data=True):
+        if "label" not in data:
+            continue
+
+        label = data.pop("label")
+        if data.get("xlabel") is None:
+            data["xlabel"] = label
+
+
+def _uses_orthogonal_dot_edges(
+    program: str,
+    graph_attributes: Mapping[str, Any],
+) -> bool:
+
+    return (
+        str(program).strip().lower() == "dot"
+        and str(graph_attributes.get("splines", "")).strip().lower() == "ortho"
+    )
+
+
+def _externalized_edge_attributes(
+    attributes: Mapping[str, str],
+) -> Mapping[str, str]:
+
+    externalized = dict(attributes)
+    label = externalized.pop("label", None)
+    if label is not None:
+        externalized.setdefault("xlabel", label)
+    return externalized

@@ -63,6 +63,12 @@ def _as_csr(matrix: Any) -> csr_matrix:
     return cast(csr_matrix, matrix)
 
 
+def test_pbmc3k_archive_members_use_portable_tar_paths():
+    assert str(pbmc3k_module._PBMC3K_10X_DIR / "matrix.mtx") == (
+        "filtered_gene_bc_matrices/hg19/matrix.mtx"
+    )
+
+
 def test_io_load_pbmc3k_returns_raw_counts(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache-home"))
     monkeypatch.setitem(

@@ -151,6 +151,8 @@ jobs:
   compatibility:
     name: compatibility (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
+    env:
+      MPLBACKEND: Agg
 
     strategy:
       fail-fast: false

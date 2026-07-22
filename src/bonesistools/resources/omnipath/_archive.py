@@ -108,6 +108,7 @@ def load_interactions_version(
     flavor: DorotheaFlavor = "modern",
     hcop_version: HcopVersion = "latest",
     compatibility: bool = False,
+    _downloads: Optional[List[Path]] = None,
 ) -> pd.DataFrame:
     """
     Load a signed regulatory resource from an OmniPath interactions version.
@@ -122,7 +123,11 @@ def load_interactions_version(
     target_organism = _normalize_organism(organism)
 
     url, version_label = resolve_interactions_archive(version)
-    interactions = _read_interactions_archive(url)
+    interactions = (
+        _read_interactions_archive(url)
+        if _downloads is None
+        else _read_interactions_archive(url, _downloads=_downloads)
+    )
 
     if resource not in interactions:
         raise ValueError(f"resource column not found in OmniPath archive: {resource}")
@@ -569,7 +574,11 @@ def _list_interactions_archives() -> List[Tuple[str, str, str]]:
     return sorted(set(archives))
 
 
-def _read_interactions_archive(url: str) -> pd.DataFrame:
+def _read_interactions_archive(
+    url: str,
+    *,
+    _downloads: Optional[List[Path]] = None,
+) -> pd.DataFrame:
 
     columns = {
         "source",
@@ -602,6 +611,8 @@ def _read_interactions_archive(url: str) -> pd.DataFrame:
         category="archives",
         max_age=max_age,
     )
+    if _downloads is not None:
+        _downloads.append(archive)
 
     return pd.read_csv(
         archive,
@@ -612,7 +623,11 @@ def _read_interactions_archive(url: str) -> pd.DataFrame:
     )
 
 
-def _read_omnipath_query(url: str) -> pd.DataFrame:
+def _read_omnipath_query(
+    url: str,
+    *,
+    _downloads: Optional[List[Path]] = None,
+) -> pd.DataFrame:
 
     response = _cached_download(
         url,
@@ -621,6 +636,8 @@ def _read_omnipath_query(url: str) -> pd.DataFrame:
         max_age=_LATEST_CACHE_MAX_AGE,
         suffix=".tsv",
     )
+    if _downloads is not None:
+        _downloads.append(response)
     return pd.read_csv(response, sep="\t", low_memory=False)
 
 

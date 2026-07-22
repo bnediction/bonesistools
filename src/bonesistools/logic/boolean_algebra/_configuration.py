@@ -25,9 +25,9 @@ class ConfigurationSet:
     Exact finite set of Boolean configurations.
 
     A ConfigurationSet represents a set of complete Boolean configurations over
-    a fixed ordered list of components. The internal representation is compact
-    and intentionally hidden from the public API: users interact with concrete
-    configurations through membership, iteration, counting and sampling.
+    a fixed ordered list of components. Users can interact with complete
+    configurations through membership, iteration, counting and sampling, or
+    recover an exact decomposition into Boolean subspaces with `hypercubes()`.
 
     The stored representation is exact and non-redundant: adding a more general
     subspace removes more specific stored subspaces that it covers. The
@@ -195,6 +195,33 @@ class ConfigurationSet:
         copied._hypercubes = list(self._hypercubes)
 
         return copied
+
+    def hypercubes(self) -> Tuple[Hypercube, ...]:
+        """
+        Return an exact, pairwise-disjoint hypercube decomposition.
+
+        The returned hypercubes collectively represent exactly the same
+        complete configurations as this set. Their order is unspecified, and
+        the decomposition is not guaranteed to use the globally minimal number
+        of hypercubes.
+
+        Examples
+        --------
+        >>> states = ConfigurationSet(["A", "B"], [{"B": 0}])
+        >>> states.hypercubes()
+        (Hypercube(B=0),)
+
+        Returns
+        -------
+        tuple of Hypercube
+            Independent hypercubes whose disjoint union is this configuration
+            set.
+        """
+
+        return tuple(
+            _decode_hypercube(hypercube, self._components)
+            for hypercube in self._hypercubes
+        )
 
     def add(
         self,
@@ -484,13 +511,6 @@ class ConfigurationSet:
                 self._coerce_hypercube(_decode_hypercube(hypercube, other._components))
             )
             for hypercube in other._hypercubes
-        )
-
-    def _as_hypercubes(self) -> Tuple[Hypercube, ...]:
-
-        return tuple(
-            _decode_hypercube(hypercube, self._components)
-            for hypercube in self._hypercubes
         )
 
     def _iter_encoded_hypercubes(self) -> Iterator[_EncodedHypercube]:
