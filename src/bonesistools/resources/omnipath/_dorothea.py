@@ -35,16 +35,12 @@ from ._archive import (
 from ._graph_cache import (
     _cache_source_identity,
     _cached_graph,
-    _edge_data,
     _GraphBuild,
-    _GraphSnapshot,
-    _ordered_subgraph,
     _snapshot_from_dataframe,
 )
 
 OMNIPATH_INTERACTIONS_URL = "https://omnipathdb.org/interactions/?genesymbols=1&"
 DorotheaWrapper = Literal["op", "get"]
-_DOROTHEA_LEVELS = ("A", "B", "C", "D", "E")
 
 
 @_rename_deprecated_arguments(
@@ -202,6 +198,7 @@ def dorothea(
         or (version_label == "latest" and flavor == "legacy")
         else _cache_source_identity(hcop_version)
     )
+    # Level selection precedes orthology translation and edge deduplication.
     snapshot = _cached_graph(
         {
             "resource": "dorothea",
@@ -209,20 +206,20 @@ def dorothea(
             "version": version_label,
             "flavor": flavor,
             "hcop": hcop_identity,
+            "levels": levels,
+            "compatibility": compatibility,
         },
-        lambda: _build_canonical_dorothea(
+        lambda: _build_dorothea_graph(
             organism=organism,
+            levels=levels,
             version=version,
             version_label=version_label,
             hcop_version=hcop_version,
             flavor=flavor,
+            compatibility=compatibility,
         ),
     )
-    grn = _filter_dorothea_graph(
-        snapshot,
-        levels=levels,
-        compatibility=compatibility,
-    )
+    grn = snapshot.graph
 
     if identifiers is None:
         return grn
@@ -392,23 +389,25 @@ def _load_latest_legacy_dorothea(
     return _deduplicate_dorothea(dorothea_db, compatibility=compatibility)
 
 
-def _build_canonical_dorothea(
+def _build_dorothea_graph(
     *,
     organism: Union[str, int],
+    levels: List[str],
     version: OmnipathVersion,
     version_label: str,
     hcop_version: HcopVersion,
     flavor: DorotheaFlavor,
+    compatibility: bool,
 ) -> _GraphBuild:
 
     downloads: List[Path] = []
     if version_label == "latest":
         dorothea_db = _load_latest_dorothea(
             organism=organism,
-            levels=list(_DOROTHEA_LEVELS),
+            levels=levels,
             hcop_version=hcop_version,
             flavor=flavor,
-            compatibility=False,
+            compatibility=compatibility,
             _downloads=downloads,
         )
     else:
@@ -416,55 +415,26 @@ def _build_canonical_dorothea(
             "dorothea",
             version=version,
             organism=organism,
-            levels=None,
+            levels=levels,
             flavor=flavor,
             hcop_version=hcop_version,
-            compatibility=False,
+            compatibility=compatibility,
             _downloads=downloads,
         )
 
     if "weight" in dorothea_db:
         dorothea_db = dorothea_db.rename(columns={"weight": "sign"})
-    dorothea_db["sign"] = _normalize_signed_weights(dorothea_db["sign"].to_numpy())
-    return _snapshot_from_dataframe(dorothea_db, downloads=downloads)
-
-
-def _filter_dorothea_graph(
-    snapshot: _GraphSnapshot,
-    *,
-    levels: List[str],
-    compatibility: bool,
-) -> InfluenceGraph:
-
-    selected_levels = set(levels)
-    selected = []
-    for edge in snapshot.edge_order:
-        data = _edge_data(snapshot.graph, *edge)
-        confidence = data.get("confidence")
-        if "confidence" not in data or confidence in selected_levels:
-            selected.append((edge, confidence))
-
-    if compatibility:
-        selected.sort(
-            key=lambda item: (
-                item[0][0],
-                item[0][1],
-                item[1] or "",
-                item[0][2],
-            )
+    if "confidence" in dorothea_db:
+        dorothea_db = cast(
+            pd.DataFrame,
+            dorothea_db[dorothea_db["confidence"].isin(levels)],
         )
-        deduplicated = []
-        seen = set()
-        for edge, _confidence in selected:
-            pair = edge[:2]
-            if pair not in seen:
-                deduplicated.append(edge)
-                seen.add(pair)
-        selected_edges = deduplicated
-    else:
-        selected_edges = [edge for edge, _confidence in selected]
-
-    return _ordered_subgraph(snapshot, selected_edges)
+    dorothea_db["sign"] = _normalize_signed_weights(dorothea_db["sign"].to_numpy())
+    dorothea_db = _deduplicate_dorothea(
+        dorothea_db,
+        compatibility=compatibility,
+    )
+    return _snapshot_from_dataframe(dorothea_db, downloads=downloads)
 
 
 def load_dorothea_grn(*args: Any, **kwargs: Any) -> InfluenceGraph:

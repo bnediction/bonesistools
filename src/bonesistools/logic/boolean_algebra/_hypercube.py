@@ -7,7 +7,6 @@ from collections.abc import (
     Iterator,
     Mapping,
 )
-from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
@@ -27,43 +26,6 @@ from ._typing import (
     PartialBooleanLike,
     is_hypercube_like,
 )
-
-
-@dataclass(frozen=True)
-class HypercubeChanges:
-    """
-    Component changes between two Boolean hypercubes.
-
-    Results can be unpacked as flips, stabilizations and destabilizations, in
-    that order.
-
-    Parameters
-    ----------
-    flips: frozenset[str]
-        Components changing between fixed values 0 and 1.
-    stabilizations: frozenset[str]
-        Components changing from a free value to a fixed value.
-    destabilizations: frozenset[str]
-        Components changing from a fixed value to a free value.
-    """
-
-    flips: FrozenSet[str]
-    stabilizations: FrozenSet[str]
-    destabilizations: FrozenSet[str]
-
-    def __iter__(self) -> Iterator[FrozenSet[str]]:
-        """
-        Iterate over flips, stabilizations and destabilizations.
-
-        Returns
-        -------
-        Iterator[frozenset[str]]
-            Change groups in their documented order.
-        """
-
-        yield self.flips
-        yield self.stabilizations
-        yield self.destabilizations
 
 
 class Hypercube(MutableMapping[str, PartialBoolean]):
@@ -816,7 +778,7 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         other: HypercubeLike,
         *,
         components: Optional[Iterable[str]] = None,
-    ) -> HypercubeChanges:
+    ) -> Tuple[FrozenSet[str], FrozenSet[str], FrozenSet[str]]:
         """
         Classify component changes from this hypercube to another one.
 
@@ -828,12 +790,12 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
         --------
         >>> source = Hypercube({"A": 0, "B": "*", "C": 1})
         >>> target = Hypercube({"A": 1, "B": 0, "C": "*"})
-        >>> changes = source.changes(target)
-        >>> changes.flips
+        >>> flips, stabilizations, destabilizations = source.changes(target)
+        >>> flips
         frozenset({'A'})
-        >>> changes.stabilizations
+        >>> stabilizations
         frozenset({'B'})
-        >>> changes.destabilizations
+        >>> destabilizations
         frozenset({'C'})
 
         Parameters
@@ -846,8 +808,8 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
 
         Returns
         -------
-        HypercubeChanges
-            Components grouped by their type of change.
+        tuple of frozenset[str]
+            Flips, stabilizations and destabilizations, in that order.
 
         Raises
         ------
@@ -882,10 +844,10 @@ class Hypercube(MutableMapping[str, PartialBoolean]):
             else:
                 destabilizations.add(component)
 
-        return HypercubeChanges(
-            flips=frozenset(flips),
-            stabilizations=frozenset(stabilizations),
-            destabilizations=frozenset(destabilizations),
+        return (
+            frozenset(flips),
+            frozenset(stabilizations),
+            frozenset(destabilizations),
         )
 
     def is_smaller_than(self, other: object) -> bool:

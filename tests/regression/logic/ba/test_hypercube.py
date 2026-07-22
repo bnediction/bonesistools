@@ -168,10 +168,10 @@ def test_hypercube_changes_classifies_and_filters_components():
         components={"flip", "stabilized", "destabilized"},
     )
 
-    assert changes == bt.logic.ba.HypercubeChanges(
-        flips=frozenset({"flip"}),
-        stabilizations=frozenset({"stabilized"}),
-        destabilizations=frozenset({"destabilized"}),
+    assert changes == (
+        frozenset({"flip"}),
+        frozenset({"stabilized"}),
+        frozenset({"destabilized"}),
     )
     flips, stabilizations, destabilizations = changes
     assert flips == frozenset({"flip"})
@@ -184,10 +184,10 @@ def test_hypercube_changes_uses_union_and_implicit_free_values():
     source = bt.logic.ba.Hypercube({"fixed": 1})
     target = bt.logic.ba.Hypercube({"newly_fixed": 0})
 
-    assert source.changes(target) == bt.logic.ba.HypercubeChanges(
-        flips=frozenset(),
-        stabilizations=frozenset({"newly_fixed"}),
-        destabilizations=frozenset({"fixed"}),
+    assert source.changes(target) == (
+        frozenset(),
+        frozenset({"newly_fixed"}),
+        frozenset({"fixed"}),
     )
 
 

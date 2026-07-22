@@ -9,9 +9,6 @@ from bonesistools.logic.boolean_algebra._configuration import (
 )
 from bonesistools.logic.boolean_algebra._hypercube import Hypercube as Hypercube
 from bonesistools.logic.boolean_algebra._hypercube import (
-    HypercubeChanges as HypercubeChanges,
-)
-from bonesistools.logic.boolean_algebra._hypercube import (
     HypercubeCollection as HypercubeCollection,
 )
 from bonesistools.logic.boolean_algebra._kleene import KleeneValue as KleeneValue
@@ -38,7 +35,6 @@ __all__ = [
     "KleeneValue",
     "ConfigurationSet",
     "Hypercube",
-    "HypercubeChanges",
     "HypercubeCollection",
     "ROBDD",
     "diff",

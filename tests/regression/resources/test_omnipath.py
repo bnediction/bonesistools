@@ -628,7 +628,15 @@ def test_dorothea_uses_omnipath_archive_version(monkeypatch):
     )
 
     assert calls == [
-        ("dorothea", "2024-01-01", 9606, None, "modern", "bundled", False)
+        (
+            "dorothea",
+            "2024-01-01",
+            9606,
+            ["B"],
+            "modern",
+            "bundled",
+            False,
+        )
     ]
     assert isinstance(grn, InfluenceGraph)
     assert list(grn.edges(data=True)) == [
@@ -704,7 +712,7 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
             "dorothea",
             "2024-01-01",
             "mouse",
-            None,
+            ["A", "B", "C"],
             "legacy",
             "latest",
             False,
@@ -713,7 +721,7 @@ def test_dorothea_supports_legacy_flavor_and_deprecated_wrappers(monkeypatch):
             "dorothea",
             "2024-01-01",
             "mouse",
-            None,
+            ["A", "B", "C"],
             "modern",
             "latest",
             False,
@@ -769,7 +777,7 @@ def test_collectri_uses_omnipath_archive_version_and_identifiers(monkeypatch):
     ]
 
 
-def test_dorothea_reuses_one_canonical_graph_across_level_filters(monkeypatch):
+def test_dorothea_caches_level_selections_separately(monkeypatch):
     calls = []
 
     def load_version(
@@ -782,8 +790,8 @@ def test_dorothea_reuses_one_canonical_graph_across_level_filters(monkeypatch):
         compatibility=False,
         _downloads=None,
     ):
-        calls.append((resource, levels, compatibility))
-        return pd.DataFrame(
+        calls.append((resource, tuple(levels), compatibility))
+        interactions = pd.DataFrame(
             {
                 "source": ["TfB", "TfA"],
                 "target": ["GeneB", "GeneA"],
@@ -791,6 +799,7 @@ def test_dorothea_reuses_one_canonical_graph_across_level_filters(monkeypatch):
                 "confidence": ["B", "A"],
             }
         )
+        return interactions[interactions["confidence"].isin(levels)]
 
     monkeypatch.setattr(_dorothea, "load_interactions_version", load_version)
 
@@ -811,13 +820,16 @@ def test_dorothea_reuses_one_canonical_graph_across_level_filters(monkeypatch):
         version="2024-01-01",
     )
 
-    assert calls == [("dorothea", None, False)]
+    assert calls == [
+        ("dorothea", ("A",), False),
+        ("dorothea", ("B",), False),
+    ]
     assert list(level_b.edges(data="confidence")) == [("TfB", "GeneB", "B")]
     assert list(restored_a.edges(data="confidence")) == [("TfA", "GeneA", "A")]
-    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
+    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 2
 
 
-def test_dorothea_compatibility_does_not_create_another_cache(monkeypatch):
+def test_dorothea_caches_compatibility_modes_separately(monkeypatch):
     calls = []
 
     def load_version(*args, **kwargs):
@@ -851,8 +863,8 @@ def test_dorothea_compatibility_does_not_create_another_cache(monkeypatch):
         ("TfA", "GeneA", -1),
     ]
     assert list(compatible.edges(data="sign")) == [("TfA", "GeneA", -1)]
-    assert len(calls) == 1
-    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
+    assert len(calls) == 2
+    assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 2
 
 
 def test_collectri_removes_references_after_reusing_canonical_graph(monkeypatch):

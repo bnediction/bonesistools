@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from functools import lru_cache
+from types import FunctionType
 from typing import Any, Dict, Optional, Tuple, Union, cast
 
 import numpy as np
@@ -544,10 +546,7 @@ def umap(
         ) from error
 
     find_ab_params = cast(Any, getattr(umap_umap_module, "find_ab_params"))
-    simplicial_set_embedding = cast(
-        Any,
-        getattr(umap_umap_module, "simplicial_set_embedding"),
-    )
+    simplicial_set_embedding = _reproducible_umap_embedding(umap_umap_module)
     if a is None or b is None:
         a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
 
@@ -653,6 +652,84 @@ def _umap_initialization(
         ),
         prepared_graph,
     )
+
+
+@lru_cache(maxsize=4)
+def _reproducible_umap_embedding(umap_module: Any) -> Any:
+    """Return UMAP's embedding routine with strict serial arithmetic."""
+
+    embedding = cast(Any, getattr(umap_module, "simplicial_set_embedding"))
+    try:
+        layouts = importlib.import_module("umap.layouts")
+        numba = importlib.import_module("numba")
+        distance = cast(Any, getattr(layouts, "rdist"))
+        epoch = cast(
+            Any,
+            getattr(layouts, "_optimize_layout_euclidean_single_epoch"),
+        )
+        optimizer = cast(Any, getattr(layouts, "optimize_layout_euclidean"))
+    except (AttributeError, ImportError):
+        return embedding
+
+    distance_function = cast(Any, getattr(distance, "py_func", distance))
+    epoch_function = cast(Any, getattr(epoch, "py_func", epoch))
+    if not all(
+        isinstance(function, FunctionType)
+        for function in (distance_function, epoch_function, optimizer, embedding)
+    ):
+        return embedding
+
+    strict_distance = numba.njit(
+        "f4(f4[::1],f4[::1])",
+        fastmath=False,
+    )(distance_function)
+
+    epoch_globals = dict(epoch_function.__globals__)
+    epoch_globals["rdist"] = strict_distance
+    strict_epoch = numba.njit(
+        _clone_function(
+            epoch_function,
+            epoch_globals,
+            "_strict_optimize_layout_euclidean_single_epoch",
+        ),
+        fastmath=False,
+        parallel=False,
+    )
+
+    optimizer_globals = dict(optimizer.__globals__)
+    optimizer_globals["_get_optimize_layout_euclidean_single_epoch_fn"] = (
+        lambda parallel=False: strict_epoch
+    )
+    strict_optimizer = _clone_function(
+        optimizer,
+        optimizer_globals,
+        "_strict_optimize_layout_euclidean",
+    )
+
+    embedding_globals = dict(embedding.__globals__)
+    embedding_globals["optimize_layout_euclidean"] = strict_optimizer
+    return _clone_function(
+        embedding,
+        embedding_globals,
+        "_strict_simplicial_set_embedding",
+    )
+
+
+def _clone_function(
+    function: FunctionType,
+    global_namespace: Dict[str, Any],
+    name: str,
+) -> FunctionType:
+
+    cloned = FunctionType(
+        function.__code__,
+        global_namespace,
+        name,
+        function.__defaults__,
+        function.__closure__,
+    )
+    cloned.__kwdefaults__ = function.__kwdefaults__
+    return cloned
 
 
 def _prepare_umap_graph_for_embedding(graph: Any, n_epochs: int) -> Any:
