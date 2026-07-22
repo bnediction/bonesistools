@@ -652,15 +652,16 @@ implementation.
 
 Golden files are frozen test resources, not tests. Store them under
 `tests/golden` and update them only when an intentional algorithmic change or
-bug fix changes the expected behavior. See `docs/TESTING.md` for the golden
-acceptance-test update procedure.
+bug fix changes the expected behavior. See `docs/REPRODUCIBILITY.md` for the
+golden acceptance-test update procedure.
 
 When testing warnings or errors, prefer checking the warning/error type and the
 behavior. Avoid asserting exact message strings unless the message itself is
 part of the public behavior being tested.
 
 Do not update reproducibility references unless explicitly requested. If code no
-longer matches a reference, fix the implementation first.
+longer matches a reference, fix the implementation first. See
+`docs/REPRODUCIBILITY.md` for the reference-review policy.
 
 ---
 

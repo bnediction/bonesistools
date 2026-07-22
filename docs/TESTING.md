@@ -18,6 +18,9 @@ data, live resources or deterministic signatures.
 Golden tests are intentionally separate because they compare against versioned
 reference outputs and run only in the canonical Python 3.13 CI job.
 
+The guarantees, numerical-stability policy and reference-review procedure are
+documented in [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
+
 ## CI layout
 
 The GitHub CI separates fast local checks from live reproducibility checks:
@@ -47,28 +50,8 @@ content can affect downstream results. They intentionally run in a separate CI
 job because they may require network access and can fail when an upstream
 database changes.
 
-The tests do not redistribute restricted upstream data. Instead, they:
-
-1. fetch the resource at test time;
-2. build the corresponding bonesistools object;
-3. compute a deterministic signature from the result;
-4. hash that signature with SHA-256;
-5. compare the hash to a tracked `.sha256` file.
-
-For DoRothEA, the tracked files are:
-
-- `tests/reproducibility/dorothea_current_mouse_A.sha256`;
-- `tests/reproducibility/dorothea_legacy_mouse.sha256`.
-
-These hashes are small reproducibility sentinels. If one changes, the test
-failure means either:
-
-- the upstream resource changed;
-- the resource access or post-processing logic changed;
-- the expected signature must be reviewed and intentionally updated.
-
-The local JSON files in `tests/reproducibility/` are diagnostic artifacts only.
-They must not be modified for normal test updates and must not be committed.
+Signature construction and review policy are described in
+[REPRODUCIBILITY.md](REPRODUCIBILITY.md#external-resources).
 
 Run reproducibility tests explicitly with:
 
@@ -82,10 +65,8 @@ Golden tests compare current outputs against validated reference outputs stored
 under `tests/golden/expected/`. They are acceptance tests for important
 scientific workflows, not immutable mathematical truths.
 
-If a golden test fails, first determine whether the difference is an unintended
-code regression, an intentional algorithmic change, or a dependency/numerical
-environment change. Only intentional algorithmic changes and validated
-environment changes justify regenerating the expected outputs.
+Before changing a reference, follow the numerical diagnosis and review policy
+in [REPRODUCIBILITY.md](REPRODUCIBILITY.md#golden-references).
 
 Run golden tests explicitly with:
 
@@ -98,5 +79,3 @@ Regenerate expected outputs intentionally with:
 ```bash
 BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py
 ```
-
-This section is the golden update procedure.
