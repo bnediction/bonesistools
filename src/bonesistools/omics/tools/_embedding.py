@@ -916,6 +916,7 @@ def tsne(
     """
 
     from sklearn.manifold import TSNE
+    from threadpoolctl import threadpool_limits
 
     n_components = _as_positive_integer(n_components, "n_components")
     if not isinstance(n_jobs, int):
@@ -970,7 +971,12 @@ def tsne(
     else:
         tsne_kwargs["n_iter"] = n_iter
 
-    embedding = cast(np.ndarray, TSNE(**tsne_kwargs).fit_transform(representation_mtx))
+    thread_limit = n_jobs if n_jobs > 0 else None
+    with threadpool_limits(limits=thread_limit):
+        embedding = cast(
+            np.ndarray,
+            TSNE(**tsne_kwargs).fit_transform(representation_mtx),
+        )
 
     adata.obsm[key_added] = embedding
     adata.uns[key_added] = {

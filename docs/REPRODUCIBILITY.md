@@ -131,11 +131,46 @@ optimizer to different embeddings. Explicit random initialization makes the
 starting coordinates a direct function of `seed` while preserving the same
 distance, probability and optimization calculations.
 
+The `n_jobs` argument also limits the native numerical thread pools used by
+the Barnes-Hut optimizer. Scikit-learn otherwise applies `n_jobs` to nearest-
+neighbor search but may select a different OpenMP thread count for gradient
+descent. The default `n_jobs=1` therefore defines a serial seeded path for the
+complete t-SNE calculation.
+
+The t-SNE golden receives the frozen PCA reference rather than the PCA
+recomputed during the same test run. PCA remains tested independently, while a
+t-SNE coordinate divergence can be attributed to the t-SNE stage itself.
+
+The dedicated t-SNE golden records exact checkpoints for:
+
+1. the nearest-neighbor structure and squared distances;
+2. conditional neighborhood probabilities;
+3. the symmetrized joint-probability graph;
+4. seeded random initialization and its initial gradient;
+5. embeddings at iterations 1, 2, 5, 10, 25, 50, 100, 250, and 300.
+
+Neighbor indices and every downstream checkpoint are compared exactly. Raw
+squared distances use a narrow floating-point tolerance because equivalent
+serial distance kernels can differ below `1e-12`; the subsequent probability
+checkpoint remains exact and detects whether such noise affects t-SNE itself.
+
+The diagnostic also verifies that its final checkpoint is exactly the result
+returned by the public scikit-learn solver under the same serial settings. A
+platform failure therefore identifies whether divergence first occurs during
+neighbor search, probability estimation, initialization, or optimization.
+
 ## Golden references
 
 Golden tests compare current outputs against validated references under
 `tests/golden/expected/`. They are acceptance tests for important scientific
 workflows, not immutable mathematical truths.
+
+The omics golden isolates dependencies between tested stages. A stage is
+collected and compared independently, then its frozen reference is supplied to
+downstream stages where available. PCA therefore consumes the frozen HVG mask;
+neighbors, spectral embedding, KNNSC and t-SNE consume the frozen PCA; and
+Louvain and UMAP consume the frozen neighbor graph. Intentional reference
+generation disables this isolation and rebuilds the complete workflow.
 
 If a golden test fails, first determine whether the difference is:
 

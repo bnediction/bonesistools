@@ -56,7 +56,10 @@ def load_pbmc3k() -> ad.AnnData:
     return ad.read_h5ad(PBMC3K_PATH)
 
 
-def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
+def run_omics_workflow(
+    *,
+    use_expected_dependencies: bool = True,
+) -> Dict[str, Dict[str, Any]]:
 
     adata = load_pbmc3k()
     outputs: Dict[str, Dict[str, Any]] = {}
@@ -96,6 +99,9 @@ def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
         key_added="log1p",
     )
 
+    if use_expected_dependencies:
+        _restore_expected_hvg(adata)
+
     bt.omics.tl.pca(
         adata,
         n_components=PCA_N_COMPONENTS,
@@ -107,6 +113,9 @@ def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
         n_jobs=1,
     )
     outputs["pca"] = _collect_pca(adata)
+
+    if use_expected_dependencies:
+        _restore_expected_pca(adata)
 
     bt.omics.tl.neighbors(
         adata,
@@ -120,6 +129,9 @@ def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
         n_jobs=1,
     )
     outputs["neighbors"] = _collect_neighbors(adata)
+
+    if use_expected_dependencies:
+        _restore_expected_neighbors(adata)
 
     bt.omics.tl.louvain(
         adata,
@@ -286,6 +298,41 @@ def _collect_embedding(
     return {
         "embedding": np.asarray(adata.obsm[key]),
     }
+
+
+def _restore_expected_hvg(adata: ad.AnnData) -> None:
+
+    expected = load_expected("hvg_loess")
+    adata.var["highly_variable"] = expected["mask"].copy()
+
+
+def _restore_expected_pca(adata: ad.AnnData) -> None:
+
+    expected = load_expected("pca")
+    adata.obsm["X_pca"] = expected["embedding"].copy()
+
+
+def _restore_expected_neighbors(adata: ad.AnnData) -> None:
+
+    expected = load_expected("neighbors")
+    adata.obsp["distances"] = _expected_csr(expected, "distances")
+    adata.obsp["connectivities"] = _expected_csr(expected, "connectivities")
+
+
+def _expected_csr(
+    expected: Mapping[str, np.ndarray],
+    key: str,
+) -> csr_matrix:
+
+    shape = expected[f"{key}_shape"]
+    return csr_matrix(
+        (
+            expected[f"{key}_data"].copy(),
+            expected[f"{key}_indices"].copy(),
+            expected[f"{key}_indptr"].copy(),
+        ),
+        shape=(int(shape[0]), int(shape[1])),
+    )
 
 
 def _subset_knnsc_adata(adata: ad.AnnData) -> ad.AnnData:

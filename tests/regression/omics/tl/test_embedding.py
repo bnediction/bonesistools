@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, Dict, Optional, Tuple, cast
 
@@ -11,6 +12,7 @@ from anndata import AnnData
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.manifold import TSNE, spectral_embedding
+from threadpoolctl import threadpool_limits
 
 import bonesistools as bt
 from bonesistools.omics.tools._embedding import (
@@ -259,18 +261,19 @@ def test_tsne_embedding_stores_coordinates_and_metadata(mini_adata):
 
 
 def test_tsne_embedding_matches_sklearn(mini_adata):
-    expected = TSNE(
-        n_components=2,
-        perplexity=1.0,
-        early_exaggeration=12.0,
-        learning_rate=1000.0,
-        max_iter=250,
-        metric="euclidean",
-        random_state=np.random.RandomState(0),
-        n_jobs=1,
-        method="barnes_hut",
-        init="random",
-    ).fit_transform(mini_adata.obsm["X_pca"])
+    with threadpool_limits(limits=1):
+        expected = TSNE(
+            n_components=2,
+            perplexity=1.0,
+            early_exaggeration=12.0,
+            learning_rate=1000.0,
+            max_iter=250,
+            metric="euclidean",
+            random_state=np.random.RandomState(0),
+            n_jobs=1,
+            method="barnes_hut",
+            init="random",
+        ).fit_transform(mini_adata.obsm["X_pca"])
 
     bt.omics.tl.tsne(
         mini_adata,
@@ -282,6 +285,38 @@ def test_tsne_embedding_matches_sklearn(mini_adata):
     )
 
     assert np.allclose(mini_adata.obsm["X_tsne"], expected)
+
+
+def test_tsne_embedding_limits_native_threads(mini_adata, monkeypatch):
+    import sklearn.manifold
+    import threadpoolctl
+
+    observed = {}
+
+    class FakeTSNE:
+        def __init__(self, **kwargs):
+            observed["parameters"] = kwargs
+
+        def fit_transform(self, representation):
+            return np.zeros((representation.shape[0], 2), dtype=np.float32)
+
+    @contextmanager
+    def fake_threadpool_limits(*, limits):
+        observed["thread_limit"] = limits
+        yield
+
+    monkeypatch.setattr(sklearn.manifold, "TSNE", FakeTSNE)
+    monkeypatch.setattr(threadpoolctl, "threadpool_limits", fake_threadpool_limits)
+
+    bt.omics.tl.tsne(
+        mini_adata,
+        n_components=2,
+        perplexity=1.0,
+        n_iter=250,
+        n_jobs=3,
+    )
+
+    assert observed["thread_limit"] == 3
 
 
 def test_umap_embedding_uses_neighbors_graph_and_stores_metadata(
