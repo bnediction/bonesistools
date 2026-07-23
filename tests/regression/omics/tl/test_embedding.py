@@ -269,6 +269,7 @@ def test_tsne_embedding_matches_sklearn(mini_adata):
         random_state=np.random.RandomState(0),
         n_jobs=1,
         method="barnes_hut",
+        init="random",
     ).fit_transform(mini_adata.obsm["X_pca"])
 
     bt.omics.tl.tsne(

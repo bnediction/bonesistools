@@ -554,6 +554,39 @@ def test_umap_connectivities_ignore_numerical_self_distances():
     np.testing.assert_array_equal(actual.toarray(), expected.toarray())
 
 
+def test_fuzzy_connectivity_exponential_is_canonical():
+    values = np.array(
+        [0.0, -1e-7, -0.1, -1.0, -10.0, -50.0, -100.0, -104.0],
+        dtype=np.float32,
+    )
+
+    actual = _neighbors._deterministic_exp_float32(values)
+
+    np.testing.assert_array_equal(
+        actual.view(np.uint32),
+        np.array(
+            [
+                1065353216,
+                1065353214,
+                1063756653,
+                1052531378,
+                943614926,
+                459877355,
+                27,
+                0,
+            ],
+            dtype=np.uint32,
+        ),
+    )
+    smallest_subnormal = np.nextafter(np.float32(0.0), np.float32(1.0))
+    np.testing.assert_allclose(
+        actual,
+        np.exp(values),
+        rtol=3e-7,
+        atol=smallest_subnormal,
+    )
+
+
 def test_sparse_distance_neighbors_reject_short_rows():
     sparse_distances = csr_matrix(
         (

@@ -1,0 +1,2 @@
+tests/golden/logic/data/sea_urchin_dorsal_ventral_axis.sbml text eol=lf
+tests/golden/logic/expected/sea_urchin_dorsal_ventral_axis.bnet text eol=lf

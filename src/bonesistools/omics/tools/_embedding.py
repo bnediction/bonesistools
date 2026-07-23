@@ -963,6 +963,7 @@ def tsne(
         "random_state": resolved_random_state,
         "n_jobs": n_jobs,
         "method": "barnes_hut" if n_components <= 3 else "exact",
+        "init": "random",
     }
     if "max_iter" in inspect.signature(TSNE).parameters:
         tsne_kwargs["max_iter"] = n_iter

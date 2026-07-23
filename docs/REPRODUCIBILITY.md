@@ -66,6 +66,9 @@ The reproducible UMAP path therefore:
 
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
+- evaluates the fuzzy-connectivity exponential for `float32` inputs through a
+  fixed polynomial and accumulates probabilities in a fixed order, avoiding
+  platform-specific vector math near the local-scale convergence threshold;
 - canonicalizes automatically estimated curve parameters before optimization;
 - uses the supplied seed throughout initialization and optimization;
 - uses the canonical spectral initialization by default, converts its
@@ -104,8 +107,9 @@ divergence. This diagnostic isolated two former platform-dependent operations:
 SciPy's numerical fit of the UMAP curve parameters and fused multiply-add
 contraction in UMAP's squared Euclidean distance. Bonesistools canonicalizes
 the fitted parameters and excludes only this contraction from UMAP's otherwise
-optimized distance calculation. PCA, neighbors, spectral initialization and
-random-state construction retain their original numerical paths.
+optimized distance calculation. PCA, nearest-neighbor search, spectral
+initialization and random-state construction retain their original numerical
+paths.
 
 For a UMAP-related golden failure, compare outputs in this order:
 
@@ -117,6 +121,15 @@ For a UMAP-related golden failure, compare outputs in this order:
 6. final UMAP coordinates.
 
 Only the first divergent stage should drive the correction.
+
+### t-SNE
+
+The seeded t-SNE path uses random initialization explicitly. Scikit-learn's
+implicit PCA initialization depends on the installed linear algebra backend;
+numerically equivalent initial coordinates can then lead the nonlinear
+optimizer to different embeddings. Explicit random initialization makes the
+starting coordinates a direct function of `seed` while preserving the same
+distance, probability and optimization calculations.
 
 ## Golden references
 
