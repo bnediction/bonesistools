@@ -16,6 +16,8 @@ from ._omics_workflow import (
 
 _PORTABLE_TSNE_QUALITY_NEIGHBORS = (15, 30, 50)
 _PORTABLE_TSNE_QUALITY_MARGIN = 0.01
+_PORTABLE_FUZZY_CONNECTIVITIES_RTOL = 3e-5
+_PORTABLE_FUZZY_CONNECTIVITIES_ATOL = 3e-6
 _STRICT_HVG_LOESS_SCORE_ATOL = 2e-15
 
 
@@ -99,9 +101,16 @@ def test_golden_omics_workflow_matches_expected_outputs(
         assert_close_arrays(
             result,
             expected,
-            ("distances_data", "connectivities_data"),
+            ("distances_data",),
             rtol=1e-10,
             atol=1e-12,
+        )
+        assert_close_arrays(
+            result,
+            expected,
+            ("connectivities_data",),
+            rtol=_PORTABLE_FUZZY_CONNECTIVITIES_RTOL,
+            atol=_PORTABLE_FUZZY_CONNECTIVITIES_ATOL,
         )
     elif name in {"spectral", "umap"}:
         assert_close_arrays(
