@@ -47,6 +47,12 @@ Diagnostic runs may vary CPU and numerical backends, for example through
 not required runtime settings. The implementation should produce its reference
 result without forcing either variable.
 
+Bitwise identity is required across repeated runs in the canonical
+environment. Portable environments may use narrowly validated numerical
+tolerances. Established NumPy and SciPy numerical kernels should not be
+reimplemented solely to force cross-platform bitwise identity when doing so
+changes scientific results.
+
 ### UMAP
 
 UMAP combines several numerically sensitive stages:
@@ -66,9 +72,6 @@ The reproducible UMAP path therefore:
 
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
-- evaluates the fuzzy-connectivity exponential for `float32` inputs through a
-  fixed polynomial and accumulates probabilities in a fixed order, avoiding
-  platform-specific vector math near the local-scale convergence threshold;
 - canonicalizes automatically estimated curve parameters before optimization;
 - uses the supplied seed throughout initialization and optimization;
 - uses the canonical spectral initialization by default, converts its

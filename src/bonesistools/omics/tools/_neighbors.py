@@ -59,9 +59,6 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 _SMOOTH_K_TOLERANCE = 1e-5
 _MIN_K_DIST_SCALE = 0.001
 _NPY_FLOATMAX = np.float32(3.4028235e38)
-_EXP_TAYLOR_COEFFICIENTS = tuple(
-    1.0 / math.factorial(degree) for degree in range(12, -1, -1)
-)
 _SHARED_SCORE_CHUNK_SIZE = 500_000
 
 
@@ -622,9 +619,13 @@ def _umap_connectivities_from_knn(
     rows = np.repeat(np.arange(n_obs, dtype=np.int32), n_neighbors)
     columns = knn_indices.ravel()
     shifted_distances = knn_distances - rhos[:, None]
-    values = _deterministic_exp_float32(
-        -(shifted_distances / sigmas[:, None])
-    )
+    with np.errstate(over="ignore"):
+        values = np.exp(-(shifted_distances / sigmas[:, None]))
+    values = np.where(
+        (shifted_distances <= 0.0) | (sigmas[:, None] == 0.0),
+        1.0,
+        values,
+    ).astype(np.float32, copy=False)
     values[knn_indices == np.arange(n_obs)[:, None]] = 0.0
 
     valid = columns != -1
@@ -758,12 +759,13 @@ def _umap_smooth_knn_distances(
     shifted_distances = distances[:, 1:] - rhos[:, None]
 
     for _ in range(64):
-        probabilities = _deterministic_exp_float32(
-            -(shifted_distances / sigmas[:, None])
-        )
-        probability_sums = np.zeros(n_obs, dtype=np.float32)
-        for column in range(probabilities.shape[1]):
-            probability_sums += probabilities[:, column]
+        with np.errstate(over="ignore"):
+            probabilities = np.where(
+                shifted_distances > 0.0,
+                np.exp(-(shifted_distances / sigmas[:, None])),
+                1.0,
+            )
+        probability_sums = probabilities.sum(axis=1)
         close = np.abs(probability_sums - target) < _SMOOTH_K_TOLERANCE
         update = active & ~close
         if not np.any(update):
@@ -782,17 +784,8 @@ def _umap_smooth_knn_distances(
 
         active &= ~close
 
-    mean_distances = np.float32(
-        math.fsum(float(value) for value in distances.flat) / distances.size
-    )
-    mean_row_distances = np.fromiter(
-        (
-            math.fsum(float(value) for value in row) / distances.shape[1]
-            for row in distances
-        ),
-        dtype=np.float32,
-        count=n_obs,
-    )
+    mean_distances = np.mean(distances)
+    mean_row_distances = np.mean(distances, axis=1)
     min_sigmas = np.where(
         rhos > 0.0,
         _MIN_K_DIST_SCALE * mean_row_distances,
@@ -801,30 +794,6 @@ def _umap_smooth_knn_distances(
     sigmas = np.maximum(sigmas, min_sigmas)
 
     return sigmas.astype(np.float32, copy=False), rhos
-
-
-def _deterministic_exp_float32(values: np.ndarray) -> np.ndarray:
-    """Evaluate exp for non-positive float32 values reproducibly."""
-
-    values64 = np.minimum(
-        np.asarray(values, dtype=np.float32),
-        np.float32(0.0),
-    ).astype(np.float64)
-    reduced_values = np.maximum(values64, -104.0)
-    exponents = np.rint(reduced_values * 1.4426950408889634).astype(np.int32)
-    remainders = (
-        reduced_values
-        - exponents.astype(np.float64) * 0.6931471805599453
-    )
-
-    polynomial = np.full_like(remainders, _EXP_TAYLOR_COEFFICIENTS[0])
-    for coefficient in _EXP_TAYLOR_COEFFICIENTS[1:]:
-        polynomial *= remainders
-        polynomial += coefficient
-
-    result = np.ldexp(polynomial, exponents).astype(np.float32)
-    result[values64 <= -103.97207708399179] = 0.0
-    return result
 
 
 def _knn_arrays_from_sparse_distances_slow(

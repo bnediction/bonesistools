@@ -38,6 +38,15 @@ def test_read_bnet_directory_and_ensemble(bnet_ensemble):
     assert bnet_ensemble.components == frozenset({"A", "B", "C"})
 
 
+def test_boolean_network_ensemble_repr(bnet_ensemble):
+    assert repr(bnet_ensemble) == (
+        "BooleanNetworkEnsemble(n_models=3, n_components=3)"
+    )
+
+    empty = bt.logic.bn.BooleanNetworkEnsemble(components=["A", "B"])
+    assert repr(empty) == "BooleanNetworkEnsemble(n_models=0, n_components=2)"
+
+
 def test_boolean_network_ensemble_to_mpbn(bnet_ensemble):
     mpbn = pytest.importorskip("mpbn")
 

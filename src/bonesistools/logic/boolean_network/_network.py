@@ -2124,6 +2124,26 @@ class BooleanNetworkEnsemble(MutableSequence[BooleanNetwork]):
         for network in networks:
             self._networks.append(self._coerce_network(network))
 
+    def __repr__(self) -> str:
+        """
+        Return a compact representation of the Boolean network ensemble.
+
+        Examples
+        --------
+        >>> BooleanNetworkEnsemble({"A": 1}, {"A": 0})
+        BooleanNetworkEnsemble(n_models=2, n_components=1)
+
+        Returns
+        -------
+        str
+            Compact representation with the number of models and components.
+        """
+
+        return (
+            f"{type(self).__name__}(n_models={len(self._networks)}, "
+            f"n_components={len(self._components)})"
+        )
+
     def __len__(self) -> int:
         """
         Return the number of Boolean networks in the ensemble.
