@@ -16,7 +16,8 @@ Reproducibility tests are intentionally separate because they can use larger
 data, live resources or deterministic signatures.
 
 Golden tests are intentionally separate because they compare against versioned
-reference outputs and run only in the canonical Python 3.13 CI job.
+reference outputs and run in the pinned Python 3.13 environment under Linux,
+macOS and Windows.
 
 The guarantees, numerical-stability policy and reference-review procedure are
 documented in [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
@@ -41,7 +42,8 @@ The GitHub CI separates fast local checks from live reproducibility checks:
 
 Python 3.7 to 3.9 are import-only jobs because they mainly protect runtime
 compatibility. Regression tests run on newer Python versions under Linux and on
-Python 3.13 under macOS and Windows.
+Python 3.13 under macOS and Windows. The macOS and Windows compatibility jobs
+also run the complete golden suite in the pinned reference environment.
 
 ## Reproducibility tests
 

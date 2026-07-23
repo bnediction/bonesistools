@@ -8,6 +8,8 @@ from llvmlite import binding
 
 from ._umap_diagnostics import load_expected, run_umap_diagnostics
 
+_RAW_SPECTRAL_CHECKPOINT = "raw_spectral_layout"
+
 
 @pytest.fixture(scope="module")
 def umap_diagnostics():
@@ -26,6 +28,18 @@ def test_golden_umap_numerical_checkpoints(umap_diagnostics):
         f"NUMBA_CPU_FEATURES={os.environ.get('NUMBA_CPU_FEATURES')!r}"
     )
     for checkpoint, expected_values in expected.items():
+        if checkpoint == _RAW_SPECTRAL_CHECKPOINT:
+            np.testing.assert_allclose(
+                umap_diagnostics[checkpoint],
+                expected_values,
+                rtol=1e-12,
+                atol=1e-13,
+                err_msg=(
+                    f"first divergent UMAP checkpoint: {checkpoint!r} ({context})"
+                ),
+            )
+            continue
+
         np.testing.assert_array_equal(
             umap_diagnostics[checkpoint],
             expected_values,

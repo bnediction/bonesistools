@@ -177,12 +177,12 @@ jobs:
         with:
           python-version: "3.13"
           cache: "pip"
+          cache-dependency-path: requirements.txt
 
-      - name: Install package with all extras
-        run: pip install -e ".[all]"
-
-      - name: Install test dependencies
-        run: pip install pytest
+      - name: Install reference environment and compatibility extras
+        run: |
+          pip install -r requirements.txt
+          pip install -e ".[all]"
 
       - name: Check package import
         run: python -c "import bonesistools"
@@ -190,8 +190,8 @@ jobs:
       - name: Run regression tests
         run: pytest tests/regression -q
 
-      - name: Check native UMAP golden
+      - name: Check full golden suite
         env:
           BONESISTOOLS_RUN_GOLDEN: "1"
-          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-umap-golden
-        run: pytest tests/golden/omics/test_golden_umap_diagnostics.py -q
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-golden
+        run: pytest tests/golden -q

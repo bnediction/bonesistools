@@ -687,9 +687,9 @@ def _prepare_umap_graph_for_embedding(graph: Any, n_epochs: int) -> Any:
 
 
 def _orient_umap_spectral_layout(layout: np.ndarray) -> np.ndarray:
-    """Return spectral coordinates with fixed eigenvector orientations."""
+    """Return float32 spectral coordinates with fixed orientations."""
 
-    oriented = np.asarray(layout).copy()
+    oriented = np.asarray(layout, dtype=np.float32).copy()
     for dimension in range(oriented.shape[1]):
         column = oriented[:, dimension]
         pivot = int(np.argmax(np.abs(column)))

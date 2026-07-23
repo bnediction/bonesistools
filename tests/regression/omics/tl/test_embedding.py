@@ -371,7 +371,7 @@ def test_umap_spectral_initialization_is_canonicalized():
     )
     result = _orient_umap_spectral_layout(source)
 
-    assert result.dtype == np.float64
+    assert result.dtype == np.float32
     assert np.array_equal(
         result,
         np.asarray(

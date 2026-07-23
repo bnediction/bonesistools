@@ -68,8 +68,9 @@ The reproducible UMAP path therefore:
   connectivity scales;
 - canonicalizes automatically estimated curve parameters before optimization;
 - uses the supplied seed throughout initialization and optimization;
-- uses the canonical spectral initialization by default and fixes arbitrary
-  eigenvector orientations;
+- uses the canonical spectral initialization by default, converts its
+  coordinates to `float32` before scaling and fixes arbitrary eigenvector
+  orientations;
 - prevents fused multiply-add contraction when accumulating squared Euclidean
   distances in the optimizer;
 - limits native numerical thread pools according to `n_jobs`, whose default is
@@ -84,9 +85,10 @@ UMAP's own
 explains the role of seeds and serial execution.
 
 Spectral initialization remains available explicitly. Bonesistools fixes
-arbitrary eigenvector orientations while preserving the eigensolver output
-precision until UMAP performs its normal scaling step. This reduces backend
-variability without changing the historical numerical trajectory.
+arbitrary eigenvector orientations and converts the eigensolver output to
+`float32` before UMAP scales it. This prevents insignificant platform-level
+`float64` differences from influencing the scale supplied to the nonlinear
+optimizer.
 
 The dedicated UMAP golden decomposes this trajectory into exact checkpoints:
 
