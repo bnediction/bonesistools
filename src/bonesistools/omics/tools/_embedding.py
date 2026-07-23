@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from functools import lru_cache, wraps
-from types import FunctionType
-from typing import Any, Callable, Dict, Optional, Tuple, Union, cast
+from typing import Any, Dict, Optional, Tuple, Union, cast
 
 import numpy as np
 from anndata import AnnData
@@ -418,7 +416,7 @@ def umap(
     alpha: float = 1.0,
     gamma: float = 1.0,
     negative_sample_rate: int = 5,
-    init_pos: Union[str, np.ndarray] = "random",
+    init_pos: Union[str, np.ndarray] = "spectral",
     a: Optional[float] = None,
     b: Optional[float] = None,
     key_added: Optional[str] = None,
@@ -455,12 +453,11 @@ def umap(
         Negative sample weighting.
     negative_sample_rate: int (default: 5)
         Number of negative samples per positive sample.
-    init_pos: str or ndarray (default: 'random')
-        Initialization used by UMAP. Random initialization is reproducible
-        across numerical backends when a seed is provided. Spectral
-        initialization remains available with ``init_pos="spectral"``; its
-        coordinates are canonicalized, although numerical eigensolvers can
-        still vary across platforms.
+    init_pos: str or ndarray (default: 'spectral')
+        Initialization used by UMAP. Spectral initialization uses the fuzzy
+        neighborhood graph and canonicalizes eigenvector orientations.
+        Numerical eigensolvers can still vary across platforms. Use
+        ``init_pos="random"`` for seeded random coordinates.
     a: float, optional
         UMAP curve parameter. If `None`, UMAP determines it from `min_dist` and
         `spread`.
@@ -552,14 +549,25 @@ def umap(
         ) from error
 
     find_ab_params = cast(Any, getattr(umap_umap_module, "find_ab_params"))
-    simplicial_set_embedding = _reproducible_umap_embedding(umap_umap_module)
+    simplicial_set_embedding = cast(
+        Any,
+        getattr(umap_umap_module, "simplicial_set_embedding"),
+    )
     with threadpool_limits(limits=n_jobs):
         if a is None or b is None:
             a, b = cast(Tuple[float, float], find_ab_params(spread, min_dist))
 
-        init = _resolve_umap_initialization(
+        init, graph = _umap_initialization(
             init_pos=init_pos,
             adata=adata,
+            data=representation_mtx,
+            graph=graph,
+            n_components=n_components,
+            n_epochs=n_iter,
+            random_state=resolved_random_state,
+            metric=graph_metric,
+            metric_kwds=graph_metric_kwargs,
+            umap_module=umap_umap_module,
         )
 
         embedding, _ = cast(
@@ -609,121 +617,75 @@ def umap(
     return adata if copy else None
 
 
-def _resolve_umap_initialization(
+def _umap_initialization(
     *,
     init_pos: Union[str, np.ndarray],
     adata: AnnData,
-) -> Union[str, np.ndarray]:
+    data: Any,
+    graph: Any,
+    n_components: int,
+    n_epochs: int,
+    random_state: np.random.RandomState,
+    metric: str,
+    metric_kwds: Dict[str, Any],
+    umap_module: Any,
+) -> Tuple[Union[str, np.ndarray], Any]:
 
     if isinstance(init_pos, str) and init_pos in adata.obsm:
-        return np.asarray(adata.obsm[init_pos], dtype=np.float32)
+        return np.asarray(adata.obsm[init_pos], dtype=np.float32), graph
 
-    return init_pos
+    if not isinstance(init_pos, str) or init_pos != "spectral":
+        return init_pos, graph
 
-
-@lru_cache(maxsize=4)
-def _reproducible_umap_embedding(umap_module: Any) -> Any:
-    """Return UMAP's embedding routine with strict serial arithmetic."""
-
-    embedding = cast(Any, getattr(umap_module, "simplicial_set_embedding"))
-    try:
-        layouts = importlib.import_module("umap.layouts")
-        numba = importlib.import_module("numba")
-        distance = cast(Any, getattr(layouts, "rdist"))
-        epoch = cast(
-            Any,
-            getattr(layouts, "_optimize_layout_euclidean_single_epoch"),
-        )
-        optimizer = cast(Any, getattr(layouts, "optimize_layout_euclidean"))
-    except (AttributeError, ImportError):
-        return embedding
-
-    distance_function = cast(Any, getattr(distance, "py_func", distance))
-    epoch_function = cast(Any, getattr(epoch, "py_func", epoch))
-    if not all(
-        isinstance(function, FunctionType)
-        for function in (distance_function, epoch_function, optimizer, embedding)
-    ):
-        return embedding
-
-    strict_distance = numba.njit(
-        "f4(f4[::1],f4[::1])",
-        fastmath=False,
-    )(distance_function)
-
-    epoch_globals = dict(epoch_function.__globals__)
-    epoch_globals["rdist"] = strict_distance
-    strict_epoch = numba.njit(
-        _clone_function(
-            epoch_function,
-            epoch_globals,
-            "_strict_optimize_layout_euclidean_single_epoch",
+    spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
+    noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
+    prepared_graph = _prepare_umap_graph_for_embedding(graph, n_epochs)
+    layout = cast(
+        np.ndarray,
+        spectral_layout(
+            data,
+            prepared_graph,
+            n_components,
+            random_state,
+            metric=metric,
+            metric_kwds=metric_kwds,
         ),
-        fastmath=False,
-        parallel=False,
     )
-
-    optimizer_globals = dict(optimizer.__globals__)
-    optimizer_globals["_get_optimize_layout_euclidean_single_epoch_fn"] = (
-        lambda parallel=False: strict_epoch
-    )
-    strict_optimizer = _clone_function(
-        optimizer,
-        optimizer_globals,
-        "_strict_optimize_layout_euclidean",
-    )
-
-    embedding_globals = dict(embedding.__globals__)
-    embedding_globals["optimize_layout_euclidean"] = strict_optimizer
-    spectral_layout = embedding_globals.get("spectral_layout")
-    if callable(spectral_layout):
-        embedding_globals["spectral_layout"] = _wrap_umap_spectral_layout(
-            cast(Callable[..., np.ndarray], spectral_layout)
-        )
-    return _clone_function(
-        embedding,
-        embedding_globals,
-        "_strict_simplicial_set_embedding",
+    layout = _orient_umap_spectral_layout(layout)
+    return (
+        cast(
+            np.ndarray,
+            noisy_scale_coords(layout, random_state, max_coord=10, noise=0.0001),
+        ),
+        prepared_graph,
     )
 
 
-def _clone_function(
-    function: FunctionType,
-    global_namespace: Dict[str, Any],
-    name: str,
-) -> FunctionType:
+def _prepare_umap_graph_for_embedding(graph: Any, n_epochs: int) -> Any:
 
-    cloned = FunctionType(
-        function.__code__,
-        global_namespace,
-        name,
-        function.__defaults__,
-        function.__closure__,
-    )
-    cloned.__kwdefaults__ = function.__kwdefaults__
-    return cloned
+    prepared_graph = graph.tocoo(copy=True)
+    prepared_graph.sum_duplicates()
+
+    default_epochs = 500 if prepared_graph.shape[0] <= 10000 else 200
+    threshold_epochs = n_epochs if n_epochs > 10 else default_epochs
+    if prepared_graph.data.size > 0:
+        cutoff = prepared_graph.data.max() / float(threshold_epochs)
+        prepared_graph.data[prepared_graph.data < cutoff] = 0.0
+    prepared_graph.eliminate_zeros()
+    return prepared_graph
 
 
-def _wrap_umap_spectral_layout(
-    spectral_layout: Callable[..., np.ndarray],
-) -> Callable[..., np.ndarray]:
-    """Wrap a spectral layout with deterministic precision and orientation."""
+def _orient_umap_spectral_layout(layout: np.ndarray) -> np.ndarray:
+    """Return spectral coordinates with fixed eigenvector orientations."""
 
-    @wraps(spectral_layout)
-    def stabilized_layout(*args: Any, **kwargs: Any) -> np.ndarray:
-        layout = np.asarray(
-            spectral_layout(*args, **kwargs),
-            dtype=np.float32,
-        ).copy()
-        for dimension in range(layout.shape[1]):
-            column = layout[:, dimension]
-            pivot = int(np.argmax(np.abs(column)))
-            if column[pivot] > 0.0:
-                column *= -1.0
+    oriented = np.asarray(layout).copy()
+    for dimension in range(oriented.shape[1]):
+        column = oriented[:, dimension]
+        pivot = int(np.argmax(np.abs(column)))
+        if column[pivot] > 0.0:
+            column *= -1.0
 
-        return layout
-
-    return stabilized_layout
+    return oriented
 
 
 def _neighbors_graph(

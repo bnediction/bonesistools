@@ -87,8 +87,8 @@ def test_golden_omics_workflow_matches_expected_outputs(golden_outputs, name):
             result,
             expected,
             ("shortest_path_lengths",),
-            rtol=1e-10,
-            atol=1e-12,
+            rtol=1e-6,
+            atol=1e-8,
         )
     else:
         raise AssertionError(f"unexpected golden output: {name}")

@@ -58,42 +58,57 @@ UMAP combines several numerically sensitive stages:
 
 An epsilon-valued self-distance can change the local connectivity scale, and a
 small initialization difference can lead the nonlinear optimizer to a
-different embedding. In the golden omics workflow, that embedding is also
-consumed by KNNSC, so one UMAP divergence can produce failures in both
-reference outputs.
+different embedding. KNNSC is evaluated independently from a PCA
+representation so that a UMAP divergence is not reported as a second,
+downstream KNNSC regression.
 
 The reproducible UMAP path therefore:
 
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
 - uses the supplied seed throughout initialization and optimization;
-- uses random initialization by default, avoiding platform-dependent numerical
-  eigensolvers;
-- uses serial, strict floating-point arithmetic for the Euclidean optimization
-  path rather than relaxed `fastmath` transformations;
+- uses the canonical spectral initialization by default and fixes arbitrary
+  eigenvector orientations;
 - limits native numerical thread pools according to `n_jobs`, whose default is
   one.
 
-These controls select a stable representative embedding. They do not imply
-that UMAP has a unique mathematical embedding. UMAP's own
+These controls reduce avoidable variability. They do not imply that UMAP has a
+unique mathematical embedding or that its coordinates are bitwise identical
+across processor targets. UMAP's own
 [reproducibility guide](https://umap-learn.readthedocs.io/en/latest/reproducibility.html)
-explains the role of seeds and serial execution; bonesistools additionally
-stabilizes numerical boundaries needed for cross-runner golden tests.
+explains the role of seeds and serial execution.
 
-Spectral initialization remains available explicitly. Bonesistools converts
-its coordinates to the embedding precision and fixes arbitrary eigenvector
-orientations before optimization. This reduces backend variability, but the
-underlying numerical eigensolver can still produce mathematically equivalent
-yet non-bitwise initial coordinates across platforms.
+Spectral initialization remains available explicitly. Bonesistools fixes
+arbitrary eigenvector orientations while preserving the eigensolver output
+precision until UMAP performs its normal scaling step. This reduces backend
+variability without changing the historical numerical trajectory.
+
+The dedicated UMAP golden decomposes this trajectory into exact checkpoints:
+
+1. curve parameters;
+2. prepared fuzzy graph;
+3. raw and oriented spectral layouts;
+4. noisy and normalized initialization;
+5. optimizer random state;
+6. embeddings at epochs 0, 1, 2, 5, 10, 25, 50, 100, 250, and 500.
+
+The test compares these checkpoints in order and stops at the first
+divergence. Changing only `NUMBA_CPU_NAME` to `generic` preserves every
+initialization checkpoint locally but first diverges at epoch 1. The same
+divergence occurs with the `haswell` target when FMA is disabled, while adding
+FMA to the `generic` target restores every reference checkpoint. This isolates
+the initial discrepancy to fused multiply-add contraction permitted by UMAP's
+Numba optimizer under `fastmath=True`, rather than PCA, neighbors, spectral
+initialization, or random-state construction.
 
 For a UMAP-related golden failure, compare outputs in this order:
 
 1. PCA coordinates;
 2. neighbor indices and distances;
 3. fuzzy connectivities;
-4. initialization;
-5. final UMAP coordinates;
-6. analyses that consume the embedding, such as KNNSC.
+4. spectral and normalized initialization;
+5. optimizer checkpoints;
+6. final UMAP coordinates.
 
 Only the first divergent stage should drive the correction.
 

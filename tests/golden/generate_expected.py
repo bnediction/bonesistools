@@ -24,6 +24,15 @@ from omics._omics_workflow import (  # noqa: E402
     run_omics_workflow,
     save_expected,
 )
+from omics._umap_diagnostics import (  # noqa: E402
+    EXPECTED_PATH as UMAP_DIAGNOSTIC_PATH,
+)
+from omics._umap_diagnostics import (  # noqa: E402
+    run_umap_diagnostics,
+)
+from omics._umap_diagnostics import (  # noqa: E402
+    save_expected as save_umap_diagnostics,
+)
 
 
 def main() -> None:
@@ -31,7 +40,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--section",
-        choices=("all", "omics", "logic"),
+        choices=("all", "omics", "logic", "umap-diagnostics"),
         default="all",
         help="Golden output section to regenerate.",
     )
@@ -47,6 +56,10 @@ def main() -> None:
 
         for path in sorted(EXPECTED_DIR.glob("*.npz")):
             print(f"wrote {path}")
+
+    if args.section in ["all", "omics", "umap-diagnostics"]:
+        save_umap_diagnostics(run_umap_diagnostics())
+        print(f"wrote {UMAP_DIAGNOSTIC_PATH}")
 
     if args.section in ["all", "logic"]:
         boolean_outputs = run_boolean_workflow()

@@ -159,6 +159,7 @@ def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
         n_components=EMBEDDING_N_COMPONENTS,
         neighbors_key="neighbors",
         n_iter=500,
+        init_pos="spectral",
         key_added="X_umap",
         seed=0,
         n_jobs=1,
@@ -170,7 +171,7 @@ def run_omics_workflow() -> Dict[str, Dict[str, Any]]:
     knnsc.fit(
         knnsc_adata,
         cluster_key="knnsc_clusters",
-        representation="X_umap",
+        representation="X_pca",
         n_components=EMBEDDING_N_COMPONENTS,
         n_neighbors=KNNSC_N_NEIGHBORS,
         n_jobs=1,

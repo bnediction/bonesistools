@@ -100,10 +100,24 @@ PBMC3k preprocessing workflow:
 * `umap.npz`: UMAP embedding computed from fuzzy neighbors;
 * `tsne.npz`: t-SNE embedding computed from the PCA representation.
 
+`omics/expected/umap_diagnostics/checkpoints.npz` decomposes the spectral UMAP
+calculation into ordered numerical checkpoints. It covers curve parameters,
+the prepared graph, spectral initialization, optimizer random state, and
+embeddings from the first effective update through epoch 500. The dedicated
+test stops at the first divergent checkpoint so that a platform-dependent
+failure identifies its source rather than only reporting the final embedding.
+
 Regenerate these files intentionally with:
 
 ```bash
 BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section omics
+```
+
+Regenerate only the UMAP diagnostic checkpoints with:
+
+```bash
+BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py \
+    --section umap-diagnostics
 ```
 
 ### `logic/data/death_receptor_cell_fate.zginml`
