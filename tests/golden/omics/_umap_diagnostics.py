@@ -10,8 +10,10 @@ import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix
 
 from bonesistools.omics.tools._embedding import (
+    _canonicalize_umap_curve_parameters,
     _orient_umap_spectral_layout,
     _prepare_umap_graph_for_embedding,
+    _reproducible_umap_embedding,
 )
 
 GOLDEN_DIR = Path(__file__).parent
@@ -33,7 +35,9 @@ def run_umap_diagnostics() -> Dict[str, np.ndarray]:
     spectral_layout = cast(Any, getattr(umap_module, "spectral_layout"))
     noisy_scale_coords = cast(Any, getattr(umap_module, "noisy_scale_coords"))
 
-    a, b = cast(Tuple[float, float], find_ab_params(1.0, 0.5))
+    a, b = _canonicalize_umap_curve_parameters(
+        *cast(Tuple[float, float], find_ab_params(1.0, 0.5))
+    )
     prepared_graph = cast(
         coo_matrix,
         _prepare_umap_graph_for_embedding(graph, N_EPOCHS),
@@ -61,10 +65,7 @@ def run_umap_diagnostics() -> Dict[str, np.ndarray]:
     normalized_initialization = _normalize_initialization(noisy_initialization)
     optimizer_rng_state = _optimizer_rng_state(random_state, umap_module)
 
-    embedding_function = cast(
-        Any,
-        getattr(umap_module, "simplicial_set_embedding"),
-    )
+    embedding_function = _reproducible_umap_embedding(umap_module)
     final_embedding, auxiliary = cast(
         Tuple[np.ndarray, Dict[str, Any]],
         embedding_function(
@@ -114,7 +115,7 @@ def save_expected(
 ) -> None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(output_path, **checkpoints)
+    cast(Any, np.savez_compressed)(output_path, **checkpoints)
 
 
 def load_expected(output_path: Path = EXPECTED_PATH) -> Dict[str, np.ndarray]:
@@ -128,14 +129,17 @@ def _load_frozen_inputs() -> Tuple[np.ndarray, coo_matrix]:
     with np.load(EXPECTED_DIR / "pca.npz") as pca:
         data = np.asarray(pca["embedding"])
     with np.load(EXPECTED_DIR / "neighbors.npz") as neighbors:
-        graph = csr_matrix(
-            (
-                neighbors["connectivities_data"],
-                neighbors["connectivities_indices"],
-                neighbors["connectivities_indptr"],
-            ),
-            shape=tuple(neighbors["connectivities_shape"]),
-        ).tocoo()
+        graph = cast(
+            coo_matrix,
+            csr_matrix(
+                (
+                    neighbors["connectivities_data"],
+                    neighbors["connectivities_indices"],
+                    neighbors["connectivities_indptr"],
+                ),
+                shape=tuple(neighbors["connectivities_shape"]),
+            ).tocoo(),
+        )
     return data, graph
 
 

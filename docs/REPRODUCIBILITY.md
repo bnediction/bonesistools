@@ -66,15 +66,20 @@ The reproducible UMAP path therefore:
 
 - canonicalizes self-neighbor distances to exact zero before estimating local
   connectivity scales;
+- canonicalizes automatically estimated curve parameters before optimization;
 - uses the supplied seed throughout initialization and optimization;
 - uses the canonical spectral initialization by default and fixes arbitrary
   eigenvector orientations;
+- prevents fused multiply-add contraction when accumulating squared Euclidean
+  distances in the optimizer;
 - limits native numerical thread pools according to `n_jobs`, whose default is
   one.
 
-These controls reduce avoidable variability. They do not imply that UMAP has a
-unique mathematical embedding or that its coordinates are bitwise identical
-across processor targets. UMAP's own
+These controls make the seeded serial optimization path bitwise reproducible
+across the processor targets covered by the test suite. They do not imply that
+UMAP has a unique mathematical embedding, and external eigensolvers may still
+change a spectral initialization when their numerical behavior changes.
+UMAP's own
 [reproducibility guide](https://umap-learn.readthedocs.io/en/latest/reproducibility.html)
 explains the role of seeds and serial execution.
 
@@ -93,13 +98,12 @@ The dedicated UMAP golden decomposes this trajectory into exact checkpoints:
 6. embeddings at epochs 0, 1, 2, 5, 10, 25, 50, 100, 250, and 500.
 
 The test compares these checkpoints in order and stops at the first
-divergence. Changing only `NUMBA_CPU_NAME` to `generic` preserves every
-initialization checkpoint locally but first diverges at epoch 1. The same
-divergence occurs with the `haswell` target when FMA is disabled, while adding
-FMA to the `generic` target restores every reference checkpoint. This isolates
-the initial discrepancy to fused multiply-add contraction permitted by UMAP's
-Numba optimizer under `fastmath=True`, rather than PCA, neighbors, spectral
-initialization, or random-state construction.
+divergence. This diagnostic isolated two former platform-dependent operations:
+SciPy's numerical fit of the UMAP curve parameters and fused multiply-add
+contraction in UMAP's squared Euclidean distance. Bonesistools canonicalizes
+the fitted parameters and excludes only this contraction from UMAP's otherwise
+optimized distance calculation. PCA, neighbors, spectral initialization and
+random-state construction retain their original numerical paths.
 
 For a UMAP-related golden failure, compare outputs in this order:
 

@@ -15,6 +15,7 @@ from sklearn.manifold import TSNE, spectral_embedding
 import bonesistools as bt
 from bonesistools.omics.tools._embedding import (
     EigenSolver,
+    _canonicalize_umap_curve_parameters,
     _orient_umap_spectral_layout,
 )
 
@@ -392,6 +393,21 @@ def test_umap_spectral_initialization_is_canonicalized():
             ],
             dtype=np.float64,
         ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    (
+        (0.5830300203968329, 1.3341669926352966),
+        (0.5830300207571723, 1.3341669921303172),
+        (0.5830300202072974, 1.3341669926670465),
+    ),
+)
+def test_umap_curve_parameters_are_canonicalized(a, b):
+    assert _canonicalize_umap_curve_parameters(a, b) == (
+        0.58303002,
+        1.33416699,
     )
 
 
