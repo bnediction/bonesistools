@@ -24,34 +24,32 @@ documented in [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
 
 ## CI layout
 
-The GitHub CI separates fast local checks from live reproducibility checks:
+The GitHub CI separates static checks and three test matrices:
 
 - `ruff`: linting;
 - `pyright`: static typing with the `pyproject.toml` configuration;
-- `reproducibility`: live resource checks against deterministic signatures;
-- `golden`: strict bitwise golden-output checks on Python 3.13;
-- `import (3.7)`;
-- `import (3.8)`;
-- `import (3.9)`;
-- `regression (3.10)`;
-- `regression (3.11)`;
-- `regression (3.12)`;
-- `regression (3.13)`;
-- `compatibility (macOS ARM64)`;
-- `compatibility (Windows x64)`.
+- `reproducibility (Linux | macOS ARM64 | Windows x64)`: live resource
+  checks against deterministic signatures on Python 3.13;
+- `golden (Linux, strict)`;
+- `golden (macOS ARM64, portable)`;
+- `golden (Windows x64, portable)`;
+- `import (Linux, 3.7 | 3.8 | 3.9)`;
+- `test (Linux, 3.10 | 3.11 | 3.12 | 3.13)`;
+- `test (macOS ARM64, 3.13)`;
+- `test (Windows x64, 3.13)`.
 
 Python 3.7 to 3.9 are import-only jobs because they mainly protect runtime
 compatibility. Regression tests run on newer Python versions under Linux and on
-Python 3.13 under macOS and Windows. The macOS and Windows compatibility jobs
-also run the complete golden suite under the portable contract in the pinned
-reference environment.
+Python 3.13 under macOS and Windows. Golden and reproducibility checks use
+independent matrices so their failures are reported separately from behavioral
+regressions.
 
 ## Reproducibility tests
 
 Reproducibility tests are for external scientific resources whose current
-content can affect downstream results. They intentionally run in a separate CI
-job because they may require network access and can fail when an upstream
-database changes.
+content can affect downstream results. They intentionally run in a separate
+Linux, macOS and Windows CI matrix because they may require network access and
+can fail when an upstream database changes.
 
 Signature construction and review policy are described in
 [REPRODUCIBILITY.md](REPRODUCIBILITY.md#external-resources).
@@ -89,8 +87,8 @@ BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden --golden-mode=portable
 ```
 
 CI selects the contract explicitly. It does not infer it from the operating
-system: the canonical Linux job is strict, while macOS and Windows are
-portable compatibility jobs.
+system: the Linux matrix entry is strict, while the macOS and Windows entries
+are portable.
 
 Regenerate expected outputs intentionally with:
 

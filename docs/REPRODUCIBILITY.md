@@ -175,7 +175,7 @@ workflows, not immutable mathematical truths.
 The canonical Linux job uses the strict contract and requires bitwise equality
 for stored arrays. The sole numerical exception is `hvg_loess.score`, compared
 with `rtol=0` and `atol=2e-15`; its mask, ranks and selected genes remain exact.
-The macOS and Windows compatibility jobs use the portable contract. This
+The macOS and Windows golden matrix entries use the portable contract. This
 selection is explicit in CI and is not inferred from the operating system,
 allowing any future non-canonical Linux runner to use the portable contract as
 well.

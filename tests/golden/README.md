@@ -26,7 +26,7 @@ Two comparison contracts are available:
   is used by the canonical Linux job. The only numerical exception is
   `hvg_loess.score`, compared with `rtol=0` and `atol=2e-15`; its selected
   genes, mask and ranks remain exact;
-* `portable` is used by the macOS and Windows compatibility jobs. Stable
+* `portable` is used by the macOS and Windows golden matrix entries. Stable
   structures remain exact, narrowly varying floating-point stages use explicit
   tolerances, and non-convex final embeddings are checked through numerical
   and neighborhood-quality invariants.
