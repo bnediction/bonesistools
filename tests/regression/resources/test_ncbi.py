@@ -649,8 +649,7 @@ def test_gene_identifiers_parse_latest_gene_info_and_remove_temporary_files(tmp_
 
 def test_latest_gene_info_download_uses_raw_local_cache(tmp_path, monkeypatch):
     cached_file = tmp_path / "Mus_musculus.gene_info.gz"
-    with gzip.open(cached_file, "wt", encoding="utf-8") as file:
-        file.write("#tax_id\tGeneID\n10090\t10\n")
+    cached_file.write_bytes(gzip.compress(b"#tax_id\tGeneID\n10090\t10\n"))
     calls = []
 
     def cached_download(url, **kwargs):
