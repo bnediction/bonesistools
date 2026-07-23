@@ -5,6 +5,7 @@ import os
 import numpy as np
 import pytest
 from llvmlite import binding
+from typing_extensions import Literal
 
 from ._umap_diagnostics import load_expected, run_umap_diagnostics
 
@@ -17,7 +18,10 @@ def umap_diagnostics():
     return run_umap_diagnostics()
 
 
-def test_golden_umap_numerical_checkpoints(umap_diagnostics):
+def test_golden_umap_numerical_checkpoints(
+    umap_diagnostics,
+    golden_mode: Literal["strict", "portable"],
+):
     expected = load_expected()
     assert tuple(umap_diagnostics) == tuple(expected)
 
@@ -28,7 +32,10 @@ def test_golden_umap_numerical_checkpoints(umap_diagnostics):
         f"NUMBA_CPU_FEATURES={os.environ.get('NUMBA_CPU_FEATURES')!r}"
     )
     for checkpoint, expected_values in expected.items():
-        if checkpoint == _RAW_SPECTRAL_CHECKPOINT:
+        if (
+            golden_mode == "portable"
+            and checkpoint == _RAW_SPECTRAL_CHECKPOINT
+        ):
             np.testing.assert_allclose(
                 umap_diagnostics[checkpoint],
                 expected_values,

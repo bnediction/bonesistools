@@ -17,7 +17,25 @@ Golden tests are run in CI only with Python 3.13.
 Run golden tests explicitly with:
 
 ```bash
-BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden
+BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden --golden-mode=strict
+```
+
+Two comparison contracts are available:
+
+* `strict` is the default and requires bitwise equality with golden arrays. It
+  is used by the canonical Linux job. The only numerical exception is
+  `hvg_loess.score`, compared with `rtol=0` and `atol=2e-15`; its selected
+  genes, mask and ranks remain exact;
+* `portable` is used by the macOS and Windows compatibility jobs. Stable
+  structures remain exact, narrowly varying floating-point stages use explicit
+  tolerances, and non-convex final embeddings are checked through numerical
+  and neighborhood-quality invariants.
+
+The mode is selected explicitly rather than inferred from the operating
+system. Run the compatibility contract locally with:
+
+```bash
+BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden --golden-mode=portable
 ```
 
 ## Layout
@@ -112,6 +130,8 @@ Regenerate these files intentionally with:
 ```bash
 BONESISTOOLS_RUN_GOLDEN=1 python tests/golden/generate_expected.py --section omics
 ```
+
+References are generated and reviewed against the strict contract.
 
 Regenerate only the UMAP diagnostic checkpoints with:
 

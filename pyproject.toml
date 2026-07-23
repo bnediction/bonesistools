@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "bonesistools"
 description = "Bioinformatics toolkit for upstream and downstream analyses around the BoNesis framework"
-version = "1.5.0"
+version = "1.6.0"
 license = "CECILL-2.1"
 credits = ["BNeDiction", "PEPR Santé Numérique 2030"]
 authors = [

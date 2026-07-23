@@ -29,7 +29,7 @@ The GitHub CI separates fast local checks from live reproducibility checks:
 - `ruff`: linting;
 - `pyright`: static typing with the `pyproject.toml` configuration;
 - `reproducibility`: live resource checks against deterministic signatures;
-- `golden`: golden-output checks on Python 3.13;
+- `golden`: strict bitwise golden-output checks on Python 3.13;
 - `import (3.7)`;
 - `import (3.8)`;
 - `import (3.9)`;
@@ -43,7 +43,8 @@ The GitHub CI separates fast local checks from live reproducibility checks:
 Python 3.7 to 3.9 are import-only jobs because they mainly protect runtime
 compatibility. Regression tests run on newer Python versions under Linux and on
 Python 3.13 under macOS and Windows. The macOS and Windows compatibility jobs
-also run the complete golden suite in the pinned reference environment.
+also run the complete golden suite under the portable contract in the pinned
+reference environment.
 
 ## Reproducibility tests
 
@@ -73,8 +74,23 @@ in [REPRODUCIBILITY.md](REPRODUCIBILITY.md#golden-references).
 Run golden tests explicitly with:
 
 ```bash
-BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden
+BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden --golden-mode=strict
 ```
+
+The strict contract is the default and requires bitwise equality with the
+canonical Linux references, except for the `hvg_loess.score` values, which use
+`rtol=0` and `atol=2e-15`; their mask, ranks and selected genes remain exact.
+The portable contract keeps deterministic arrays exact while applying reviewed
+tolerances or scientific quality invariants to numerically sensitive native
+algorithms:
+
+```bash
+BONESISTOOLS_RUN_GOLDEN=1 pytest tests/golden --golden-mode=portable
+```
+
+CI selects the contract explicitly. It does not infer it from the operating
+system: the canonical Linux job is strict, while macOS and Windows are
+portable compatibility jobs.
 
 Regenerate expected outputs intentionally with:
 

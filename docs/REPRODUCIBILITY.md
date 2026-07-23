@@ -80,9 +80,10 @@ The reproducible UMAP path therefore:
   one.
 
 These controls make the seeded serial optimization path bitwise reproducible
-across the processor targets covered by the test suite. They do not imply that
-UMAP has a unique mathematical embedding, and external eigensolvers may still
-change a spectral initialization when their numerical behavior changes.
+in the canonical environment and constrain platform-level divergence in the
+portable environments. They do not imply that UMAP has a unique mathematical
+embedding, and external eigensolvers may still change a spectral
+initialization when their numerical behavior changes.
 UMAP's own
 [reproducibility guide](https://umap-learn.readthedocs.io/en/latest/reproducibility.html)
 explains the role of seeds and serial execution.
@@ -93,7 +94,7 @@ arbitrary eigenvector orientations and converts the eigensolver output to
 `float64` differences from influencing the scale supplied to the nonlinear
 optimizer.
 
-The dedicated UMAP golden decomposes this trajectory into exact checkpoints:
+The dedicated UMAP golden decomposes this trajectory into checkpoints:
 
 1. curve parameters;
 2. prepared fuzzy graph;
@@ -102,8 +103,10 @@ The dedicated UMAP golden decomposes this trajectory into exact checkpoints:
 5. optimizer random state;
 6. embeddings at epochs 0, 1, 2, 5, 10, 25, 50, 100, 250, and 500.
 
-The test compares these checkpoints in order and stops at the first
-divergence. This diagnostic isolated two former platform-dependent operations:
+Strict mode compares every checkpoint exactly. Portable mode permits only a
+narrow tolerance for the raw spectral layout and keeps the canonicalized
+downstream checkpoints exact. The diagnostic isolated two former
+platform-dependent operations:
 SciPy's numerical fit of the UMAP curve parameters and fused multiply-add
 contraction in UMAP's squared Euclidean distance. Bonesistools canonicalizes
 the fitted parameters and excludes only this contraction from UMAP's otherwise
@@ -141,7 +144,7 @@ The t-SNE golden receives the frozen PCA reference rather than the PCA
 recomputed during the same test run. PCA remains tested independently, while a
 t-SNE coordinate divergence can be attributed to the t-SNE stage itself.
 
-The dedicated t-SNE golden records exact checkpoints for:
+The dedicated t-SNE golden records checkpoints for:
 
 1. the nearest-neighbor structure and squared distances;
 2. conditional neighborhood probabilities;
@@ -149,11 +152,14 @@ The dedicated t-SNE golden records exact checkpoints for:
 4. seeded random initialization and its initial gradient;
 5. embeddings at iterations 1, 2, 5, 10, 25, 50, 100, 250, and 300.
 
-Neighbor indices, initialization, gradients and optimizer iterations are
-compared exactly. Raw distances and probabilities use narrow floating-point
-tolerances because equivalent serial kernels can differ near machine precision.
-The following exact gradient and iteration checkpoints detect whether that
-noise affects t-SNE itself.
+Strict mode compares every checkpoint exactly. In portable mode, neighbor
+indices and initialization remain exact, while raw distances, probabilities
+and the initial gradient use narrow floating-point tolerances. Scikit-learn's
+compiled Barnes-Hut kernel evaluates the gradient in `float32`; architecture-
+level differences near machine precision can therefore send the non-convex
+optimizer toward different final coordinates. Portable mode validates finite
+optimizer states, final KL divergence, trustworthiness and continuity instead
+of comparing those amplified coordinates directly.
 
 The diagnostic also verifies that its final checkpoint is exactly the result
 returned by the public scikit-learn solver under the same serial settings. A
@@ -165,6 +171,14 @@ neighbor search, probability estimation, initialization, or optimization.
 Golden tests compare current outputs against validated references under
 `tests/golden/expected/`. They are acceptance tests for important scientific
 workflows, not immutable mathematical truths.
+
+The canonical Linux job uses the strict contract and requires bitwise equality
+for stored arrays. The sole numerical exception is `hvg_loess.score`, compared
+with `rtol=0` and `atol=2e-15`; its mask, ranks and selected genes remain exact.
+The macOS and Windows compatibility jobs use the portable contract. This
+selection is explicit in CI and is not inferred from the operating system,
+allowing any future non-canonical Linux runner to use the portable contract as
+well.
 
 The omics golden isolates dependencies between tested stages. A stage is
 collected and compared independently, then its frozen reference is supplied to

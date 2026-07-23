@@ -86,17 +86,20 @@ jobs:
       - name: Install reference environment
         run: pip install -r requirements.txt
 
-      - name: Check golden tests
+      - name: Check strict golden tests
         env:
           BONESISTOOLS_RUN_GOLDEN: "1"
-        run: pytest tests/golden -q
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-golden-strict
+        run: pytest tests/golden -q --golden-mode=strict
 
       - name: Check generic CPU UMAP golden
         env:
           BONESISTOOLS_RUN_GOLDEN: "1"
           NUMBA_CPU_NAME: "generic"
           NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-generic
-        run: pytest tests/golden/omics/test_golden_umap_diagnostics.py -q
+        run: >-
+          pytest tests/golden/omics/test_golden_umap_diagnostics.py -q
+          --golden-mode=portable
 
   regression:
     name: ${{ matrix.label }} (${{ matrix.python-version }})
@@ -190,8 +193,8 @@ jobs:
       - name: Run regression tests
         run: pytest tests/regression -q
 
-      - name: Check full golden suite
+      - name: Check portable full golden suite
         env:
           BONESISTOOLS_RUN_GOLDEN: "1"
           NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-golden
-        run: pytest tests/golden -q
+        run: pytest tests/golden -q --golden-mode=portable
