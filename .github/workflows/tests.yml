@@ -91,6 +91,13 @@ jobs:
           BONESISTOOLS_RUN_GOLDEN: "1"
         run: pytest tests/golden -q
 
+      - name: Check generic CPU UMAP golden
+        env:
+          BONESISTOOLS_RUN_GOLDEN: "1"
+          NUMBA_CPU_NAME: "generic"
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-generic
+        run: pytest tests/golden/omics/test_golden_umap_diagnostics.py -q
+
   regression:
     name: ${{ matrix.label }} (${{ matrix.python-version }})
     runs-on: ubuntu-22.04
@@ -182,3 +189,9 @@ jobs:
 
       - name: Run regression tests
         run: pytest tests/regression -q
+
+      - name: Check native UMAP golden
+        env:
+          BONESISTOOLS_RUN_GOLDEN: "1"
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-umap-golden
+        run: pytest tests/golden/omics/test_golden_umap_diagnostics.py -q
