@@ -13,15 +13,18 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.manifold import TSNE, spectral_embedding
 
 import bonesistools as bt
-from bonesistools.omics.tools._embedding import _orient_umap_spectral_layout
+from bonesistools.omics.tools._embedding import (
+    EigenSolver,
+    _orient_umap_spectral_layout,
+)
 
 
 def _spectral_reference(
     graph,
     random_state,
     *,
-    eigen_solver="arpack",
-    eigen_tolerance=0.0,
+    eigen_solver: EigenSolver = "arpack",
+    eigen_tolerance: float = 0.0,
 ):
 
     if eigen_solver == "lobpcg":

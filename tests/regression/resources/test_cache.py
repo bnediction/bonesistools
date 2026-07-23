@@ -3,6 +3,7 @@
 import io
 import os
 import sys
+from email.message import Message
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -258,7 +259,7 @@ def test_stale_download_is_revalidated_with_http_metadata(
 
     def revalidate(request):
         requests.append(request)
-        raise HTTPError(request.full_url, 304, "Not Modified", {}, None)
+        raise HTTPError(request.full_url, 304, "Not Modified", Message(), None)
 
     monkeypatch.setattr(cache, "urlopen", revalidate)
     result = cache._cached_download(

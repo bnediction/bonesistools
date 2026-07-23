@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any, Iterable, Tuple, cast
+from typing import Any, Iterable, List, Tuple, cast
 
 import pytest
 
@@ -170,11 +170,12 @@ def test_complete_universe_graphs_without_nodes_are_identical():
 def test_complete_universe_values_avoid_complement_rounding():
 
     nodes = ("A", "B", "C")
-    complete_edges = [
+    signs: Tuple[InfluenceSign, InfluenceSign] = (1, -1)
+    complete_edges: List[Tuple[str, str, InfluenceSign]] = [
         (source, target, sign)
         for source in nodes
         for target in nodes
-        for sign in (1, -1)
+        for sign in signs
     ]
     graph1 = _influence_graph(complete_edges[:6], nodes=nodes)
     graph2 = _influence_graph(complete_edges[6:12], nodes=nodes)

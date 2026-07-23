@@ -151,7 +151,7 @@ def test_robdd_boolean_operators_reject_incompatible_custom_orders():
     right = bt.logic.ba.ROBDD("A | B", order=("B", "A"))
 
     with pytest.raises(ValueError, match="incompatible variable orders"):
-        left & right
+        _ = left & right
 
 
 def test_robdd_accepts_boolean_expression():

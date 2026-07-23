@@ -654,7 +654,7 @@ class KNNSC:
                     kth=len(_min_dists_cluster) - subcluster_size,
                 )[-subcluster_size:]
                 _obs = _min_dists_cluster.iloc[_idx].index
-            subclusters_series.loc[_obs] = cluster
+            cast(Any, subclusters_series.loc)[_obs] = cluster
 
         return subclusters_series
 
@@ -741,7 +741,7 @@ class KNNSC:
                     :subcluster_size
                 ]
                 _obs = _central_scores_cluster.iloc[_idx].index
-            subclusters_series.loc[_obs] = cluster
+            cast(Any, subclusters_series.loc)[_obs] = cluster
 
         return subclusters_series
 

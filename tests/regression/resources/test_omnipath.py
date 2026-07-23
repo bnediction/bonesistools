@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os
-from typing import Any, cast
+from typing import Any, Dict, Iterable, Optional, cast
 
 import pandas as pd
 import pytest
@@ -784,12 +784,13 @@ def test_dorothea_caches_level_selections_separately(monkeypatch):
         resource,
         version,
         organism,
-        levels=None,
+        levels: Optional[Iterable[str]] = None,
         flavor="modern",
         hcop_version="latest",
         compatibility=False,
         _downloads=None,
     ):
+        assert levels is not None
         calls.append((resource, tuple(levels), compatibility))
         interactions = pd.DataFrame(
             {
@@ -808,7 +809,11 @@ def test_dorothea_caches_level_selections_separately(monkeypatch):
         levels=["A"],
         version="2024-01-01",
     )
-    level_a["TfA"]["GeneA"][0]["confidence"] = "changed"
+    level_a_attributes = cast(
+        Dict[str, Any],
+        level_a.get_edge_data("TfA", "GeneA", key=0),
+    )
+    level_a_attributes["confidence"] = "changed"
     level_b = _dorothea.dorothea(
         organism="human",
         levels=["B"],
@@ -895,10 +900,18 @@ def test_collectri_removes_references_after_reusing_canonical_graph(monkeypatch)
         version="2024-01-01",
     )
 
-    assert complete["TfA"]["GeneA"][0]["PMID"] == "123"
-    assert "PMID" not in without_references["TfA"]["GeneA"][0]
-    assert "references" not in without_references["TfA"]["GeneA"][0]
-    assert complete["TfA"]["GeneA"][0]["references"] == "CollecTRI:123"
+    complete_attributes = cast(
+        Dict[str, Any],
+        complete.get_edge_data("TfA", "GeneA", key=0),
+    )
+    without_reference_attributes = cast(
+        Dict[str, Any],
+        without_references.get_edge_data("TfA", "GeneA", key=0),
+    )
+    assert complete_attributes["PMID"] == "123"
+    assert "PMID" not in without_reference_attributes
+    assert "references" not in without_reference_attributes
+    assert complete_attributes["references"] == "CollecTRI:123"
     assert len(calls) == 1
     assert len(list(resource_cache.path("omnipath").glob("graphs/*.pickle"))) == 1
 

@@ -129,7 +129,7 @@ def test_neighbors_binary_connectivities_reuse_brute_neighbors_with_ties():
     )
 
     np.testing.assert_array_equal(
-        adata.obsp["connectivities"].toarray(),
+        cast(csr_matrix, adata.obsp["connectivities"]).toarray(),
         expected,
     )
 
