@@ -98,20 +98,12 @@ def run_tsne_diagnostics() -> Dict[str, np.ndarray]:
             squared_distances.indptr,
         ),
         "squared_knn_distances": squared_distances.data.copy(),
-        "conditional_probabilities_sample": _sample(
-            conditional_probabilities
-        ),
-        "conditional_probabilities_digest": _digest_arrays(
-            conditional_probabilities
-        ),
+        "conditional_probabilities": conditional_probabilities.copy(),
         "joint_probability_structure_digest": _digest_arrays(
             joint_probabilities.indices,
             joint_probabilities.indptr,
         ),
-        "joint_probabilities_sample": _sample(joint_probabilities.data),
-        "joint_probabilities_digest": _digest_arrays(
-            joint_probabilities.data
-        ),
+        "joint_probabilities": joint_probabilities.data.copy(),
         "random_initialization": initialization,
     }
     checkpoints.update(optimizer)
@@ -257,15 +249,6 @@ def _optimizer_checkpoints(
         checkpoints[f"iteration_{checkpoint:03d}"] = embeddings[checkpoint]
     checkpoints["final_kl_divergence"] = np.asarray([error], dtype=np.float64)
     return checkpoints
-
-
-def _sample(values: np.ndarray, size: int = 256) -> np.ndarray:
-
-    flattened = np.asarray(values).ravel()
-    if flattened.size <= size:
-        return flattened.copy()
-    indices = np.linspace(0, flattened.size - 1, num=size, dtype=np.int64)
-    return flattened[indices]
 
 
 def _digest_arrays(*arrays: Iterable[Any]) -> np.ndarray:

@@ -149,10 +149,11 @@ The dedicated t-SNE golden records exact checkpoints for:
 4. seeded random initialization and its initial gradient;
 5. embeddings at iterations 1, 2, 5, 10, 25, 50, 100, 250, and 300.
 
-Neighbor indices and every downstream checkpoint are compared exactly. Raw
-squared distances use a narrow floating-point tolerance because equivalent
-serial distance kernels can differ below `1e-12`; the subsequent probability
-checkpoint remains exact and detects whether such noise affects t-SNE itself.
+Neighbor indices, initialization, gradients and optimizer iterations are
+compared exactly. Raw distances and probabilities use narrow floating-point
+tolerances because equivalent serial kernels can differ near machine precision.
+The following exact gradient and iteration checkpoints detect whether that
+noise affects t-SNE itself.
 
 The diagnostic also verifies that its final checkpoint is exactly the result
 returned by the public scikit-learn solver under the same serial settings. A
