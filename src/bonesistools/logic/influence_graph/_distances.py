@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Set, Tuple, Union
 
 from ..._compat import Literal
+from ..._warnings import _rename_deprecated_arguments
 from ._influence_graph import InfluenceGraph
 
 SignedEdge = Tuple[Any, Any, int]
@@ -14,6 +15,7 @@ InfluenceGraphUniverse = Union[
 ]
 
 
+@_rename_deprecated_arguments(domain="universe")
 def similarity(
     ig1: InfluenceGraph,
     ig2: InfluenceGraph,
@@ -77,6 +79,8 @@ def similarity(
     Using the same explicit universe is recommended for pairwise similarity
     matrices when graph pairs may contain different node sets.
 
+    `domain` is accepted as a deprecated alias for `universe` until 2.0.0.
+
     Raises
     ------
     ValueError
@@ -103,6 +107,7 @@ def similarity(
     return agreement_size / universe_size
 
 
+@_rename_deprecated_arguments(domain="universe")
 def distance(
     ig1: InfluenceGraph,
     ig2: InfluenceGraph,
@@ -165,6 +170,8 @@ def distance(
 
     Using the same explicit universe is recommended for pairwise distance
     matrices when graph pairs may contain different node sets.
+
+    `domain` is accepted as a deprecated alias for `universe` until 2.0.0.
 
     Raises
     ------

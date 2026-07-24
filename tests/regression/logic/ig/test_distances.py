@@ -335,16 +335,11 @@ def test_unsupported_edge_universe_raises_clear_error(comparison):
         comparison(graph1, graph2, universe=cast(Any, "observed"))
 
 
-def test_removed_metric_and_domain_arguments_are_rejected():
+def test_removed_metric_argument_is_rejected():
 
     graph1 = _influence_graph([("A", "B", 1)])
     graph2 = _influence_graph([("A", "B", 1)])
-    prior = graph1.copy()
     distance = cast(Any, bt.logic.ig.distance)
-    similarity = cast(Any, bt.logic.ig.similarity)
 
     with pytest.raises(TypeError):
         distance(graph1, graph2, metric="jaccard")
-
-    with pytest.raises(TypeError):
-        similarity(graph1, graph2, domain=prior)

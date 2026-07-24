@@ -227,7 +227,7 @@ The tests do not redistribute restricted upstream data. Instead, they:
 
 For DoRothEA, the tracked references are:
 
-- `tests/reproducibility/dorothea_current_mouse_A.sha256`;
+- `tests/reproducibility/dorothea_modern_mouse_A_2025-08-13.sha256`;
 - `tests/reproducibility/dorothea_legacy_mouse.sha256`.
 
 A changed signature can indicate an upstream resource change, a change in
