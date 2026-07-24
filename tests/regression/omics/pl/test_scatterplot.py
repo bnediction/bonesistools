@@ -69,6 +69,109 @@ def test_embedding_alias_with_test_representation(mini_adata):
     plt.close(fig)
 
 
+def test_embedding_rotates_2d_points_and_labels_without_modifying_data(mini_adata):
+    original = mini_adata.obsm["X_pca"].copy()
+
+    fig, ax = bt.omics.pl.embedding(
+        mini_adata,
+        obs="cluster",
+        representation="X_pca",
+        rotation=450,
+        legend=False,
+        labels=True,
+    )
+
+    plotted = np.concatenate(
+        [
+            np.asarray(_path_collection(ax, index).get_offsets())
+            for index in range(len(ax.collections))
+        ]
+    )
+    expected = np.asarray(
+        [
+            [2.15, -0.05],
+            [2.05, 0.15],
+            [0.15, 1.95],
+            [0.05, 2.15],
+        ]
+    )
+    label_positions = {
+        text.get_text(): np.asarray(text.get_position()) for text in ax.texts
+    }
+
+    np.testing.assert_allclose(plotted, expected, atol=1e-12)
+    np.testing.assert_allclose(label_positions["A"], [2.1, 0.05], atol=1e-12)
+    np.testing.assert_allclose(label_positions["B"], [0.1, 2.05], atol=1e-12)
+    np.testing.assert_array_equal(mini_adata.obsm["X_pca"], original)
+    plt.close(fig)
+
+
+def test_embedding_rotates_3d_points_around_selected_axes(mini_adata):
+    original = mini_adata.obsm["X_pca"].copy()
+
+    fig, ax = bt.omics.pl.embedding(
+        mini_adata,
+        obs="cluster",
+        representation="X_pca",
+        n_components=3,
+        rotation=(0, 0, 180),
+        legend=False,
+    )
+
+    plotted = []
+    for collection in ax.collections:
+        x, y, z = cast(Any, collection)._offsets3d
+        plotted.append(np.column_stack((x, y, z)))
+    expected = np.asarray(
+        [
+            [2.2, 2.1, 1.0],
+            [2.0, 2.0, 1.1],
+            [0.2, 0.1, 0.0],
+            [0.0, 0.0, 0.1],
+        ]
+    )
+
+    np.testing.assert_allclose(np.concatenate(plotted), expected, atol=1e-12)
+    np.testing.assert_array_equal(mini_adata.obsm["X_pca"], original)
+    plt.close(fig)
+
+
+def test_embedding_rotation_validates_dimensions_and_angles(mini_adata):
+    with pytest.raises(TypeError, match="real number"):
+        bt.omics.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            rotation=cast(Any, (0, 0, 0)),
+        )
+
+    with pytest.raises(ValueError, match="tuple of three"):
+        bt.omics.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            n_components=3,
+            rotation=90,
+        )
+
+    with pytest.raises(ValueError, match="tuple of three"):
+        bt.omics.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            n_components=3,
+            rotation=cast(Any, (0, 90)),
+        )
+
+    with pytest.raises(ValueError, match="finite angle"):
+        bt.omics.pl.embedding(
+            mini_adata,
+            obs="cluster",
+            representation="X_pca",
+            rotation=np.inf,
+        )
+
+
 def test_embedding_plot_continuous_3d_with_title_and_labels(mini_adata):
     mini_adata.obs["score_with_nan"] = mini_adata.obs["score"].astype(float)
     mini_adata.obs.loc["c3", "score_with_nan"] = np.nan

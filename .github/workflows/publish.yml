@@ -36,11 +36,31 @@ jobs:
           unzip -l dist/*.whl | grep "bonesistools/resources/ncbi/data/gi/"
           unzip -l dist/*.whl | grep "bonesistools/resources/hcop/data/human_mouse_hcop.tsv.gz"
 
+      - name: Check source distribution content
+        run: |
+          contents="$(tar -tzf dist/*.tar.gz)"
+
+          grep -q "src/bonesistools/omics/input_output/datasets.json$" <<< "$contents"
+          test "$(grep -cE 'src/bonesistools/resources/hcop/data/.*\.tsv\.gz$' <<< "$contents")" -eq 19
+          test "$(grep -cE 'src/bonesistools/resources/ncbi/data/gi/.*\.tsv\.gz$' <<< "$contents")" -eq 3
+
+          if grep -qE '/(\.cache|__pycache__)/|\.bak\.tsv$|\.pyc$' <<< "$contents"; then
+            echo "The source distribution contains local cache or backup files."
+            exit 1
+          fi
+
       - name: Test built wheel
         run: |
           python -m venv /tmp/bonesistools-wheel-test
           source /tmp/bonesistools-wheel-test/bin/activate
           pip install dist/*.whl
+          python -c "import bonesistools as bt; print(bt.omics.io.info('nestorowa')['cells'])"
+
+      - name: Test built source distribution
+        run: |
+          python -m venv /tmp/bonesistools-sdist-test
+          source /tmp/bonesistools-sdist-test/bin/activate
+          pip install dist/*.tar.gz
           python -c "import bonesistools as bt; print(bt.omics.io.info('nestorowa')['cells'])"
 
       - name: Publish package

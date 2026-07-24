@@ -34,7 +34,12 @@ from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_checker, anndata_or_mudata_checker
 from ..tools._utils import _UNSET, _resolve_representation_argument
 from ._colors import black
-from ._scatterplot import Colors, embedding
+from ._scatterplot import (
+    _EMBEDDING_ROTATION_ATTRIBUTE,
+    Colors,
+    _rotate_embedding,
+    embedding,
+)
 from ._utils import _resolve_toggle_mapping_argument, save_figure
 
 
@@ -152,6 +157,10 @@ def graph_overlay(
             edge_curves.append(np.asarray(curve_points))
 
     for edge_curve in edge_curves:
+        edge_curve = __rotate_overlay_positions(
+            ax,
+            edge_curve[:, :n_components],
+        )
         if n_components == 2:
             x, y = edge_curve[:, 0], edge_curve[:, 1]
             line = Line2D(xdata=x, ydata=y, color=cast(Any, black), **line_kwargs)
@@ -178,7 +187,10 @@ def graph_overlay(
                 continue
 
             label = labels[node] if node in labels else node
-            position = label_positions[node]
+            position = __rotate_overlay_positions(
+                ax,
+                np.asarray(label_positions[node])[:n_components][None, :],
+            )[0]
 
             if n_components == 2:
                 cast(Any, ax).text(position[0], position[1], str(label), **text_kwargs)
@@ -193,6 +205,23 @@ def graph_overlay(
                 )
 
     return ax
+
+
+def __rotate_overlay_positions(
+    ax: Axes,
+    positions: np.ndarray,
+) -> np.ndarray:
+
+    transform = getattr(ax, _EMBEDDING_ROTATION_ATTRIBUTE, None)
+    if transform is None:
+        return positions
+
+    rotation, center = transform
+    return _rotate_embedding(
+        positions,
+        rotation,
+        center=np.asarray(center)[: positions.shape[1]],
+    )
 
 
 @overload

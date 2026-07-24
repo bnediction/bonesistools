@@ -131,6 +131,28 @@ def test_trajectory_uses_custom_graph_key_and_draws_labels(mini_adata):
     plt.close(fig)
 
 
+def test_trajectory_rotates_graph_with_embedding(mini_adata):
+    _add_trajectory_graph(mini_adata)
+
+    fig, ax = bt.omics.pl.trajectory(
+        mini_adata,
+        obs="cluster",
+        representation="X_pca",
+        rotation=180,
+        labels=True,
+    )
+
+    x, y = ax.lines[0].get_data()
+    label_positions = {
+        text.get_text(): np.asarray(text.get_position()) for text in ax.texts
+    }
+    np.testing.assert_allclose(x, [2.2, 0.2], atol=1e-12)
+    np.testing.assert_allclose(y, [2.1, 0.1], atol=1e-12)
+    np.testing.assert_allclose(label_positions["N1"], [2.2, 2.1], atol=1e-12)
+    np.testing.assert_allclose(label_positions["N2"], [0.2, 0.1], atol=1e-12)
+    plt.close(fig)
+
+
 def test_trajectory_labels_accept_artist_kwargs(mini_adata):
     _add_trajectory_graph(mini_adata, graph_key="custom_key")
 

@@ -1,4 +1,4 @@
---editable .[omics,bdd,bn]
+--editable .[omics,bn]
 anndata==0.13.1
 annotated-types==0.7.0
 array-api-compat==1.15.0

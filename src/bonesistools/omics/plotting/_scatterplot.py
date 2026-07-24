@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Real
 from pathlib import Path
 from typing import (
     Any,
@@ -27,7 +28,6 @@ from matplotlib.figure import Figure
 from ..._compat import Literal
 from ..._warnings import _warn_deprecated, _warn_deprecated_argument
 from .._typing import ScData, anndata_or_mudata_checker
-from ..tools import barycenters
 from ..tools._utils import (
     _UNSET,
     _resolve_representation_argument,
@@ -62,6 +62,7 @@ Colors = Union[
 ]
 ContinuousColors = Union[str, Colormap]
 MarkerParameter = Union[float, Tuple[float, float]]
+_EMBEDDING_ROTATION_ATTRIBUTE = "_bonesistools_embedding_rotation"
 
 
 @overload
@@ -71,6 +72,7 @@ def embedding(
     representation: Any = _UNSET,
     *,
     n_components: Literal[2, 3] = 2,
+    rotation: Union[float, Tuple[float, float, float]] = 0.0,
     s: MarkerParameter = (2.0, 2.0),
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
@@ -95,6 +97,7 @@ def embedding(
     representation: Any = _UNSET,
     *,
     n_components: Literal[2, 3] = 2,
+    rotation: Union[float, Tuple[float, float, float]] = 0.0,
     s: MarkerParameter = (2.0, 2.0),
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
@@ -119,6 +122,7 @@ def embedding(
     representation: Any = _UNSET,
     *,
     n_components: Literal[2, 3] = 2,
+    rotation: Union[float, Tuple[float, float, float]] = 0.0,
     s: MarkerParameter = (2.0, 2.0),
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
@@ -143,6 +147,7 @@ def embedding(
     representation: Any = _UNSET,
     *,
     n_components: Literal[2, 3] = 2,
+    rotation: Union[float, Tuple[float, float, float]] = 0.0,
     s: MarkerParameter = (2.0, 2.0),
     alpha: MarkerParameter = (1.0, 1.0),
     colors: Optional[Colors] = None,
@@ -171,6 +176,10 @@ def embedding(
         Representation key in `scdata.obsm`.
     n_components: 2 or 3 (default: 2)
         Number of plotted dimensions.
+    rotation: float or tuple[float, float, float] (default: 0)
+        Counterclockwise rotation angle in degrees for a two-dimensional
+        embedding, or successive rotation angles around the x-, y- and z-axis
+        for a three-dimensional embedding.
     s: float or tuple[float, float] (default: (2, 2))
         Marker size. If a pair is provided, the first value applies to valid
         observations and the second to observations with missing values in
@@ -238,8 +247,19 @@ def embedding(
 
     Raises
     ------
+    TypeError
+        If the rotation contains a value that is not a real number.
     ValueError
-        If `n_components` is not 2 or 3.
+        If `n_components` is not 2 or 3, or if the rotation does not match the
+        number of plotted dimensions.
+
+    Notes
+    -----
+    Rotation preserves pairwise geometry but not necessarily the interpretation
+    of individual axes. Arbitrary angles are suitable for axis-free embeddings
+    such as UMAP, t-SNE and spectral embeddings. For PCA, rotations in
+    90-degree increments preserve principal axes up to sign and permutation;
+    other angles mix the components.
     """
 
     representation = _resolve_representation_argument(
@@ -257,6 +277,18 @@ def embedding(
             f"invalid argument value for 'n_components': "
             f"expected 2 or 3 but received {n_components!r}"
         )
+    representation_mtx = __embedding_matrix(scdata, representation, n_components)
+    rotation_transform: Optional[
+        Tuple[Union[float, Tuple[float, float, float]], np.ndarray]
+    ] = None
+    if any(__rotation_angles(rotation, n_components)):
+        rotation_center = np.nanmean(representation_mtx, axis=0)
+        representation_mtx = _rotate_embedding(
+            representation_mtx,
+            rotation,
+            center=rotation_center,
+        )
+        rotation_transform = (rotation, rotation_center)
     automatic_resize = bool(kwargs.pop("automatic_resize", False))
     legend = _resolve_legend_argument(legend, kwargs, stacklevel=2)
     draw_labels, label_kwargs = _resolve_toggle_mapping_argument(
@@ -307,7 +339,7 @@ def embedding(
         fig, ax = __scatterplot_continuous(
             scdata,
             obs,
-            representation,
+            representation_mtx,
             cast(Optional[ContinuousColors], colors),
             component_number,
             ax=ax,
@@ -322,7 +354,7 @@ def embedding(
         fig, ax = __scatterplot_discrete(
             scdata,
             obs,
-            representation,
+            representation_mtx,
             colors,
             component_number,
             legend=legend,
@@ -331,8 +363,14 @@ def embedding(
         )
     else:
         raise TypeError(
-            f"unsupported dtype for observation {obs!r}: " f"{scdata.obs[obs].dtype!r}"
+            f"unsupported dtype for observation {obs!r}: {scdata.obs[obs].dtype!r}"
         )
+
+    setattr(
+        ax,
+        _EMBEDDING_ROTATION_ATTRIBUTE,
+        rotation_transform,
+    )
 
     if draw_labels:
         if "text" in kwargs:
@@ -344,7 +382,7 @@ def embedding(
         __draw_labels(
             scdata,
             obs=obs,
-            representation=representation,
+            representation_mtx=representation_mtx,
             ax=ax,
             dim=component_number,
             **label_kwargs,
@@ -493,6 +531,110 @@ def __embedding_matrix(
     )
 
 
+def _rotate_embedding(
+    embedding: np.ndarray,
+    rotation: Union[float, Tuple[float, float, float]],
+    *,
+    center: Optional[np.ndarray] = None,
+) -> np.ndarray:
+
+    n_components = embedding.shape[1]
+    angles = __rotation_angles(rotation, n_components)
+    if not any(angles):
+        return embedding
+
+    radians = np.deg2rad(angles)
+    if n_components == 2:
+        cosine = np.cos(radians[0])
+        sine = np.sin(radians[0])
+        rotation_matrix = np.asarray(
+            [
+                [cosine, -sine],
+                [sine, cosine],
+            ]
+        )
+    else:
+        cosine_x, cosine_y, cosine_z = np.cos(radians)
+        sine_x, sine_y, sine_z = np.sin(radians)
+        rotation_x = np.asarray(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, cosine_x, -sine_x],
+                [0.0, sine_x, cosine_x],
+            ]
+        )
+        rotation_y = np.asarray(
+            [
+                [cosine_y, 0.0, sine_y],
+                [0.0, 1.0, 0.0],
+                [-sine_y, 0.0, cosine_y],
+            ]
+        )
+        rotation_z = np.asarray(
+            [
+                [cosine_z, -sine_z, 0.0],
+                [sine_z, cosine_z, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        rotation_matrix = rotation_z @ rotation_y @ rotation_x
+
+    if center is None:
+        center = np.nanmean(embedding, axis=0)
+    return (embedding - center) @ rotation_matrix.T + center
+
+
+def __rotation_angles(
+    rotation: Union[float, Tuple[float, float, float]],
+    n_components: int,
+) -> Tuple[float, ...]:
+
+    if n_components == 2:
+        return (__rotation_angle(rotation, "rotation"),)
+
+    if isinstance(rotation, Real) and not isinstance(rotation, bool):
+        angle = __rotation_angle(rotation, "rotation")
+        if angle == 0.0:
+            return (0.0, 0.0, 0.0)
+        raise ValueError(
+            "invalid argument value for 'rotation': expected a tuple of three "
+            f"angles for a three-dimensional embedding but received {rotation!r}"
+        )
+
+    if not isinstance(rotation, tuple):
+        raise TypeError(
+            "unsupported argument type for 'rotation': expected a tuple of "
+            f"three real numbers but received {type(rotation)}"
+        )
+    if len(rotation) != 3:
+        raise ValueError(
+            "invalid argument value for 'rotation': expected a tuple of three "
+            f"angles but received {rotation!r}"
+        )
+
+    return tuple(
+        __rotation_angle(angle, f"rotation[{index}]")
+        for index, angle in enumerate(rotation)
+    )
+
+
+def __rotation_angle(value: object, name: str) -> float:
+
+    if not isinstance(value, Real) or isinstance(value, bool):
+        raise TypeError(
+            f"unsupported argument type for '{name}': "
+            f"expected a real number but received {type(value)}"
+        )
+
+    angle = float(value)
+    if not np.isfinite(angle):
+        raise ValueError(
+            f"invalid argument value for '{name}': "
+            f"expected a finite angle but received {angle!r}"
+        )
+    return angle % 360.0
+
+
 def __scatter_values(
     ax: Axes,
     representation_mtx: np.ndarray,
@@ -569,7 +711,7 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
     def wrapper(
         scdata: ScData,  # type: ignore
         obs: str,
-        representation: str,
+        representation_mtx: np.ndarray,
         colors: Optional[Colors] = None,
         n_components: Optional[int] = 2,
         ax: Optional[Axes] = None,
@@ -579,7 +721,15 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
         n_components = 2 if n_components is None else n_components
         fig, ax = cast(
             Tuple[Figure, Axes],
-            plot(scdata, obs, representation, colors, n_components, ax=ax, **kwargs),
+            plot(
+                scdata,
+                obs,
+                representation_mtx,
+                colors,
+                n_components,
+                ax=ax,
+                **kwargs,
+            ),
         )
 
         if "xlabel" in kwargs:
@@ -625,7 +775,7 @@ def __default_plot(plot: Callable[..., Tuple[Figure, Axes]]):
 def __scatterplot_discrete(
     scdata: ScData,  # type: ignore
     obs: str,
-    representation: Optional[str] = None,
+    representation_mtx: np.ndarray,
     colors: Optional[Colors] = None,
     n_components: int = 2,
     legend: Union[bool, Mapping[str, Any]] = False,
@@ -650,7 +800,6 @@ def __scatterplot_discrete(
     if isinstance(colors, ListedColormap):
         colors = colormap_colors(colors)
 
-    representation_mtx = __embedding_matrix(scdata, representation, n_components)
     fig, ax = __embedding_axes(ax, n_components, kwargs)
 
     kwargs["nan"] = kwargs["nan"] if "nan" in kwargs else {}
@@ -698,7 +847,7 @@ def __scatterplot_discrete(
 def __scatterplot_continuous(
     scdata: ScData,  # type: ignore
     obs: str,
-    representation: Optional[str] = None,
+    representation_mtx: np.ndarray,
     colors: Optional[ContinuousColors] = None,
     n_components: int = 2,
     ax: Optional[Axes] = None,
@@ -713,7 +862,6 @@ def __scatterplot_continuous(
     if not np.all(cmap.get_bad() != 0) and "facecolor" not in kwargs["nan"]:
         kwargs["nan"]["color"] = cmap.get_bad()
 
-    representation_mtx = __embedding_matrix(scdata, representation, n_components)
     fig, ax = __embedding_axes(ax, n_components, kwargs)
     __scatter_missing_values(
         scdata,
@@ -764,16 +912,23 @@ def __scatterplot_continuous(
 def __draw_labels(
     scdata: ScData,  # type: ignore
     obs: str,
-    representation: Optional[str] = None,
+    representation_mtx: np.ndarray,
     ax: Optional[Axes] = None,
     dim: int = 2,
     **kwargs: Any,
 ) -> None:
 
-    barycenter_values = cast(
-        Dict[object, np.ndarray],
-        barycenters(scdata=scdata, obs=obs, representation=representation),
-    )
+    series = scdata.obs[obs]
+    if not hasattr(series, "cat"):
+        raise AttributeError(f"scdata.obs[{obs!r}] object has no attribute 'cat'")
+    clusters = cast(Any, series).cat.categories
+    barycenter_values: Dict[object, np.ndarray] = {
+        cluster: np.nanmean(
+            cast(Any, representation_mtx)[series == cluster],
+            axis=0,
+        )
+        for cluster in clusters
+    }
     keys_to_remove = []
     for k, v in barycenter_values.items():
         if np.isnan(v).any():

@@ -101,7 +101,6 @@ omics = [
 ]
 
 [tool.hatch.build.targets.sdist]
-ignore-vcs = true
 include = [
     "/LICENSE",
     "/README.md",
